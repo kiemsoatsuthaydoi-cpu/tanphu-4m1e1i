@@ -1,0 +1,54 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents employees and observers in the system.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Personnel ID (format YYYY.XXXXX)." },
+        "fullName": { "type": "string", "description": "Full name of the user." },
+        "phone": { "type": "string", "description": "Phone number." },
+        "department": { "type": "string", "description": "Department name." },
+        "branch": { "type": "string", "description": "Branch name." },
+        "role": { "type": "string", "enum": ["STAFF", "REVIEWER", "ADMIN"] },
+        "status": { "type": "string", "enum": ["PENDING", "ACTIVE", "LOCKED"] },
+        "password": { "type": "string" },
+        "isOnline": { "type": "boolean" }
+      },
+      "required": ["id", "fullName", "phone", "role", "status", "password"]
+    },
+    "QualityReport": {
+      "title": "QualityReport",
+      "description": "Represents 4M1E1I quality incident reports.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "factory": { "type": "string" },
+        "department": { "type": "string" },
+        "line": { "type": "string" },
+        "shift": { "type": "string" },
+        "factor": { "type": "string", "enum": ["MAN", "MATERIAL", "MACHINE", "METHOD", "ENV", "INFO"] },
+        "subFactor": { "type": "string" },
+        "description": { "type": "string" },
+        "action": { "type": "string" },
+        "isAbnormal": { "type": "boolean" },
+        "timestamp": { "type": "string" },
+        "uploaderId": { "type": "string" },
+        "uploaderName": { "type": "string" },
+        "uploaderDepartment": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "googleDrivePath": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "All system users."
+    },
+    "/reports/{reportId}": {
+      "schema": "QualityReport",
+      "description": "4M1E1I quality reports list."
+    }
+  }
+}
