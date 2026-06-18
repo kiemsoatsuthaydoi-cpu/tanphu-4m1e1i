@@ -37,6 +37,7 @@ export interface QualityReport {
   category: Category4M1E1I;
   content: string;
   imageUrl: string; // Base64 of compressed WebP
+  imageUrls?: string[]; // Array of up to 3 compressed image Base64s
   compressedSizeKb: number;
   originalSizeKb: number;
   uploaderName: string;

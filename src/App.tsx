@@ -50,6 +50,7 @@ export default function App() {
   const [dbLoading, setDbLoading] = useState(true);
   const [dbStatus, setDbStatus] = useState("Đang kết nối Firestore...");
   const [dbConnected, setDbConnected] = useState(false);
+  const [syncCompleted, setSyncCompleted] = useState(false);
 
   // Persistence state
   const [users, setUsers] = useState<User[]>(() => {
@@ -279,30 +280,110 @@ export default function App() {
         // 1. Seed default data if users collection is empty
         await seedFirestoreIfNeeded();
 
-        // 2. Load collections
+        // 2. Load and SMART MERGE collections to prevent data loss or staleness
         const fUsers = await fetchCollection<User>(COLLECTIONS.USERS);
-        if (fUsers.length > 0) setUsers(fUsers);
+        if (fUsers.length > 0) {
+          setUsers((prev) => {
+            const merged = [...fUsers];
+            prev.forEach((u) => {
+              if (!merged.some((mu) => mu.id === u.id)) {
+                merged.push(u);
+              }
+            });
+            return merged;
+          });
+        }
 
         const fReports = await fetchCollection<QualityReport>(COLLECTIONS.REPORTS);
-        if (fReports.length > 0) setReports(fReports);
+        if (fReports.length > 0) {
+          setReports((prev) => {
+            const merged = [...fReports];
+            prev.forEach((r) => {
+              if (!merged.some((mr) => mr.id === r.id)) {
+                merged.push(r);
+              }
+            });
+            return merged;
+          });
+        }
 
         const fCompanies = await fetchCollection<Company>(COLLECTIONS.COMPANIES);
-        if (fCompanies.length > 0) setCompanies(fCompanies);
+        if (fCompanies.length > 0) {
+          setCompanies((prev) => {
+            const merged = [...fCompanies];
+            prev.forEach((c) => {
+              if (!merged.some((mc) => mc.id === c.id)) {
+                merged.push(c);
+              }
+            });
+            return merged;
+          });
+        }
 
         const fBranches = await fetchCollection<Branch>(COLLECTIONS.BRANCHES);
-        if (fBranches.length > 0) setBranches(fBranches);
+        if (fBranches.length > 0) {
+          setBranches((prev) => {
+            const merged = [...fBranches];
+            prev.forEach((b) => {
+              if (!merged.some((mb) => mb.id === b.id)) {
+                merged.push(b);
+              }
+            });
+            return merged;
+          });
+        }
 
         const fDepts = await fetchCollection<Department>(COLLECTIONS.DEPARTMENTS);
-        if (fDepts.length > 0) setDepartments(fDepts);
+        if (fDepts.length > 0) {
+          setDepartments((prev) => {
+            const merged = [...fDepts];
+            prev.forEach((d) => {
+              if (!merged.some((md) => md.id === d.id)) {
+                merged.push(d);
+              }
+            });
+            return merged;
+          });
+        }
 
         const fBroadcasts = await fetchCollection<BroadcastNotice>(COLLECTIONS.BROADCASTS);
-        if (fBroadcasts.length > 0) setBroadcasts(fBroadcasts);
+        if (fBroadcasts.length > 0) {
+          setBroadcasts((prev) => {
+            const merged = [...fBroadcasts];
+            prev.forEach((b) => {
+              if (!merged.some((mb) => mb.id === b.id)) {
+                merged.push(b);
+              }
+            });
+            return merged;
+          });
+        }
 
         const fChats = await fetchCollection<ChatMessage>(COLLECTIONS.CHATS);
-        if (fChats.length > 0) setChats(fChats);
+        if (fChats.length > 0) {
+          setChats((prev) => {
+            const merged = [...fChats];
+            prev.forEach((c) => {
+              if (!merged.some((mc) => mc.id === c.id)) {
+                merged.push(c);
+              }
+            });
+            return merged;
+          });
+        }
 
         const fProdRequests = await fetchCollection<ProductionRequest>(COLLECTIONS.PRODUCTION_REQUESTS);
-        if (fProdRequests.length > 0) setProductionRequests(fProdRequests);
+        if (fProdRequests.length > 0) {
+          setProductionRequests((prev) => {
+            const merged = [...fProdRequests];
+            prev.forEach((pr) => {
+              if (!merged.some((mpr) => mpr.id === pr.id)) {
+                merged.push(pr);
+              }
+            });
+            return merged;
+          });
+        }
 
         const fRequestItems = await fetchCollection<{ prId: string; items: any[] }>(COLLECTIONS.PRODUCTION_REQUEST_ITEMS);
         if (fRequestItems.length > 0) {
@@ -310,19 +391,55 @@ export default function App() {
           fRequestItems.forEach((x) => {
             if (x.prId) itemsMap[x.prId] = x.items || [];
           });
-          setProductionRequestItemsMap(itemsMap);
+          setProductionRequestItemsMap((prev) => {
+            return {
+              ...prev,
+              ...itemsMap
+            };
+          });
         }
 
         const fOrderImpls = await fetchCollection<OrderImplementation>(COLLECTIONS.ORDER_IMPLEMENTATIONS);
-        if (fOrderImpls.length > 0) setOrderImplementations(fOrderImpls);
+        if (fOrderImpls.length > 0) {
+          setOrderImplementations((prev) => {
+            const merged = [...fOrderImpls];
+            prev.forEach((oi) => {
+              if (!merged.some((moi) => moi.id === oi.id)) {
+                merged.push(oi);
+              }
+            });
+            return merged;
+          });
+        }
 
         const fProducts = await fetchCollection<CatalogProduct>(COLLECTIONS.PRODUCTS_CATALOG);
-        if (fProducts.length > 0) setProductsCatalog(fProducts);
+        if (fProducts.length > 0) {
+          setProductsCatalog((prev) => {
+            const merged = [...fProducts];
+            prev.forEach((p) => {
+              if (!merged.some((mp) => mp.code === p.code)) {
+                merged.push(p);
+              }
+            });
+            return merged;
+          });
+        }
 
         const fMolds = await fetchCollection<CatalogMold>(COLLECTIONS.MOLDS_CATALOG);
-        if (fMolds.length > 0) setMoldsCatalog(fMolds);
+        if (fMolds.length > 0) {
+          setMoldsCatalog((prev) => {
+            const merged = [...fMolds];
+            prev.forEach((m) => {
+              if (!merged.some((mm) => mm.code === m.code)) {
+                merged.push(m);
+              }
+            });
+            return merged;
+          });
+        }
 
         setDbConnected(true);
+        setSyncCompleted(true);
         setDbStatus("Đồng bộ liên kết với server thành công!");
       } catch (error) {
         console.error("Firestore loading error:", error);
@@ -337,82 +454,82 @@ export default function App() {
   // Save changes to localStorage on any state modification + back up to Firestore
   useEffect(() => {
     localStorage.setItem("4m1e1i_users", JSON.stringify(users));
-    if (dbConnected && !dbLoading) {
+    if (syncCompleted && dbConnected && !dbLoading) {
       users.forEach((u) => saveDocument(COLLECTIONS.USERS, u.id, u));
     }
-  }, [users, dbConnected, dbLoading]);
+  }, [users, dbConnected, dbLoading, syncCompleted]);
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_reports", JSON.stringify(reports));
-    if (dbConnected && !dbLoading) {
+    if (syncCompleted && dbConnected && !dbLoading) {
       reports.forEach((r) => saveDocument(COLLECTIONS.REPORTS, r.id, r));
     }
-  }, [reports, dbConnected, dbLoading]);
+  }, [reports, dbConnected, dbLoading, syncCompleted]);
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_companies", JSON.stringify(companies));
-    if (dbConnected && !dbLoading) {
+    if (syncCompleted && dbConnected && !dbLoading) {
       companies.forEach((c) => saveDocument(COLLECTIONS.COMPANIES, c.id, c));
     }
-  }, [companies, dbConnected, dbLoading]);
+  }, [companies, dbConnected, dbLoading, syncCompleted]);
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_branches", JSON.stringify(branches));
-    if (dbConnected && !dbLoading) {
+    if (syncCompleted && dbConnected && !dbLoading) {
       branches.forEach((b) => saveDocument(COLLECTIONS.BRANCHES, b.id, b));
     }
-  }, [branches, dbConnected, dbLoading]);
+  }, [branches, dbConnected, dbLoading, syncCompleted]);
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_departments", JSON.stringify(departments));
-    if (dbConnected && !dbLoading) {
+    if (syncCompleted && dbConnected && !dbLoading) {
       departments.forEach((d) => saveDocument(COLLECTIONS.DEPARTMENTS, d.id, d));
     }
-  }, [departments, dbConnected, dbLoading]);
+  }, [departments, dbConnected, dbLoading, syncCompleted]);
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_broadcasts", JSON.stringify(broadcasts));
-    if (dbConnected && !dbLoading) {
+    if (syncCompleted && dbConnected && !dbLoading) {
       broadcasts.forEach((b) => saveDocument(COLLECTIONS.BROADCASTS, b.id, b));
     }
-  }, [broadcasts, dbConnected, dbLoading]);
+  }, [broadcasts, dbConnected, dbLoading, syncCompleted]);
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_prod_requests", JSON.stringify(productionRequests));
-    if (dbConnected && !dbLoading) {
+    if (syncCompleted && dbConnected && !dbLoading) {
       productionRequests.forEach((pr) => saveDocument(COLLECTIONS.PRODUCTION_REQUESTS, pr.id, pr));
     }
-  }, [productionRequests, dbConnected, dbLoading]);
+  }, [productionRequests, dbConnected, dbLoading, syncCompleted]);
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_prod_request_items", JSON.stringify(productionRequestItemsMap));
-    if (dbConnected && !dbLoading) {
+    if (syncCompleted && dbConnected && !dbLoading) {
       Object.entries(productionRequestItemsMap).forEach(([prId, items]) => {
         saveDocument(COLLECTIONS.PRODUCTION_REQUEST_ITEMS, prId, { prId, items });
       });
     }
-  }, [productionRequestItemsMap, dbConnected, dbLoading]);
+  }, [productionRequestItemsMap, dbConnected, dbLoading, syncCompleted]);
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_order_implementations", JSON.stringify(orderImplementations));
-    if (dbConnected && !dbLoading) {
+    if (syncCompleted && dbConnected && !dbLoading) {
       orderImplementations.forEach((oi) => saveDocument(COLLECTIONS.ORDER_IMPLEMENTATIONS, oi.id, oi));
     }
-  }, [orderImplementations, dbConnected, dbLoading]);
+  }, [orderImplementations, dbConnected, dbLoading, syncCompleted]);
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_products_catalog", JSON.stringify(productsCatalog));
-    if (dbConnected && !dbLoading) {
+    if (syncCompleted && dbConnected && !dbLoading) {
       productsCatalog.forEach((p) => saveDocument(COLLECTIONS.PRODUCTS_CATALOG, p.code, p));
     }
-  }, [productsCatalog, dbConnected, dbLoading]);
+  }, [productsCatalog, dbConnected, dbLoading, syncCompleted]);
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_molds_catalog", JSON.stringify(moldsCatalog));
-    if (dbConnected && !dbLoading) {
+    if (syncCompleted && dbConnected && !dbLoading) {
       moldsCatalog.forEach((m) => saveDocument(COLLECTIONS.MOLDS_CATALOG, m.code, m));
     }
-  }, [moldsCatalog, dbConnected, dbLoading]);
+  }, [moldsCatalog, dbConnected, dbLoading, syncCompleted]);
 
   // Synchronize registration form branch and department choices dynamically
   useEffect(() => {
@@ -453,37 +570,65 @@ export default function App() {
     localStorage.setItem("4m1e1i_current_user", JSON.stringify(currentUser));
   }, [currentUser]);
 
-  // Automatic screen detect and fully immersive fullscreen for mobile devices
+  // Automatic screen detect and fully immersive fullscreen for mobile devices with tap, double-click, and double-tap listeners
   useEffect(() => {
-    // Detect if client is a touch/mobile screen size
     const isMobileDevice = window.innerWidth < 1024 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    
-    if (isMobileDevice) {
-      const requestFullscreenOnInteraction = () => {
-        const docEl = document.documentElement as any;
-        if (!document.fullscreenElement) {
-          if (docEl.requestFullscreen) {
-            docEl.requestFullscreen().catch((err: any) => {
-              console.log("Auto-fullscreen requires direct user click, continuing...", err);
-            });
-          } else if (docEl.webkitRequestFullscreen) {
-            docEl.webkitRequestFullscreen();
-          } else if (docEl.msRequestFullscreen) {
-            docEl.msRequestFullscreen();
-          }
-        }
-        // Remove listener once attempted
-        window.removeEventListener("touchstart", requestFullscreenOnInteraction);
-        window.removeEventListener("click", requestFullscreenOnInteraction);
-      };
+    let lastTap = 0;
 
-      window.addEventListener("touchstart", requestFullscreenOnInteraction, { passive: true });
-      window.addEventListener("click", requestFullscreenOnInteraction);
-      return () => {
-        window.removeEventListener("touchstart", requestFullscreenOnInteraction);
-        window.removeEventListener("click", requestFullscreenOnInteraction);
-      };
+    const requestFullscreenOnInteraction = () => {
+      const doc = document as any;
+      const docEl = document.documentElement as any;
+      if (!doc.fullscreenElement && !doc.webkitFullscreenElement && !doc.mozFullScreenElement && !doc.msFullscreenElement) {
+        if (docEl.requestFullscreen) {
+          docEl.requestFullscreen().catch(() => {});
+        } else if (docEl.webkitRequestFullscreen) {
+          docEl.webkitRequestFullscreen();
+        } else if (docEl.mozRequestFullScreen) {
+          docEl.mozRequestFullScreen();
+        } else if (docEl.msRequestFullscreen) {
+          docEl.msRequestFullscreen();
+        }
+      }
+    };
+
+    const handleDblClick = () => {
+      requestFullscreenOnInteraction();
+    };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      const now = Date.now();
+      const DOUBLE_TAP_DELAY = 300;
+      if (now - lastTap < DOUBLE_TAP_DELAY) {
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+        requestFullscreenOnInteraction();
+      }
+      lastTap = now;
+    };
+
+    // Auto trigger on first touch or click
+    const handleFirstInteraction = () => {
+      requestFullscreenOnInteraction();
+      window.removeEventListener("touchstart", handleFirstInteraction);
+      window.removeEventListener("click", handleFirstInteraction);
+    };
+
+    if (isMobileDevice) {
+      window.addEventListener("touchstart", handleFirstInteraction, { passive: true });
+      window.addEventListener("click", handleFirstInteraction);
     }
+
+    // Always support double click and double tap for toggling fullscreen
+    window.addEventListener("dblclick", handleDblClick);
+    window.addEventListener("touchstart", handleTouchStart, { passive: false });
+
+    return () => {
+      window.removeEventListener("touchstart", handleFirstInteraction);
+      window.removeEventListener("click", handleFirstInteraction);
+      window.removeEventListener("dblclick", handleDblClick);
+      window.removeEventListener("touchstart", handleTouchStart);
+    };
   }, []);
 
   // Handle auto-sync when network gets re-enabled

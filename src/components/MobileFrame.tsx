@@ -3,6 +3,64 @@ import { Search, RotateCw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff,
 import { QualityReport, Category4M1E1I } from "../types";
 import { T } from "./TranslateText";
 
+interface AutoImageSliderProps {
+  imageUrls?: string[];
+  fallbackUrl: string;
+  isAbnormal?: boolean;
+}
+
+export function AutoImageSlider({ imageUrls, fallbackUrl, isAbnormal }: AutoImageSliderProps) {
+  const list = imageUrls && imageUrls.length > 0 ? imageUrls : [fallbackUrl];
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    if (list.length <= 1) return;
+    const interval = setInterval(() => {
+      setIndex((prev) => (prev + 1) % list.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [list]);
+
+  return (
+    <div className="relative group bg-slate-900 border-b border-slate-100 flex items-center justify-center overflow-hidden h-44 w-full select-none">
+      {list.map((url, i) => (
+        <img
+          key={url + i}
+          src={url}
+          alt={`Slide ${i}`}
+          referrerPolicy="no-referrer"
+          className={`absolute inset-0 w-full h-full object-cover transition-all duration-1000 ${
+            i === index ? "opacity-100 scale-100 z-10" : "opacity-0 scale-95 z-0"
+          }`}
+        />
+      ))}
+      
+      {/* Indicator Dots */}
+      {list.length > 1 && (
+        <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex gap-1 z-20 bg-black/60 px-2 py-1 rounded-full">
+          {list.map((_, i) => (
+            <div
+              key={i}
+              className={`w-1.5 h-1.5 rounded-full transition-all ${
+                i === index ? "bg-white scale-110" : "bg-white/40"
+              }`}
+            />
+          ))}
+        </div>
+      )}
+
+      {isAbnormal && (
+        <div className="absolute top-0 inset-x-0 bg-red-600 bg-opacity-85 text-white py-1px px-3 flex items-center gap-1.5 z-20 py-1">
+          <span className="w-2 h-2 rounded-full bg-white animate-pulse block shrink-0" />
+          <T className="text-[10px] font-bold block uppercase tracking-wide leading-none select-none">
+            PHÁT HIỆN BIẾN ĐỘNG BẤT THƯỜNG
+          </T>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface MobileFrameProps {
   reports: QualityReport[];
   currentUserId: string;
@@ -194,22 +252,11 @@ export default function MobileFrame({
 
                 {/* Report Image */}
                 {report.imageUrl && (
-                  <div className="relative group bg-slate-900 border-b border-slate-100 flex items-center justify-center overflow-hidden h-44">
-                    <img
-                      src={report.imageUrl}
-                      alt={report.content}
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    />
-                    {report.isAbnormal && (
-                      <div className="absolute top-0 inset-x-0 bg-red-600 bg-opacity-85 text-white py-1 px-3 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-white animate-pulse block shrink-0" />
-                        <T className="text-[10px] font-bold block uppercase tracking-wide leading-none select-none">
-                          PHÁT HIỆN BIẾN ĐỘNG BẤT THƯỜNG
-                        </T>
-                      </div>
-                    )}
-                  </div>
+                  <AutoImageSlider
+                    imageUrls={report.imageUrls}
+                    fallbackUrl={report.imageUrl}
+                    isAbnormal={report.isAbnormal}
+                  />
                 )}
 
                 {/* Card Info Section */}
@@ -264,7 +311,7 @@ export default function MobileFrame({
       {/* Blue Circular float creation trigger */}
       <button
         onClick={onOpenReportForm}
-        className="absolute bottom-5 right-5 w-14 h-14 bg-[#1e3a8a] text-white rounded-full flex items-center justify-center shadow-xl hover:scale-110 active:scale-90 transition-transform z-20 hover:bg-[#1a306c]"
+        className="absolute bottom-20 right-5 w-14 h-14 bg-[#1e3a8a] text-white rounded-full flex items-center justify-center shadow-xl hover:scale-110 active:scale-90 transition-transform z-20 hover:bg-[#1a306c]"
       >
         <Plus className="w-7 h-7 text-white stroke-[3px]" />
       </button>

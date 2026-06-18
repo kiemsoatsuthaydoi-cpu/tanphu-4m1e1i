@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Users,
   Settings,
@@ -104,6 +104,115 @@ interface DashboardDesktopProps {
   setProductsCatalog: React.Dispatch<React.SetStateAction<CatalogProduct[]>>;
   moldsCatalog: CatalogMold[];
   setMoldsCatalog: React.Dispatch<React.SetStateAction<CatalogMold[]>>;
+}
+
+interface DesktopThumbnailSliderProps {
+  imageUrls?: string[];
+  fallbackUrl: string;
+}
+
+function DesktopThumbnailSlider({ imageUrls, fallbackUrl }: DesktopThumbnailSliderProps) {
+  const list = imageUrls && imageUrls.length > 0 ? imageUrls : [fallbackUrl];
+  const [index, setIndex] = useState(0);
+  const [zoomOpen, setZoomOpen] = useState(false);
+
+  useEffect(() => {
+    if (list.length <= 1) return;
+    const interval = setInterval(() => {
+      setIndex((prev) => (prev + 1) % list.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [list]);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setZoomOpen(true)}
+        className="inline-block border border-slate-200 rounded p-0.5 bg-slate-50 relative group overflow-hidden focus:outline-none hover:border-blue-500"
+      >
+        <div className="w-10 h-8 relative overflow-hidden">
+          {list.map((url, i) => (
+            <img
+              key={url + i}
+              src={url}
+              alt="Thumb"
+              referrerPolicy="no-referrer"
+              className={`absolute inset-0 w-full h-full object-cover rounded cursor-zoom-in group-hover:scale-110 transition-all duration-1000 ${
+                i === index ? "opacity-100 scale-100 z-10" : "opacity-0 scale-95 z-0"
+              }`}
+            />
+          ))}
+        </div>
+        {list.length > 1 && (
+          <span className="absolute bottom-0 right-0 bg-blue-600 text-white text-[8px] font-black px-1 rounded-tl leading-none scale-90 z-20">
+            {list.length}
+          </span>
+        )}
+      </button>
+
+      {/* Elegant lightbox Zoom overlay modal */}
+      {zoomOpen && (
+        <div
+          className="fixed inset-0 bg-slate-950/80 z-[1000] flex items-center justify-center p-4 backdrop-blur-sm transition-opacity"
+          onClick={() => setZoomOpen(false)}
+        >
+          <div
+            className="bg-white rounded-3xl p-4 max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setZoomOpen(false)}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-800 flex items-center justify-center text-sm font-bold z-50 shadow"
+            >
+              ✕
+            </button>
+            <div className="flex-1 overflow-hidden h-96 relative rounded-2xl bg-slate-900 flex items-center justify-center">
+              <img
+                src={list[index]}
+                alt="Zoomed"
+                referrerPolicy="no-referrer"
+                className="max-h-full max-w-full object-contain"
+              />
+              {/* Inner overlay dot indicators */}
+              <div className="absolute bottom-3 left-1/2 transform -translate-x-1/2 flex gap-1 bg-black/55 px-2 py-1 rounded-full z-10">
+                {list.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setIndex(i)}
+                    className={`w-2 h-2 rounded-full transition-all ${
+                      i === index ? "bg-white scale-110" : "bg-white/40 hover:bg-white/70"
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="mt-3 flex justify-between items-center px-1">
+              <span className="text-xs text-slate-500 font-medium">
+                <T>Hình ảnh</T> {index + 1} / {list.length}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIndex((prev) => (prev - 1 + list.length) % list.length)}
+                  className="px-2.5 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 text-xs font-bold rounded"
+                >
+                  <T>◀ Trước</T>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIndex((prev) => (prev + 1) % list.length)}
+                  className="px-2.5 py-1 bg-[#1e3a8a] text-white hover:bg-[#152862] text-xs font-bold rounded"
+                >
+                  <T>Tiếp ▶</T>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 export default function DashboardDesktop({
@@ -1111,14 +1220,7 @@ export default function DashboardDesktop({
                             </td>
                             <td className="p-4 text-center">
                               {r.imageUrl ? (
-                                <div className="inline-block border border-slate-200 rounded p-0.5 bg-slate-50 relative group overflow-hidden">
-                                  <img
-                                    src={r.imageUrl}
-                                    alt="Thumb"
-                                    referrerPolicy="no-referrer"
-                                    className="w-10 h-8 object-cover rounded cursor-zoom-in group-hover:scale-110 transition-transform"
-                                  />
-                                </div>
+                                <DesktopThumbnailSlider imageUrls={r.imageUrls} fallbackUrl={r.imageUrl} />
                               ) : (
                                 <T className="text-slate-400 text-[10px]">Trống</T>
                               )}

@@ -28,13 +28,20 @@ export default function ReportForm({
   const [notes, setNotes] = useState(editingReport?.notes || "");
   const [isAbnormal, setIsAbnormal] = useState(editingReport?.isAbnormal || false);
 
-  // Image parameters
-  const [originalImage, setOriginalImage] = useState<HTMLImageElement | null>(null);
-  const [originalImgUrl, setOriginalImgUrl] = useState<string>("");
-  const [rotationAngle, setRotationAngle] = useState(0);
-  const [qualitySlider, setQualitySlider] = useState(85);
-  const [cropBox, setCropBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
-  const [compressedResult, setCompressedResult] = useState<CompressingResult | null>(null);
+  // Multiple Images Management (Max 3)
+  interface ProcessedImage {
+    id: string;
+    base64: string;
+    compressedSizeKb: number;
+    originalSizeKb: number;
+    rotationAngle: number;
+    cropBox: { x: number; y: number; width: number; height: number } | null;
+    originalImage: HTMLImageElement | null;
+    qualitySlider: number;
+  }
+
+  const [images, setImages] = useState<ProcessedImage[]>([]);
+  const [activeImageIndex, setActiveImageIndex] = useState<number>(-1);
   const [isCompressing, setIsCompressing] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -60,70 +67,167 @@ export default function ReportForm({
     }
   }, [editingReport]);
 
-  // Keep re-compressing the image dynamically if raw image, quality, rotation, or crop changes
+  // Loading existing report's images
   useEffect(() => {
-    if (!originalImage) {
-      if (editingReport?.imageUrl) {
-        // Mock fallback results if editing existing report with loaded string
-        setCompressedResult({
-          compressedBase64: editingReport.imageUrl,
-          originalSizeKb: editingReport.originalSizeKb || 350,
-          compressedSizeKb: editingReport.compressedSizeKb || 142,
-          width: 800,
-          height: 600,
-          qualityUsed: 0.85
-        });
-      }
-      return;
+    if (editingReport && images.length === 0) {
+      const urls = editingReport.imageUrls || (editingReport.imageUrl ? [editingReport.imageUrl] : []);
+      
+      const loadInitialImages = async () => {
+        const loaded: ProcessedImage[] = [];
+        for (let i = 0; i < urls.length; i++) {
+          const url = urls[i];
+          let imgEl: HTMLImageElement | null = null;
+          try {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            await new Promise((resolve, reject) => {
+              img.onload = () => {
+                imgEl = img;
+                resolve(null);
+              };
+              img.onerror = reject;
+              img.src = url;
+            });
+          } catch (e) {
+            console.warn("Could not preload original image for editing tools:", e);
+          }
+
+          loaded.push({
+            id: `edit-${i}-${Date.now()}-${Math.random()}`,
+            base64: url,
+            compressedSizeKb: Math.round((editingReport.compressedSizeKb || 120) / urls.length),
+            originalSizeKb: Math.round((editingReport.originalSizeKb || 300) / urls.length),
+            rotationAngle: 0,
+            cropBox: null,
+            originalImage: imgEl,
+            qualitySlider: 85
+          });
+        }
+
+        setImages(loaded);
+        if (loaded.length > 0) {
+          setActiveImageIndex(0);
+        }
+      };
+
+      loadInitialImages();
     }
+  }, [editingReport]);
 
-    const triggerProcessing = async () => {
-      setIsCompressing(true);
-      try {
-        const res = await processImage(originalImage, {
-          rotationAngle,
-          cropState: cropBox,
-          targetMinKb: 100,
-          targetMaxKb: 200
-        });
-        setCompressedResult(res);
-      } catch (err) {
-        console.error("Lỗi nén ảnh:", err);
-      } finally {
-        setIsCompressing(false);
-      }
-    };
+  // Single Image compression processor
+  const runCompressionForActive = async (
+    index: number,
+    rotation: number,
+    crop: { x: number; y: number; width: number; height: number } | null,
+    quality: number
+  ) => {
+    const targetImg = images[index];
+    if (!targetImg || !targetImg.originalImage) return;
 
-    const timer = setTimeout(triggerProcessing, 250); // Debounce resizing checks
-    return () => clearTimeout(timer);
-  }, [originalImage, rotationAngle, cropBox, qualitySlider, editingReport]);
+    setIsCompressing(true);
+    try {
+      const targetMin = Math.max(50, quality - 20);
+      const targetMax = Math.max(100, quality + 30);
+
+      const res = await processImage(targetImg.originalImage, {
+        rotationAngle: rotation,
+        cropState: crop,
+        targetMinKb: targetMin,
+        targetMaxKb: targetMax
+      });
+
+      setImages(prev => prev.map((img, i) => i === index ? {
+        ...img,
+        base64: res.compressedBase64,
+        compressedSizeKb: res.compressedSizeKb,
+        originalSizeKb: res.originalSizeKb,
+        rotationAngle: rotation,
+        cropBox: crop,
+        qualitySlider: quality
+      } : img));
+    } catch (err) {
+      console.error("Lỗi nén ảnh:", err);
+    } finally {
+      setIsCompressing(false);
+    }
+  };
 
   // Manual File input trigger
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (images.length >= 3) {
+      alert("Quý khách chỉ được chọn tối đa 3 hình ảnh.");
+      return;
+    }
+
+    setIsCompressing(true);
     try {
       const img = await loadImage(file);
-      setOriginalImage(img);
-      const dataUrl = URL.createObjectURL(file);
-      setOriginalImgUrl(dataUrl);
-      setCropBox(null); // Reset crop box for new uploads
-      setRotationAngle(0);
+      const res = await processImage(img, {
+        rotationAngle: 0,
+        cropState: null,
+        targetMinKb: 100,
+        targetMaxKb: 200
+      });
+
+      const newImageItem: ProcessedImage = {
+        id: `upload-${Date.now()}-${Math.random()}`,
+        base64: res.compressedBase64,
+        compressedSizeKb: res.compressedSizeKb,
+        originalSizeKb: res.originalSizeKb,
+        rotationAngle: 0,
+        cropBox: null,
+        originalImage: img,
+        qualitySlider: 85
+      };
+
+      setImages(prev => {
+        const updated = [...prev, newImageItem];
+        setActiveImageIndex(updated.length - 1);
+        return updated;
+      });
     } catch (err) {
       alert("Không kham nạp được file hình ảnh do lỗi bộ giải mã.");
+    } finally {
+      setIsCompressing(false);
     }
   };
 
   // Rotation trigger
-  const rotateLeft = () => setRotationAngle((prev) => (prev + 90) % 360);
+  const rotateLeft = () => {
+    if (activeImageIndex < 0 || activeImageIndex >= images.length) return;
+    const active = images[activeImageIndex];
+    const nextRotation = (active.rotationAngle + 90) % 360;
+    runCompressionForActive(activeImageIndex, nextRotation, active.cropBox, active.qualitySlider);
+  };
 
-  // Preset crop helper: Square crop center logic simulator
+  // Preset crop helper
   const toggleSquareCrop = () => {
-    if (cropBox) {
-      setCropBox(null);
+    if (activeImageIndex < 0 || activeImageIndex >= images.length) return;
+    const active = images[activeImageIndex];
+    const nextCrop = active.cropBox ? null : { x: 12.5, y: 12.5, width: 75, height: 75 };
+    runCompressionForActive(activeImageIndex, active.rotationAngle, nextCrop, active.qualitySlider);
+  };
+
+  // Quality slider change
+  const handleQualitySliderChange = (newQual: number) => {
+    if (activeImageIndex < 0 || activeImageIndex >= images.length) return;
+    const active = images[activeImageIndex];
+    setImages(prev => prev.map((img, i) => i === activeImageIndex ? { ...img, qualitySlider: newQual } : img));
+    runCompressionForActive(activeImageIndex, active.rotationAngle, active.cropBox, newQual);
+  };
+
+  // Delete specific index image
+  const handleDeleteActiveImage = () => {
+    if (activeImageIndex < 0 || activeImageIndex >= images.length) return;
+    const filtered = images.filter((_, i) => i !== activeImageIndex);
+    setImages(filtered);
+    if (filtered.length === 0) {
+      setActiveImageIndex(-1);
     } else {
-      setCropBox({ x: 12.5, y: 12.5, width: 75, height: 75 }); // Select center square proportional
+      setActiveImageIndex(Math.max(0, activeImageIndex - 1));
     }
   };
 
@@ -134,19 +238,23 @@ export default function ReportForm({
       return;
     }
 
-    if (!compressedResult && !editingReport?.imageUrl) {
+    if (images.length === 0) {
       alert("Hãy đính kèm hình ảnh minh chứng để đảm bảo tính xác thực.");
       return;
     }
+
+    const totalCompressedSizeKb = images.reduce((sum, img) => sum + img.compressedSizeKb, 0);
+    const totalOriginalSizeKb = images.reduce((sum, img) => sum + img.originalSizeKb, 0);
 
     const reportPayload: Omit<QualityReport, "id" | "googleDrivePath"> = {
       factory: selectedBranch,
       timestamp,
       category: selectedCategory,
       content,
-      imageUrl: compressedResult?.compressedBase64 || editingReport?.imageUrl || "",
-      compressedSizeKb: compressedResult?.compressedSizeKb || editingReport?.compressedSizeKb || 142,
-      originalSizeKb: compressedResult?.originalSizeKb || editingReport?.originalSizeKb || 310,
+      imageUrl: images[0].base64,
+      imageUrls: images.map(img => img.base64),
+      compressedSizeKb: totalCompressedSizeKb,
+      originalSizeKb: totalOriginalSizeKb,
       uploaderName: currentUser.fullName,
       uploaderPhone: currentUser.phone,
       uploaderId: currentUser.id,
@@ -231,12 +339,12 @@ export default function ReportForm({
           </label>
           <div className="grid grid-cols-2 gap-1.5">
             {[
-              { id: "CON NGƯỜI", color: "bg-indigo-600 border-indigo-400 text-indigo-700" },
-              { id: "NGUYÊN VẬT LIỆU", color: "bg-fuchsia-600 border-fuchsia-400 text-fuchsia-700" },
-              { id: "MÁY MÓC", color: "bg-emerald-600 border-emerald-400 text-emerald-700" },
-              { id: "PHƯƠNG PHÁP", color: "bg-amber-600 border-amber-400 text-amber-700" },
-              { id: "MÔI TRƯỜNG", color: "bg-teal-600 border-teal-400 text-teal-700" },
-              { id: "THÔNG TIN", color: "bg-slate-600 border-slate-400 text-slate-700" }
+              { id: "CON NGƯỜI", color: "bg-indigo-600 border-indigo-700 text-white" },
+              { id: "NGUYÊN VẬT LIỆU", color: "bg-fuchsia-600 border-fuchsia-700 text-white" },
+              { id: "MÁY MÓC", color: "bg-emerald-600 border-emerald-700 text-white" },
+              { id: "PHƯƠNG PHÁP", color: "bg-amber-600 border-amber-700 text-white" },
+              { id: "MÔI TRƯỜNG", color: "bg-teal-600 border-teal-700 text-white" },
+              { id: "THÔNG TIN", color: "bg-slate-700 border-slate-800 text-white" }
             ].map((cat) => {
               const isSel = selectedCategory === cat.id;
               return (
@@ -246,8 +354,8 @@ export default function ReportForm({
                   onClick={() => setSelectedCategory(cat.id as Category4M1E1I)}
                   className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase text-center border transition-all ${
                     isSel
-                      ? `${cat.color} bg-opacity-10 dark:bg-opacity-50 border-2 shadow-sm ring-1`
-                      : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                      ? `${cat.color} border-2 shadow-md ring-1 ring-white/10 font-bold`
+                      : "bg-white border-slate-200 text-slate-600 hover:bg-slate-100"
                   }`}
                 >
                   <T>{cat.id}</T>
@@ -259,9 +367,14 @@ export default function ReportForm({
 
         {/* 4. Photo Evidence (Hình ảnh minh chứng*) */}
         <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-3">
-          <label className="text-xs font-bold text-slate-700 block uppercase">
-            <T>Hình ảnh minh chứng (Nhấp để chụp hoặc tải)*</T>
-          </label>
+          <div className="flex justify-between items-center">
+            <label className="text-xs font-bold text-slate-700 block uppercase">
+              <T>Hình ảnh minh chứng (Tối đa 3 ảnh)*</T>
+            </label>
+            <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full">
+              {images.length}/3 <T>ảnh</T>
+            </span>
+          </div>
           
           <input
             type="file"
@@ -271,112 +384,157 @@ export default function ReportForm({
             className="hidden"
           />
 
-          {!originalImage && !editingReport?.imageUrl ? (
+          {/* Thumbnail row */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {images.map((img, idx) => {
+              const isActive = idx === activeImageIndex;
+              return (
+                <div key={img.id} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setActiveImageIndex(idx)}
+                    className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
+                      isActive ? "border-indigo-600 ring-2 ring-indigo-200 scale-105" : "border-slate-200 opacity-80"
+                    }`}
+                  >
+                    <img src={img.base64} alt={`Thumb ${idx}`} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const filtered = images.filter((_, i) => i !== idx);
+                      setImages(filtered);
+                      if (filtered.length === 0) {
+                        setActiveImageIndex(-1);
+                      } else {
+                        setActiveImageIndex(Math.max(0, idx - 1));
+                      }
+                    }}
+                    className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full text-white text-[10px] font-bold flex items-center justify-center shadow-md hover:scale-110 active:scale-95 cursor-pointer"
+                    title="Xóa ảnh"
+                  >
+                    ✕
+                  </button>
+                </div>
+              );
+            })}
+
+            {/* Empty slots or add button */}
+            {images.length < 3 && (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-16 h-16 border-2 border-dashed border-slate-300 hover:border-indigo-500 rounded-lg flex flex-col items-center justify-center text-slate-400 bg-slate-50 transition-colors"
+              >
+                <Camera className="w-5 h-5 text-slate-400" />
+                <span className="text-[8px] font-bold mt-0.5"><T>THÊM</T></span>
+              </button>
+            )}
+          </div>
+
+          {images.length === 0 ? (
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="w-full h-32 border-2 border-dashed border-slate-200 rounded-xl hover:border-blue-400 active:bg-slate-50 transition-colors flex flex-col items-center justify-center text-slate-400"
+              className="w-full h-24 border-2 border-dashed border-slate-200 rounded-xl hover:border-blue-400 active:bg-slate-50 transition-colors flex flex-col items-center justify-center text-slate-400"
             >
-              <Camera className="w-8 h-8 mb-1.5 text-slate-400 stroke-[1.5]" />
+              <Camera className="w-8 h-8 mb-1 text-slate-400 stroke-[1.5]" />
               <T className="text-xs font-semibold">TẢI HOẶC CHỤP HÌNH ẢNH</T>
-              <T className="text-[9px] text-slate-400 mt-1">Đường truyền nén WebP tự động lưu lượng</T>
+              <T className="text-[8px] text-slate-400">Hỗ trợ tối đa 3 ảnh, nén nạp WebP thông minh</T>
             </button>
           ) : (
-            <div className="space-y-3">
-              {/* Photo Display Zone */}
-              <div className="relative border border-slate-100 rounded-lg overflow-hidden h-40 bg-slate-100 flex items-center justify-center">
-                <img
-                  src={compressedResult?.compressedBase64 || editingReport?.imageUrl}
-                  alt="Review"
-                  referrerPolicy="no-referrer"
-                  className="max-w-full max-h-full object-contain"
-                />
-                
-                {isCompressing && (
-                  <div className="absolute inset-0 bg-slate-900 bg-opacity-40 flex items-center justify-center text-white">
-                    <RefreshCw className="w-6 h-6 animate-spin" />
+            activeImageIndex >= 0 && activeImageIndex < images.length && (
+              <div className="space-y-2 border-t pt-2 border-slate-100">
+                {/* Active Image Display Zone */}
+                <div className="relative border border-slate-100 rounded-lg overflow-hidden h-40 bg-slate-100 flex items-center justify-center">
+                  <img
+                    src={images[activeImageIndex].base64}
+                    alt="Active Review"
+                    referrerPolicy="no-referrer"
+                    className="max-w-full max-h-full object-contain"
+                  />
+                  
+                  {isCompressing && (
+                    <div className="absolute inset-0 bg-slate-900 bg-opacity-40 flex items-center justify-center text-white">
+                      <RefreshCw className="w-6 h-6 animate-spin" />
+                    </div>
+                  )}
+                  
+                  <div className="absolute bottom-1 right-1 bg-black bg-opacity-50 text-white px-1.5 py-0.5 rounded text-[8px] font-mono">
+                    <T>Mã hình: </T> {activeImageIndex + 1}
                   </div>
-                )}
-              </div>
+                </div>
 
-              {/* Compression dashboard indices */}
-              {compressedResult && (
-                <div className="bg-indigo-50 border border-indigo-100 p-2.5 rounded-lg space-y-2">
+                {/* Compression stats & adjustments for active image */}
+                <div className="bg-indigo-50 border border-indigo-100 p-2 rounded-lg space-y-2">
                   <div className="flex justify-between text-[10px] font-bold text-indigo-900">
                     <T>Nén thông minh WebP:</T>
-                    <T className="text-blue-700">
-                      {compressedResult.compressedSizeKb} KB ({Math.round((0.15 - compressedResult.compressedSizeKb / 1000) * 100)}% tối ưu)
-                    </T>
+                    <span className="text-blue-700">
+                      {images[activeImageIndex].compressedSizeKb} KB 
+                    </span>
                   </div>
-                  {/* Progress size gauge pointer */}
-                  <div className="w-full bg-slate-200 rounded-full h-2">
+                  
+                  {/* Progress gauge */}
+                  <div className="w-full bg-slate-200 rounded-full h-1.5">
                     <div
-                      className={`h-2 rounded-full transition-all duration-300 ${
-                        compressedResult.compressedSizeKb < 100
+                      className={`h-1.5 rounded-full transition-all duration-300 ${
+                        images[activeImageIndex].compressedSizeKb < 100
                           ? "bg-amber-400"
-                          : compressedResult.compressedSizeKb <= 200
+                          : images[activeImageIndex].compressedSizeKb <= 200
                           ? "bg-emerald-500"
                           : "bg-red-500"
                       }`}
-                      style={{ width: `${Math.min(100, (compressedResult.compressedSizeKb / 250) * 100)}%` }}
+                      style={{ width: `${Math.min(100, (images[activeImageIndex].compressedSizeKb / 250) * 100)}%` }}
                     />
                   </div>
-                  <div className="flex justify-between items-center text-[8px] text-slate-400 font-mono">
-                    <T>0 KB / Quá gọn</T>
-                    <T className="text-emerald-600 font-bold">100-200 KB Tiêu chuẩn</T>
-                    <T>250 KB / Quá nặng</T>
-                  </div>
 
-                  {/* Manual canvas adjustments */}
-                  <div className="pt-1 border-t border-indigo-100 grid grid-cols-3 gap-1.5">
-                    <button
-                      type="button"
-                      onClick={rotateLeft}
-                      className="px-2 py-1 bg-white border border-slate-200 rounded text-[9px] font-bold flex items-center justify-center gap-1 hover:bg-slate-50 cursor-pointer text-slate-600"
-                    >
-                      <RotateCw className="w-3 h-3" />
-                      <T>XOAY 90°</T>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={toggleSquareCrop}
-                      className={`px-2 py-1 border rounded text-[9px] font-bold flex items-center justify-center gap-1 cursor-pointer ${
-                        cropBox
-                          ? "bg-amber-500 border-amber-600 text-white"
-                          : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                      }`}
-                    >
-                      <Scissors className="w-3 h-3" />
-                      <T>{cropBox ? "HUỶ CẮT" : "CẮT VUÔNG"}</T>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="px-2 py-1 bg-white border border-slate-200 rounded text-[9px] font-bold flex items-center justify-center gap-1 hover:bg-slate-50 cursor-pointer text-[#1e3a8a]"
-                    >
-                      <Camera className="w-3 h-3" />
-                      <T>ĐỔI ẢNH</T>
-                    </button>
-                  </div>
-
-                  {/* Manual quality sliders */}
-                  <div className="pt-2 text-left space-y-1">
-                    <div className="flex justify-between text-[9px] font-semibold text-slate-500">
-                      <T>Điều chỉnh độ sắc nét mục tiêu:</T>
-                      <T className="font-bold text-indigo-700">{qualitySlider}%</T>
+                  {/* Visual adjustment buttons */}
+                  {images[activeImageIndex].originalImage && (
+                    <div className="pt-1 border-t border-indigo-100 grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={rotateLeft}
+                        className="px-2 py-1 bg-white border border-slate-200 rounded text-[9px] font-bold flex items-center justify-center gap-1 hover:bg-slate-50 cursor-pointer text-slate-600"
+                      >
+                        <RotateCw className="w-3 h-3" />
+                        <T>XOAY 90°</T>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={toggleSquareCrop}
+                        className={`px-2 py-1 border rounded text-[9px] font-bold flex items-center justify-center gap-1 cursor-pointer ${
+                          images[activeImageIndex].cropBox
+                            ? "bg-amber-500 border-amber-600 text-white"
+                            : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        <Scissors className="w-3 h-3" />
+                        <T>{images[activeImageIndex].cropBox ? "HUỶ CẮT" : "CẮT VUÔNG"}</T>
+                      </button>
                     </div>
-                    <input
-                      type="range"
-                      min="10"
-                      max="100"
-                      value={qualitySlider}
-                      onChange={(e) => setQualitySlider(Number(e.target.value))}
-                      className="w-full accent-indigo-600 bg-slate-300"
-                    />
-                  </div>
+                  )}
+
+                  {/* Manual quality tuner slider */}
+                  {images[activeImageIndex].originalImage && (
+                    <div className="pt-1 text-left space-y-0.5">
+                      <div className="flex justify-between text-[9px] font-semibold text-slate-500">
+                        <T>Độ sắc nét mục tiêu:</T>
+                        <span className="font-bold text-indigo-700">{images[activeImageIndex].qualitySlider}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="10"
+                        max="100"
+                        value={images[activeImageIndex].qualitySlider}
+                        onChange={(e) => handleQualitySliderChange(Number(e.target.value))}
+                        className="w-full accent-indigo-600 bg-slate-300 h-1 rounded"
+                      />
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
+            )
           )}
         </div>
 
