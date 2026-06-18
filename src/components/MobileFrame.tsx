@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Search, RotateCw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Info, ArrowLeft, Camera, Trash2, Edit } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Search, RotateCw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize } from "lucide-react";
 import { QualityReport, Category4M1E1I } from "../types";
 import { T } from "./TranslateText";
 
@@ -22,6 +22,45 @@ export default function MobileFrame({
 }: MobileFrameProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", handleFsChange);
+    document.addEventListener("webkitfullscreenchange", handleFsChange);
+    document.addEventListener("mozfullscreenchange", handleFsChange);
+    document.addEventListener("MSFullscreenChange", handleFsChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFsChange);
+      document.removeEventListener("webkitfullscreenchange", handleFsChange);
+      document.removeEventListener("mozfullscreenchange", handleFsChange);
+      document.removeEventListener("MSFullscreenChange", handleFsChange);
+    };
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      const docEl = document.documentElement as any;
+      if (docEl.requestFullscreen) {
+        docEl.requestFullscreen().catch(() => {});
+      } else if (docEl.webkitRequestFullscreen) {
+        docEl.webkitRequestFullscreen();
+      } else if (docEl.msRequestFullscreen) {
+        docEl.msRequestFullscreen();
+      }
+    } else {
+      const doc = document as any;
+      if (doc.exitFullscreen) {
+        doc.exitFullscreen().catch(() => {});
+      } else if (doc.webkitExitFullscreen) {
+        doc.webkitExitFullscreen();
+      } else if (doc.msExitFullscreen) {
+        doc.msExitFullscreen();
+      }
+    }
+  };
 
   // Filter items based on uploader or factory search or description search
   const filteredReports = reports.filter((r) => {
@@ -66,6 +105,17 @@ export default function MobileFrame({
           <T className="font-bold text-sm tracking-wide">BÁO CÁO 4M1E1I</T>
         </div>
         <div className="flex items-center gap-3">
+          <button 
+            onClick={toggleFullscreen}
+            className="hover:scale-115 active:scale-95 transition-transform"
+            title={isFullscreen ? "Thoát toàn màn hình" : "Bung toàn màn hình"}
+          >
+            {isFullscreen ? (
+              <Minimize className="w-[18px] h-[18px] text-white" />
+            ) : (
+              <Maximize className="w-[18px] h-[18px] text-white" />
+            )}
+          </button>
           <button 
             onClick={() => { setSelectedCategory(null); setSearchTerm(""); }} 
             className="hover:scale-115 active:scale-95 transition-transform"

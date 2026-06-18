@@ -453,6 +453,39 @@ export default function App() {
     localStorage.setItem("4m1e1i_current_user", JSON.stringify(currentUser));
   }, [currentUser]);
 
+  // Automatic screen detect and fully immersive fullscreen for mobile devices
+  useEffect(() => {
+    // Detect if client is a touch/mobile screen size
+    const isMobileDevice = window.innerWidth < 1024 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    if (isMobileDevice) {
+      const requestFullscreenOnInteraction = () => {
+        const docEl = document.documentElement as any;
+        if (!document.fullscreenElement) {
+          if (docEl.requestFullscreen) {
+            docEl.requestFullscreen().catch((err: any) => {
+              console.log("Auto-fullscreen requires direct user click, continuing...", err);
+            });
+          } else if (docEl.webkitRequestFullscreen) {
+            docEl.webkitRequestFullscreen();
+          } else if (docEl.msRequestFullscreen) {
+            docEl.msRequestFullscreen();
+          }
+        }
+        // Remove listener once attempted
+        window.removeEventListener("touchstart", requestFullscreenOnInteraction);
+        window.removeEventListener("click", requestFullscreenOnInteraction);
+      };
+
+      window.addEventListener("touchstart", requestFullscreenOnInteraction, { passive: true });
+      window.addEventListener("click", requestFullscreenOnInteraction);
+      return () => {
+        window.removeEventListener("touchstart", requestFullscreenOnInteraction);
+        window.removeEventListener("click", requestFullscreenOnInteraction);
+      };
+    }
+  }, []);
+
   // Handle auto-sync when network gets re-enabled
   const handleToggleOfflineMode = () => {
     const nextOffline = !offlineMode;
