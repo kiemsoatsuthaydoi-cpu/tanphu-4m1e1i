@@ -1133,14 +1133,8 @@ export default function App() {
 
       {/* Floating mobile simulator overlay on small screen if toggled */}
       {showMobilePreview && (
-        <div className="lg:hidden fixed inset-0 z-50 bg-[#1E293B]/95 p-6 flex items-center justify-center">
-          <div className="relative">
-            <button
-              onClick={() => setShowMobilePreview(false)}
-              className="absolute -top-12 right-0 bg-blue-600 text-white p-2.5 rounded-full hover:bg-blue-700 active:scale-95 transition-all text-xs font-bold shadow-md"
-            >
-              <T>X ĐÓNG GIAO DIỆN DI ĐỘNG</T>
-            </button>
+        <div className="lg:hidden fixed inset-0 z-50 bg-slate-950 flex flex-col items-center justify-center p-0">
+          <div className="relative w-full h-[100dvh] max-w-[440px] flex flex-col items-center justify-center">
             {isFormOpen ? (
               <ReportForm
                 currentUser={currentUser}
@@ -1162,6 +1156,15 @@ export default function App() {
                 offlineMode={offlineMode}
               />
             )}
+
+            {/* floating switch back screen toggle at bottom-left corner */}
+            <button
+              onClick={() => setShowMobilePreview(false)}
+              className="absolute bottom-20 left-4 bg-slate-950/95 text-white rounded-full p-3 shadow-2xl border border-white/15 hover:scale-105 active:scale-95 transition-transform z-30 flex items-center justify-center cursor-pointer"
+              title="Quay lại giao diện máy tính"
+            >
+              <Monitor className="w-4.5 h-4.5 text-slate-300" />
+            </button>
           </div>
         </div>
       )}

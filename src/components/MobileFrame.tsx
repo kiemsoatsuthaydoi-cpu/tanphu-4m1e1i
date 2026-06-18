@@ -55,23 +55,7 @@ export default function MobileFrame({
   };
 
   return (
-    <div id="mobile-viewport" className="w-[375px] h-[780px] bg-slate-100 rounded-[36px] border-8 border-slate-800 shadow-2xl overflow-hidden flex flex-col relative">
-      {/* Phone status bar */}
-      <div className="bg-[#1e3a8a] text-white text-xs px-6 py-2 flex justify-between items-center select-none shrink-0 font-sans">
-        <T className="font-semibold text-[10px]">19:25</T>
-        <div className="w-32 h-4 bg-slate-900 rounded-full mx-auto" />
-        <div className="flex items-center gap-1.5">
-          {offlineMode ? (
-            <span className="bg-red-500 w-1.5 h-1.5 rounded-full animate-pulse" />
-          ) : (
-            <span className="bg-emerald-500 w-1.5 h-1.5 rounded-full" />
-          )}
-          <T className="text-[10px] scale-90 font-mono">
-            {offlineMode ? "OFFLINE" : "4G LTE"}
-          </T>
-        </div>
-      </div>
-
+    <div id="mobile-viewport" className="w-full h-[100dvh] max-w-[440px] lg:w-[375px] lg:h-[780px] bg-slate-100 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl overflow-hidden flex flex-col relative">
       {/* Main Appsheet Blue Title Bar */}
       <div className="bg-[#1e3a8a] text-white px-4 py-3 flex items-center justify-between shadow-md shrink-0 select-none">
         <div className="flex items-center gap-2">
