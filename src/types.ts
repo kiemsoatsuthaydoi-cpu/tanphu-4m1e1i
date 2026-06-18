@@ -30,6 +30,13 @@ export type Category4M1E1I =
   | "MÔI TRƯỜNG" 
   | "THÔNG TIN";
 
+export interface QualityReportDirective {
+  id: string;
+  text: string;
+  author: string;
+  timestamp: string;
+}
+
 export interface QualityReport {
   id: string;
   factory: string;
@@ -47,6 +54,11 @@ export interface QualityReport {
   notes?: string;
   isAbnormal: boolean; // Is abnormal/alert report
   googleDrivePath?: string;
+  directives?: QualityReportDirective[];
+  likedBy?: string[];
+  sharedBy?: string[];
+  updatedAt?: string;
+  updateLogs?: string[];
 }
 
 export interface Company {

@@ -21,7 +21,7 @@ export default function ReportForm({
   offlineMode
 }: ReportFormProps) {
   // Fields state
-  const [selectedBranch, setSelectedBranch] = useState(editingReport?.factory || initialBranches[1].name); // Standard default Chi Nhánh Bắc Ninh
+  const [selectedBranch, setSelectedBranch] = useState(editingReport?.factory || currentUser?.branch || initialBranches[1].name); // Tự động nhận diện chi nhánh người dùng
   const [selectedCategory, setSelectedCategory] = useState<Category4M1E1I>(editingReport?.category || "CON NGƯỜI");
   const [timestamp, setTimestamp] = useState("");
   const [content, setContent] = useState(editingReport?.content || "");
@@ -296,8 +296,14 @@ export default function ReportForm({
 
         {/* 1. Branch selection block (Chi nhánh*) */}
         <div>
-          <label className="text-xs font-bold text-slate-700 flex items-center mb-1.5 uppercase">
+          <label className="text-xs font-bold text-slate-700 flex items-center justify-between mb-1.5 uppercase">
             <T>Chi nhánh ghi nhận*</T>
+            {currentUser?.branch && selectedBranch === currentUser.branch && (
+              <span className="text-[9px] text-emerald-600 font-extrabold flex items-center gap-0.5 normal-case">
+                <span>🛡️</span>
+                <T>Tự động nhận diện</T>
+              </span>
+            )}
           </label>
           <div className="grid grid-cols-2 gap-1.5">
             {initialBranches.map((b) => {
@@ -598,6 +604,16 @@ export default function ReportForm({
           />
         </div>
       </div>
+
+      {/* Green floating BACK button */}
+      <button
+        type="button"
+        onClick={onCancel}
+        className="absolute bottom-24 right-5 w-14 h-14 bg-emerald-600 hover:bg-emerald-750 active:scale-90 text-white rounded-full flex items-center justify-center shadow-2xl z-20 hover:shadow-emerald-300 transition-all cursor-pointer border-2 border-white"
+        title="Quay lại"
+      >
+        <ArrowLeft className="w-7 h-7 stroke-[3px]" />
+      </button>
 
       {/* Primary footer buttons: HỦY BỎ & GỬI BÁO CÁO */}
       <div className="bg-white border-t border-slate-200 p-3.5 grid grid-cols-2 gap-3 shrink-0">

@@ -104,6 +104,7 @@ interface DashboardDesktopProps {
   setProductsCatalog: React.Dispatch<React.SetStateAction<CatalogProduct[]>>;
   moldsCatalog: CatalogMold[];
   setMoldsCatalog: React.Dispatch<React.SetStateAction<CatalogMold[]>>;
+  onUpdateReport?: (report: QualityReport) => void;
 }
 
 interface DesktopThumbnailSliderProps {
@@ -249,7 +250,8 @@ export default function DashboardDesktop({
   productsCatalog,
   setProductsCatalog,
   moldsCatalog,
-  setMoldsCatalog
+  setMoldsCatalog,
+  onUpdateReport
 }: DashboardDesktopProps) {
   const [activeTab, setActiveTab] = useState<
     "PHÊ_DUYỆT" | "MÃ_HÓA" | "THỐNG_KÊ" | "DỮ_LIỆU" | "QUY_CHẾ" | "CÁ_NHÂN" | "THÔNG_BÁO" | "TRAO_ĐỔI" | "TRIỂN_KHAI"
@@ -1174,6 +1176,8 @@ export default function DashboardDesktop({
                         <th className="p-4 text-center">Phân tố.</th>
                         <th className="p-4 w-[40%]">Nội dung chi tiết</th>
                         <th className="p-4">Người ghi / SĐT</th>
+                        <th className="p-4 text-center">Người Thích</th>
+                        <th className="p-4 text-center">Người Chia Sẻ</th>
                         <th className="p-4 text-center">Hình ảnh</th>
                         <th className="p-4 text-center">Trạng thái</th>
                       </tr>
@@ -1213,10 +1217,102 @@ export default function DashboardDesktop({
                                   <T>Ghi chú: {r.notes}</T>
                                 </div>
                               )}
+
+                              {/* Display directives history in Nhật ký table row */}
+                              {r.directives && r.directives.length > 0 && (
+                                <div className="mt-2 space-y-1 block border-l-2 border-amber-500 pl-1.5 bg-amber-50/50 p-1.5 rounded">
+                                  <div className="text-[9px] font-extrabold text-[#78350f] uppercase flex items-center gap-1">
+                                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                    <T>Chỉ đạo / Điều hành:</T>
+                                  </div>
+                                  {r.directives.map((dir) => (
+                                    <div key={dir.id} className="text-[10px] text-amber-800 leading-tight">
+                                      <T>• {dir.text}</T> <span className="text-[9px] text-slate-400 font-mono">({dir.author} - {dir.timestamp})</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Simple mini-form to input direct directive right inside the log table cell for leaders! */}
+                              <form
+                                onSubmit={(e) => {
+                                  e.preventDefault();
+                                  const form = e.currentTarget;
+                                  const input = form.elements.namedItem("desktopDirectiveInput") as HTMLInputElement;
+                                  const text = input.value.trim();
+                                  if (!text) return;
+
+                                  const dateObj = new Date();
+                                  const currentSingaporeTime = new Date(dateObj.getTime() + (dateObj.getTimezoneOffset() + 420) * 60000);
+                                  const yy = String(currentSingaporeTime.getFullYear()).slice(-2);
+                                  const mm = String(currentSingaporeTime.getMonth() + 1).padStart(2, '0');
+                                  const dd = String(currentSingaporeTime.getDate()).padStart(2, '0');
+                                  const timeStr = currentSingaporeTime.toTimeString().split(' ')[0];
+                                  const stamp = `${timeStr} ${dd}/${mm}/${yy}`;
+
+                                  const newDir = {
+                                    id: Math.random().toString(36).substr(2, 9),
+                                    text,
+                                    author: currentUser?.fullName || "Cấp quản lý",
+                                    timestamp: stamp
+                                  };
+
+                                  const updatedReport = {
+                                    ...r,
+                                    directives: [...(r.directives || []), newDir]
+                                  };
+
+                                  if (onUpdateReport) {
+                                    onUpdateReport(updatedReport);
+                                  }
+                                  input.value = "";
+                                }}
+                                className="mt-2 flex gap-1 items-center"
+                              >
+                                <input
+                                  type="text"
+                                  name="desktopDirectiveInput"
+                                  placeholder="Chỉ đạo (mặc định ghi mờ bên trong ô)..."
+                                  className="flex-1 bg-slate-50 border border-slate-200 text-[10px] rounded px-2 py-1 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all select-text"
+                                />
+                                <button
+                                  type="submit"
+                                  className="bg-amber-500 hover:bg-amber-600 px-2 py-1 text-[9px] text-white font-extrabold rounded uppercase cursor-pointer"
+                                >
+                                  <T>Gửi</T>
+                                </button>
+                              </form>
                             </td>
                             <td className="p-4 whitespace-nowrap">
                               <T className="font-semibold block text-slate-800">{r.uploaderName}</T>
                               <T className="text-[10px] text-slate-400 block font-mono">{r.uploaderPhone}</T>
+                            </td>
+                            {/* Two new columns tracking likes and shares */}
+                            <td className="p-4 min-w-[120px]">
+                              {r.likedBy && r.likedBy.length > 0 ? (
+                                <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto max-w-[140px]">
+                                  {r.likedBy.map((name, i) => (
+                                    <span key={i} className="bg-rose-50 text-rose-700 text-[9px] px-1.5 py-0.5 rounded border border-rose-100 font-bold whitespace-nowrap">
+                                      <T>{name}</T>
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-slate-400 text-[10px] italic"><T>Chưa có</T></span>
+                              )}
+                            </td>
+                            <td className="p-4 min-w-[120px]">
+                              {r.sharedBy && r.sharedBy.length > 0 ? (
+                                <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto max-w-[140px]">
+                                  {r.sharedBy.map((name, i) => (
+                                    <span key={i} className="bg-emerald-50 text-emerald-700 text-[9px] px-1.5 py-0.5 rounded border border-emerald-100 font-bold whitespace-nowrap">
+                                      <T>{name}</T>
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-slate-400 text-[10px] italic"><T>Chưa có</T></span>
+                              )}
                             </td>
                             <td className="p-4 text-center">
                               {r.imageUrl ? (

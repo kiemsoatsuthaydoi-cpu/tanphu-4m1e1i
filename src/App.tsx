@@ -858,8 +858,36 @@ export default function App() {
     } else {
       if (editingReport) {
         // Edit flow
+        const now = new Date();
+        const hrs = String(now.getHours()).padStart(2, '0');
+        const mns = String(now.getMinutes()).padStart(2, '0');
+        const scs = String(now.getSeconds()).padStart(2, '0');
+        const date = String(now.getDate()).padStart(2, '0');
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const year = String(now.getFullYear()).slice(-2);
+        const updateTimeStr = `${hrs}:${mns}:${scs} ${date}/${month}/${year}`;
+
+        const logs = editingReport.updateLogs ? [...editingReport.updateLogs] : [];
+        const changes: string[] = [];
+        if (editingReport.content !== payload.content) changes.push("Sửa chi tiết");
+        if (editingReport.factory !== payload.factory) changes.push("Sửa chi nhánh");
+        if (editingReport.category !== payload.category) changes.push("Sửa hạng mục 4M1E1I");
+        if (editingReport.notes !== payload.notes) changes.push("Sửa ghi chú");
+        if (editingReport.isAbnormal !== payload.isAbnormal) changes.push("Thay đổi mức cảnh báo");
+        if (editingReport.imageUrl !== payload.imageUrl || (payload.imageUrls && JSON.stringify(editingReport.imageUrls) !== JSON.stringify(payload.imageUrls))) {
+          changes.push("Sửa ảnh");
+        }
+
+        const logMsg = changes.length > 0 ? `${changes.join(", ")} (${updateTimeStr})` : `Cập nhật thông tin (${updateTimeStr})`;
+        logs.push(logMsg);
+
         setReports((prev) =>
-          prev.map((r) => (r.id === editingReport.id ? { ...r, ...payload } : r))
+          prev.map((r) => (r.id === editingReport.id ? { 
+            ...r, 
+            ...payload, 
+            updatedAt: updateTimeStr,
+            updateLogs: logs
+          } : r))
         );
         alert("✅ Đã cập nhật tệp tin biến động chất lượng thành công!");
       } else {
@@ -898,6 +926,58 @@ export default function App() {
         deleteDocument(COLLECTIONS.REPORTS, id);
       }
     }
+  };
+
+  // Update report handler for likes, shares, or directives
+  const handleUpdateReport = (updatedReport: QualityReport) => {
+    setReports((prev) => prev.map((r) => {
+      if (r.id !== updatedReport.id) return r;
+
+      const now = new Date();
+      const hrs = String(now.getHours()).padStart(2, '0');
+      const mns = String(now.getMinutes()).padStart(2, '0');
+      const scs = String(now.getSeconds()).padStart(2, '0');
+      const date = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = String(now.getFullYear()).slice(-2);
+      const updateTimeStr = `${hrs}:${mns}:${scs} ${date}/${month}/${year}`;
+
+      const logs = r.updateLogs ? [...r.updateLogs] : [];
+      const changes: string[] = [];
+
+      const oldLikes = r.likedBy || [];
+      const newLikes = updatedReport.likedBy || [];
+      if (newLikes.length > oldLikes.length) {
+        const addedLike = newLikes.find(l => !oldLikes.includes(l)) || "Kiểm soát viên";
+        changes.push(`Lượt thích mới (${addedLike})`);
+      }
+
+      const oldShares = r.sharedBy || [];
+      const newShares = updatedReport.sharedBy || [];
+      if (newShares.length > oldShares.length) {
+        const addedShare = newShares.find(s => !oldShares.includes(s)) || "Kiểm soát viên";
+        changes.push(`Chia sẻ mới (${addedShare})`);
+      }
+
+      const oldDirs = r.directives || [];
+      const newDirs = updatedReport.directives || [];
+      if (newDirs.length > oldDirs.length) {
+        const addedDir = newDirs[newDirs.length - 1];
+        changes.push(`Chỉ đạo mới (${addedDir.author}: "${addedDir.text.substring(0, 15)}...")`);
+      }
+
+      if (changes.length > 0) {
+        const logMsg = `${changes.join(", ")} (${updateTimeStr})`;
+        logs.push(logMsg);
+        return {
+          ...updatedReport,
+          updatedAt: updateTimeStr,
+          updateLogs: logs
+        };
+      }
+
+      return updatedReport;
+    }));
   };
 
   // Render Authentication Section (Login / registration cards)
@@ -1274,6 +1354,7 @@ export default function App() {
             setProductsCatalog={setProductsCatalog}
             moldsCatalog={moldsCatalog}
             setMoldsCatalog={setMoldsCatalog}
+            onUpdateReport={handleUpdateReport}
           />
         </div>
 
@@ -1303,6 +1384,8 @@ export default function App() {
                 onDeleteReport={handleDeleteReportTrigger}
                 onEditReport={handleEditReportTrigger}
                 offlineMode={offlineMode}
+                currentUser={currentUser}
+                onUpdateReport={handleUpdateReport}
               />
             )}
           </div>
@@ -1332,6 +1415,8 @@ export default function App() {
                 onDeleteReport={handleDeleteReportTrigger}
                 onEditReport={handleEditReportTrigger}
                 offlineMode={offlineMode}
+                currentUser={currentUser}
+                onUpdateReport={handleUpdateReport}
               />
             )}
 
