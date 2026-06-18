@@ -102,9 +102,9 @@ export default function MobileFrame({
     if (!document.fullscreenElement) {
       const docEl = document.documentElement as any;
       if (docEl.requestFullscreen) {
-        docEl.requestFullscreen().catch(() => {});
+        docEl.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
       } else if (docEl.webkitRequestFullscreen) {
-        docEl.webkitRequestFullscreen();
+        docEl.webkitRequestFullscreen({ navigationUI: "hide" });
       } else if (docEl.msRequestFullscreen) {
         docEl.msRequestFullscreen();
       }

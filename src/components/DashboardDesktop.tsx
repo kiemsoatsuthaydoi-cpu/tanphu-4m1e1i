@@ -867,7 +867,7 @@ export default function DashboardDesktop({
                     </span>
                   </div>
 
-                  <div className="flex-1 mt-4 space-y-2.5 overflow-y-auto pr-1">
+                  <div className="flex-1 mt-4 space-y-2.5 overflow-y-auto pr-1 max-h-[480px]">
                     {activeBranchId === "" ? (
                       <div className="text-center py-12 text-slate-400 text-xs font-medium">
                         <span translate="no" className="notranslate">Vui lòng nhấp chọn một chi nhánh ở Cột 2.</span>

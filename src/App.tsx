@@ -580,9 +580,9 @@ export default function App() {
       const docEl = document.documentElement as any;
       if (!doc.fullscreenElement && !doc.webkitFullscreenElement && !doc.mozFullScreenElement && !doc.msFullscreenElement) {
         if (docEl.requestFullscreen) {
-          docEl.requestFullscreen().catch(() => {});
+          docEl.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
         } else if (docEl.webkitRequestFullscreen) {
-          docEl.webkitRequestFullscreen();
+          docEl.webkitRequestFullscreen({ navigationUI: "hide" });
         } else if (docEl.mozRequestFullScreen) {
           docEl.mozRequestFullScreen();
         } else if (docEl.msRequestFullscreen) {
