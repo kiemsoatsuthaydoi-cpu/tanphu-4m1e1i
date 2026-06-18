@@ -403,14 +403,14 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("4m1e1i_products_catalog", JSON.stringify(productsCatalog));
     if (dbConnected && !dbLoading) {
-      productsCatalog.forEach((p) => saveDocument(COLLECTIONS.PRODUCTS_CATALOG, p.id, p));
+      productsCatalog.forEach((p) => saveDocument(COLLECTIONS.PRODUCTS_CATALOG, p.code, p));
     }
   }, [productsCatalog, dbConnected, dbLoading]);
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_molds_catalog", JSON.stringify(moldsCatalog));
     if (dbConnected && !dbLoading) {
-      moldsCatalog.forEach((m) => saveDocument(COLLECTIONS.MOLDS_CATALOG, m.id, m));
+      moldsCatalog.forEach((m) => saveDocument(COLLECTIONS.MOLDS_CATALOG, m.code, m));
     }
   }, [moldsCatalog, dbConnected, dbLoading]);
 
