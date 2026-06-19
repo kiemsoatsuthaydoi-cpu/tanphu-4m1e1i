@@ -1,5 +1,6 @@
 import { db } from "./firebase";
 import { collection, doc, getDocs, setDoc, deleteDoc, writeBatch } from "firebase/firestore";
+import { UserRole, UserStatus } from "../types";
 import { 
   initialUsers, 
   initialReports, 
@@ -17,7 +18,7 @@ import {
 
 // Collections list
 export const COLLECTIONS = {
-  USERS: "users",
+  USERS: "user_profiles",
   REPORTS: "reports",
   COMPANIES: "companies",
   BRANCHES: "branches",
@@ -43,14 +44,51 @@ export async function seedFirestoreIfNeeded(): Promise<boolean> {
   try {
     const userSnap = await getDocs(collection(db, COLLECTIONS.USERS));
     if (userSnap.empty) {
-      console.log("Firestore users collection is empty. Seeding initial data...");
+      console.log("Firestore user_profiles collection is empty. Seeding initial data...");
       
       const batch = writeBatch(db);
       
-      // Seed users
+      // Seed users with the mapped attributes
       initialUsers.forEach((u) => {
         const docRef = doc(db, COLLECTIONS.USERS, u.id);
-        batch.set(docRef, u);
+        
+        // Map fields to requested firestore schema
+        const dbUser: any = {
+          id: u.id,
+          phoneNumber: u.phone || "",
+          name: u.fullName || "",
+          department: u.department || "",
+          branch: u.branch || "",
+          company: u.company || "TÂN PHÚ VIỆT NAM",
+          createdAt: new Date().toISOString()
+        };
+
+        // Role mapping
+        if (u.role === UserRole.ADMIN) {
+          dbUser.role = "admin";
+        } else if (u.role === UserRole.REVIEWER) {
+          dbUser.role = "approver";
+        } else {
+          dbUser.role = "employee";
+        }
+
+        // Status mapping
+        if (u.status === UserStatus.PENDING) {
+          dbUser.status = "pending";
+        } else if (u.status === UserStatus.ACTIVE) {
+          dbUser.status = "approved";
+        } else if (u.status === UserStatus.REJECTED) {
+          dbUser.status = "rejected";
+        } else if (u.status === UserStatus.LOCKED) {
+          dbUser.status = "locked";
+        } else {
+          dbUser.status = "approved";
+        }
+
+        // Preserve password if it exists
+        if (u.password) dbUser.password = u.password;
+
+        batch.set(docRef, dbUser);
       });
 
       // Seed companies
@@ -139,7 +177,34 @@ export async function fetchCollection<T>(collectionName: string): Promise<T[]> {
     const snap = await getDocs(collection(db, collectionName));
     const items: T[] = [];
     snap.forEach((doc) => {
-      items.push({ ...doc.data() } as T);
+      const data = { ...doc.data() } as any;
+      if (collectionName === "user_profiles") {
+        // Map database schema fields to App internal fields
+        const appUser: any = {
+          ...data,
+          id: doc.id || data.id,
+          phone: data.phone || data.phoneNumber || "",
+          fullName: data.fullName || data.name || "",
+          createdAt: data.createdAt || new Date().toISOString()
+        };
+        
+        // Map role string value to App's UserRole enum
+        if (data.role === "admin") appUser.role = "CHỦ ADMIN";
+        else if (data.role === "approver") appUser.role = "DUYỆT VIÊN";
+        else if (data.role === "employee") appUser.role = "NHÂN VIÊN";
+        else if (data.role) appUser.role = data.role; // Backup
+        
+        // Map status string value to App's UserStatus enum
+        if (data.status === "pending") appUser.status = "Chờ phê duyệt";
+        else if (data.status === "approved" || data.status === "active") appUser.status = "Đã hoạt động";
+        else if (data.status === "rejected") appUser.status = "Bị từ chối";
+        else if (data.status === "locked") appUser.status = "Đã khóa";
+        else if (data.status) appUser.status = data.status; // Backup
+        
+        items.push(appUser as T);
+      } else {
+        items.push({ ...data } as T);
+      }
     });
     return items;
   } catch (error) {
@@ -154,8 +219,35 @@ export async function fetchCollection<T>(collectionName: string): Promise<T[]> {
 export async function saveDocument(collectionName: string, id: string, data: any): Promise<boolean> {
   if (!db) return false;
   try {
+    let rawData = { ...data };
+    if (collectionName === "user_profiles") {
+      // Map App internal fields back to Database schema fields
+      const dbUser: any = {
+        ...rawData,
+        id: id || rawData.id,
+        phoneNumber: rawData.phone || rawData.phoneNumber || "",
+        name: rawData.fullName || rawData.name || "",
+        createdAt: rawData.createdAt || new Date().toISOString()
+      };
+      
+      // Map App's UserRole enum to database role string value
+      if (rawData.role === "CHỦ ADMIN" || rawData.role === "admin") dbUser.role = "admin";
+      else if (rawData.role === "DUYỆT VIÊN" || rawData.role === "approver") dbUser.role = "approver";
+      else if (rawData.role === "NHÂN VIÊN" || rawData.role === "employee") dbUser.role = "employee";
+      else dbUser.role = "employee"; // Fallback
+      
+      // Map App's UserStatus enum to database status string value
+      if (rawData.status === "Chờ phê duyệt" || rawData.status === "pending") dbUser.status = "pending";
+      else if (rawData.status === "Đã hoạt động" || rawData.status === "approved" || rawData.status === "Đã duyệt") dbUser.status = "approved";
+      else if (rawData.status === "Bị từ chối" || rawData.status === "rejected") dbUser.status = "rejected";
+      else if (rawData.status === "Đã khóa" || rawData.status === "locked") dbUser.status = "locked";
+      else dbUser.status = "pending"; // Fallback
+      
+      rawData = dbUser;
+    }
+    
     const docRef = doc(db, collectionName, id);
-    await setDoc(docRef, data, { merge: true });
+    await setDoc(docRef, rawData, { merge: true });
     return true;
   } catch (error) {
     console.error(`Error saving doc ${id} to ${collectionName}:`, error);

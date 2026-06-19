@@ -19,6 +19,10 @@ import {
   CloudLightning,
   UserMinus,
   Check,
+  X,
+  Zap,
+  Lock,
+  Unlock,
   Send,
   Bell,
   Sparkles,
@@ -702,162 +706,224 @@ export default function DashboardDesktop({
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse">
                     <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                        <th className="p-4"><T>Họ tên nhân viên</T></th>
-                        <th className="p-4"><T>Mã số</T></th>
-                        <th className="p-4"><T>Số điện thoại</T></th>
-                        <th className="p-4"><T>Bộ phận / Đơn vị</T></th>
-                        <th className="p-4"><T>Chi nhánh đại diện</T></th>
-                        <th className="p-4"><T>Vai trò</T></th>
-                        <th className="p-4"><T>Trạng thái</T></th>
-                        <th className="p-4 text-center"><T>Tính năng phê duyệt</T></th>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-left text-[11px] font-bold text-slate-500 uppercase tracking-wider select-none">
+                        <th className="p-4"><T>Họ tên nhân viên / SĐT</T></th>
+                        <th className="p-4"><T>Thuộc bộ phận / Chi nhánh</T></th>
+                        <th className="p-4"><T>Vai trò phân cấp</T></th>
+                        <th className="p-4"><T>Phê duyệt trạng thái</T></th>
+                        <th className="p-4 text-center"><T>Phân bổ thao tác</T></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
-                      {users.map((u) => {
-                        const isSelf = u.id === currentUser.id;
-                        return (
-                          <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
-                            <td className="p-4">
-                              <div className="flex items-center gap-2">
-                                <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
-                                  {u.fullName.charAt(0)}
-                                </div>
-                                <div>
-                                  <T className="font-bold text-slate-800 block">{u.fullName}</T>
-                                  {isSelf && <T className="text-[9px] text-blue-600 font-bold block">(Bạn)</T>}
-                                </div>
-                              </div>
-                            </td>
-                            <td className="p-4 font-mono font-bold text-slate-800">{u.id}</td>
-                            <td className="p-4 font-mono text-slate-500">{u.phone}</td>
-                            <td className="p-4 text-slate-600 leading-normal">{u.department}</td>
-                            <td className="p-4 text-slate-600 leading-normal">{u.branch}</td>
-                            <td className="p-4 select-none">
-                              <select
-                                value={u.role}
-                                disabled={isSelf}
-                                onChange={(e) => onUpdateUserRole(u.id, e.target.value as UserRole)}
-                                className={`px-2 py-1 rounded text-[10px] font-extrabold cursor-pointer border ${
-                                  u.role === UserRole.ADMIN
-                                    ? "bg-purple-50 text-purple-700 border-purple-200"
-                                    : u.role === UserRole.REVIEWER
-                                    ? "bg-amber-50 text-amber-700 border-amber-200"
-                                    : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                }`}
-                              >
-                                <option value={UserRole.ADMIN}>{UserRole.ADMIN}</option>
-                                <option value={UserRole.REVIEWER}>{UserRole.REVIEWER}</option>
-                                <option value={UserRole.STAFF}>{UserRole.STAFF}</option>
-                              </select>
-                            </td>
-                            <td className="p-4 select-none">
-                              {u.status === UserStatus.ACTIVE ? (
-                                <span className="bg-[#DEF7EC] text-[#03543F] text-[10px] font-bold px-2 py-1 rounded-full border border-emerald-100 inline-flex items-center gap-1.5">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 block" />
-                                  <T>{UserStatus.ACTIVE}</T>
-                                </span>
-                              ) : u.status === UserStatus.PENDING ? (
-                                <span className="bg-[#FEF3C7] text-[#92400E] text-[10px] font-bold px-2 py-1 rounded-full border border-amber-150 inline-flex items-center gap-1.5 animate-pulse">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 block" />
-                                  <T>{UserStatus.PENDING}</T>
-                                </span>
-                              ) : (
-                                <span className="bg-red-50 text-red-700 text-[10px] font-bold px-2 py-1 rounded-full border border-red-150 inline-flex items-center gap-1.5">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 block" />
-                                  <T>{UserStatus.LOCKED}</T>
-                                </span>
-                              )}
-                            </td>
-                            <td className="p-4 text-center">
-                              <div className="flex justify-center items-center gap-2 select-none">
-                                <button
-                                  onClick={() => handleStartEditUser(u)}
-                                  className="p-1 px-2.5 text-[#1e3a8a] bg-blue-50 border border-blue-200 hover:bg-blue-100 rounded cursor-pointer text-[10px] font-bold flex items-center gap-1 transition-colors"
-                                  title="Chỉnh sửa thông tin"
-                                >
-                                  <Edit className="w-2.5 h-2.5" />
-                                  <T>SỬA</T>
-                                </button>
+                      {(() => {
+                        let filteredUsers = [...users];
+                        // If current user is REVIEWER (approver/Trưởng nhóm), only show users in their branch
+                        if (currentUser.role === UserRole.REVIEWER) {
+                          filteredUsers = filteredUsers.filter((u) => u.branch === currentUser.branch);
+                        }
+                        
+                        if (filteredUsers.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={5} className="p-8 text-center text-slate-400 font-semibold select-none">
+                                <T>Không tìm thấy danh sách nhân sự cần thao tác thuộc chi nhánh của bạn.</T>
+                              </td>
+                            </tr>
+                          );
+                        }
 
-                                {u.role !== UserRole.ADMIN && onUpdateUser && (
+                        return filteredUsers.map((u) => {
+                          const isSelf = u.id === currentUser.id;
+                          return (
+                            <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
+                              <td className="p-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-sm shrink-0 select-none border border-slate-200">
+                                    {u.fullName.charAt(0)}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <T className="font-extrabold text-slate-800 text-[12px] uppercase">{u.fullName}</T>
+                                      <span className="bg-blue-50 text-blue-600 border border-blue-150 rounded px-1.5 py-0.5 text-[9px] font-bold font-mono tracking-wider">
+                                        MS: {u.id}
+                                      </span>
+                                      {isSelf && (
+                                        <span className="bg-slate-100 text-slate-600 rounded px-1.5 py-0.5 text-[8.5px] font-extrabold uppercase">
+                                          <T>Bạn</T>
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="text-slate-400 font-mono text-[11px] mt-0.5 block">
+                                      {u.phone}
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="p-4 leading-relaxed">
+                                <div className="text-slate-800 font-extrabold text-[11.5px]">{u.department}</div>
+                                <div className="text-slate-400 text-[10.5px] font-medium">{u.branch}</div>
+                              </td>
+                              <td className="p-4 select-none">
+                                <select
+                                  value={u.role}
+                                  disabled={isSelf}
+                                  onChange={(e) => onUpdateUserRole(u.id, e.target.value as UserRole)}
+                                  className={`px-2 py-1 rounded text-[10px] font-extrabold cursor-pointer border ${
+                                    u.role === UserRole.ADMIN
+                                      ? "bg-purple-50 text-purple-700 border-purple-200"
+                                      : u.role === UserRole.REVIEWER
+                                      ? "bg-amber-50 text-amber-700 border-amber-200"
+                                      : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  } focus:outline-none`}
+                                >
+                                  <option value={UserRole.ADMIN}>{UserRole.ADMIN}</option>
+                                  <option value={UserRole.REVIEWER}>{UserRole.REVIEWER}</option>
+                                  <option value={UserRole.STAFF}>{UserRole.STAFF}</option>
+                                </select>
+                              </td>
+                              <td className="p-4 select-none">
+                                {u.status === UserStatus.ACTIVE ? (
+                                  <span className="bg-[#DEF7EC] text-[#03543F] text-[10px] font-bold px-2 py-1 rounded-full border border-emerald-100 inline-flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 block" />
+                                    <T>{UserStatus.ACTIVE}</T>
+                                  </span>
+                                ) : u.status === UserStatus.PENDING ? (
+                                  <span className="bg-[#FEF3C7] text-[#92400E] text-[10px] font-bold px-2 py-1 rounded-full border border-amber-150 inline-flex items-center gap-1.5 animate-pulse">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 block" />
+                                    <T>{UserStatus.PENDING}</T>
+                                  </span>
+                                ) : u.status === UserStatus.REJECTED ? (
+                                  <span className="bg-red-50 text-red-700 text-[10px] font-bold px-2 py-1 rounded-full border border-red-150 inline-flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-red-400 block" />
+                                    <T>{UserStatus.REJECTED}</T>
+                                  </span>
+                                ) : (
+                                  <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-1 rounded-full border border-slate-200 inline-flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-500 block" />
+                                    <T>{UserStatus.LOCKED}</T>
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-4 text-center">
+                                <div className="flex justify-center items-center gap-1.5 select-none">
+                                  {/* Button 1: Đặc cách (Zap) */}
+                                  {u.role !== UserRole.ADMIN && onUpdateUser && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        onUpdateUser({
+                                          ...u,
+                                          canSpeciallyEditDelete: !u.canSpeciallyEditDelete
+                                        });
+                                      }}
+                                      className={`p-1.5 rounded-lg border flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95 ${
+                                        u.canSpeciallyEditDelete
+                                          ? "bg-indigo-50 text-indigo-700 border-indigo-300 hover:bg-indigo-100/80"
+                                          : "bg-white text-slate-400 border-slate-200 hover:bg-slate-50 hover:text-indigo-600"
+                                      }`}
+                                      title={u.canSpeciallyEditDelete ? "Hủy đặt cách Sửa/Xóa bản tin chi nhánh" : "Đặt cách Sửa/Xóa bản tin chi nhánh"}
+                                    >
+                                      <Zap className={`w-3.5 h-3.5 ${u.canSpeciallyEditDelete ? "fill-indigo-600 font-extrabold text-indigo-700" : ""}`} />
+                                    </button>
+                                  )}
+
+                                  {/* Button 2: Khóa/Mở khóa (Lock/Unlock) */}
+                                  {u.status === UserStatus.ACTIVE && !isSelf && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onUpdateUserStatus(u.id, UserStatus.LOCKED)}
+                                      className="p-1.5 bg-white hover:bg-slate-50 rounded-lg border border-slate-200 text-slate-500 hover:text-amber-600 transition-all cursor-pointer shadow-xs active:scale-95"
+                                      title="Khóa tài khoản thành viên"
+                                    >
+                                      <Unlock className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+
+                                  {u.status === UserStatus.LOCKED && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onUpdateUserStatus(u.id, UserStatus.ACTIVE)}
+                                      className="p-1.5 bg-amber-50 rounded-lg border border-amber-200 text-amber-600 hover:bg-amber-100 transition-all cursor-pointer shadow-xs active:scale-95"
+                                      title="Mở khóa kích hoạt tài khoản"
+                                    >
+                                      <Lock className="w-3.5 h-3.5 fill-amber-500/10 text-amber-600" />
+                                    </button>
+                                  )}
+
+                                  {/* Button 3: Kích hoạt (Check) & Từ chối (X) when PENDING */}
+                                  {u.status === UserStatus.PENDING && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => onUpdateUserStatus(u.id, UserStatus.ACTIVE)}
+                                        className="p-1.5 bg-[#DEF7EC] text-[#03543F] border border-emerald-250 hover:bg-emerald-100 rounded-lg cursor-pointer transition-all shadow-xs active:scale-95 flex items-center justify-center animate-bounce"
+                                        title="Phê duyệt kích hoạt tài khoản ngay"
+                                      >
+                                        <Check className="w-3.5 h-3.5 stroke-[3px]" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => onUpdateUserStatus(u.id, UserStatus.REJECTED)}
+                                        className="p-1.5 bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 rounded-lg cursor-pointer transition-all shadow-xs active:scale-95 flex items-center justify-center"
+                                        title="Từ chối yêu cầu đăng ký"
+                                      >
+                                        <X className="w-3.5 h-3.5 stroke-[3px]" />
+                                      </button>
+                                    </>
+                                  )}
+
+                                  {/* Active re-trigger for rejected users */}
+                                  {u.status === UserStatus.REJECTED && (
+                                    <button
+                                      type="button"
+                                      onClick={() => onUpdateUserStatus(u.id, UserStatus.ACTIVE)}
+                                      className="p-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-150 rounded-lg cursor-pointer transition-all shadow-xs active:scale-95 flex items-center justify-center"
+                                      title="Phê duyệt tái kích hoạt tài khoản"
+                                    >
+                                      <Check className="w-3.5 h-3.5 stroke-[3px]" />
+                                    </button>
+                                  )}
+
+                                  {/* Button 4: Sửa thành viên (Edit) */}
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      onUpdateUser({
-                                        ...u,
-                                        canSpeciallyEditDelete: !u.canSpeciallyEditDelete
-                                      });
-                                    }}
-                                    className={`p-1 px-2 rounded font-extrabold text-[10px] flex items-center gap-1 transition-all cursor-pointer ${
-                                      u.canSpeciallyEditDelete
-                                        ? "bg-indigo-650 text-white hover:bg-indigo-700 border border-indigo-600 shadow-xs"
-                                        : "bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200"
-                                    }`}
-                                    title={u.canSpeciallyEditDelete ? "Hủy đặt cách Sửa/Xóa" : "Đặt cách Sửa/Xóa bản tin chi nhánh"}
+                                    onClick={() => handleStartEditUser(u)}
+                                    className="p-1.5 bg-white border border-slate-200 hover:bg-slate-50 hover:border-blue-300 text-slate-500 hover:text-blue-600 rounded-lg cursor-pointer transition-all shadow-xs active:scale-95 flex items-center justify-center"
+                                    title="Chỉnh sửa thông tin thành viên"
                                   >
-                                    <span>{u.canSpeciallyEditDelete ? "⭐" : "☆"}</span>
-                                    <T>{u.canSpeciallyEditDelete ? "ĐẶC CÁCH" : "ĐẶC CÁCH"}</T>
+                                    <Edit className="w-3.5 h-3.5" />
                                   </button>
-                                )}
 
-                                {u.status === UserStatus.PENDING && (
-                                  <button
-                                    onClick={() => onUpdateUserStatus(u.id, UserStatus.ACTIVE)}
-                                    className="px-2 py-1 bg-emerald-600 text-white hover:bg-emerald-700 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer"
-                                    title="Phê duyệt kích hoạt"
-                                  >
-                                    <Check className="w-3 h-3" />
-                                    <T>KÍCH HOẠT</T>
-                                  </button>
-                                )}
-
-                                {u.status === UserStatus.ACTIVE && !isSelf && (
-                                  <button
-                                    onClick={() => onUpdateUserStatus(u.id, UserStatus.LOCKED)}
-                                    className="p-1 px-[10px] text-amber-700 hover:text-amber-800 bg-amber-50 rounded border border-amber-200 cursor-pointer text-[10px] font-bold"
-                                    title="Khóa tài khoản"
-                                  >
-                                    <T>KHÓA</T>
-                                  </button>
-                                )}
-
-                                {u.status === UserStatus.LOCKED && (
-                                  <button
-                                    onClick={() => onUpdateUserStatus(u.id, UserStatus.ACTIVE)}
-                                    className="p-1 px-2 text-emerald-700 hover:text-emerald-800 bg-emerald-50 rounded border border-emerald-200 cursor-pointer text-[10px] font-bold"
-                                    title="Mở khóa tài khoản"
-                                  >
-                                    <T>MỞ KHÓA</T>
-                                  </button>
-                                )}
-
+                                {/* Button 5: Xóa thành viên (Delete/Trash) */}
                                 {!isSelf && (
                                   userIdConfirmDlt === u.id ? (
-                                    <div className="flex items-center gap-1 justify-end">
+                                    <div className="flex items-center gap-1 select-none shrink-0">
                                       <button
+                                        type="button"
                                         onClick={() => {
                                           onDeleteUser(u.id);
                                           setUserIdConfirmDlt(null);
                                         }}
-                                        className="bg-rose-650 hover:bg-rose-700 text-white font-extrabold text-[9px] px-1.5 py-0.5 rounded transition-colors cursor-pointer uppercase shrink-0"
+                                        className="bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[9px] px-2 py-1 rounded-md transition-all cursor-pointer uppercase shadow-xs shrink-0"
                                       >
-                                        <span translate="no" className="notranslate">Xóa</span>
+                                        <T>Xóa</T>
                                       </button>
                                       <button
+                                        type="button"
                                         onClick={() => setUserIdConfirmDlt(null)}
-                                        className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold text-[9px] px-1.5 py-0.5 rounded transition-colors cursor-pointer uppercase shrink-0"
+                                        className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold text-[9px] px-2 py-1 rounded-md transition-all cursor-pointer uppercase shadow-xs shrink-0"
                                       >
-                                        <span translate="no" className="notranslate">Hủy</span>
+                                        <T>Hủy</T>
                                       </button>
                                     </div>
                                   ) : (
                                     <button
+                                      type="button"
                                       onClick={() => {
                                         setUserIdConfirmDlt(u.id);
                                       }}
-                                      className="p-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded cursor-pointer"
-                                      title="Xóa nhân viên"
+                                      className="p-1.5 bg-white border border-slate-200 hover:bg-rose-50 hover:border-rose-250 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer transition-all shadow-xs active:scale-95 flex items-center justify-center"
+                                      title="Xóa nhân sự khỏi hệ thống"
                                     >
                                       <Trash2 className="w-3.5 h-3.5" />
                                     </button>
@@ -867,7 +933,8 @@ export default function DashboardDesktop({
                             </td>
                           </tr>
                         );
-                      })}
+                      })
+                    })()}
                     </tbody>
                   </table>
                 </div>

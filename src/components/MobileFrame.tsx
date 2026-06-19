@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Search, RotateCw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut } from "lucide-react";
-import { QualityReport, Category4M1E1I, User, UserRole } from "../types";
+import { QualityReport, Category4M1E1I, User, UserRole, Branch } from "../types";
 import { T } from "./TranslateText";
 
 interface AutoImageSliderProps {
@@ -91,6 +91,7 @@ interface MobileFrameProps {
   };
   onUpdateMobileUIConfig?: (config: any) => void;
   onLogout?: () => void;
+  branches?: Branch[];
 }
 
 export default function MobileFrame({
@@ -104,7 +105,8 @@ export default function MobileFrame({
   onUpdateReport,
   mobileUIConfig,
   onUpdateMobileUIConfig,
-  onLogout
+  onLogout,
+  branches
 }: MobileFrameProps) {
   const config = mobileUIConfig || {};
   const displayRule = config.displayRule || "clean";
@@ -505,12 +507,17 @@ App Link: ${window.location.origin}`;
       return true;
     }
 
-    // 2. Đặc cách cho Duyệt viên hoặc Nhân viên của chi nhánh hiện tại
+    // 2. Duyệt viên (Reviewer) chỉ có quyền xóa đối với các bản tin thuộc đúng chi nhánh của mình
+    if (currentUser.role === UserRole.REVIEWER) {
+      return currentUser.branch === report.factory;
+    }
+
+    // 3. Đặc cách cho Nhân viên / Duyệt viên (canSpeciallyEditDelete) của chi nhánh hiện tại
     if (currentUser.canSpeciallyEditDelete && currentUser.branch === report.factory) {
       return true;
     }
     
-    // 3. Người đăng tin (uploader) chỉ được xóa bài của chính mình trong vòng 5 phút kể từ khi đăng
+    // 4. Người đăng tin (uploader) chỉ được xóa bài của chính mình trong vòng 5 phút kể từ khi đăng
     if (report.uploaderId === currentUser.id) {
       const reportDate = parseReportTimestamp(report.timestamp);
       const now = new Date();
@@ -584,6 +591,18 @@ App Link: ${window.location.origin}`;
   // Helper to match selected factory abbreviation to actual database names
   const matchSelectedFactory = (factoryName: string, filterKey: string): boolean => {
     const norm = factoryName.toLowerCase();
+    
+    // 1. Check if the report's factory name contains the filter key (e.g. "(TPP-BNI)" contains "tpp-bni")
+    if (norm.includes(filterKey.toLowerCase())) return true;
+    
+    // 2. Lookup branch mapping to match full name
+    if (branches) {
+      const matchBranch = branches.find(b => b.id === filterKey);
+      if (matchBranch && norm.includes(matchBranch.name.toLowerCase())) {
+        return true;
+      }
+    }
+
     if (filterKey === "TPP-BNI") return norm.includes("bắc ninh") || norm.includes("tpp-bni");
     if (filterKey === "TPP-LAN") return norm.includes("long an") || norm.includes("tpp-lan");
     if (filterKey === "TPP-CTY") return norm.includes("văn phòng") || norm.includes("tpp-cty");
@@ -651,17 +670,22 @@ App Link: ${window.location.origin}`;
   const isEditAllowed = (report: QualityReport): boolean => {
     if (!currentUser) return false;
     
-    // 1. Chỉ Admin mới được quyền chỉnh sửa mặc định
+    // 1. Chỉ Admin mới được quyền chỉnh sửa mặc định mọi bản tin
     if (currentUser.role === UserRole.ADMIN) {
       return true;
     }
 
-    // 2. Đặc cách cho Duyệt viên hoặc Nhân viên của chi nhánh hiện tại
+    // 2. Duyệt viên (Reviewer) chỉ có quyền chỉnh sửa đối với các bản tin thuộc đúng chi nhánh của mình
+    if (currentUser.role === UserRole.REVIEWER) {
+      return currentUser.branch === report.factory;
+    }
+
+    // 3. Đặc cách cho Nhân viên / Duyệt viên (canSpeciallyEditDelete) của chi nhánh hiện tại
     if (currentUser.canSpeciallyEditDelete && currentUser.branch === report.factory) {
       return true;
     }
 
-    // 3. Người đăng tin (uploader) chỉ được sửa bài của chính mình trong vòng 5 phút kể từ khi đăng
+    // 4. Người đăng tin (uploader) chỉ được sửa bài của chính mình trong vòng 5 phút kể từ khi đăng
     if (report.uploaderId === currentUser.id) {
       const reportDate = parseReportTimestamp(report.timestamp);
       const now = new Date();
@@ -858,25 +882,31 @@ App Link: ${window.location.origin}`;
             >
               <span translate="no" className="notranslate">TẤT CẢ ĐV</span>
             </button>
-            {[
-              { key: "TPP-BNI", label: "TPP-BNI" },
-              { key: "TPP-LAN", label: "TPP-LAN" },
-              { key: "TPP-CTY", label: "TPP-CTY" },
-              { key: "TPP-314", label: "TPP-314" },
-              { key: "DNP", label: "DNP" }
-            ].map((item) => (
-              <button
-                key={item.key}
-                onClick={() => setSelectedFactoryFilter(item.key)}
-                className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase shrink-0 transition-all ${
-                  selectedFactoryFilter === item.key
-                    ? "bg-sky-600 text-white shadow"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                <span translate="no" className="notranslate">{item.label}</span>
-              </button>
-            ))}
+            {(() => {
+              const activeFactoryChips = branches && branches.length > 0
+                ? branches
+                    .filter((b) => b.isScoring)
+                    .map((b) => ({ key: b.id, label: b.id }))
+                : [
+                    { key: "TPP-BNI", label: "TPP-BNI" },
+                    { key: "TPP-LAN", label: "TPP-LAN" },
+                    { key: "TPP-CTY", label: "TPP-CTY" },
+                    { key: "TPP-314", label: "TPP-314" }
+                  ];
+              return activeFactoryChips.map((item) => (
+                <button
+                  key={item.key}
+                  onClick={() => setSelectedFactoryFilter(item.key)}
+                  className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase shrink-0 transition-all ${
+                    selectedFactoryFilter === item.key
+                      ? "bg-sky-600 text-white shadow"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  <span translate="no" className="notranslate">{item.label}</span>
+                </button>
+              ));
+            })()}
           </div>
           {/* Rapid filter chips */}
           <div className="flex py-0.5 gap-1.5 overflow-x-auto no-scrollbar scroll-smooth">
@@ -1124,8 +1154,9 @@ App Link: ${window.location.origin}`;
                     {(() => {
                       const isUploader = currentUser?.id === report.uploaderId;
                       const isSpeciallyAuthorized = currentUser?.canSpeciallyEditDelete && currentUser?.branch === report.factory;
+                      const isReviewerAtMyBranch = currentUser?.role === UserRole.REVIEWER && currentUser?.branch === report.factory;
                       const isAdmin = currentUser?.role === UserRole.ADMIN;
-                      const shouldShow = isUploader || isSpeciallyAuthorized || isAdmin;
+                      const shouldShow = isUploader || isSpeciallyAuthorized || isReviewerAtMyBranch || isAdmin;
 
                       if (!shouldShow) return null;
 
@@ -1150,10 +1181,10 @@ App Link: ${window.location.origin}`;
                           <button
                             type="button"
                             disabled
-                            className="flex items-center justify-center p-1 text-slate-300 opacity-40 cursor-not-allowed select-none border-none bg-transparent"
+                            className="flex items-center justify-center p-1 text-slate-350 opacity-40 cursor-not-allowed select-none border-none bg-transparent"
                             title="Nút xóa đã bị vô hiệu hóa (quá 5 phút)"
                           >
-                            <Trash2 className="w-[18px] h-[18px] stroke-[1.8px] text-slate-300" />
+                            <Trash2 className="w-[18px] h-[18px] stroke-[1.8px] text-slate-350" />
                           </button>
                         );
                       }
@@ -1162,8 +1193,9 @@ App Link: ${window.location.origin}`;
                     {(() => {
                       const isUploader = currentUser?.id === report.uploaderId;
                       const isSpeciallyAuthorized = currentUser?.canSpeciallyEditDelete && currentUser?.branch === report.factory;
+                      const isReviewerAtMyBranch = currentUser?.role === UserRole.REVIEWER && currentUser?.branch === report.factory;
                       const isAdmin = currentUser?.role === UserRole.ADMIN;
-                      const shouldShow = isUploader || isSpeciallyAuthorized || isAdmin;
+                      const shouldShow = isUploader || isSpeciallyAuthorized || isReviewerAtMyBranch || isAdmin;
 
                       if (!shouldShow) return null;
 
@@ -1184,10 +1216,10 @@ App Link: ${window.location.origin}`;
                           <button
                             type="button"
                             disabled
-                            className="flex items-center justify-center p-1 text-slate-300 opacity-40 cursor-not-allowed select-none border-none bg-transparent"
+                            className="flex items-center justify-center p-1 text-slate-350 opacity-40 cursor-not-allowed select-none border-none bg-transparent"
                             title="Nút chỉnh sửa đã bị vô hiệu hóa (quá 5 phút)"
                           >
-                            <Edit className="w-[18px] h-[18px] stroke-[1.8px] text-slate-300" />
+                            <Edit className="w-[18px] h-[18px] stroke-[1.8px] text-slate-350" />
                           </button>
                         );
                       }

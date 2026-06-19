@@ -7,7 +7,8 @@ export enum UserRole {
 export enum UserStatus {
   ACTIVE = "Đã hoạt động",
   PENDING = "Chờ phê duyệt",
-  LOCKED = "Đã khóa"
+  LOCKED = "Đã khóa",
+  REJECTED = "Bị từ chối"
 }
 
 export interface User {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { AlertCircle, LogIn, Heart, ShieldCheck, Wifi, WifiOff, RefreshCw, Smartphone, Monitor } from "lucide-react";
+import { AlertCircle, LogIn, Heart, ShieldCheck, Wifi, WifiOff, RefreshCw, Smartphone, Monitor, Lock, Building, ChevronDown, Briefcase, User as UserIcon } from "lucide-react";
 import { T } from "./components/TranslateText";
 import {
   User,
@@ -312,10 +312,12 @@ export default function App() {
   const [regFullName, setRegFullName] = useState("");
   const [regId, setRegId] = useState(""); // YYYY.XXXXX
   const [regPhone, setRegPhone] = useState("");
-  const [regDepartment, setRegDepartment] = useState(STANDARDIZED_QC_DEPT);
-  const [regBranch, setRegBranch] = useState("Chi Nhánh Bắc Ninh (TPP-BNI)");
+  const [regCompany, setRegCompany] = useState("TPP-Group");
+  const [regDepartment, setRegDepartment] = useState("");
+  const [regBranch, setRegBranch] = useState("");
   const [regRole, setRegRole] = useState<UserRole>(UserRole.STAFF);
   const [regPassword, setRegPassword] = useState("");
+  const [regConfirmPassword, setRegConfirmPassword] = useState("");
 
   // Format employee ID helper (auto-insertion of dot, restricts length of 10, allows numbers and dot, removes spaces)
   const formatEmployeeId = (value: string, prevValue: string) => {
@@ -711,33 +713,6 @@ export default function App() {
     }
   }, [moldsCatalog, dbConnected, dbLoading, syncCompleted]);
 
-  // Synchronize registration form branch and department choices dynamically
-  useEffect(() => {
-    if (branches.length > 0) {
-      const defaultB = branches.find(b => b.name === regBranch) || branches.find(b => b.id === "TPP-BNI") || branches[0];
-      if (regBranch !== defaultB.name) {
-        setRegBranch(defaultB.name);
-      }
-    }
-  }, [branches]);
-
-  useEffect(() => {
-    if (regBranch) {
-      const selectedB = branches.find(b => b.name === regBranch);
-      if (selectedB) {
-        const branchDepts = departments.filter(d => d.branchId === selectedB.id);
-        if (branchDepts.length > 0) {
-          const hasCurrent = branchDepts.some(d => d.name === regDepartment);
-          if (!hasCurrent) {
-            setRegDepartment(branchDepts[0].name);
-          }
-        } else {
-          setRegDepartment("");
-        }
-      }
-    }
-  }, [regBranch, branches, departments, regDepartment]);
-
   useEffect(() => {
     localStorage.setItem("4m1e1i_chats", JSON.stringify(chats));
   }, [chats]);
@@ -767,6 +742,44 @@ export default function App() {
       }
     }
   }, [users, currentUser]);
+
+  // Auto-polling user status check from Firestore every 8 seconds when user is pending
+  useEffect(() => {
+    if (!currentUser || currentUser.status !== UserStatus.PENDING) {
+      return;
+    }
+
+    const intervalId = setInterval(async () => {
+      try {
+        if (!dbConnected) return; // Only pull if connected
+        const latestUsers = await fetchCollection<User>(COLLECTIONS.USERS);
+        if (latestUsers && latestUsers.length > 0) {
+          const match = latestUsers.find(
+            (u) => u.id === currentUser.id || u.phone.replace(/\s+/g, "") === currentUser.phone.replace(/\s+/g, "")
+          );
+          if (match) {
+            // Sync in local memory
+            setUsers((prev) => prev.map((u) => u.id === match.id ? match : u));
+            
+            if (match.status === UserStatus.ACTIVE) {
+              // Automatically transition to MAIN dashboard!
+              setCurrentUser(match);
+              localStorage.setItem("4m1e1i_current_user", JSON.stringify(match));
+            } else if (match.status === UserStatus.REJECTED || match.status === UserStatus.LOCKED) {
+              // Sync transition
+              setCurrentUser(match);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Lỗi tự động kiểm tra trạng thái phê duyệt: ", err);
+      }
+    }, 8000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [currentUser, dbConnected]);
 
   // Automatic screen detect and fully immersive fullscreen for mobile devices with tap, double-click, and double-tap listeners
   useEffect(() => {
@@ -855,27 +868,34 @@ export default function App() {
     setAuthError("");
     setRegisterSuccessMsg("");
 
-    // Validate inputs
-    if (!loginId || !loginPhone || !loginPassword) {
-      setAuthError("Vui lòng điền đầy đủ Mã nhân sự, Điện thoại và Mật khẩu.");
+    const cleanId = loginId.trim();
+    const cleanPhone = loginPhone.replace(/\s+/g, "");
+    const cleanPassword = loginPassword.trim();
+
+    if (!cleanId || !cleanPhone || !cleanPassword) {
+      setAuthError("Vui lòng nhập đầy đủ Mã nhân sự, Số điện thoại và Mật khẩu.");
       return;
     }
 
-    // Lookup user
+    // Lookup user in state by id AND phone number
     const found = users.find(
-      (u) =>
-        u.id.trim() === loginId.trim() &&
-        u.phone.replace(/\s+/g, "") === loginPhone.replace(/\s+/g, "") &&
-        u.password === loginPassword
+      (u) => 
+        u.id.trim() === cleanId && 
+        u.phone.replace(/\s+/g, "") === cleanPhone
     );
 
     if (!found) {
-      setAuthError("Thông tin đăng nhập không chính xác. Quý khách vui lòng kiểm tra lại dữ liệu.");
+      setAuthError("Thông tin đăng nhập không chính xác. Quý khách vui lòng kiểm tra lại Mã nhân sự hoặc Số điện thoại.");
       return;
     }
 
-    if (found.status === UserStatus.PENDING) {
-      setAuthError("Tài khoản của bạn đang chờ phê duyệt. Vui lòng liên hệ Admin Lê Nhật Trường (0907767304) để được kích hoạt.");
+    if (found.password && found.password !== cleanPassword) {
+      setAuthError("Mật khẩu không chính xác. Vui lòng nhập lại.");
+      return;
+    }
+
+    if (found.status === UserStatus.REJECTED) {
+      setAuthError("Yêu cầu đăng ký của bạn đã bị từ chối. Vui lòng liên hệ quản lý cấp trên.");
       return;
     }
 
@@ -884,7 +904,7 @@ export default function App() {
       return;
     }
 
-    // Logged in successfully
+    // Logged in successfully (approved or pending)
     setCurrentUser(found);
   };
 
@@ -894,12 +914,20 @@ export default function App() {
     setAuthError("");
     setRegisterSuccessMsg("");
 
-    if (!regFullName.trim() || !regId.trim() || !regPhone.trim() || !regPassword.trim()) {
+    const cleanPhone = regPhone.replace(/\s+/g, "");
+
+    if (!regFullName.trim() || !regId.trim() || !cleanPhone || !regPassword.trim() || !regConfirmPassword.trim()) {
       setAuthError("Tất cả các trường đánh dấu (*) đều bắt buộc hoàn thiện.");
       return;
     }
 
-    // Verify personnel ID formatting e.g., 2018.00281 (4 digits, dot, 5 digits)
+    // Confirm passwords match
+    if (regPassword !== regConfirmPassword) {
+      setAuthError("Mật khẩu và Xác nhận mật khẩu không khớp.");
+      return;
+    }
+
+    // Verify personnel ID formatting e.g., 2018.00281
     const idRegex = /^\d{4}\.\d{5}$/;
     if (!idRegex.test(regId.trim())) {
       setAuthError("Định dạng Mã nhân sự sai quy chuẩn. Định dạng mẫu đúng: YYYY.XXXXX (ví dụ: 2018.00281)");
@@ -907,22 +935,22 @@ export default function App() {
     }
 
     // Verify phone digit count
-    const cleanPhone = regPhone.replace(/\s+/g, "");
     if (cleanPhone.length !== 10 || !cleanPhone.startsWith("0")) {
       setAuthError("Vui lòng nhập đúng SĐT cá nhân gồm 10 chữ số (bắt đầu bằng số 0)");
       return;
     }
 
-    // Check pre-existing indices
-    const preExistingId = users.find((u) => u.id === regId);
-    if (preExistingId) {
-      setAuthError("Mã nhân sự này đã tồn tại trên hệ thống!");
+    // Check if phone number already registered
+    const preExistingPhone = users.find((u) => u.phone.replace(/\s+/g, "") === cleanPhone);
+    if (preExistingPhone) {
+      setAuthError("Số điện thoại đã được đăng ký");
       return;
     }
 
-    const preExistingPhone = users.find((u) => u.phone.replace(/\s+/g, "") === cleanPhone);
-    if (preExistingPhone) {
-      setAuthError("Số điện thoại này đã tồn tại trên hệ thống!");
+    // Check if personnel ID already exists
+    const preExistingId = users.find((u) => u.id === regId.trim());
+    if (preExistingId) {
+      setAuthError("Mã nhân sự này đã tồn tại trên hệ thống!");
       return;
     }
 
@@ -931,28 +959,35 @@ export default function App() {
     const regCompanyObj = regBranchObj ? companies.find((c) => c.id === regBranchObj.companyId) : null;
     const regCompanyVal = regCompanyObj ? regCompanyObj.name : "TÂN PHÚ VIỆT NAM";
 
-    // Register user with PENDING state
+    // Register user with PENDING state and STAFF (employee) role
     const newUser: User = {
       id: regId.trim(),
       fullName: regFullName.trim(),
       phone: cleanPhone,
       department: regDepartment,
       branch: regBranch,
-      role: regRole,
-      status: UserStatus.PENDING,
-      password: regPassword || "123456",
+      role: UserRole.STAFF, // employee default
+      status: UserStatus.PENDING, // pending default
+      password: regPassword,
       company: regCompanyVal
     };
 
     setUsers((prev) => [...prev, newUser]);
-    setRegisterSuccessMsg("ĐĂNG KÝ THÀNH CÔNG! Tài khoản hiện đang ở trạng thái chờ phê duyệt. Vui lòng đợi quản trị viên duyệt trước khi có thể đăng nhập.");
     
+    if (dbConnected) {
+      saveDocument(COLLECTIONS.USERS, newUser.id, newUser).catch(console.error);
+    }
+
+    // Keep user logged in under pending status, which displays Waiting landing screen with auto-polling
+    setCurrentUser(newUser);
+    setRegisterSuccessMsg("Đăng ký tài khoản thành công! Tài khoản của bạn đang chờ quản trị viên phê duyệt.");
+
     // Clear registration fields
     setRegFullName("");
     setRegId("");
     setRegPhone("");
     setRegPassword("");
-    setAuthScreen("LOGIN");
+    setRegConfirmPassword("");
   };
 
   // Admin controls
@@ -1388,63 +1423,98 @@ export default function App() {
 
   // Render Authentication Section (Login / registration cards)
   if (!currentUser) {
+    const isRegIdValid = /^\d{4}\.\d{5}$/.test(regId);
+    const isRegPhoneValid = regPhone.replace(/\s+/g, "").length === 10 && regPhone.replace(/\s+/g, "").startsWith("0");
+    const isLoginPhoneValid = loginPhone.replace(/\s+/g, "").length === 10 && loginPhone.replace(/\s+/g, "").startsWith("0");
+
     return (
       <div className="min-h-screen bg-[#F0F2F5] flex flex-col items-center justify-center p-4 relative font-sans overflow-y-auto selection:bg-blue-600 selection:text-white">
         {/* Soft elegant backdrops */}
-        <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-blue-400 rounded-full blur-[160px] opacity-10 pointer-events-none" />
-        <div className="absolute bottom-1/4 right-1/4 w-72 h-72 bg-purple-400 rounded-full blur-[160px] opacity-10 pointer-events-none" />
+        <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-blue-400 bg-opacity-10 rounded-full blur-[160px] pointer-events-none" />
+        <div className="absolute bottom-1/4 right-1/4 w-72 h-72 bg-purple-400 bg-opacity-10 rounded-full blur-[160px] pointer-events-none" />
 
-        {/* Corporate branding header */}
-        <div className="text-center mb-8 select-none z-10 animate-fade-in">
-          {/* Logo 4M1E1I above registration and login forms */}
-          <div className="bg-gradient-to-r from-blue-700 to-indigo-700 text-white font-serif font-black text-4xl px-8 py-3.5 rounded-2xl shadow-md inline-block tracking-widest border border-blue-500 border-opacity-25">
-            <T>4M1E1I</T>
+        {/* Action card enclosing everything (branding logo + login/register switcher + forms) */}
+        <div className="w-full max-w-md bg-white border border-slate-200 rounded-[32px] p-6 sm:p-8 shadow-xl relative z-10 animate-scale-in text-slate-800">
+          
+          {/* Corporate branding header: Logo 4M1E1I as requested */}
+          <div className="flex flex-col items-center mb-6 select-none text-center animate-fade-in">
+            <div className="px-10 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-[18px] flex items-center justify-center shadow-lg border border-blue-400/20 mb-3.5 transform transition hover:scale-105 duration-200">
+              <span translate="no" className="notranslate font-sans font-black text-2xl tracking-wider text-white leading-none">
+                4M1E1I
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-500 font-bold tracking-normal mt-1 uppercase">
+              <T>HỆ THỐNG KIỂM SOÁT NGUỒN LỰC SX-KD</T>
+            </p>
           </div>
-          <h1 className="text-[15px] sm:text-lg font-black text-slate-805 tracking-wide mt-4 uppercase whitespace-nowrap">
-            <T>CÔNG TY CP TÂN PHÚ VIỆT NAM</T>
-          </h1>
-          <T className="text-[8.5px] sm:text-[10px] text-slate-500 mt-1.5 block uppercase font-mono tracking-tighter whitespace-nowrap">
-            HỆ THỐNG TRỰC QUAN HÓA QUẢN LÝ BIẾN ĐỘNG CLSX
-          </T>
-        </div>
+          
+          {/* Beautiful sliding tab switcher */}
+          <div className="flex bg-slate-100 p-1 rounded-xl mb-6 select-none border border-slate-200">
+            <button
+              type="button"
+              onClick={() => {
+                setAuthScreen("LOGIN");
+                setAuthError("");
+                setRegisterSuccessMsg("");
+              }}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg uppercase tracking-wider transition-all duration-305 cursor-pointer ${
+                authScreen === "LOGIN"
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              <T>Đăng Nhập</T>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAuthScreen("REGISTER");
+                setAuthError("");
+                setRegisterSuccessMsg("");
+              }}
+              className={`flex-1 py-1.5 py-2 text-xs font-bold rounded-lg uppercase tracking-wider transition-all duration-305 cursor-pointer ${
+                authScreen === "REGISTER"
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              <T>Đăng Ký</T>
+            </button>
+          </div>
 
-        {/* Action card */}
-        <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-8 shadow-lg relative z-10 animate-scale-in text-slate-800">
           {/* Status feedback */}
           {authError && (
-            <div className="mb-6 bg-red-50 border border-red-200 text-red-800 text-xs p-3.5 rounded-xl flex items-start gap-2.5">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-650" />
+            <div className="mb-5 bg-red-50 border border-red-200 text-red-800 text-xs p-3.5 rounded-xl flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
               <span translate="no" className="notranslate font-semibold block">{authError}</span>
             </div>
           )}
 
           {registerSuccessMsg && (
-            <div className="mb-6 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs p-3.5 rounded-xl flex items-start gap-2.5">
-              <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5 text-emerald-650" />
+            <div className="mb-5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs p-3.5 rounded-xl flex items-start gap-2.5">
+              <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
               <span translate="no" className="notranslate font-semibold block">{registerSuccessMsg}</span>
             </div>
           )}
 
           {authScreen === "LOGIN" ? (
-            <form onSubmit={handleLogin} className="space-y-5">
-              <div className="border-b border-slate-100 pb-3 text-center">
-                <T className="text-lg font-bold text-slate-850 block uppercase">ĐĂNG NHẬP HỆ THỐNG</T>
-                <T className="text-[10px] text-slate-450 block font-bold tracking-widest mt-0.5 uppercase">
-                  NHÂN SỰ VÀ TRƯỞNG BP QUAN SÁT
-                </T>
-              </div>
-
+            <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <label className="text-[11px] text-slate-500 font-bold block mb-1.5">
-                  <span translate="no" className="notranslate">MÃ NHÂN SỰ (MẬT KHẨU HÀNH CHÍNH)*</span>
+                <label className="text-[11px] text-slate-500 font-bold block mb-1">
+                  <T>MÃ NHÂN SỰ</T>
                 </label>
-                <input
-                  type="text"
-                  placeholder="Ví dụ: 2026.00001"
-                  value={loginId}
-                  onChange={(e) => setLoginId(formatEmployeeId(e.target.value, loginId))}
-                  className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl px-4 py-3 text-xs text-slate-850 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono tracking-wide shadow-sm"
-                />
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none select-none z-10 text-slate-400">
+                    <UserIcon className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Ví dụ: 2026.00001"
+                    value={loginId}
+                    onChange={(e) => setLoginId(formatEmployeeId(e.target.value, loginId))}
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-850 font-mono shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
                 {loginId.length > 0 && !isLoginIdValid && (
                   <span translate="no" className="notranslate text-red-500 text-[10px] block mt-1.5 font-semibold">
                     Mã nhân sự phải đúng định dạng YYYY.XXXXX (10 ký tự)
@@ -1453,89 +1523,118 @@ export default function App() {
               </div>
 
               <div>
-                <label className="text-[11px] text-slate-500 font-bold block mb-1.5">
-                  <span translate="no" className="notranslate">SỐ ĐIỆN THOẠI ĐÃ DUYỆT*</span>
+                <label className="text-[11px] text-slate-500 font-bold block mb-1">
+                  <T>SỐ ĐIỆN THOẠI</T>
                 </label>
-                <input
-                  type="text"
-                  placeholder="Ví dụ: 0907 767 304"
-                  value={loginPhone}
-                  onChange={(e) => setLoginPhone(formatPhoneNumber(e.target.value))}
-                  className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl px-4 py-3 text-xs text-slate-850 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono shadow-sm"
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] text-slate-500 font-bold uppercase block mb-1.5">
-                  <T>Mật khẩu an toàn*</T>
-                </label>
-                <input
-                  type="password"
-                  placeholder="••••••"
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl px-4 py-3 text-xs text-slate-850 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold uppercase transition-all shadow-md flex items-center justify-center gap-1 cursor-pointer"
-              >
-                <LogIn className="w-4 h-4" />
-                <T>ĐĂNG NHẬP</T>
-              </button>
-
-              <div className="pt-4 border-t border-slate-100 text-center select-none">
-                <T className="text-[11px] text-slate-500 font-medium">Chưa có tài khoản trên hệ thống? </T>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthScreen("REGISTER");
-                    setAuthError("");
-                    setRegisterSuccessMsg("");
-                  }}
-                  className="text-blue-600 hover:text-blue-550 text-[11px] font-bold cursor-pointer"
-                >
-                  <T>ĐĂNG KÝ NGAY</T>
-                </button>
-              </div>
-
-
-            </form>
-          ) : (
-            <form onSubmit={handleRegister} className="space-y-4">
-              <div className="border-b border-slate-100 pb-3 text-center">
-                <T className="text-lg font-bold text-slate-850 block uppercase">ĐĂNG KÝ TÀI KHOẢN MỚI</T>
-                <T className="text-[10px] text-slate-450 block font-bold tracking-widest mt-0.5 uppercase">
-                  BIỂU MẪU GHI NHẬN THÔNG TIN
-                </T>
-              </div>
-
-              <div>
-                <label className="text-[11px] text-slate-500 font-bold uppercase block mb-1">
-                  <T>Họ tên nhân viên*</T>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ví dụ: Bùi Thanh Dung"
-                  value={regFullName}
-                  onChange={(e) => setRegFullName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl px-3 py-2.5 text-xs text-slate-850 shadow-sm"
-                />
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none select-none z-10 text-slate-400">
+                    <Smartphone className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Nhập số điện thoại..."
+                    value={loginPhone}
+                    onChange={(e) => setLoginPhone(formatPhoneNumber(e.target.value))}
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-850 font-mono shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+                {loginPhone.length > 0 && !isLoginPhoneValid && (
+                  <span translate="no" className="notranslate text-red-500 text-[10px] block mt-1.5 font-semibold">
+                    Vui lòng nhập đúng SĐT cá nhân gồm 10 chữ số (bắt đầu bằng số 0)
+                  </span>
+                )}
               </div>
 
               <div>
                 <label className="text-[11px] text-slate-500 font-bold block mb-1">
-                  <span translate="no" className="notranslate">MÃ NHÂN SỰ (ĐỊNH DẠNG YYYY.XXXXX)*</span>
+                  <T>MẬT KHẨU</T>
                 </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none select-none z-10 text-slate-400">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="password"
+                    placeholder="Nhập mật khẩu..."
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-850 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Remember account option matches mockups */}
+              <div className="flex items-center gap-2 select-none pt-1">
                 <input
-                  type="text"
-                  placeholder="Ví dụ: 2026.00001"
-                  value={regId}
-                  onChange={(e) => setRegId(formatEmployeeId(e.target.value, regId))}
-                  className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl px-3 py-2.5 text-xs text-slate-850 font-mono shadow-sm"
+                  type="checkbox"
+                  id="rememberMe"
+                  defaultChecked
+                  className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500 cursor-pointer"
                 />
+                <label htmlFor="rememberMe" className="text-[11px] text-slate-500 font-medium cursor-pointer">
+                  <T>Nhớ thông tin đăng nhập</T>
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                disabled={!isLoginIdValid || !isLoginPhoneValid || !loginPassword.trim()}
+                className={`w-full py-3.5 text-white rounded-xl text-xs font-bold uppercase transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer ${
+                  (!isLoginIdValid || !isLoginPhoneValid || !loginPassword.trim())
+                    ? "bg-slate-350 cursor-not-allowed opacity-50 select-none shadow-none"
+                    : "bg-blue-600 hover:bg-blue-700 hover:shadow-lg"
+                }`}
+              >
+                <LogIn className="w-4 h-4" />
+                <T>VÀO HỆ THỐNG</T>
+              </button>
+
+              {/* Administrative and help notice inside nice curved block */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-center select-none mt-2">
+                <p className="text-[10px] text-slate-500 leading-relaxed font-bold uppercase">
+                  <T>Nếu không đăng nhập được, liên hệ Admin:</T>
+                </p>
+                <p className="text-xs text-blue-600 font-black font-semibold mt-1">
+                  <T>Lê Nhật Trường (0907.767.304)</T>
+                </p>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleRegister} className="space-y-4">
+              <div>
+                <label className="text-[11px] text-slate-500 font-bold block mb-1">
+                  <T>HỌ VÀ TÊN</T>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none select-none z-10 text-slate-400">
+                    <UserIcon className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Nhập họ tên đầy đủ..."
+                    value={regFullName}
+                    onChange={(e) => setRegFullName(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-850 shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] text-slate-500 font-bold block mb-1">
+                  <T>MÃ NHÂN SỰ</T>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none select-none z-10 text-slate-400">
+                    <UserIcon className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Ví dụ: 2026.00001"
+                    value={regId}
+                    onChange={(e) => setRegId(formatEmployeeId(e.target.value, regId))}
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-850 font-mono shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
                 {regId.length > 0 && !isRegIdValid && (
                   <span translate="no" className="notranslate text-red-500 text-[10px] block mt-1.5 font-semibold">
                     Mã nhân sự phải đúng định dạng YYYY.XXXXX (10 ký tự)
@@ -1545,24 +1644,24 @@ export default function App() {
 
               <div>
                 <label className="text-[11px] text-slate-500 font-bold block mb-1">
-                  <span translate="no" className="notranslate">SỐ ĐIỆN THOẠI*</span>
+                  <T>SỐ ĐIỆN THOẠI</T>
                 </label>
-                <div className="mb-1.5">
-                  <span translate="no" className="notranslate text-blue-600 text-[9px] italic block leading-snug">
-                    * Lưu ý: Vui lòng nhập chính xác SĐT của anh/chị để Trưởng Bộ Phận nhận diện phê duyệt.
-                  </span>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none select-none z-10 text-slate-400">
+                    <Smartphone className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Ví dụ: 0907 767 304"
+                    value={regPhone}
+                    onChange={(e) => setRegPhone(formatPhoneNumber(e.target.value))}
+                    className={`w-full bg-slate-50 border pl-9 pr-3 py-2.5 text-xs text-slate-850 font-mono shadow-sm focus:outline-none transition-colors rounded-xl ${
+                      regPhone.length > 0 && !isRegPhoneValid
+                        ? "border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500"
+                        : "border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    }`}
+                  />
                 </div>
-                <input
-                  type="text"
-                  placeholder="Ví dụ: 0907 767 304"
-                  value={regPhone}
-                  onChange={(e) => setRegPhone(formatPhoneNumber(e.target.value))}
-                  className={`w-full bg-slate-50 border rounded-xl px-3 py-2.5 text-xs text-slate-850 font-mono shadow-sm focus:outline-none transition-colors ${
-                    regPhone.length > 0 && !isRegPhoneValid
-                      ? "border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500"
-                      : "border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  }`}
-                />
                 {regPhone.length > 0 && !isRegPhoneValid && (
                   <span translate="no" className="notranslate text-red-500 text-[10px] block mt-1.5 font-semibold">
                     Vui lòng nhập đúng SĐT cá nhân gồm 10 chữ số (bắt đầu bằng số 0)
@@ -1570,105 +1669,229 @@ export default function App() {
                 )}
               </div>
 
-              <div className="select-none">
-                <label className="text-[11px] text-slate-500 font-bold uppercase block mb-1">
-                  <T>Chi nhánh hoạt động chính*</T>
+              <div>
+                <label className="text-[11px] text-slate-500 font-bold block mb-1">
+                  <T>MẬT KHẨU</T>
                 </label>
-                <select
-                  value={regBranch}
-                  onChange={(e) => setRegBranch(e.target.value)}
-                  className="w-full bg-[#FFFFFF] border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-850 focus:outline-none shadow-sm"
-                >
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.name}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="select-none">
-                <label className="text-[11px] text-slate-500 font-bold uppercase block mb-1">
-                  <T>Bộ phận công tác*</T>
-                </label>
-                <select
-                  value={regDepartment}
-                  onChange={(e) => setRegDepartment(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-850 focus:outline-none shadow-sm"
-                >
-                  {(() => {
-                    const selectedB = branches.find((b) => b.name === regBranch);
-                    const filteredDepts = selectedB
-                      ? departments.filter((d) => d.branchId === selectedB.id)
-                      : [];
-                    if (filteredDepts.length === 0) {
-                      return <option value="">Chưa có bộ phận</option>;
-                    }
-                    return filteredDepts.map((d) => (
-                      <option key={d.id} value={d.name}>
-                        {d.name}
-                      </option>
-                    ));
-                  })()}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 pb-2 select-none">
-                <div>
-                  <label className="text-[11px] text-slate-500 font-bold uppercase block mb-1">
-                    <T>Phân quyền đề xuất*</T>
-                  </label>
-                  <select
-                    value={regRole}
-                    onChange={(e) => setRegRole(e.target.value as UserRole)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-850 shadow-sm"
-                  >
-                    <option value={UserRole.STAFF}>{UserRole.STAFF}</option>
-                    <option value={UserRole.REVIEWER}>{UserRole.REVIEWER}</option>
-                    <option value={UserRole.ADMIN}>{UserRole.ADMIN}</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[11px] text-slate-500 font-bold uppercase block mb-1">
-                    <T>Mật khẩu*</T>
-                  </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none select-none z-10 text-slate-400">
+                    <Lock className="w-4 h-4" />
+                  </div>
                   <input
                     type="password"
-                    placeholder="••••••"
+                    placeholder="Tạo mật khẩu đăng nhập..."
                     value={regPassword}
                     onChange={(e) => setRegPassword(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-850 focus:outline-none shadow-sm"
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-850 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
                   />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] text-slate-500 font-bold block mb-1">
+                  <T>XÁC NHẬN MẬT KHẨU</T>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none select-none z-10 text-slate-400">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="password"
+                    placeholder="Nhập lại mật khẩu để xác nhận..."
+                    value={regConfirmPassword}
+                    onChange={(e) => setRegConfirmPassword(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-850 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="select-none">
+                <label className="text-[11px] text-slate-500 font-bold uppercase block mb-1">
+                  <T>CÔNG TY THÀNH VIÊN</T>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none select-none z-10 text-slate-400">
+                    <Building className="w-4 h-4" />
+                  </div>
+                  <select
+                    value={regCompany}
+                    onChange={(e) => {
+                      setRegCompany(e.target.value);
+                      setRegBranch("");
+                      setRegDepartment("");
+                    }}
+                    className="w-full bg-[#FFFFFF] border border-slate-200 rounded-xl pl-9 pr-8 py-2.5 text-xs text-slate-850 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm appearance-none"
+                  >
+                    {companies.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
+                    <ChevronDown className="w-4 h-4" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="select-none">
+                <label className="text-[11px] text-emerald-700 font-bold uppercase block mb-1">
+                  <T>CHI NHÁNH/ VĂN PHÒNG ĐẠI DIỆN *</T>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none select-none z-10 text-emerald-600">
+                    <Building className="w-4 h-4" />
+                  </div>
+                  <select
+                    value={regBranch}
+                    onChange={(e) => {
+                      setRegBranch(e.target.value);
+                      setRegDepartment("");
+                    }}
+                    style={{ borderColor: "#10b981" }}
+                    className="w-full bg-[#FFFFFF] border border-emerald-500 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500 rounded-xl pl-9 pr-8 py-2.5 text-xs text-slate-850 focus:outline-none shadow-sm appearance-none"
+                  >
+                    <option value="">--- Chọn Chi nhánh/ Văn Phòng đại diện ---</option>
+                    {(() => {
+                      const filteredBranches = branches.filter((b) => b.companyId === regCompany);
+                      return filteredBranches.map((b) => (
+                        <option key={b.id} value={b.name}>
+                          {b.name}
+                        </option>
+                      ));
+                    })()}
+                  </select>
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-emerald-600">
+                    <ChevronDown className="w-4 h-4" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="select-none">
+                <label className="text-[11px] text-emerald-700 font-bold uppercase block mb-1">
+                  <T>BỘ PHẬN/ ĐƠN VỊ *</T>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none select-none z-10 text-emerald-600">
+                    <Briefcase className="w-4 h-4" />
+                  </div>
+                  <select
+                    value={regDepartment}
+                    onChange={(e) => setRegDepartment(e.target.value)}
+                    style={{ borderColor: "#10b981" }}
+                    className="w-full bg-[#FFFFFF] border border-emerald-500 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500 rounded-xl pl-9 pr-8 py-2.5 text-xs text-slate-850 focus:outline-none shadow-sm appearance-none"
+                  >
+                    <option value="">--- Chọn Bộ phận/ Đơn vị làm việc ---</option>
+                    {(() => {
+                      const selectedB = branches.find((b) => b.name === regBranch);
+                      const filteredDepts = selectedB
+                        ? departments.filter((d) => d.branchId === selectedB.id)
+                        : [];
+                      return filteredDepts.map((d) => (
+                        <option key={d.id} value={d.name}>
+                          {d.name}
+                        </option>
+                      ));
+                    })()}
+                  </select>
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-emerald-600">
+                    <ChevronDown className="w-4 h-4" />
+                  </div>
                 </div>
               </div>
 
               <button
                 type="submit"
-                disabled={!isRegIdValid || !isRegPhoneValid}
-                className={`w-full py-3 text-white rounded-xl text-xs font-bold uppercase transition-all shadow-md flex items-center justify-center gap-1 cursor-pointer ${
-                  (!isRegIdValid || !isRegPhoneValid)
-                    ? "bg-slate-350 cursor-not-allowed opacity-50 select-none"
-                    : "bg-emerald-600 hover:bg-emerald-700"
+                disabled={!isRegIdValid || !isRegPhoneValid || !regBranch || !regDepartment || !regFullName.trim() || !regPassword.trim() || regPassword !== regConfirmPassword}
+                className={`w-full py-3.5 text-white rounded-xl text-xs font-bold uppercase transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer ${
+                  (!isRegIdValid || !isRegPhoneValid || !regBranch || !regDepartment || !regFullName.trim() || !regPassword.trim() || regPassword !== regConfirmPassword)
+                    ? "bg-slate-350 cursor-not-allowed opacity-50 select-none shadow-none"
+                    : "bg-blue-600 hover:bg-blue-700 hover:shadow-lg"
                 }`}
               >
-                <T>ĐĂNG KÝ THÔNG TIN</T>
+                <T>Đăng Ký Tài Khoản</T>
               </button>
-
-              <div className="pt-3 border-t border-slate-100 text-center select-none">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthScreen("LOGIN");
-                    setAuthError("");
-                    setRegisterSuccessMsg("");
-                  }}
-                  className="text-slate-500 hover:text-slate-850 text-[11px] font-bold cursor-pointer"
-                >
-                  <T>← QUAY LẠI ĐĂNG NHẬP</T>
-                </button>
-              </div>
             </form>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  // Intercept pending users and lock them onto the Waiting Landing Screen with auto-polling checks
+  if (currentUser && currentUser.status === UserStatus.PENDING) {
+    return (
+      <div className="min-h-screen bg-[#F0F2F5] flex flex-col items-center justify-center p-4 relative font-sans overflow-y-auto selection:bg-blue-600 selection:text-white">
+        {/* Soft elegant backdrops */}
+        <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-amber-400 bg-opacity-10 rounded-full blur-[160px] pointer-events-none" />
+        <div className="absolute bottom-1/4 right-1/4 w-72 h-72 bg-blue-400 bg-opacity-10 rounded-full blur-[160px] pointer-events-none" />
+
+        {/* Corporate branding header */}
+        <div className="flex flex-col items-center mb-8 select-none text-center animate-fade-in pointer-events-none">
+          <div className="px-10 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-[18px] flex items-center justify-center shadow-lg border border-blue-400/20 mb-3.5 transform transition hover:scale-105 duration-200">
+            <span translate="no" className="notranslate font-sans font-black text-2xl tracking-wider text-white leading-none">
+              4M1E1I
+            </span>
+          </div>
+          <p className="text-[10px] text-slate-500 font-bold tracking-normal mt-1 uppercase">
+            <T>HỆ THỐNG KIỂM SOÁT NGUỒN LỰC SX-KD</T>
+          </p>
+        </div>
+
+        {/* Waiting card */}
+        <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-8 shadow-lg relative z-10 text-center space-y-6">
+          <div className="flex flex-col items-center">
+            <div className="w-16 h-16 rounded-full bg-amber-50 flex items-center justify-center border border-amber-200 animate-pulse">
+              <RefreshCw className="w-6 h-6 text-amber-500 animate-spin" />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-lg font-bold text-slate-850 uppercase">
+              <T>TÀI KHOẢN ĐANG CHỜ PHÊ DUYỆT</T>
+            </h2>
+            <p className="text-xs text-slate-500 leading-relaxed max-w-sm mx-auto">
+              <T>Hệ thống đang kiểm tra trạng thái kích hoạt tài khoản của bạn trên nền tảng cơ sở dữ liệu.</T>
+            </p>
+          </div>
+
+          <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl text-left space-y-2">
+            <div className="flex items-center gap-2 text-amber-800 font-bold text-xs">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+              <T>Thông báo phê duyệt tài khoản</T>
+            </div>
+            <p className="text-[11px] text-amber-700 leading-relaxed font-semibold">
+              <T>Tài khoản của bạn đang chờ quản trị viên phê duyệt. Hệ thống sẽ tự động đưa bạn vào màn hình chính sau khi Trưởng bộ phận hoặc Chủ Admin kích hoạt (tự động kiểm tra trạng thái mỗi 8 giây).</T>
+            </p>
+          </div>
+
+          {/* User details summary for reference */}
+          <div className="border border-slate-100 p-4 rounded-xl text-left text-xs text-slate-600 space-y-1.5 bg-slate-50">
+            <div><strong><T>Họ tên:</T></strong> <span translate="no" className="notranslate">{currentUser.fullName}</span></div>
+            <div><strong><T>Số điện thoại:</T></strong> <span translate="no" className="notranslate">{currentUser.phone}</span></div>
+            <div><strong><T>Mã nhân sự:</T></strong> <span translate="no" className="notranslate">{currentUser.id}</span></div>
+            <div><strong><T>Bộ phận/Chi nhánh:</T></strong> <span translate="no" className="notranslate">{currentUser.department} - {currentUser.branch}</span></div>
+          </div>
+
+          {/* Polling loading bar */}
+          <div className="space-y-1.5 pt-2">
+            <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 h-full w-2/3 rounded-full animate-pulse" style={{ animationDuration: "2s" }} />
+            </div>
+            <div className="text-[10px] text-slate-400 font-bold tracking-tight">
+              <T>Tự động kiểm tra sau mỗi 8 giây...</T>
+            </div>
+          </div>
+
+          <button
+            onClick={() => {
+              setCurrentUser(null);
+              localStorage.removeItem("4m1e1i_current_user");
+            }}
+            className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 rounded-xl text-xs font-bold uppercase transition-all cursor-pointer"
+          >
+            <T>THOÁT RA / ĐĂNG NHẬP SỐ KHÁC</T>
+          </button>
         </div>
       </div>
     );
@@ -1939,6 +2162,7 @@ export default function App() {
                 mobileUIConfig={mobileUIConfig}
                 onUpdateMobileUIConfig={setMobileUIConfig}
                 onLogout={() => setCurrentUser(null)}
+                branches={branches}
               />
             )}
           </div>
@@ -1975,6 +2199,7 @@ export default function App() {
                 mobileUIConfig={mobileUIConfig}
                 onUpdateMobileUIConfig={setMobileUIConfig}
                 onLogout={() => setCurrentUser(null)}
+                branches={branches}
               />
             )}
 
