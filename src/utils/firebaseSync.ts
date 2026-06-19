@@ -219,7 +219,26 @@ export async function fetchCollection<T>(collectionName: string): Promise<T[]> {
 export async function saveDocument(collectionName: string, id: string, data: any): Promise<boolean> {
   if (!db) return false;
   try {
-    let rawData = { ...data };
+    // Helper to recursively clean undefined values to prevent Firestore crashes
+    const cleanObject = (obj: any): any => {
+      if (obj === null || obj === undefined) return null;
+      if (Array.isArray(obj)) {
+        return obj.map(item => cleanObject(item));
+      }
+      if (typeof obj === "object" && obj.constructor === Object) {
+        const cleaned: any = {};
+        for (const key of Object.keys(obj)) {
+          if (obj[key] !== undefined) {
+            cleaned[key] = cleanObject(obj[key]);
+          }
+        }
+        return cleaned;
+      }
+      return obj;
+    };
+
+    let rawData = cleanObject(data);
+
     if (collectionName === "user_profiles") {
       // Map App internal fields back to Database schema fields
       const dbUser: any = {

@@ -45,6 +45,27 @@ import {
   deleteDocument 
 } from "./utils/firebaseSync";
 
+// Helper to parse date/time string format e.g., "18:15:18 18/06/2026" or "18/06/2026"
+const parseReportDate = (dateStr: string | undefined): number => {
+  if (!dateStr) return 0;
+  const cleanedStr = dateStr.trim();
+  // Match HH:mm:ss dd/MM/yy or HH:mm:ss dd/MM/yyyy
+  const match = cleanedStr.match(/^(\d{1,2}):(\d{1,2}):(\d{1,2})\s+(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (!match) {
+    // Try dd/MM/yy fallback
+    const fallbackMatch = cleanedStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    if (fallbackMatch) {
+      const [_, d, m, y] = fallbackMatch;
+      const year = y.length === 2 ? 2000 + parseInt(y, 10) : parseInt(y, 10);
+      return new Date(year, parseInt(m, 10) - 1, parseInt(d, 10)).getTime();
+    }
+    return 0;
+  }
+  const [_, hrs, mns, scs, d, m, y] = match;
+  const year = y.length === 2 ? 2000 + parseInt(y, 10) : parseInt(y, 10);
+  return new Date(year, parseInt(m, 10) - 1, parseInt(d, 10), parseInt(hrs, 10), parseInt(mns, 10), parseInt(scs, 10)).getTime();
+};
+
 export default function App() {
   // Firebase configurations & connection indicators
   const [dbLoading, setDbLoading] = useState(true);
@@ -353,24 +374,63 @@ export default function App() {
   const isRegPhoneValid = regPhone.replace(/\s+/g, "").length === 10 && regPhone.replace(/\s+/g, "").startsWith("0");
   const isLoginPhoneValid = loginPhone.replace(/\s+/g, "").length === 10 && loginPhone.replace(/\s+/g, "").startsWith("0");
 
-  // Synchronize with Firestore upon startup
-  useEffect(() => {
-    async function syncFromDb() {
-      if (!db) {
-        setDbLoading(false);
-        setDbStatus("Chế độ Offline/Local (VITE_FIREBASE_CONF chưa được khai báo)");
-        return;
+  // Synchronize with Firestore function
+  const syncFromDb = async (isManual = false) => {
+    if (!db) {
+      setDbLoading(false);
+      setDbStatus("Chế độ Offline/Local (VITE_FIREBASE_CONF chưa được khai báo)");
+      if (isManual) {
+        alert("Chế độ Offline/Local (Không dùng Firestore)");
       }
-      try {
-        setDbStatus("Đang đồng bộ dữ liệu với Firestore...");
-        // 1. Seed default data if users collection is empty
-        await seedFirestoreIfNeeded();
+      return;
+    }
+    try {
+      setDbStatus(isManual ? "Đang tải dữ liệu mới từ Firestore..." : "Đang đồng bộ dữ liệu với Firestore...");
+      // 1. Seed default data if users collection is empty
+      await seedFirestoreIfNeeded();
 
-        // 2. Load and SMART MERGE collections to prevent data loss or staleness
-        const fUsers = await fetchCollection<User>(COLLECTIONS.USERS);
-        if (fUsers.length > 0) {
-          setUsers((prev) => {
-            const cleanedFetched = fUsers.map((u) => {
+      // 2. Load and SMART MERGE collections to prevent data loss or staleness
+      const fUsers = await fetchCollection<User>(COLLECTIONS.USERS);
+      if (fUsers.length > 0) {
+        setUsers((prev) => {
+          const cleanedFetched = fUsers.map((u) => {
+            let userPwd = u.password;
+            if (u.id === "2018.00281" && (!userPwd || userPwd === "123456")) {
+              userPwd = "111222";
+            } else {
+              const isAdmin = u.role === UserRole.ADMIN;
+              if (!isAdmin) {
+                if (!userPwd || userPwd === "password123" || userPwd === "111222" || userPwd.startsWith("password") || userPwd === "password" || userPwd.toLowerCase().includes("password")) {
+                  userPwd = "123456";
+                }
+              }
+            }
+            let deptName = u.department || "";
+            deptName = deptName.replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
+            deptName = deptName.replace(/\s\([^)]+\)$/, "").trim();
+            
+            let suffix = "";
+            let branchName = u.branch || "";
+            if (branchName.includes("TPP-CTY") || branchName.includes("Văn Phòng")) {
+              suffix = " (TPP-CTY)";
+            } else if (branchName.includes("TPP-BNI") || branchName.includes("Bắc Ninh")) {
+              suffix = " (TPP-BNI)";
+            } else if (branchName.includes("TPP-LAN") || branchName.includes("Long An")) {
+              suffix = " (TPP-LAN)";
+            } else if (branchName.includes("TPP-314") || branchName.includes("314")) {
+              suffix = " (TPP-314)";
+            }
+            
+            return {
+              ...u,
+              password: userPwd,
+              department: suffix ? `${deptName}${suffix}` : deptName
+            };
+          });
+          const merged = [...cleanedFetched];
+          prev.forEach((u) => {
+            if (!merged.some((mu) => mu.id === u.id)) {
+              // Ensure local unsynced users also have sanitized passwords and department names
               let userPwd = u.password;
               if (u.id === "2018.00281" && (!userPwd || userPwd === "123456")) {
                 userPwd = "111222";
@@ -382,254 +442,234 @@ export default function App() {
                   }
                 }
               }
-              let deptName = u.department || "";
-              deptName = deptName.replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
-              deptName = deptName.replace(/\s\([^)]+\)$/, "").trim();
-              
-              let suffix = "";
-              let branchName = u.branch || "";
-              if (branchName.includes("TPP-CTY") || branchName.includes("Văn Phòng")) {
-                suffix = " (TPP-CTY)";
-              } else if (branchName.includes("TPP-BNI") || branchName.includes("Bắc Ninh")) {
-                suffix = " (TPP-BNI)";
-              } else if (branchName.includes("TPP-LAN") || branchName.includes("Long An")) {
-                suffix = " (TPP-LAN)";
-              } else if (branchName.includes("TPP-314") || branchName.includes("314")) {
-                suffix = " (TPP-314)";
-              }
-              
-              return {
-                ...u,
-                password: userPwd,
-                department: suffix ? `${deptName}${suffix}` : deptName
-              };
-            });
-            const merged = [...cleanedFetched];
-            prev.forEach((u) => {
-              if (!merged.some((mu) => mu.id === u.id)) {
-                // Ensure local unsynced users also have sanitized passwords and department names
-                let userPwd = u.password;
-                if (u.id === "2018.00281" && (!userPwd || userPwd === "123456")) {
-                  userPwd = "111222";
-                } else {
-                  const isAdmin = u.role === UserRole.ADMIN;
-                  if (!isAdmin) {
-                    if (!userPwd || userPwd === "password123" || userPwd === "111222" || userPwd.startsWith("password") || userPwd === "password" || userPwd.toLowerCase().includes("password")) {
-                      userPwd = "123456";
-                    }
-                  }
-                }
-                merged.push({ ...u, password: userPwd });
-              }
-            });
-            return merged;
+              merged.push({ ...u, password: userPwd });
+            }
           });
-        }
+          return merged;
+        });
+      }
 
-        const fReports = await fetchCollection<QualityReport>(COLLECTIONS.REPORTS);
-        if (fReports.length > 0) {
-          setReports((prev) => {
-            const merged = [...fReports];
-            prev.forEach((r) => {
-              if (!merged.some((mr) => mr.id === r.id)) {
-                merged.push(r);
+      const fReports = await fetchCollection<QualityReport>(COLLECTIONS.REPORTS);
+      if (fReports.length > 0) {
+        setReports((prev) => {
+          const merged = [...fReports];
+          prev.forEach((localReport) => {
+            const dbIndex = merged.findIndex((dbReport) => dbReport.id === localReport.id);
+            if (dbIndex === -1) {
+              merged.push(localReport);
+            } else {
+              const dbReport = merged[dbIndex];
+              const localTime = parseReportDate(localReport.updatedAt || localReport.timestamp);
+              const dbTime = parseReportDate(dbReport.updatedAt || dbReport.timestamp);
+              if (localTime > dbTime) {
+                merged[dbIndex] = localReport;
               }
-            });
-            return merged;
+            }
           });
-        }
+          return merged;
+        });
+      }
 
-        const fCompanies = await fetchCollection<Company>(COLLECTIONS.COMPANIES);
-        if (fCompanies.length > 0) {
-          setCompanies((prev) => {
-            const merged = [...fCompanies];
-            prev.forEach((c) => {
-              if (!merged.some((mc) => mc.id === c.id)) {
-                merged.push(c);
-              }
-            });
-            return merged;
+      const fCompanies = await fetchCollection<Company>(COLLECTIONS.COMPANIES);
+      if (fCompanies.length > 0) {
+        setCompanies((prev) => {
+          const merged = [...fCompanies];
+          prev.forEach((c) => {
+            if (!merged.some((mc) => mc.id === c.id)) {
+              merged.push(c);
+            }
           });
-        }
+          return merged;
+        });
+      }
 
-        const fBranches = await fetchCollection<Branch>(COLLECTIONS.BRANCHES);
-        if (fBranches.length > 0) {
-          setBranches((prev) => {
-            const merged = [...fBranches];
-            prev.forEach((b) => {
-              if (!merged.some((mb) => mb.id === b.id)) {
-                merged.push(b);
-              }
-            });
-            return merged;
+      const fBranches = await fetchCollection<Branch>(COLLECTIONS.BRANCHES);
+      if (fBranches.length > 0) {
+        setBranches((prev) => {
+          const merged = [...fBranches];
+          prev.forEach((b) => {
+            if (!merged.some((mb) => mb.id === b.id)) {
+              merged.push(b);
+            }
           });
-        }
+          return merged;
+        });
+      }
 
-        const fDepts = await fetchCollection<Department>(COLLECTIONS.DEPARTMENTS);
-        if (fDepts.length > 0) {
-          setDepartments((prev) => {
-            // Read latest branches for helper suffix formatting
-            const latestBranches = fBranches.length > 0 ? fBranches : initialBranches;
-            const cleanedFetched = fDepts.map((d) => {
-              let cleanName = d.name || "";
-              cleanName = cleanName.replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
-              cleanName = cleanName.replace(/\s\([^)]+\)$/, "").trim();
+      const fDepts = await fetchCollection<Department>(COLLECTIONS.DEPARTMENTS);
+      if (fDepts.length > 0) {
+        setDepartments((prev) => {
+          // Read latest branches for helper suffix formatting
+          const latestBranches = fBranches.length > 0 ? fBranches : initialBranches;
+          const cleanedFetched = fDepts.map((d) => {
+            let cleanName = d.name || "";
+            cleanName = cleanName.replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
+            cleanName = cleanName.replace(/\s\([^)]+\)$/, "").trim();
 
-              let suffix = "";
-              const br = latestBranches.find((b) => b.id === d.branchId);
-              if (br) {
-                const match = br.name.match(/\(([^)]+)\)/);
-                if (match) {
-                  suffix = ` (${match[1]})`;
-                } else {
-                  const words = br.name.trim().split(/\s+/);
-                  const lastWord = words[words.length - 1];
-                  if (lastWord === lastWord.toUpperCase() && lastWord.length >= 2) {
-                    suffix = ` (${lastWord})`;
-                  }
-                }
+            let suffix = "";
+            const br = latestBranches.find((b) => b.id === d.branchId);
+            if (br) {
+              const match = br.name.match(/\(([^)]+)\)/);
+              if (match) {
+                suffix = ` (${match[1]})`;
               } else {
-                if (!d.branchId.startsWith("BRANCH-") && !d.branchId.startsWith("DEPT-") && d.branchId.length <= 10) {
-                  suffix = ` (${d.branchId})`;
+                const words = br.name.trim().split(/\s+/);
+                const lastWord = words[words.length - 1];
+                if (lastWord === lastWord.toUpperCase() && lastWord.length >= 2) {
+                  suffix = ` (${lastWord})`;
                 }
               }
-
-              if (suffix.includes("BRANCH-") || suffix.includes("DEPT-") || suffix.length > 15) {
-                suffix = "";
+            } else {
+              if (!d.branchId.startsWith("BRANCH-") && !d.branchId.startsWith("DEPT-") && d.branchId.length <= 10) {
+                suffix = ` (${d.branchId})`;
               }
+            }
 
-              return {
-                ...d,
-                name: suffix ? `${cleanName}${suffix}` : cleanName
-              };
-            });
+            if (suffix.includes("BRANCH-") || suffix.includes("DEPT-") || suffix.length > 15) {
+              suffix = "";
+            }
 
-            const merged = [...cleanedFetched];
-            prev.forEach((d) => {
-              if (!merged.some((md) => md.id === d.id)) {
-                merged.push(d);
-              }
-            });
-            return merged;
-          });
-        }
-
-        const fBroadcasts = await fetchCollection<BroadcastNotice>(COLLECTIONS.BROADCASTS);
-        if (fBroadcasts.length > 0) {
-          setBroadcasts((prev) => {
-            const merged = [...fBroadcasts];
-            prev.forEach((b) => {
-              if (!merged.some((mb) => mb.id === b.id)) {
-                merged.push(b);
-              }
-            });
-            return merged;
-          });
-        }
-
-        const fChats = await fetchCollection<ChatMessage>(COLLECTIONS.CHATS);
-        if (fChats.length > 0) {
-          setChats((prev) => {
-            const merged = [...fChats];
-            prev.forEach((c) => {
-              if (!merged.some((mc) => mc.id === c.id)) {
-                merged.push(c);
-              }
-            });
-            return merged;
-          });
-        }
-
-        const fProdRequests = await fetchCollection<ProductionRequest>(COLLECTIONS.PRODUCTION_REQUESTS);
-        if (fProdRequests.length > 0) {
-          setProductionRequests((prev) => {
-            const merged = [...fProdRequests];
-            prev.forEach((pr) => {
-              if (!merged.some((mpr) => mpr.id === pr.id)) {
-                merged.push(pr);
-              }
-            });
-            return merged;
-          });
-        }
-
-        const fRequestItems = await fetchCollection<{ prId: string; items: any[] }>(COLLECTIONS.PRODUCTION_REQUEST_ITEMS);
-        if (fRequestItems.length > 0) {
-          const itemsMap: Record<string, any[]> = {};
-          fRequestItems.forEach((x) => {
-            if (x.prId) itemsMap[x.prId] = x.items || [];
-          });
-          setProductionRequestItemsMap((prev) => {
             return {
-              ...prev,
-              ...itemsMap
+              ...d,
+              name: suffix ? `${cleanName}${suffix}` : cleanName
             };
           });
-        }
 
-        const fOrderImpls = await fetchCollection<OrderImplementation>(COLLECTIONS.ORDER_IMPLEMENTATIONS);
-        if (fOrderImpls.length > 0) {
-          setOrderImplementations((prev) => {
-            const merged = [...fOrderImpls];
-            prev.forEach((oi) => {
-              if (!merged.some((moi) => moi.id === oi.id)) {
-                merged.push(oi);
-              }
-            });
-            return merged;
+          const merged = [...cleanedFetched];
+          prev.forEach((d) => {
+            if (!merged.some((md) => md.id === d.id)) {
+              merged.push(d);
+            }
           });
-        }
-
-        const fProducts = await fetchCollection<CatalogProduct>(COLLECTIONS.PRODUCTS_CATALOG);
-        if (fProducts.length > 0) {
-          setProductsCatalog((prev) => {
-            const merged = [...fProducts];
-            prev.forEach((p) => {
-              if (!merged.some((mp) => mp.code === p.code)) {
-                merged.push(p);
-              }
-            });
-            return merged;
-          });
-        }
-
-        const fMolds = await fetchCollection<CatalogMold>(COLLECTIONS.MOLDS_CATALOG);
-        if (fMolds.length > 0) {
-          setMoldsCatalog((prev) => {
-            const merged = [...fMolds];
-            prev.forEach((m) => {
-              if (!merged.some((mm) => mm.code === m.code)) {
-                merged.push(m);
-              }
-            });
-            return merged;
-          });
-        }
-
-        try {
-          const fConfigs = await fetchCollection<any>("config");
-          const remoteConfig = fConfigs.find((c) => c.id === "mobile_ui");
-          if (remoteConfig) {
-            const { id, ...cleanCfg } = remoteConfig;
-            setMobileUIConfig((prev: any) => ({
-              ...prev,
-              ...cleanCfg
-            }));
-          }
-        } catch (err) {
-          console.error("Failed fetching remote config from cloud:", err);
-        }
-
-        setDbConnected(true);
-        setSyncCompleted(true);
-        setDbStatus("Đồng bộ liên kết với server thành công!");
-      } catch (error) {
-        console.error("Firestore loading error:", error);
-        setDbStatus("Đồng bộ thất bại, chuyển chế độ ngoại tuyến");
-      } finally {
-        setDbLoading(false);
+          return merged;
+        });
       }
+
+      const fBroadcasts = await fetchCollection<BroadcastNotice>(COLLECTIONS.BROADCASTS);
+      if (fBroadcasts.length > 0) {
+        setBroadcasts((prev) => {
+          const merged = [...fBroadcasts];
+          prev.forEach((b) => {
+            if (!merged.some((mb) => mb.id === b.id)) {
+              merged.push(b);
+            }
+          });
+          return merged;
+        });
+      }
+
+      const fChats = await fetchCollection<ChatMessage>(COLLECTIONS.CHATS);
+      if (fChats.length > 0) {
+        setChats((prev) => {
+          const merged = [...fChats];
+          prev.forEach((c) => {
+            if (!merged.some((mc) => mc.id === c.id)) {
+              merged.push(c);
+            }
+          });
+          return merged;
+        });
+      }
+
+      const fProdRequests = await fetchCollection<ProductionRequest>(COLLECTIONS.PRODUCTION_REQUESTS);
+      if (fProdRequests.length > 0) {
+        setProductionRequests((prev) => {
+          const merged = [...fProdRequests];
+          prev.forEach((pr) => {
+            if (!merged.some((mpr) => mpr.id === pr.id)) {
+              merged.push(pr);
+            }
+          });
+          return merged;
+        });
+      }
+
+      const fRequestItems = await fetchCollection<{ prId: string; items: any[] }>(COLLECTIONS.PRODUCTION_REQUEST_ITEMS);
+      if (fRequestItems.length > 0) {
+        const itemsMap: Record<string, any[]> = {};
+        fRequestItems.forEach((x) => {
+          if (x.prId) itemsMap[x.prId] = x.items || [];
+        });
+        setProductionRequestItemsMap((prev) => {
+          return {
+            ...prev,
+            ...itemsMap
+          };
+        });
+      }
+
+      const fOrderImpls = await fetchCollection<OrderImplementation>(COLLECTIONS.ORDER_IMPLEMENTATIONS);
+      if (fOrderImpls.length > 0) {
+        setOrderImplementations((prev) => {
+          const merged = [...fOrderImpls];
+          prev.forEach((oi) => {
+            if (!merged.some((moi) => moi.id === oi.id)) {
+              merged.push(oi);
+            }
+          });
+          return merged;
+        });
+      }
+
+      const fProducts = await fetchCollection<CatalogProduct>(COLLECTIONS.PRODUCTS_CATALOG);
+      if (fProducts.length > 0) {
+        setProductsCatalog((prev) => {
+          const merged = [...fProducts];
+          prev.forEach((p) => {
+            if (!merged.some((mp) => mp.code === p.code)) {
+              merged.push(p);
+            }
+          });
+          return merged;
+        });
+      }
+
+      const fMolds = await fetchCollection<CatalogMold>(COLLECTIONS.MOLDS_CATALOG);
+      if (fMolds.length > 0) {
+        setMoldsCatalog((prev) => {
+          const merged = [...fMolds];
+          prev.forEach((m) => {
+            if (!merged.some((mm) => mm.code === m.code)) {
+              merged.push(m);
+            }
+          });
+          return merged;
+        });
+      }
+
+      try {
+        const fConfigs = await fetchCollection<any>("config");
+        const remoteConfig = fConfigs.find((c) => c.id === "mobile_ui");
+        if (remoteConfig) {
+          const { id, ...cleanCfg } = remoteConfig;
+          setMobileUIConfig((prev: any) => ({
+            ...prev,
+            ...cleanCfg
+          }));
+        }
+      } catch (err) {
+        console.error("Failed fetching remote config from cloud:", err);
+      }
+
+      setDbConnected(true);
+      setSyncCompleted(true);
+      setDbStatus("Đồng bộ liên kết với server thành công!");
+      if (isManual) {
+        alert("🔄 Đã tải lại và đồng bộ dữ liệu mới nhất thành công!");
+      }
+    } catch (error) {
+      console.error("Firestore loading error:", error);
+      setDbStatus("Đồng bộ thất bại, chuyển chế độ ngoại tuyến");
+      if (isManual) {
+        alert("❌ Lỗi khi tải lại dữ liệu từ server!");
+      }
+    } finally {
+      setDbLoading(false);
     }
+  };
+
+  // Synchronize with Firestore upon startup
+  useEffect(() => {
     syncFromDb();
   }, []);
 
@@ -1322,23 +1362,39 @@ export default function App() {
         const logMsg = changes.length > 0 ? `${changes.join(", ")} (${updateTimeStr})` : `Cập nhật thông tin (${updateTimeStr})`;
         logs.push(logMsg);
 
+        const updatedReport: QualityReport = {
+          ...editingReport,
+          ...payload,
+          updatedAt: updateTimeStr,
+          updateLogs: logs
+        };
+
         setReports((prev) =>
-          prev.map((r) => (r.id === editingReport.id ? { 
-            ...r, 
-            ...payload, 
-            updatedAt: updateTimeStr,
-            updateLogs: logs
-          } : r))
+          prev.map((r) => (r.id === editingReport.id ? updatedReport : r))
         );
+
+        if (syncCompleted && dbConnected && !dbLoading) {
+          saveDocument(COLLECTIONS.REPORTS, editingReport.id, updatedReport).catch((err) => {
+            console.error("Lỗi khi tải báo cáo cập nhật lên Firestore:", err);
+          });
+        }
+
         alert("✅ Đã cập nhật tệp tin biến động chất lượng thành công!");
       } else {
         // New report flow
+        const newId = `R-${Date.now()}`;
         const newReport: QualityReport = {
           ...payload,
-          id: `R-${Date.now()}`,
+          id: newId,
           googleDrivePath: `My Drive > 4M1E1I Reports > AutoSync > ${payload.timestamp.replace(/[:\/]/g, "")}.pdf`
         };
         setReports((prev) => [newReport, ...prev]);
+
+        if (syncCompleted && dbConnected && !dbLoading) {
+          saveDocument(COLLECTIONS.REPORTS, newId, newReport).catch((err) => {
+            console.error("Lỗi khi tải báo cáo mới lên Firestore:", err);
+          });
+        }
         
         // Auto alert sound simulator if abnormal
         if (payload.isAbnormal) {
@@ -2163,6 +2219,7 @@ export default function App() {
                 onUpdateMobileUIConfig={setMobileUIConfig}
                 onLogout={() => setCurrentUser(null)}
                 branches={branches}
+                onManualRefresh={syncFromDb}
               />
             )}
           </div>
@@ -2200,6 +2257,7 @@ export default function App() {
                 onUpdateMobileUIConfig={setMobileUIConfig}
                 onLogout={() => setCurrentUser(null)}
                 branches={branches}
+                onManualRefresh={syncFromDb}
               />
             )}
 

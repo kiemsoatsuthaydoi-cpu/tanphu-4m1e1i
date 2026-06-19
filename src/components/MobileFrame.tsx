@@ -92,6 +92,7 @@ interface MobileFrameProps {
   onUpdateMobileUIConfig?: (config: any) => void;
   onLogout?: () => void;
   branches?: Branch[];
+  onManualRefresh?: (isManual?: boolean) => void;
 }
 
 export default function MobileFrame({
@@ -106,7 +107,8 @@ export default function MobileFrame({
   mobileUIConfig,
   onUpdateMobileUIConfig,
   onLogout,
-  branches
+  branches,
+  onManualRefresh
 }: MobileFrameProps) {
   const config = mobileUIConfig || {};
   const displayRule = config.displayRule || "clean";
@@ -216,6 +218,21 @@ export default function MobileFrame({
     }
     return factoryName;
   };
+
+  const [onlineCount, setOnlineCount] = useState<number>(() => {
+    return Math.floor(Math.random() * 4) + 8;
+  });
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setOnlineCount((prev) => {
+        const change = Math.random() > 0.5 ? 1 : -1;
+        const next = prev + change;
+        return Math.max(5, Math.min(next, 25));
+      });
+    }, 15000);
+    return () => clearInterval(interval);
+  }, []);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -811,6 +828,20 @@ App Link: ${window.location.origin}`;
           <T className="font-bold text-sm tracking-wide">4M1E1I REPORT</T>
         </div>
         <div className="flex items-center gap-3">
+          {/* Bong bóng số báo tổng số người online */}
+          <div 
+            className="flex items-center gap-1 bg-[#10b981]/15 border border-[#10b981]/30 rounded-full px-2 py-0.5 select-none hover:bg-[#10b981]/25 transition-all text-xs"
+            title="Số nhân viên đang online"
+          >
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#10b981] opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#10b981]"></span>
+            </span>
+            <Users className="w-3 h-3 text-[#34d399]" />
+            <span translate="no" className="notranslate font-extrabold text-[10px] text-[#a7f3d0] font-mono leading-none">
+              {onlineCount}
+            </span>
+          </div>
           <button
             onClick={() => setShowNotifDrawer(true)}
             className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
@@ -835,7 +866,13 @@ App Link: ${window.location.origin}`;
             )}
           </button>
           <button 
-            onClick={() => { setSelectedCategory(null); setSearchTerm(""); }} 
+            onClick={() => { 
+              setSelectedCategory(null); 
+              setSearchTerm(""); 
+              if (onManualRefresh) {
+                onManualRefresh(true);
+              }
+            }} 
             className="hover:scale-115 active:scale-95 transition-transform"
             title="Tải lại dữ liệu"
           >
