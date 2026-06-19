@@ -660,10 +660,10 @@ export default function ReportForm({
       <button
         type="button"
         onClick={onCancel}
-        className="absolute bottom-24 right-5 w-11 h-11 bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-xl flex items-center justify-center shadow-2xl z-20 hover:shadow-emerald-300 transition-all cursor-pointer border-2 border-white"
+        className="absolute bottom-20 right-5 w-10 h-10 bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-xl flex items-center justify-center shadow-2xl z-20 hover:shadow-emerald-300 transition-all cursor-pointer border-2 border-white"
         title="Quay lại"
       >
-        <ArrowLeft className="w-6 h-6 stroke-[3px]" />
+        <ArrowLeft className="w-5 h-5 stroke-[2.5px]" />
       </button>
 
       {/* Primary footer buttons: HỦY BỎ & GỬI BÁO CÁO */}

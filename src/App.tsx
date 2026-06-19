@@ -56,8 +56,11 @@ export default function App() {
   const [users, setUsers] = useState<User[]>(() => {
     const saved = localStorage.getItem("4m1e1i_users");
     let loadedUsers = saved ? JSON.parse(saved) : initialUsers;
-    // Restore original admin password for Lê Nhật Trường only if it was overwritten to default 123456
+    // Restore original admin password for Lê Nhật Trường and promote Kim Thị Bích Tuyền
     loadedUsers = loadedUsers.map((u: User) => {
+      if (u.id === "2024.00912") {
+        return { ...u, role: UserRole.REVIEWER };
+      }
       if (u.id === "2018.00281" && u.password === "123456") {
         return { ...u, password: "111222" };
       }
@@ -747,6 +750,24 @@ export default function App() {
     localStorage.setItem("4m1e1i_current_user", JSON.stringify(currentUser));
   }, [currentUser]);
 
+  // Synchronize currentUser fields if they are updated in the general user list
+  useEffect(() => {
+    if (currentUser) {
+      const match = users.find((u) => u.id === currentUser.id);
+      if (match) {
+        if (
+          match.role !== currentUser.role ||
+          match.status !== currentUser.status ||
+          match.fullName !== currentUser.fullName ||
+          match.department !== currentUser.department ||
+          match.branch !== currentUser.branch
+        ) {
+          setCurrentUser(match);
+        }
+      }
+    }
+  }, [users, currentUser]);
+
   // Automatic screen detect and fully immersive fullscreen for mobile devices with tap, double-click, and double-tap listeners
   useEffect(() => {
     const isMobileDevice = window.innerWidth < 1024 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -1379,11 +1400,11 @@ export default function App() {
           <div className="bg-gradient-to-r from-blue-700 to-indigo-700 text-white font-serif font-black text-4xl px-8 py-3.5 rounded-2xl shadow-md inline-block tracking-widest border border-blue-500 border-opacity-25">
             <T>4M1E1I</T>
           </div>
-          <h1 className="text-2xl font-bold text-slate-850 tracking-wide mt-4 uppercase">
-            <T>CÔNG TY CỔ PHẦN TÂN PHÚ VIỆT NAM</T>
+          <h1 className="text-[15px] sm:text-lg font-black text-slate-805 tracking-wide mt-4 uppercase whitespace-nowrap">
+            <T>CÔNG TY CP TÂN PHÚ VIỆT NAM</T>
           </h1>
-          <T className="text-xs text-slate-500 mt-1 block uppercase font-mono tracking-widest">
-            HỆ THỐNG TRỰC QUAN HÓA QUẢN LÝ BIẾN ĐỘNG CHẤT LƯỢNG SẢN XUẤT
+          <T className="text-[8.5px] sm:text-[10px] text-slate-500 mt-1.5 block uppercase font-mono tracking-tighter whitespace-nowrap">
+            HỆ THỐNG TRỰC QUAN HÓA QUẢN LÝ BIẾN ĐỘNG CLSX
           </T>
         </div>
 
@@ -1751,16 +1772,19 @@ export default function App() {
         {showMobilePreview && (
           <div className="hidden lg:flex w-[420px] bg-[#F7F9FC] border-l border-slate-200 p-6 flex-col items-center shrink-0 overflow-y-auto select-none shadow-inner">
             <div className="w-full flex items-center justify-between mb-4 header-mobile-controls">
-              <T className="text-[10px] text-slate-500 font-extrabold uppercase tracking-widest block">
+              <T className="text-[10px] text-slate-500 font-extrabold uppercase tracking-widest block font-sans">
                 📱 Xem trước giao diện di động (Mobile Preview)
               </T>
-              <button
-                onClick={() => setShowConfigPanel(!showConfigPanel)}
-                className="text-[10px] bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-1 rounded font-bold transition-all flex items-center gap-1 cursor-pointer"
-              >
-                <span>⚙️</span>
-                <T>{showConfigPanel ? "Đóng cài đặt" : "Cấu hình di động"}</T>
-              </button>
+              {currentUser?.role === UserRole.ADMIN && (
+                <button
+                  type="button"
+                  onClick={() => setShowConfigPanel(!showConfigPanel)}
+                  className="text-[10px] bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-1 rounded font-bold transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  <span>⚙️</span>
+                  <T>{showConfigPanel ? "Đóng cài đặt" : "Cấu hình di động"}</T>
+                </button>
+              )}
             </div>
 
             {showConfigPanel && (
@@ -1955,13 +1979,15 @@ export default function App() {
             )}
 
             {/* floating switch back screen toggle at bottom-left corner */}
-            <button
-              onClick={() => setShowMobilePreview(false)}
-              className="absolute bottom-20 left-4 bg-slate-950/95 text-white rounded-full p-3 shadow-2xl border border-white/15 hover:scale-105 active:scale-95 transition-transform z-30 flex items-center justify-center cursor-pointer"
-              title="Quay lại giao diện máy tính"
-            >
-              <Monitor className="w-4.5 h-4.5 text-slate-300" />
-            </button>
+            {currentUser?.role === UserRole.ADMIN && (
+              <button
+                onClick={() => setShowMobilePreview(false)}
+                className="absolute bottom-20 left-4 bg-slate-950/95 text-white rounded-full p-3 shadow-2xl border border-white/15 hover:scale-105 active:scale-95 transition-transform z-30 flex items-center justify-center cursor-pointer"
+                title="Quay lại giao diện máy tính"
+              >
+                <Monitor className="w-4.5 h-4.5 text-slate-300" />
+              </button>
+            )}
           </div>
         </div>
       )}
