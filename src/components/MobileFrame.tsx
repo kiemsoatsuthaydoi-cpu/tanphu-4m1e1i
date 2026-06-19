@@ -500,12 +500,22 @@ App Link: ${window.location.origin}`;
   const isDeleteAllowed = (report: QualityReport): boolean => {
     if (!currentUser) return false;
     
-    // 1. Duyệt viên hoặc Admin luôn được quyền xóa
-    if (currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.REVIEWER) {
+    // 1. Admin luôn được quyền xóa mọi thứ
+    if (currentUser.role === UserRole.ADMIN) {
+      return true;
+    }
+
+    // 2. Đặc cách cho Duyệt viên hoặc Nhân viên của chi nhánh hiện tại
+    if (currentUser.canSpeciallyEditDelete && currentUser.branch === report.factory) {
       return true;
     }
     
-    // 2. Nhân viên chỉ được xóa bài của chính mình trong vòng 5 phút kể từ khi đăng
+    // 3. Duyệt viên bìnht thường luôn được quyền xóa
+    if (currentUser.role === UserRole.REVIEWER) {
+      return true;
+    }
+    
+    // 4. Nhân viên chỉ được xóa bài của chính mình trong vòng 5 phút kể từ khi đăng
     if (currentUser.role === UserRole.STAFF && report.uploaderId === currentUser.id) {
       const reportDate = parseReportTimestamp(report.timestamp);
       const now = new Date();
@@ -646,8 +656,13 @@ App Link: ${window.location.origin}`;
   const isEditAllowed = (report: QualityReport): boolean => {
     if (!currentUser) return false;
     
-    // Chỉ Admin mới được quyền chỉnh sửa
+    // 1. Chỉ Admin mới được quyền chỉnh sửa mặc định
     if (currentUser.role === UserRole.ADMIN) {
+      return true;
+    }
+
+    // 2. Đặc cách cho Duyệt viên hoặc Nhân viên của chi nhánh hiện tại
+    if (currentUser.canSpeciallyEditDelete && currentUser.branch === report.factory) {
       return true;
     }
     
@@ -1012,81 +1027,70 @@ App Link: ${window.location.origin}`;
                     )}
 
                     {/* Input form to submit a new directive */}
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        const form = e.currentTarget;
-                        const input = form.elements.namedItem("directiveInput") as HTMLTextAreaElement;
-                        const text = input.value.trim();
-                        if (!text) return;
+                    {(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) && (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const form = e.currentTarget;
+                          const input = form.elements.namedItem("directiveInput") as HTMLTextAreaElement;
+                          const text = input.value.trim();
+                          if (!text) return;
 
-                        const dateObj = new Date();
-                        const currentSingaporeTime = new Date(dateObj.getTime() + (dateObj.getTimezoneOffset() + 420) * 60000);
-                        const yy = String(currentSingaporeTime.getFullYear()).slice(-2);
-                        const mm = String(currentSingaporeTime.getMonth() + 1).padStart(2, '0');
-                        const dd = String(currentSingaporeTime.getDate()).padStart(2, '0');
-                        const timeStr = currentSingaporeTime.toTimeString().split(' ')[0];
-                        const stamp = `${timeStr} ${dd}/${mm}/${yy}`;
+                          const dateObj = new Date();
+                          const currentSingaporeTime = new Date(dateObj.getTime() + (dateObj.getTimezoneOffset() + 420) * 60000);
+                          const yy = String(currentSingaporeTime.getFullYear()).slice(-2);
+                          const mm = String(currentSingaporeTime.getMonth() + 1).padStart(2, '0');
+                          const dd = String(currentSingaporeTime.getDate()).padStart(2, '0');
+                          const timeStr = currentSingaporeTime.toTimeString().split(' ')[0];
+                          const stamp = `${timeStr} ${dd}/${mm}/${yy}`;
 
-                        const newDir = {
-                          id: Math.random().toString(36).substr(2, 9),
-                          text,
-                          author: currentUser?.fullName || "Cấp quản lý",
-                          timestamp: stamp
-                        };
+                          const newDir = {
+                            id: Math.random().toString(36).substr(2, 9),
+                            text,
+                            author: currentUser?.fullName || "Cấp quản lý",
+                            timestamp: stamp
+                          };
 
-                        const updatedReport = {
-                          ...report,
-                          directives: [...(report.directives || []), newDir]
-                        };
+                          const updatedReport = {
+                            ...report,
+                            directives: [...(report.directives || []), newDir]
+                          };
 
-                        if (onUpdateReport) {
-                          onUpdateReport(updatedReport);
-                        }
-                        input.value = "";
-                        input.style.height = "32px";
-                        showToast("Ghi nhận chỉ đạo điều hành thành công! 📑");
-                      }}
-                      className="flex gap-2 items-end"
-                    >
-                      {(() => {
-                        const isMgmtOrReviewer = currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER;
-                        return (
-                          <>
-                            <textarea
-                              name="directiveInput"
-                              placeholder={isMgmtOrReviewer ? "Chỉ đạo" : "Chỉ Duyệt Viên trở lên mới được chỉ đạo"}
-                              disabled={!isMgmtOrReviewer}
-                              rows={1}
-                              style={{ height: '32px', minHeight: '32px', maxHeight: '72px', resize: 'none' }}
-                              onInput={(e) => {
-                                const target = e.currentTarget;
-                                target.style.height = 'auto';
-                                target.style.height = `${Math.min(target.scrollHeight, 72)}px`;
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' && !e.shiftKey) {
-                                  e.preventDefault();
-                                  e.currentTarget.form?.requestSubmit();
-                                }
-                              }}
-                              className={`flex-1 bg-slate-50 border border-slate-200 text-[11px] rounded-lg px-2.5 py-2 text-slate-800 placeholder-slate-400 font-medium focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all select-text overflow-y-auto thin-scrollbar ${
-                                !isMgmtOrReviewer ? "cursor-not-allowed bg-slate-100 placeholder:text-slate-400 text-slate-400 opacity-60" : ""
-                              }`}
-                            />
-                            <button
-                              type="submit"
-                              disabled={!isMgmtOrReviewer}
-                              className={`bg-amber-500 hover:bg-amber-600 px-3 py-2 text-[10px] text-white font-extrabold items-center justify-center rounded-lg shadow-sm transition-all active:scale-95 cursor-pointer uppercase shrink-0 h-[32px] ${
-                                !isMgmtOrReviewer ? "bg-slate-300 hover:bg-slate-300 text-slate-400 cursor-not-allowed opacity-50 shadow-none" : ""
-                              }`}
-                            >
-                              <T>Gửi</T>
-                            </button>
-                          </>
-                        );
-                      })()}
-                    </form>
+                          if (onUpdateReport) {
+                            onUpdateReport(updatedReport);
+                          }
+                          input.value = "";
+                          input.style.height = "32px";
+                          showToast("Ghi nhận chỉ đạo điều hành thành công! 📑");
+                        }}
+                        className="flex gap-2 items-end"
+                      >
+                        <textarea
+                          name="directiveInput"
+                          placeholder="Chỉ đạo"
+                          rows={1}
+                          style={{ height: '32px', minHeight: '32px', maxHeight: '72px', resize: 'none' }}
+                          onInput={(e) => {
+                            const target = e.currentTarget;
+                            target.style.height = 'auto';
+                            target.style.height = `${Math.min(target.scrollHeight, 72)}px`;
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              e.currentTarget.form?.requestSubmit();
+                            }
+                          }}
+                          className="flex-1 bg-slate-50 border border-slate-200 text-[11px] rounded-lg px-2.5 py-2 text-slate-800 placeholder-slate-400 font-medium focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all select-text overflow-y-auto thin-scrollbar"
+                        />
+                        <button
+                          type="submit"
+                          className="bg-amber-500 hover:bg-amber-600 px-3 py-2 text-[10px] text-white font-extrabold items-center justify-center rounded-lg shadow-sm transition-all active:scale-95 cursor-pointer uppercase shrink-0 h-[32px]"
+                        >
+                          <T>Gửi</T>
+                        </button>
+                      </form>
+                    )}
                     {/* BP/ĐV TIẾP NHẬN list display */}
                     <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-col gap-1.5" id={`receivers-section-${report.id}`}>
                       <div className="flex items-center gap-1 text-[10px] font-extrabold text-sky-700 uppercase">
@@ -1112,86 +1116,79 @@ App Link: ${window.location.origin}`;
 
                 {/* Footer buttons of card (Xóa/Sửa/Like/BP Tiếp Nhận) only for managers or the author */}
                 <div className="bg-slate-50 border-t border-slate-100 px-3 py-2 flex justify-between items-center select-none text-[10px] font-semibold text-slate-600">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-4">
                     {(() => {
-                      const isAuthor = currentUser?.id === report.uploaderId;
-                      const isMgmt = currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER;
                       const allowed = isDeleteAllowed(report);
-                      
-                      if (!isMgmt && !isAuthor) return null;
-                      
                       if (allowed) {
                         return (
                           <button
+                            type="button"
                             onClick={() => {
                               if (confirm("Bạn có chắc chắn muốn xóa bản tin này không? Hành động này không thể hoàn tác.")) {
                                 onDeleteReport(report.id);
                               }
                             }}
-                            className="flex items-center gap-1.5 text-rose-600 hover:text-rose-800 transition-colors py-1 cursor-pointer font-bold"
+                            className="flex items-center justify-center p-1 cursor-pointer transition-all hover:scale-110 active:scale-90 text-rose-600 hover:text-rose-800 border-none bg-transparent"
+                            title="Xóa bản tin"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <T>XÓA</T>
+                            <Trash2 className="w-[18px] h-[18px] stroke-[2.2px]" />
                           </button>
                         );
                       } else {
                         return (
                           <button
+                            type="button"
                             disabled
-                            title="Nút xóa đã bị vô hiệu hóa sau 5 phút kể từ khi đăng."
-                            className="flex items-center gap-1.5 text-slate-400 opacity-60 py-1 cursor-not-allowed select-none font-bold"
+                            className="flex items-center justify-center p-1 text-slate-300 opacity-40 cursor-not-allowed select-none border-none bg-transparent"
+                            title="Bạn không thể xóa bản tin này"
                           >
-                            <Trash2 className="w-3.5 h-3.5 text-slate-400" />
-                            <T>XÓA (QUÁ 5 PHÚT)</T>
+                            <Trash2 className="w-[18px] h-[18px] stroke-[1.8px] text-slate-300" />
                           </button>
                         );
                       }
                     })()}
 
                     {(() => {
-                      const isAuthor = currentUser?.id === report.uploaderId;
-                      const isMgmt = currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER;
-                      if (!isMgmt && !isAuthor) return null;
-                      
                       const allowed = isEditAllowed(report);
                       if (allowed) {
                         return (
                           <button
+                            type="button"
                             onClick={() => onEditReport(report)}
-                            className="flex items-center gap-1.5 text-blue-600 hover:text-blue-800 transition-colors py-1 cursor-pointer font-bold"
+                            className="flex items-center justify-center p-1 cursor-pointer transition-all hover:scale-110 active:scale-90 text-blue-600 hover:text-blue-800 border-none bg-transparent"
+                            title="Chỉnh sửa bản tin"
                           >
-                            <Edit className="w-3.5 h-3.5" />
-                            <T>CHỈNH SỬA</T>
+                            <Edit className="w-[18px] h-[18px] stroke-[2.2px]" />
                           </button>
                         );
                       } else {
                         return (
                           <button
+                            type="button"
                             disabled
-                            title="Nút chỉnh sửa đã bị vô hiệu hóa đối với Nhân viên và Duyệt viên."
-                            className="flex items-center gap-1.5 text-slate-400 opacity-60 py-1 cursor-not-allowed select-none font-bold"
+                            className="flex items-center justify-center p-1 text-slate-300 opacity-40 cursor-not-allowed select-none border-none bg-transparent"
+                            title="Bạn không thể chỉnh sửa bản tin này"
                           >
-                            <Edit className="w-3.5 h-3.5 text-slate-400" />
-                            <T>CHỈNH SỬA (VÔ HIỆU HÓA)</T>
+                            <Edit className="w-[18px] h-[18px] stroke-[1.8px] text-slate-300" />
                           </button>
                         );
                       }
                     })()}
                   </div>
 
-                  <div className="flex items-center gap-3.5">
+                  <div className="flex items-center gap-4">
                     {(() => {
                       const isReportLiked = report.likedBy?.includes(currentUser?.fullName || "Kiểm soát viên") || likedReports[report.id];
                       return (
                         <button
+                          type="button"
                           onClick={() => toggleLike(report.id)}
-                          className={`flex items-center gap-1 transition-colors py-1 cursor-pointer ${
-                            isReportLiked ? "text-rose-600 font-extrabold scale-105" : "text-slate-400 hover:text-rose-500"
+                          className={`flex items-center justify-center p-1 transition-all hover:scale-110 active:scale-95 cursor-pointer border-none bg-transparent ${
+                            isReportLiked ? "text-rose-600" : "text-slate-400 hover:text-rose-500"
                           }`}
-                          title="Thích"
+                          title={isReportLiked ? "Bỏ thích" : "Thích"}
                         >
-                          <Heart className={`w-3.5 h-3.5 ${isReportLiked ? "fill-rose-500 text-rose-600" : ""}`} />
-                          <T>{isReportLiked ? "ĐÃ THÍCH" : "THÍCH"}</T>
+                          <Heart className={`w-[18px] h-[18px] stroke-[2.2px] ${isReportLiked ? "fill-rose-500 text-rose-600" : ""}`} />
                         </button>
                       );
                     })()}
@@ -1199,14 +1196,14 @@ App Link: ${window.location.origin}`;
                       const isAcknowledged = report.sharedBy?.some(name => name.startsWith(currentUser?.fullName || "Kiểm soát viên")) || false;
                       return (
                         <button
+                          type="button"
                           onClick={() => toggleAcknowledge(report.id)}
-                          className={`flex items-center gap-1 transition-colors py-1 cursor-pointer ${
-                            isAcknowledged ? "text-sky-700 font-extrabold scale-105 animate-pulse" : "text-slate-400 hover:text-sky-600"
+                          className={`flex items-center justify-center p-1 transition-all hover:scale-110 active:scale-95 cursor-pointer border-none bg-transparent ${
+                            isAcknowledged ? "text-sky-700 animate-pulse" : "text-slate-400 hover:text-sky-600"
                           }`}
-                          title="Xác nhận tiếp nhận thông tin"
+                          title={isAcknowledged ? "Đã tiếp nhận" : "Tiếp nhận"}
                         >
-                          <Check className={`w-3.5 h-3.5 ${isAcknowledged ? "stroke-[3.5px] text-sky-700" : ""}`} />
-                          <T>{isAcknowledged ? "ĐÃ TIẾP NHẬN" : "TIẾP NHẬN"}</T>
+                          <Check className={`w-[18px] h-[18px] ${isAcknowledged ? "stroke-[3.2px] text-sky-700" : "stroke-[2.2px]"}`} />
                         </button>
                       );
                     })()}

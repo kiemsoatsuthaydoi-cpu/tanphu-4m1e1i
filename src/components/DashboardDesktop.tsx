@@ -780,6 +780,27 @@ export default function DashboardDesktop({
                                   <T>SỬA</T>
                                 </button>
 
+                                {u.role !== UserRole.ADMIN && onUpdateUser && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      onUpdateUser({
+                                        ...u,
+                                        canSpeciallyEditDelete: !u.canSpeciallyEditDelete
+                                      });
+                                    }}
+                                    className={`p-1 px-2 rounded font-extrabold text-[10px] flex items-center gap-1 transition-all cursor-pointer ${
+                                      u.canSpeciallyEditDelete
+                                        ? "bg-indigo-650 text-white hover:bg-indigo-700 border border-indigo-600 shadow-xs"
+                                        : "bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200"
+                                    }`}
+                                    title={u.canSpeciallyEditDelete ? "Hủy đặt cách Sửa/Xóa" : "Đặt cách Sửa/Xóa bản tin chi nhánh"}
+                                  >
+                                    <span>{u.canSpeciallyEditDelete ? "⭐" : "☆"}</span>
+                                    <T>{u.canSpeciallyEditDelete ? "ĐẶC CÁCH" : "ĐẶC CÁCH"}</T>
+                                  </button>
+                                )}
+
                                 {u.status === UserStatus.PENDING && (
                                   <button
                                     onClick={() => onUpdateUserStatus(u.id, UserStatus.ACTIVE)}

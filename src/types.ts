@@ -21,6 +21,7 @@ export interface User {
   password?: string;
   isOnline?: boolean;
   company?: string;
+  canSpeciallyEditDelete?: boolean;
 }
 
 export type Category4M1E1I = 
