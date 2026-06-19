@@ -299,6 +299,8 @@ export default function DashboardDesktop({
   const [editBranch, setEditBranch] = useState("");
   const [editRole, setEditRole] = useState<UserRole>(UserRole.STAFF);
   const [editStatus, setEditStatus] = useState<UserStatus>(UserStatus.PENDING);
+  const [editPassword, setEditPassword] = useState("");
+  const [editCompany, setEditCompany] = useState("");
 
   const handleStartEditUser = (u: User) => {
     setEditingUser(u);
@@ -306,9 +308,52 @@ export default function DashboardDesktop({
     setEditPhone(u.phone);
     setEditDepartment(u.department);
     setEditBranch(u.branch);
+
+    // Find representing company based on the user's branch
+    const userBranch = branches.find((b) => b.name === u.branch);
+    const userCompany = userBranch ? companies.find((c) => c.id === userBranch.companyId) : null;
+    const initialCompanyVal = u.company || (userCompany ? userCompany.name : (companies[0]?.name || "TÂN PHÚ VIỆT NAM"));
+    setEditCompany(initialCompanyVal);
+    setEditPassword(u.password || "123456");
+
     setEditRole(u.role);
     setEditStatus(u.status);
   };
+
+  // Cascade link: Company -> Branch -> Department
+  useEffect(() => {
+    if (editingUser && editCompany) {
+      const selectedC = companies.find((c) => c.name === editCompany);
+      if (selectedC) {
+        const companyBranches = branches.filter((b) => b.companyId === selectedC.id);
+        if (companyBranches.length > 0) {
+          const hasCurrentBranch = companyBranches.some((b) => b.name === editBranch);
+          if (!hasCurrentBranch) {
+            setEditBranch(companyBranches[0].name);
+          }
+        } else {
+          setEditBranch("");
+        }
+      }
+    }
+  }, [editCompany, companies, branches, editingUser]);
+
+  useEffect(() => {
+    if (editingUser && editBranch) {
+      const selectedB = branches.find((b) => b.name === editBranch);
+      if (selectedB) {
+        const branchDepts = departments.filter((d) => d.branchId === selectedB.id);
+        if (branchDepts.length > 0) {
+          const hasCurrentDept = branchDepts.some((d) => d.name === editDepartment);
+          if (!hasCurrentDept) {
+            setEditDepartment(branchDepts[0].name);
+          }
+        } else {
+          setEditDepartment("");
+        }
+      }
+    }
+  }, [editBranch, branches, departments, editingUser]);
 
   const handleSaveEditedUser = (e: React.FormEvent) => {
     e.preventDefault();
@@ -321,6 +366,8 @@ export default function DashboardDesktop({
       branch: editBranch,
       role: editRole,
       status: editStatus,
+      password: editPassword,
+      company: editCompany,
     };
     if (onUpdateUser) {
       onUpdateUser(updatedUser);
@@ -330,7 +377,7 @@ export default function DashboardDesktop({
 
   const getLocalBranchCodeSuffix = (branchId: string) => {
     const activeBranch = branches.find((b) => b.id === branchId);
-    if (!activeBranch) return ` (${branchId})`;
+    if (!activeBranch) return "";
     const brName = activeBranch.name;
     const match = brName.match(/\(([^)]+)\)/);
     let code = match ? match[1] : "";
@@ -346,6 +393,9 @@ export default function DashboardDesktop({
       } else {
         code = words.map(w => w[0]?.toUpperCase()).join("");
       }
+    }
+    if (!code || code.startsWith("BRANCH-") || code.startsWith("DEPT-") || code.length > 10) {
+      return "";
     }
     return ` (${code})`;
   };
@@ -820,9 +870,10 @@ export default function DashboardDesktop({
                     </h3>
 
                     <form onSubmit={handleSaveEditedUser} className="space-y-4">
+                      {/* Họ và Tên */}
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">
-                          <T>Họ và tên nhân viên</T>
+                          <T>Họ và Tên</T>
                         </label>
                         <input
                           type="text"
@@ -833,69 +884,125 @@ export default function DashboardDesktop({
                         />
                       </div>
 
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">
-                          <T>Mã nhân sự (Không thể sửa)</T>
-                        </label>
-                        <input
-                          type="text"
-                          disabled
-                          value={editingUser.id}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-400 bg-slate-100 select-none cursor-not-allowed"
-                        />
+                      {/* Số Điện Thoại & Mã Nhân Sự */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">
+                            <T>Số Điện Thoại</T>
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={editPhone}
+                            onChange={(e) => setEditPhone(e.target.value)}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">
+                            <T>Mã Nhân Sự</T>
+                          </label>
+                          <input
+                            type="text"
+                            disabled
+                            value={editingUser.id}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-400 bg-slate-100 select-none cursor-not-allowed"
+                          />
+                        </div>
                       </div>
 
+                      {/* Mật khẩu đăng nhập */}
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">
-                          <T>Số điện thoại</T>
+                          <T>Mật khẩu đăng nhập (Mới hoặc cũ)</T>
                         </label>
                         <input
                           type="text"
                           required
-                          value={editPhone}
-                          onChange={(e) => setEditPhone(e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all"
+                          value={editPassword}
+                          onChange={(e) => setEditPassword(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all"
                         />
                       </div>
 
+                      {/* Công Ty Thành Viên */}
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">
-                          <T>Bộ phận / Đơn vị</T>
+                          <T>Công Ty Thành Viên</T>
                         </label>
                         <select
-                          value={editDepartment}
-                          onChange={(e) => setEditDepartment(e.target.value)}
+                          value={editCompany}
+                          onChange={(e) => setEditCompany(e.target.value)}
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all cursor-pointer"
                         >
-                          {departments.map((dept) => (
-                            <option key={dept.id} value={dept.name}>
-                              {dept.name}
+                          {companies.map((c) => (
+                            <option key={c.id} value={c.name}>
+                              {c.name}
                             </option>
                           ))}
                         </select>
                       </div>
 
+                      {/* CHI NHÁNH/ VĂN PHÒNG ĐẠI DIỆN */}
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">
-                          <T>Chi nhánh đại diện</T>
+                          <T>CHI NHÁNH/ VĂN PHÒNG ĐẠI DIỆN</T>
                         </label>
                         <select
                           value={editBranch}
                           onChange={(e) => setEditBranch(e.target.value)}
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all cursor-pointer"
                         >
-                          {branches.map((br) => (
-                            <option key={br.id} value={br.name}>
-                              {br.name}
-                            </option>
-                          ))}
+                          {(() => {
+                            const selectedC = companies.find((c) => c.name === editCompany);
+                            const companyBranches = selectedC
+                              ? branches.filter((b) => b.companyId === selectedC.id)
+                              : [];
+                            if (companyBranches.length === 0) {
+                              return <option value="">Chưa có chi nhánh</option>;
+                            }
+                            return companyBranches.map((br) => (
+                              <option key={br.id} value={br.name}>
+                                {br.name}
+                              </option>
+                            ));
+                          })()}
                         </select>
                       </div>
 
+                      {/* BỘ PHẬN/ ĐƠN VỊ */}
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">
+                          <T>BỘ PHẬN/ ĐƠN VỊ</T>
+                        </label>
+                        <select
+                          value={editDepartment}
+                          onChange={(e) => setEditDepartment(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all cursor-pointer"
+                        >
+                          {(() => {
+                            const selectedB = branches.find((b) => b.name === editBranch);
+                            const filteredDepts = selectedB
+                              ? departments.filter((d) => d.branchId === selectedB.id)
+                              : [];
+                            if (filteredDepts.length === 0) {
+                              return <option value="">Chưa có bộ phận</option>;
+                            }
+                            return filteredDepts.map((dept) => (
+                              <option key={dept.id} value={dept.name}>
+                                {dept.name}
+                              </option>
+                            ));
+                          })()}
+                        </select>
+                      </div>
+
+                      {/* Vai trò hệ thống & Trạng thái tài khoản */}
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">
-                            <T>Vai trò</T>
+                            <T>Vai trò hệ thống</T>
                           </label>
                           <select
                             value={editRole}
@@ -911,7 +1018,7 @@ export default function DashboardDesktop({
 
                         <div>
                           <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">
-                            <T>Trạng thái</T>
+                            <T>Trạng thái tài khoản</T>
                           </label>
                           <select
                             value={editStatus}
@@ -1731,7 +1838,7 @@ export default function DashboardDesktop({
                         <th className="p-4 w-[40%]">Nội dung chi tiết</th>
                         <th className="p-4">Người ghi / SĐT</th>
                         <th className="p-4 text-center">Người Thích</th>
-                        <th className="p-4 text-center">Người Chia Sẻ</th>
+                        <th className="p-4 text-center">BP/ĐV Tiếp Nhận</th>
                         <th className="p-4 text-center">Hình ảnh</th>
                         <th className="p-4 text-center">Trạng thái</th>
                       </tr>
@@ -1857,15 +1964,15 @@ export default function DashboardDesktop({
                             </td>
                             <td className="p-4 min-w-[120px]">
                               {r.sharedBy && r.sharedBy.length > 0 ? (
-                                <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto max-w-[140px]">
+                                <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto max-w-[145px]">
                                   {r.sharedBy.map((name, i) => (
-                                    <span key={i} className="bg-emerald-50 text-emerald-700 text-[9px] px-1.5 py-0.5 rounded border border-emerald-100 font-bold whitespace-nowrap">
+                                    <span key={i} className="bg-sky-50 text-sky-800 text-[9px] px-1.5 py-0.5 rounded border border-sky-100 font-bold whitespace-nowrap">
                                       <T>{name}</T>
                                     </span>
                                   ))}
                                 </div>
                               ) : (
-                                <span className="text-slate-400 text-[10px] italic"><T>Chưa có</T></span>
+                                <span className="text-slate-400 text-[10px] italic"><T>Chưa tiếp nhận</T></span>
                               )}
                             </td>
                             <td className="p-4 text-center">

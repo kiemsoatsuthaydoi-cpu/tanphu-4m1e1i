@@ -20,6 +20,7 @@ export interface User {
   status: UserStatus;
   password?: string;
   isOnline?: boolean;
+  company?: string;
 }
 
 export type Category4M1E1I = 

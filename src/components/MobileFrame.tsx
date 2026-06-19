@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Search, RotateCw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X } from "lucide-react";
+import { Search, RotateCw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut } from "lucide-react";
 import { QualityReport, Category4M1E1I, User, UserRole } from "../types";
 import { T } from "./TranslateText";
 
@@ -89,6 +89,8 @@ interface MobileFrameProps {
     fontSize?: "xs" | "sm" | "base";
     customAliases?: Record<string, string>;
   };
+  onUpdateMobileUIConfig?: (config: any) => void;
+  onLogout?: () => void;
 }
 
 export default function MobileFrame({
@@ -100,11 +102,103 @@ export default function MobileFrame({
   offlineMode,
   currentUser,
   onUpdateReport,
-  mobileUIConfig
+  mobileUIConfig,
+  onUpdateMobileUIConfig,
+  onLogout
 }: MobileFrameProps) {
   const config = mobileUIConfig || {};
   const displayRule = config.displayRule || "clean";
   const customAliases = config.customAliases || {};
+
+  const getThemeClasses = (themeId: string | undefined) => {
+    switch (themeId) {
+      case "indigo":
+        return {
+          bg: "bg-[#4f46e5]",
+          text: "text-[#4f46e5]",
+          border: "border-[#4f46e5]",
+          ring: "ring-indigo-150",
+          hoverBg: "hover:bg-[#4338ca] bg-[#4f46e5]",
+          lightBg: "bg-[#f5f3ff]",
+          lightText: "text-[#312e81]"
+        };
+      case "emerald":
+        return {
+          bg: "bg-[#0d9488]",
+          text: "text-[#0d9488]",
+          border: "border-[#0d9488]",
+          ring: "ring-emerald-150",
+          hoverBg: "hover:bg-[#0f766e] bg-[#0d9488]",
+          lightBg: "bg-[#f0fdf4]",
+          lightText: "text-[#064e3b]"
+        };
+      case "amber":
+        return {
+          bg: "bg-[#f59e0b]",
+          text: "text-[#f59e0b]",
+          border: "border-[#f59e0b]",
+          ring: "ring-amber-150",
+          hoverBg: "hover:bg-[#d97706] bg-[#f59e0b]",
+          lightBg: "bg-[#fffbeb]",
+          lightText: "text-[#78350f]"
+        };
+      case "rose":
+        return {
+          bg: "bg-[#e11d48]",
+          text: "text-[#e11d48]",
+          border: "border-[#e11d48]",
+          ring: "ring-rose-150",
+          hoverBg: "hover:bg-[#be123c] bg-[#e11d48]",
+          lightBg: "bg-[#fff1f2]",
+          lightText: "text-[#4c0519]"
+        };
+      case "slate":
+        return {
+          bg: "bg-[#475569]",
+          text: "text-[#475569]",
+          border: "border-[#475569]",
+          ring: "ring-slate-150",
+          hoverBg: "hover:bg-[#334155] bg-[#475569]",
+          lightBg: "bg-[#f8fafc]",
+          lightText: "text-[#0f172a]"
+        };
+      case "blue":
+      default:
+        return {
+          bg: "bg-[#1e3a8a]",
+          text: "text-[#1e3a8a]",
+          border: "border-[#1e3a8a]",
+          ring: "ring-blue-150",
+          hoverBg: "hover:bg-[#1a306c] bg-[#1e3a8a]",
+          lightBg: "bg-[#f0f9ff]",
+          lightText: "text-[#1e3a5f]"
+        };
+    }
+  };
+
+  const getFontSizeClass = (size: string | undefined) => {
+    switch (size) {
+      case "sm": return "text-xs";
+      case "base": return "text-sm";
+      case "xs":
+      default:
+        return "text-[10px]";
+    }
+  };
+
+  const getContentFontSizeClass = (size: string | undefined) => {
+    switch (size) {
+      case "sm": return "text-xs";
+      case "base": return "text-sm";
+      case "xs":
+      default:
+        return "text-[11px]";
+    }
+  };
+
+  const theme = getThemeClasses(config.colorTheme);
+  const fontSizeClass = getFontSizeClass(config.fontSize);
+  const contentFontSizeClass = getContentFontSizeClass(config.fontSize);
 
   const getFactoryDisplayName = (factoryName: string) => {
     const match = factoryName.match(/\(((?:TPP|BBM)-[^)]+)\)/i);
@@ -123,8 +217,11 @@ export default function MobileFrame({
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedFactoryFilter, setSelectedFactoryFilter] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [showLocalConfigPanel, setShowLocalConfigPanel] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Notification states
@@ -187,6 +284,36 @@ export default function MobileFrame({
     }));
 
     showToast(isNowLiked ? "Đã thích báo cáo này! ❤️" : "Đã bỏ thích báo cáo! 💔");
+  };
+
+  const toggleAcknowledge = (reportId: string) => {
+    const report = reports.find((r) => r.id === reportId);
+    if (!report) return;
+
+    const userName = currentUser?.fullName || "Kiểm soát viên";
+    const userDept = currentUser?.department || "BP Liên Quan";
+    const label = `${userName} (${userDept})`;
+
+    const currentShares = report.sharedBy || [];
+    const isNowAcknowledged = !currentShares.some(name => name.startsWith(userName));
+
+    let updatedShares: string[];
+    if (isNowAcknowledged) {
+      updatedShares = [...currentShares, label];
+    } else {
+      updatedShares = currentShares.filter((name) => !name.startsWith(userName));
+    }
+
+    const updatedReport: QualityReport = {
+      ...report,
+      sharedBy: updatedShares,
+    };
+
+    if (onUpdateReport) {
+      onUpdateReport(updatedReport);
+    }
+
+    showToast(isNowAcknowledged ? "Đã xác nhận tiếp nhận thông tin! ✅" : "Đã hủy xác nhận tiếp nhận! ↩️");
   };
 
   const showToast = (msg: string) => {
@@ -438,6 +565,17 @@ App Link: ${window.location.origin}`;
     }
   };
 
+  // Helper to match selected factory abbreviation to actual database names
+  const matchSelectedFactory = (factoryName: string, filterKey: string): boolean => {
+    const norm = factoryName.toLowerCase();
+    if (filterKey === "TPP-BNI") return norm.includes("bắc ninh") || norm.includes("tpp-bni");
+    if (filterKey === "TPP-LAN") return norm.includes("long an") || norm.includes("tpp-lan");
+    if (filterKey === "TPP-CTY") return norm.includes("văn phòng") || norm.includes("tpp-cty");
+    if (filterKey === "TPP-314") return norm.includes("314") || norm.includes("tpp-314");
+    if (filterKey === "DNP") return norm.includes("dnp");
+    return false;
+  };
+
   // Filter items based on uploader or factory search or description search
   const filteredReports = reports.filter((r) => {
     const s = searchTerm.toLowerCase();
@@ -448,7 +586,9 @@ App Link: ${window.location.origin}`;
       r.category.toLowerCase().includes(s);
 
     const matchesCategory = selectedCategory ? r.category === selectedCategory : true;
-    return matchesSearch && matchesCategory;
+    const matchesFactoryFilter = selectedFactoryFilter ? matchSelectedFactory(r.factory, selectedFactoryFilter) : true;
+    
+    return matchesSearch && matchesCategory && matchesFactoryFilter;
   });
 
   // Sort reports according to the prioritized layout:
@@ -608,13 +748,13 @@ App Link: ${window.location.origin}`;
   return (
     <div id="mobile-viewport" className="w-full h-[100dvh] max-w-[440px] lg:w-[375px] lg:h-[780px] bg-slate-100 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl overflow-hidden flex flex-col relative">
       {/* Main Appsheet Blue Title Bar */}
-      <div className="bg-[#1e3a8a] text-white px-4 py-3 flex items-center justify-between shadow-md shrink-0 select-none">
+      <div className={`text-white px-4 py-3 flex items-center justify-between shadow-md shrink-0 select-none ${theme.bg}`}>
         <div className="flex items-center gap-2">
           {/* TANPHU simulated logo block */}
-          <div className="bg-white text-[#1e3a8a] text-[9px] font-black px-1.5 py-0.5 rounded flex items-center justify-center font-sans tracking-tighter">
+          <div className="bg-white text-[9px] font-black px-1.5 py-0.5 rounded flex items-center justify-center font-sans tracking-tighter" style={{ color: "var(--color-primary, #1e3a8a)" }}>
             <T>TANPHU</T>
           </div>
-          <T className="font-bold text-sm tracking-wide">BÁO CÁO 4M1E1I</T>
+          <T className="font-bold text-sm tracking-wide">4M1E1I REPORT</T>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -624,7 +764,7 @@ App Link: ${window.location.origin}`;
           >
             <Bell className="w-[19px] h-[19px] text-white" />
             {unreadCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 bg-rose-600 text-[8px] text-white font-extrabold w-4.5 h-4.5 rounded-full flex items-center justify-center border border-[#1e3a8a] animate-pulse">
+              <span className={`absolute -top-1.5 -right-1.5 bg-rose-600 text-[8px] text-white font-extrabold w-4.5 h-4.5 rounded-full flex items-center justify-center border ${theme.border} animate-pulse`}>
                 {unreadCount > 99 ? "99+" : unreadCount}
               </span>
             )}
@@ -647,6 +787,14 @@ App Link: ${window.location.origin}`;
           >
             <RotateCw className="w-[18px] h-[18px] text-white" />
           </button>
+          {/* Settings gear trigger for real mobile phones */}
+          <button 
+            onClick={() => setShowLocalConfigPanel(true)}
+            className="hover:scale-115 active:scale-95 transition-transform"
+            title="Cấu hình di động"
+          >
+            <Settings className="w-[18px] h-[18px] text-white" />
+          </button>
         </div>
       </div>
 
@@ -662,13 +810,45 @@ App Link: ${window.location.origin}`;
             className="w-full pl-9 pr-3 py-1.5 bg-slate-100 rounded-full text-xs focus:ring-1 focus:ring-blue-500 outline-none placeholder:text-slate-400 text-slate-700 font-medium"
           />
         </div>
+        {/* Factory/Branch quick filter chips */}
+        <div className="flex py-0.5 gap-1.5 overflow-x-auto no-scrollbar scroll-smooth border-b border-slate-100 pb-1.5" id="factory-filter-chips">
+          <button
+            onClick={() => setSelectedFactoryFilter(null)}
+            className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase shrink-0 transition-all ${
+              selectedFactoryFilter === null
+                ? `${theme.bg} text-white shadow`
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            <span translate="no" className="notranslate">TẤT CẢ ĐV</span>
+          </button>
+          {[
+            { key: "TPP-BNI", label: "TPP-BNI" },
+            { key: "TPP-LAN", label: "TPP-LAN" },
+            { key: "TPP-CTY", label: "TPP-CTY" },
+            { key: "TPP-314", label: "TPP-314" },
+            { key: "DNP", label: "DNP" }
+          ].map((item) => (
+            <button
+              key={item.key}
+              onClick={() => setSelectedFactoryFilter(item.key)}
+              className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase shrink-0 transition-all ${
+                selectedFactoryFilter === item.key
+                  ? "bg-sky-600 text-white shadow"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              <span translate="no" className="notranslate">{item.label}</span>
+            </button>
+          ))}
+        </div>
         {/* Rapid filter chips */}
         <div className="flex py-0.5 gap-1.5 overflow-x-auto no-scrollbar scroll-smooth">
           <button
             onClick={() => setSelectedCategory(null)}
             className={`px-3 py-1 rounded-full text-[9px] font-extrabold uppercase shrink-0 transition-all ${
               selectedCategory === null
-                ? "bg-[#1e3a8a] text-white shadow-sm"
+                ? `${theme.bg} text-white shadow-sm`
                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"
             }`}
           >
@@ -680,7 +860,7 @@ App Link: ${window.location.origin}`;
               onClick={() => setSelectedCategory(cat)}
               className={`px-2 py-1 rounded-full text-[9px] font-bold uppercase shrink-0 transition-all ${
                 selectedCategory === cat
-                  ? "bg-[#1e3a8a] text-white shadow-sm"
+                  ? `${theme.bg} text-white shadow-sm`
                   : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               }`}
             >
@@ -721,7 +901,7 @@ App Link: ${window.location.origin}`;
                 {/* Header card info */}
                 <div className="px-3 py-2.5 bg-slate-50 border-b border-slate-100 flex justify-between items-start">
                   <div>
-                    <T className="font-bold text-[#1e3a8a] text-xs block leading-tight">{getFactoryDisplayName(report.factory)}</T>
+                    <T className={`font-bold block leading-tight ${theme.text} ${fontSizeClass}`}>{getFactoryDisplayName(report.factory)}</T>
                     <T className="text-[9px] text-slate-400 block mt-0.5">{report.timestamp}</T>
                   </div>
                   {report.isAbnormal && (
@@ -731,7 +911,8 @@ App Link: ${window.location.origin}`;
                   )}
                 </div>
 
-                {/* Update Information Sub-bar */}
+                {/* Update Information Sub-bar (Hidden in UI as requested, but still recorded in data) */}
+                {/* 
                 {report.updatedAt && (
                   <div className="bg-emerald-50 border-b border-emerald-100 px-3 py-1.5 text-[9px] text-[#065f46]" id={`update-bar-${report.id}`}>
                     <div className="flex items-center gap-1 font-bold">
@@ -750,6 +931,7 @@ App Link: ${window.location.origin}`;
                     )}
                   </div>
                 )}
+                */}
 
                 {/* Report Image */}
                 {report.imageUrl && (
@@ -764,7 +946,7 @@ App Link: ${window.location.origin}`;
                 <div className="p-3 bg-white">
                   {/* Category marker with standard styling */}
                   <div className="pb-2 border-b border-slate-100 flex items-center justify-between">
-                    <div className="flex items-center text-[#1e3a8a] font-bold text-xs uppercase select-none">
+                    <div className={`flex items-center font-bold text-xs uppercase select-none ${theme.text}`}>
                       {getCategoryIcon(report.category)}
                       <T>{report.category}</T>
                     </div>
@@ -775,7 +957,7 @@ App Link: ${window.location.origin}`;
                   </div>
 
                   {/* Body description text */}
-                  <div className="pt-2 text-xs text-slate-700 font-medium leading-relaxed">
+                  <div className={`pt-2 font-medium leading-relaxed text-slate-705 ${contentFontSizeClass}`}>
                     <T>{report.content}</T>
                   </div>
 
@@ -816,7 +998,7 @@ App Link: ${window.location.origin}`;
                       onSubmit={(e) => {
                         e.preventDefault();
                         const form = e.currentTarget;
-                        const input = form.elements.namedItem("directiveInput") as HTMLInputElement;
+                        const input = form.elements.namedItem("directiveInput") as HTMLTextAreaElement;
                         const text = input.value.trim();
                         if (!text) return;
 
@@ -844,27 +1026,73 @@ App Link: ${window.location.origin}`;
                           onUpdateReport(updatedReport);
                         }
                         input.value = "";
+                        input.style.height = "32px";
                         showToast("Ghi nhận chỉ đạo điều hành thành công! 📑");
                       }}
-                      className="flex gap-2 items-center"
+                      className="flex gap-2 items-end"
                     >
-                      <input
-                        type="text"
-                        name="directiveInput"
-                        placeholder="Chỉ đạo (mặc định ghi mờ bên trong ô)..."
-                        className="flex-1 bg-slate-50 border border-slate-200 text-[11px] rounded-lg px-2.5 py-1.5 text-slate-800 placeholder-slate-400 font-medium focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all select-text"
-                      />
-                      <button
-                        type="submit"
-                        className="bg-amber-500 hover:bg-amber-600 px-3 py-1.5 text-[10px] text-white font-extrabold items-center justify-center rounded-lg shadow-sm transition-transform active:scale-95 cursor-pointer uppercase shrink-0"
-                      >
-                        <T>Gửi</T>
-                      </button>
+                      {(() => {
+                        const isMgmtOrReviewer = currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER;
+                        return (
+                          <>
+                            <textarea
+                              name="directiveInput"
+                              placeholder={isMgmtOrReviewer ? "Chỉ đạo" : "Chỉ Duyệt Viên trở lên mới được chỉ đạo"}
+                              disabled={!isMgmtOrReviewer}
+                              rows={1}
+                              style={{ height: '32px', minHeight: '32px', maxHeight: '72px', resize: 'none' }}
+                              onInput={(e) => {
+                                const target = e.currentTarget;
+                                target.style.height = 'auto';
+                                target.style.height = `${Math.min(target.scrollHeight, 72)}px`;
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                  e.preventDefault();
+                                  e.currentTarget.form?.requestSubmit();
+                                }
+                              }}
+                              className={`flex-1 bg-slate-50 border border-slate-200 text-[11px] rounded-lg px-2.5 py-2 text-slate-800 placeholder-slate-400 font-medium focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all select-text overflow-y-auto thin-scrollbar ${
+                                !isMgmtOrReviewer ? "cursor-not-allowed bg-slate-100 placeholder:text-slate-400 text-slate-400 opacity-60" : ""
+                              }`}
+                            />
+                            <button
+                              type="submit"
+                              disabled={!isMgmtOrReviewer}
+                              className={`bg-amber-500 hover:bg-amber-600 px-3 py-2 text-[10px] text-white font-extrabold items-center justify-center rounded-lg shadow-sm transition-all active:scale-95 cursor-pointer uppercase shrink-0 h-[32px] ${
+                                !isMgmtOrReviewer ? "bg-slate-300 hover:bg-slate-300 text-slate-400 cursor-not-allowed opacity-50 shadow-none" : ""
+                              }`}
+                            >
+                              <T>Gửi</T>
+                            </button>
+                          </>
+                        );
+                      })()}
                     </form>
+                    {/* BP/ĐV TIẾP NHẬN list display */}
+                    <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-col gap-1.5" id={`receivers-section-${report.id}`}>
+                      <div className="flex items-center gap-1 text-[10px] font-extrabold text-sky-700 uppercase">
+                        <Check className="w-3.5 h-3.5 stroke-[3px]" />
+                        <span translate="no" className="notranslate">BP/ĐV TIẾP NHẬN:</span>
+                      </div>
+                      {report.sharedBy && report.sharedBy.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {report.sharedBy.map((item, i) => (
+                            <span key={i} className="bg-sky-50 text-sky-800 text-[9px] px-2 py-0.5 rounded border border-sky-100 font-bold block max-w-full truncate">
+                              <T>{item}</T>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-[9px] italic select-none">
+                          <span translate="no" className="notranslate">Chưa có bộ phận nào tiếp nhận</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                {/* Footer buttons of card (Xóa/Sửa/Like/Share) only for managers or the author */}
+                {/* Footer buttons of card (Xóa/Sửa/Like/BP Tiếp Nhận) only for managers or the author */}
                 <div className="bg-slate-50 border-t border-slate-100 px-3 py-2 flex justify-between items-center select-none text-[10px] font-semibold text-slate-600">
                   <div className="flex items-center gap-3">
                     {(() => {
@@ -949,14 +1177,21 @@ App Link: ${window.location.origin}`;
                         </button>
                       );
                     })()}
-                    <button
-                      onClick={() => setShareModalReport(report)}
-                      className="flex items-center gap-1 text-emerald-600 hover:text-emerald-700 transition-colors py-1 cursor-pointer"
-                      title="Chia sẻ lên Zalo"
-                    >
-                      <Share2 className="w-3.5 h-3.5" />
-                      <T>CHIA SẺ</T>
-                    </button>
+                    {(() => {
+                      const isAcknowledged = report.sharedBy?.some(name => name.startsWith(currentUser?.fullName || "Kiểm soát viên")) || false;
+                      return (
+                        <button
+                          onClick={() => toggleAcknowledge(report.id)}
+                          className={`flex items-center gap-1 transition-colors py-1 cursor-pointer ${
+                            isAcknowledged ? "text-sky-700 font-extrabold scale-105 animate-pulse" : "text-slate-400 hover:text-sky-600"
+                          }`}
+                          title="Xác nhận tiếp nhận thông tin"
+                        >
+                          <Check className={`w-3.5 h-3.5 ${isAcknowledged ? "stroke-[3.5px] text-sky-700" : ""}`} />
+                          <T>{isAcknowledged ? "ĐÃ TIẾP NHẬN" : "TIẾP NHẬN"}</T>
+                        </button>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -970,35 +1205,39 @@ App Link: ${window.location.origin}`;
         <button
           type="button"
           onClick={scrollToTop}
-          className="absolute bottom-36 right-5 w-12 h-12 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-xl flex items-center justify-center shadow-lg transition-all z-20 cursor-pointer"
+          className="absolute bottom-36 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-xl flex items-center justify-center shadow-lg transition-all z-20 cursor-pointer"
           title="Lên đầu trang"
         >
-          <ArrowUp className="w-6 h-6 text-white stroke-[2.5px]" />
+          <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />
         </button>
       )}
 
       {/* Blue Circular float creation trigger */}
       <button
         onClick={onOpenReportForm}
-        className="absolute bottom-20 right-5 w-14 h-14 bg-[#1e3a8a] text-white rounded-full flex items-center justify-center shadow-xl hover:scale-110 active:scale-90 transition-transform z-20 hover:bg-[#1a306c]"
+        className={`absolute bottom-20 right-5 w-11 h-11 text-white rounded-xl flex items-center justify-center shadow-xl hover:scale-110 active:scale-90 transition-transform z-20 ${theme.hoverBg}`}
       >
-        <Plus className="w-7 h-7 text-white stroke-[3px]" />
+        <Plus className="w-6 h-6 text-white stroke-[3px]" />
       </button>
 
       {/* Mock navigation bottom bar on appsheet */}
-      <div className="bg-slate-50 border-t border-slate-200 grid grid-cols-3 py-2.5 text-center text-slate-400 text-[10px] font-semibold select-none shrink-0 font-sans shadow-inner">
-        <div>
+      <div className="bg-slate-50 border-t border-slate-200 grid grid-cols-3 py-2 text-center text-slate-400 text-[10px] font-semibold select-none shrink-0 font-sans shadow-inner">
+        <div className="flex flex-col items-center justify-center py-0.5">
           <Heart className="w-4 h-4 mx-auto mb-0.5 text-slate-400" />
           <T>Đóng Góp</T>
         </div>
-        <div className="text-[#1e3a8a]">
+        <div className={`flex flex-col items-center justify-center py-0.5 ${theme.text}`}>
           <FileText className="w-4 h-4 mx-auto mb-0.5" />
           <T>Báo Cáo</T>
         </div>
-        <div className="text-slate-400 opacity-50 cursor-not-allowed select-none" title="Tính năng đang được bảo trì / nâng cấp">
-          <Camera className="w-4 h-4 mx-auto mb-0.5 text-slate-400 opacity-60" />
-          <T>Chụp Ảnh</T>
-        </div>
+        <button
+          type="button"
+          onClick={() => setShowLogoutConfirm(true)}
+          className="flex flex-col items-center justify-center py-0.5 text-slate-500 hover:text-rose-600 transition-colors cursor-pointer select-none border-none bg-transparent"
+        >
+          <LogOut className="w-4 h-4 mx-auto mb-0.5 text-slate-500 hover:text-rose-600" />
+          <T>Đăng Xuất</T>
+        </button>
       </div>
 
       {toastMessage && (
@@ -1193,17 +1432,17 @@ App Link: ${window.location.origin}`}
                       {/* Left Side Icon Indicator */}
                       <div className="shrink-0">
                         {notif.type === "new_report" && (
-                          <div className="w-8.5 h-8.5 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs shadow-3xs">
+                          <div className="w-8.5 h-8.5 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs shadow-2xs">
                             📝
                           </div>
                         )}
                         {notif.type === "new_directive" && (
-                          <div className="w-8.5 h-8.5 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-xs shadow-3xs">
+                          <div className="w-8.5 h-8.5 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-xs shadow-2xs">
                             💬
                           </div>
                         )}
                         {notif.type === "update_report" && (
-                          <div className="w-8.5 h-8.5 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs shadow-3xs">
+                          <div className="w-8.5 h-8.5 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs shadow-2xs">
                             🔄
                           </div>
                         )}
@@ -1234,6 +1473,200 @@ App Link: ${window.location.origin}`}
                   );
                 })
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLocalConfigPanel && (
+        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-end justify-center z-50 select-none animate-fadeIn">
+          <div className="bg-white rounded-t-3xl w-full max-h-[85%] overflow-y-auto p-5 pb-8 flex flex-col shadow-2xl border-t border-slate-100 animate-slideUp">
+            {/* Header */}
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-4 shrink-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-base">⚙️</span>
+                <span className="font-extrabold text-[13px] text-slate-800 tracking-tight uppercase">
+                  <span translate="no" className="notranslate"><T>Cấu hình hiển thị</T></span>
+                </span>
+              </div>
+              <button
+                onClick={() => setShowLocalConfigPanel(false)}
+                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-xs"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Columns Selector */}
+              <div>
+                <label className="text-[10px] uppercase font-black text-slate-400 block mb-1.5 tracking-wider">
+                  <span translate="no" className="notranslate"><T>Số cột hiển thị</T></span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => onUpdateMobileUIConfig && onUpdateMobileUIConfig({ ...config, columns: 1 })}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
+                      (config.columns ?? 2) === 1
+                        ? "bg-slate-900 border-slate-900 text-white shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    1 <span translate="no" className="notranslate"><T>Cột (Dọc)</T></span>
+                  </button>
+                  <button
+                    onClick={() => onUpdateMobileUIConfig && onUpdateMobileUIConfig({ ...config, columns: 2 })}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
+                      (config.columns ?? 2) === 2
+                        ? "bg-slate-900 border-slate-900 text-white shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    2 <span translate="no" className="notranslate"><T>Cột (Giao diện lưới)</T></span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Theme Color Selector */}
+              <div>
+                <label className="text-[10px] uppercase font-black text-slate-400 block mb-1.5 tracking-wider">
+                  <span translate="no" className="notranslate"><T>Màu sắc chủ đạo (Theme)</T></span>
+                </label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { id: "blue", label: "Xanh biển", bg: "bg-blue-650" },
+                    { id: "indigo", label: "Chàm tối", bg: "bg-[#4f46e5]" },
+                    { id: "emerald", label: "Ngọc bích", bg: "bg-[#0d9488]" },
+                    { id: "amber", label: "Hổ phách", bg: "bg-[#f59e0b]" },
+                    { id: "rose", label: "Hồng đào", bg: "bg-[#e11d48]" },
+                    { id: "slate", label: "Than mộc", bg: "bg-[#475569]" }
+                  ].map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => onUpdateMobileUIConfig && onUpdateMobileUIConfig({ ...config, colorTheme: t.id })}
+                      className={`px-2 py-1.5 rounded-xl border text-[10px] font-bold flex items-center justify-center gap-1 transition-all ${
+                        (config.colorTheme || "blue") === t.id
+                          ? "bg-slate-900 border-slate-900 text-white shadow-xs"
+                          : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                      }`}
+                    >
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${t.bg}`}></span>
+                      <T>{t.label}</T>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Font Size Selector */}
+              <div>
+                <label className="text-[10px] uppercase font-black text-slate-400 block mb-1.5 tracking-wider">
+                  <span translate="no" className="notranslate"><T>Cỡ chữ nội dung</T></span>
+                </label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { id: "xs", label: "Cực nhỏ" },
+                    { id: "sm", label: "Vừa phải" },
+                    { id: "base", label: "Lớn" }
+                  ].map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => onUpdateMobileUIConfig && onUpdateMobileUIConfig({ ...config, fontSize: f.id })}
+                      className={`px-2 py-1.5 rounded-xl border text-[10px] font-bold transition-all ${
+                        (config.fontSize || "xs") === f.id
+                          ? "bg-slate-900 border-slate-900 text-white shadow-xs"
+                          : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                      }`}
+                    >
+                      <T>{f.label}</T>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Name Display Rule */}
+              <div>
+                <label className="text-[10px] uppercase font-black text-slate-400 block mb-1.5 tracking-wider">
+                  <span translate="no" className="notranslate"><T>Quy tắc hiển thị tên cơ sở</T></span>
+                </label>
+                <div className="flex flex-col gap-1.5">
+                  <button
+                    onClick={() => onUpdateMobileUIConfig && onUpdateMobileUIConfig({ ...config, displayRule: "clean" })}
+                    className={`px-3 py-1.5 rounded-xl text-left text-[11px] font-bold border transition-all flex flex-col justify-center ${
+                      displayRule === "clean"
+                        ? "bg-slate-900 border-slate-900 text-white shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span translate="no" className="notranslate"><T>Chỉ giữ Tên tinh gọn</T></span>
+                    <span className={`text-[9px] mt-0.5 font-normal ${displayRule === "clean" ? "text-slate-300" : "text-slate-400"}`}>
+                      Ví dũ: "Bắc Ninh" thay vì "Chi Nhánh Bắc Ninh (TPP-BNI)"
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => onUpdateMobileUIConfig && onUpdateMobileUIConfig({ ...config, displayRule: "full" })}
+                    className={`px-3 py-1.5 rounded-xl text-left text-[11px] font-bold border transition-all flex flex-col justify-center ${
+                      displayRule === "full"
+                        ? "bg-slate-900 border-slate-900 text-white shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span translate="no" className="notranslate"><T>Tên Đầy đủ nguyên bản</T></span>
+                    <span className={`text-[9px] mt-0.5 font-normal ${displayRule === "full" ? "text-slate-300" : "text-slate-400"}`}>
+                      Ví dụ: "Chi Nhánh Bắc Ninh (TPP-BNI)"
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => onUpdateMobileUIConfig && onUpdateMobileUIConfig({ ...config, displayRule: "custom" })}
+                    className={`px-3 py-1.5 rounded-xl text-left text-[11px] font-bold border transition-all flex flex-col justify-center ${
+                      displayRule === "custom"
+                        ? "bg-slate-900 border-slate-900 text-white shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span translate="no" className="notranslate"><T>Tên Viết tắt tùy chỉnh</T></span>
+                    <span className={`text-[9px] mt-0.5 font-normal ${displayRule === "custom" ? "text-slate-300" : "text-slate-400"}`}>
+                      Hiển thị theo bí danh quy định ở cài đặt máy tính
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLogoutConfirm && (
+        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-[60] select-none animate-fadeIn">
+          <div className="bg-white rounded-2xl w-full max-w-[280px] p-5 shadow-2xl border border-slate-100 flex flex-col items-center text-center">
+            <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mb-3">
+              <LogOut className="w-5 h-5 text-rose-600" />
+            </div>
+            <h3 className="font-extrabold text-[13px] text-slate-800 tracking-tight uppercase mb-1.5">
+              <T>Xác nhận Đăng Xuất</T>
+            </h3>
+            <p className="text-[10.5px] text-slate-500 font-medium leading-relaxed mb-4">
+              <T>Bạn có chắc chắn muốn đăng xuất khỏi ứng dụng chất lượng 4M1E1I?</T>
+            </p>
+            <div className="flex gap-2 w-full">
+              <button
+                type="button"
+                onClick={() => setShowLogoutConfirm(false)}
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-[10px] py-2 rounded-xl transition-all cursor-pointer uppercase border-none"
+              >
+                <T>Quay Lại</T>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLogoutConfirm(false);
+                  if (onLogout) {
+                    onLogout();
+                  }
+                }}
+                className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-black text-[10px] py-2 rounded-xl shadow-md cursor-pointer transition-all uppercase border-none"
+              >
+                <T>Đăng Xuất</T>
+              </button>
             </div>
           </div>
         </div>

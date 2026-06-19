@@ -55,7 +55,14 @@ export default function App() {
   // Persistence state
   const [users, setUsers] = useState<User[]>(() => {
     const saved = localStorage.getItem("4m1e1i_users");
-    const loadedUsers = saved ? JSON.parse(saved) : initialUsers;
+    let loadedUsers = saved ? JSON.parse(saved) : initialUsers;
+    // Restore original admin password for Lê Nhật Trường only if it was overwritten to default 123456
+    loadedUsers = loadedUsers.map((u: User) => {
+      if (u.id === "2018.00281" && u.password === "123456") {
+        return { ...u, password: "111222" };
+      }
+      return u;
+    });
     return loadedUsers.map((u: User) => {
       let deptName = u.department || "";
       let branchName = u.branch || "";
@@ -76,18 +83,33 @@ export default function App() {
       } else if (branchName.includes("TPP-314") || branchName.includes("314")) {
         suffix = " (TPP-314)";
       }
+
+      // Sanitize default passwords to 123456 as requested by user (only for non-ADMIN users)
+      let userPwd = u.password;
+      if (u.id === "2018.00281" && (!userPwd || userPwd === "123456")) {
+        userPwd = "111222";
+      } else {
+        const isAdmin = u.role === UserRole.ADMIN;
+        if (!isAdmin) {
+          if (!userPwd || userPwd === "password123" || userPwd === "111222" || userPwd.startsWith("password") || userPwd === "password" || userPwd.toLowerCase().includes("password")) {
+            userPwd = "123456";
+          }
+        }
+      }
       
       if (suffix && deptName) {
-        const cleanDeptName = deptName.replace(/\s\([A-Z0-9-]+\)$/, "").trim();
+        const cleanDeptName = deptName.replace(/\s\([^)]+\)$/, "").trim();
         const standardizedClean = cleanDeptName.replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
         return {
           ...u,
+          password: userPwd,
           department: `${standardizedClean}${suffix}`
         };
       }
       return {
         ...u,
-        department: deptName.replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng")
+        password: userPwd,
+        department: deptName.replace(/\s\([^)]+\)$/, "").trim().replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng")
       };
     });
   });
@@ -108,12 +130,7 @@ export default function App() {
   const [companies, setCompanies] = useState<Company[]>(() => {
     const saved = localStorage.getItem("4m1e1i_companies");
     if (saved) {
-      const parsed = JSON.parse(saved);
-      return parsed.filter((c: any) => {
-        const idUpper = (c.id || "").toUpperCase();
-        const nameUpper = (c.name || "").toUpperCase();
-        return !idUpper.includes("DNP") && !nameUpper.includes("DNP");
-      });
+      return JSON.parse(saved);
     }
     return initialCompanies;
   });
@@ -122,53 +139,67 @@ export default function App() {
     const saved = localStorage.getItem("4m1e1i_branches");
     if (saved) {
       const parsed = JSON.parse(saved);
-      return parsed
-        .filter((b: any) => {
-          const idUpper = (b.id || "").toUpperCase();
-          const coIdUpper = (b.companyId || "").toUpperCase();
-          const nameUpper = (b.name || "").toUpperCase();
-          return !idUpper.includes("DNP") && !coIdUpper.includes("DNP") && !nameUpper.includes("DNP");
-        })
-        .map((b: any) => ({
-          ...b,
-          name: b.name
-            .replace(" (CNBN)", "")
-            .replace(" (CNLA)", "")
-            .replace(" (NM314)", ""),
-          isScoring: b.id === "TPP-CTY" ? true : b.isScoring
-        }));
+      return parsed.map((b: any) => ({
+        ...b,
+        name: b.name
+          .replace(" (CNBN)", "")
+          .replace(" (CNLA)", "")
+          .replace(" (NM314)", ""),
+        isScoring: b.id === "TPP-CTY" ? true : b.isScoring
+      }));
     }
     return initialBranches;
   });
 
   const [departments, setDepartments] = useState<Department[]>(() => {
+    const savedBranchesStr = localStorage.getItem("4m1e1i_branches");
+    const loadedBranches: Branch[] = savedBranchesStr ? JSON.parse(savedBranchesStr) : initialBranches;
+
     const saved = localStorage.getItem("4m1e1i_departments");
     if (saved) {
       const parsed = JSON.parse(saved);
-      return parsed
-        .filter((d: any) => {
-          const idUpper = (d.id || "").toUpperCase();
-          const brIdUpper = (d.branchId || "").toUpperCase();
-          const nameUpper = (d.name || "").toUpperCase();
-          return !idUpper.includes("DNP") && !brIdUpper.includes("DNP") && !nameUpper.includes("DNP");
-        })
-        .map((d: any) => {
-          let cleanName = d.name || "";
-          cleanName = cleanName.replace(/Quản\s+lí/gi, "Quản Lý");
-          cleanName = cleanName.replace(/quản\s+lí/gi, "Quản Lý");
-          cleanName = cleanName.replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng");
-          cleanName = cleanName.replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
+      return parsed.map((d: any) => {
+        let cleanName = d.name || "";
+        cleanName = cleanName.replace(/Quản\s+lí/gi, "Quản Lý");
+        cleanName = cleanName.replace(/quản\s+lí/gi, "Quản Lý");
+        cleanName = cleanName.replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng");
+        cleanName = cleanName.replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
 
-          const suffix = ` (${d.branchId})`;
-          if (cleanName.endsWith(suffix)) {
-            cleanName = cleanName.substring(0, cleanName.length - suffix.length);
+        // Strip any existing suffix like (TPP-CTY) or (BRANCH-...)
+        cleanName = cleanName.replace(/\s\([^)]+\)$/, "").trim();
+
+        // Dynamically find branch to determine what suffix to use
+        let suffix = "";
+        const br = loadedBranches.find((b) => b.id === d.branchId);
+        if (br) {
+          const match = br.name.match(/\(([^)]+)\)/);
+          if (match) {
+            suffix = ` (${match[1]})`;
+          } else {
+            // Fallback for custom branch - extract uppercase initials/code
+            const words = br.name.trim().split(/\s+/);
+            const lastWord = words[words.length - 1];
+            if (lastWord && lastWord === lastWord.toUpperCase() && lastWord.length >= 2) {
+              suffix = ` (${lastWord})`;
+            } else {
+              suffix = "";
+            }
           }
-          cleanName = cleanName.replace(/\s\([A-Z0-9-]+\)$/, "").trim();
-          return {
-            ...d,
-            name: `${cleanName}${suffix}`
-          };
-        });
+        } else {
+          if (!d.branchId.startsWith("BRANCH-") && !d.branchId.startsWith("DEPT-") && d.branchId.length <= 10) {
+            suffix = ` (${d.branchId})`;
+          }
+        }
+
+        if (suffix.includes("BRANCH-") || suffix.includes("DEPT-") || suffix.length > 15) {
+          suffix = "";
+        }
+
+        return {
+          ...d,
+          name: suffix ? `${cleanName}${suffix}` : cleanName
+        };
+      });
     }
     return initialDepartments;
   });
@@ -259,7 +290,10 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_mobile_ui_config", JSON.stringify(mobileUIConfig));
-  }, [mobileUIConfig]);
+    if (syncCompleted && dbConnected && !dbLoading) {
+      saveDocument("config", "mobile_ui", mobileUIConfig).catch(console.error);
+    }
+  }, [mobileUIConfig, dbConnected, dbLoading, syncCompleted]);
 
   const [showConfigPanel, setShowConfigPanel] = useState(false);
 
@@ -331,10 +365,56 @@ export default function App() {
         const fUsers = await fetchCollection<User>(COLLECTIONS.USERS);
         if (fUsers.length > 0) {
           setUsers((prev) => {
-            const merged = [...fUsers];
+            const cleanedFetched = fUsers.map((u) => {
+              let userPwd = u.password;
+              if (u.id === "2018.00281" && (!userPwd || userPwd === "123456")) {
+                userPwd = "111222";
+              } else {
+                const isAdmin = u.role === UserRole.ADMIN;
+                if (!isAdmin) {
+                  if (!userPwd || userPwd === "password123" || userPwd === "111222" || userPwd.startsWith("password") || userPwd === "password" || userPwd.toLowerCase().includes("password")) {
+                    userPwd = "123456";
+                  }
+                }
+              }
+              let deptName = u.department || "";
+              deptName = deptName.replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
+              deptName = deptName.replace(/\s\([^)]+\)$/, "").trim();
+              
+              let suffix = "";
+              let branchName = u.branch || "";
+              if (branchName.includes("TPP-CTY") || branchName.includes("Văn Phòng")) {
+                suffix = " (TPP-CTY)";
+              } else if (branchName.includes("TPP-BNI") || branchName.includes("Bắc Ninh")) {
+                suffix = " (TPP-BNI)";
+              } else if (branchName.includes("TPP-LAN") || branchName.includes("Long An")) {
+                suffix = " (TPP-LAN)";
+              } else if (branchName.includes("TPP-314") || branchName.includes("314")) {
+                suffix = " (TPP-314)";
+              }
+              
+              return {
+                ...u,
+                password: userPwd,
+                department: suffix ? `${deptName}${suffix}` : deptName
+              };
+            });
+            const merged = [...cleanedFetched];
             prev.forEach((u) => {
               if (!merged.some((mu) => mu.id === u.id)) {
-                merged.push(u);
+                // Ensure local unsynced users also have sanitized passwords and department names
+                let userPwd = u.password;
+                if (u.id === "2018.00281" && (!userPwd || userPwd === "123456")) {
+                  userPwd = "111222";
+                } else {
+                  const isAdmin = u.role === UserRole.ADMIN;
+                  if (!isAdmin) {
+                    if (!userPwd || userPwd === "password123" || userPwd === "111222" || userPwd.startsWith("password") || userPwd === "password" || userPwd.toLowerCase().includes("password")) {
+                      userPwd = "123456";
+                    }
+                  }
+                }
+                merged.push({ ...u, password: userPwd });
               }
             });
             return merged;
@@ -383,7 +463,43 @@ export default function App() {
         const fDepts = await fetchCollection<Department>(COLLECTIONS.DEPARTMENTS);
         if (fDepts.length > 0) {
           setDepartments((prev) => {
-            const merged = [...fDepts];
+            // Read latest branches for helper suffix formatting
+            const latestBranches = fBranches.length > 0 ? fBranches : initialBranches;
+            const cleanedFetched = fDepts.map((d) => {
+              let cleanName = d.name || "";
+              cleanName = cleanName.replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
+              cleanName = cleanName.replace(/\s\([^)]+\)$/, "").trim();
+
+              let suffix = "";
+              const br = latestBranches.find((b) => b.id === d.branchId);
+              if (br) {
+                const match = br.name.match(/\(([^)]+)\)/);
+                if (match) {
+                  suffix = ` (${match[1]})`;
+                } else {
+                  const words = br.name.trim().split(/\s+/);
+                  const lastWord = words[words.length - 1];
+                  if (lastWord === lastWord.toUpperCase() && lastWord.length >= 2) {
+                    suffix = ` (${lastWord})`;
+                  }
+                }
+              } else {
+                if (!d.branchId.startsWith("BRANCH-") && !d.branchId.startsWith("DEPT-") && d.branchId.length <= 10) {
+                  suffix = ` (${d.branchId})`;
+                }
+              }
+
+              if (suffix.includes("BRANCH-") || suffix.includes("DEPT-") || suffix.length > 15) {
+                suffix = "";
+              }
+
+              return {
+                ...d,
+                name: suffix ? `${cleanName}${suffix}` : cleanName
+              };
+            });
+
+            const merged = [...cleanedFetched];
             prev.forEach((d) => {
               if (!merged.some((md) => md.id === d.id)) {
                 merged.push(d);
@@ -483,6 +599,20 @@ export default function App() {
             });
             return merged;
           });
+        }
+
+        try {
+          const fConfigs = await fetchCollection<any>("config");
+          const remoteConfig = fConfigs.find((c) => c.id === "mobile_ui");
+          if (remoteConfig) {
+            const { id, ...cleanCfg } = remoteConfig;
+            setMobileUIConfig((prev: any) => ({
+              ...prev,
+              ...cleanCfg
+            }));
+          }
+        } catch (err) {
+          console.error("Failed fetching remote config from cloud:", err);
         }
 
         setDbConnected(true);
@@ -775,6 +905,11 @@ export default function App() {
       return;
     }
 
+    // Find representing company based on selection
+    const regBranchObj = branches.find((b) => b.name === regBranch);
+    const regCompanyObj = regBranchObj ? companies.find((c) => c.id === regBranchObj.companyId) : null;
+    const regCompanyVal = regCompanyObj ? regCompanyObj.name : "TÂN PHÚ VIỆT NAM";
+
     // Register user with PENDING state
     const newUser: User = {
       id: regId.trim(),
@@ -784,7 +919,8 @@ export default function App() {
       branch: regBranch,
       role: regRole,
       status: UserStatus.PENDING,
-      password: regPassword
+      password: regPassword || "123456",
+      company: regCompanyVal
     };
 
     setUsers((prev) => [...prev, newUser]);
@@ -846,6 +982,9 @@ export default function App() {
   };
 
   const getBranchCodeSuffix = (brName: string) => {
+    if (brName.startsWith("BRANCH-") || brName.startsWith("DEPT-") || brName.length > 20) {
+      return "";
+    }
     const match = brName.match(/\(([^)]+)\)/);
     let code = match ? match[1] : "";
     if (!code) {
@@ -860,6 +999,9 @@ export default function App() {
       } else {
         code = words.map(w => w[0]?.toUpperCase()).join("");
       }
+    }
+    if (!code || code.startsWith("BRANCH-") || code.startsWith("DEPT-") || code.length > 10) {
+      return "";
     }
     return ` (${code})`;
   };
@@ -950,12 +1092,19 @@ export default function App() {
     cleanName = cleanName.replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
 
     const activeBranch = branches.find((b) => b.id === d.branchId);
-    const suffix = activeBranch ? getBranchCodeSuffix(activeBranch.name) : ` (${d.branchId})`;
+    let suffix = activeBranch ? getBranchCodeSuffix(activeBranch.name) : "";
+    if (d.branchId.startsWith("BRANCH-") || d.branchId.startsWith("DEPT-")) {
+      suffix = "";
+    }
 
-    if (!cleanName.endsWith(suffix)) {
-      cleanName = cleanName.replace(/\s\([A-Z0-9-]+\)$/, "").trim();
+    if (suffix) {
+      if (!cleanName.endsWith(suffix)) {
+        cleanName = cleanName.replace(/\s\([^)]+\)$/, "").trim();
+      } else {
+        cleanName = cleanName.substring(0, cleanName.length - suffix.length).trim();
+      }
     } else {
-      cleanName = cleanName.substring(0, cleanName.length - suffix.length).trim();
+      cleanName = cleanName.replace(/\s\([^)]+\)$/, "").trim();
     }
     
     // Reinforce spelling check
@@ -963,7 +1112,7 @@ export default function App() {
 
     d = {
       ...d,
-      name: `${cleanName}${suffix}`
+      name: suffix ? `${cleanName}${suffix}` : cleanName
     };
     setDepartments((prev) => [...prev, d]);
   };
@@ -977,11 +1126,18 @@ export default function App() {
     cleanName = cleanName.replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
 
     const activeBranch = branches.find((b) => b.id === updated.branchId);
-    const suffix = activeBranch ? getBranchCodeSuffix(activeBranch.name) : ` (${updated.branchId})`;
+    let suffix = activeBranch ? getBranchCodeSuffix(activeBranch.name) : "";
+    if (updated.branchId.startsWith("BRANCH-") || updated.branchId.startsWith("DEPT-")) {
+      suffix = "";
+    }
 
-    if (!cleanName.endsWith(suffix)) {
-      cleanName = cleanName.replace(/\s\([A-Z0-9-]+\)$/, "").trim();
-      cleanName = `${cleanName}${suffix}`;
+    if (suffix) {
+      if (!cleanName.endsWith(suffix)) {
+        cleanName = cleanName.replace(/\s\([^)]+\)$/, "").trim();
+        cleanName = `${cleanName}${suffix}`;
+      }
+    } else {
+      cleanName = cleanName.replace(/\s\([^)]+\)$/, "").trim();
     }
 
     updated = {
@@ -1757,6 +1913,8 @@ export default function App() {
                 currentUser={currentUser}
                 onUpdateReport={handleUpdateReport}
                 mobileUIConfig={mobileUIConfig}
+                onUpdateMobileUIConfig={setMobileUIConfig}
+                onLogout={() => setCurrentUser(null)}
               />
             )}
           </div>
@@ -1791,6 +1949,8 @@ export default function App() {
                 currentUser={currentUser}
                 onUpdateReport={handleUpdateReport}
                 mobileUIConfig={mobileUIConfig}
+                onUpdateMobileUIConfig={setMobileUIConfig}
+                onLogout={() => setCurrentUser(null)}
               />
             )}
 
