@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { ArrowLeft, Camera, RotateCw, Check, Scissors, AlertTriangle, RefreshCw } from "lucide-react";
 import { T } from "./TranslateText";
-import { Category4M1E1I, QualityReport, User } from "../types";
+import { Category4M1E1I, QualityReport, User, Branch } from "../types";
 import { initialBranches, STANDARDIZED_QC_DEPT } from "../data";
 import { loadImage, processImage, CompressingResult } from "../utils/imageProcessor";
 
@@ -11,6 +11,15 @@ interface ReportFormProps {
   onCancel: () => void;
   onSubmitReport: (data: Omit<QualityReport, "id" | "googleDrivePath">) => void;
   offlineMode: boolean;
+  branches?: Branch[];
+  mobileUIConfig?: {
+    displayRule?: "clean" | "full" | "custom";
+    columns?: number;
+    padding?: "compact" | "normal" | "spacious";
+    colorTheme?: "blue" | "indigo" | "emerald" | "amber" | "rose" | "slate";
+    fontSize?: "xs" | "sm" | "base";
+    customAliases?: Record<string, string>;
+  };
 }
 
 export default function ReportForm({
@@ -18,10 +27,53 @@ export default function ReportForm({
   editingReport,
   onCancel,
   onSubmitReport,
-  offlineMode
+  offlineMode,
+  branches = initialBranches,
+  mobileUIConfig
 }: ReportFormProps) {
+  // Config fallbacks
+  const config = mobileUIConfig || {};
+  const displayRule = config.displayRule || "clean";
+  const columns = config.columns === 1 ? 1 : 2;
+  const paddingStyle = config.padding || "normal";
+  const colorTheme = config.colorTheme || "blue";
+  const fontSize = config.fontSize || "xs";
+  const customAliases = config.customAliases || {};
+
+  const fontClass = 
+    fontSize === "xs" ? "text-[10px]" :
+    fontSize === "sm" ? "text-xs font-semibold" :
+    "text-sm font-bold";
+
+  const paddingClass = 
+    paddingStyle === "compact" ? "px-2 py-1" :
+    paddingStyle === "normal" ? "px-2.5 py-1.5" :
+    "px-3 py-2.5";
+
+  const colsClass = columns === 1 ? "grid-cols-1" : "grid-cols-2";
+
+  const activeColorMap: Record<string, { btnClass: string; checkClass: string }> = {
+    blue: { btnClass: "bg-blue-50 border-blue-500 text-blue-800 ring-1 ring-blue-400", checkClass: "text-blue-600" },
+    indigo: { btnClass: "bg-indigo-50 border-indigo-500 text-indigo-805 ring-1 ring-indigo-400", checkClass: "text-indigo-600" },
+    emerald: { btnClass: "bg-emerald-50 border-emerald-550 text-emerald-800 ring-1 ring-emerald-400", checkClass: "text-emerald-600" },
+    amber: { btnClass: "bg-amber-50 border-amber-500 text-amber-800 ring-1 ring-amber-400", checkClass: "text-amber-600" },
+    rose: { btnClass: "bg-rose-50 border-rose-500 text-rose-800 ring-1 ring-rose-400", checkClass: "text-rose-600" },
+    slate: { btnClass: "bg-slate-100 border-slate-600 text-slate-800 ring-1 ring-slate-450", checkClass: "text-slate-600" }
+  };
+  const activeStyles = activeColorMap[colorTheme] || activeColorMap.blue;
+
+  const getBranchDisplayName = (b: Branch) => {
+    if (displayRule === "custom" && customAliases[b.id]) {
+      return customAliases[b.id];
+    }
+    const cleanPrefix = b.name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn Phòng ", "");
+    if (displayRule === "clean") {
+      return cleanPrefix.replace(/\s*\(TPP-[^)]+\)/, "");
+    }
+    return b.name;
+  };
   // Fields state
-  const [selectedBranch, setSelectedBranch] = useState(editingReport?.factory || currentUser?.branch || initialBranches[1].name); // Tự động nhận diện chi nhánh người dùng
+  const [selectedBranch, setSelectedBranch] = useState(editingReport?.factory || currentUser?.branch || (branches.length > 1 ? branches[1].name : (branches[0]?.name || ""))); // Tự động nhận diện chi nhánh người dùng
   const [selectedCategory, setSelectedCategory] = useState<Category4M1E1I>(editingReport?.category || "CON NGƯỜI");
   const [timestamp, setTimestamp] = useState("");
   const [content, setContent] = useState(editingReport?.content || "");
@@ -58,7 +110,7 @@ export default function ReportForm({
         const scs = String(d.getSeconds()).padStart(2, '0');
         const date = String(d.getDate()).padStart(2, '0');
         const month = String(d.getMonth() + 1).padStart(2, '0');
-        const year = d.getFullYear();
+        const year = String(d.getFullYear()).slice(-2);
         setTimestamp(`${hrs}:${mns}:${scs} ${date}/${month}/${year}`);
       };
       updateClock();
@@ -305,26 +357,25 @@ export default function ReportForm({
               </span>
             )}
           </label>
-          <div className="grid grid-cols-2 gap-1.5">
-            {initialBranches.map((b) => {
+          <div className={`grid ${colsClass} gap-1.5`}>
+            {branches.filter((b) => b.isScoring).map((b) => {
               const br = b.name;
               const isSel = selectedBranch === br;
-              // Clean label for interactive grid
-              const displayName = br.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn Phòng ", "");
+              const displayName = getBranchDisplayName(b);
               return (
                 <button
                   key={br}
                   type="button"
                   onClick={() => setSelectedBranch(br)}
-                  className={`px-2.5 py-2 text-[10px] font-semibold rounded-lg text-left border transition-all ${
+                  className={`${paddingClass} ${fontClass} rounded-lg text-left border transition-all ${
                     isSel
-                      ? "bg-blue-50 border-blue-500 text-blue-800 ring-1 ring-blue-400"
+                      ? activeStyles.btnClass
                       : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <T>{displayName}</T>
-                    {isSel && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-1" />}
+                    {isSel && <Check className={`w-3.5 h-3.5 ${activeStyles.checkClass} shrink-0 ml-1`} />}
                   </div>
                 </button>
               );

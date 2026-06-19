@@ -85,6 +85,9 @@ interface DashboardDesktopProps {
   onAddCompany: (c: Company) => void;
   onAddBranch: (b: Branch) => void;
   onAddDepartment: (d: Department) => void;
+  onUpdateCompany?: (oldId: string, c: Company) => void;
+  onUpdateBranch?: (oldId: string, b: Branch) => void;
+  onUpdateDepartment?: (oldId: string, d: Department) => void;
   onDeleteCompany: (id: string) => void;
   onDeleteBranch: (id: string) => void;
   onDeleteDepartment: (id: string) => void;
@@ -105,6 +108,7 @@ interface DashboardDesktopProps {
   moldsCatalog: CatalogMold[];
   setMoldsCatalog: React.Dispatch<React.SetStateAction<CatalogMold[]>>;
   onUpdateReport?: (report: QualityReport) => void;
+  onUpdateUser?: (updatedUser: User) => void;
 }
 
 interface DesktopThumbnailSliderProps {
@@ -233,6 +237,9 @@ export default function DashboardDesktop({
   onAddCompany,
   onAddBranch,
   onAddDepartment,
+  onUpdateCompany,
+  onUpdateBranch,
+  onUpdateDepartment,
   onDeleteCompany,
   onDeleteBranch,
   onDeleteDepartment,
@@ -251,7 +258,8 @@ export default function DashboardDesktop({
   setProductsCatalog,
   moldsCatalog,
   setMoldsCatalog,
-  onUpdateReport
+  onUpdateReport,
+  onUpdateUser
 }: DashboardDesktopProps) {
   const [activeTab, setActiveTab] = useState<
     "PHÊ_DUYỆT" | "MÃ_HÓA" | "THỐNG_KÊ" | "DỮ_LIỆU" | "QUY_CHẾ" | "CÁ_NHÂN" | "THÔNG_BÁO" | "TRAO_ĐỔI" | "TRIỂN_KHAI"
@@ -259,12 +267,88 @@ export default function DashboardDesktop({
 
   // Local entry inputs for Mã hóa lookup creation
   const [newCompanyName, setNewCompanyName] = useState("");
+  const [newCompanyId, setNewCompanyId] = useState("");
   const [newBranchName, setNewBranchName] = useState("");
+  const [newBranchId, setNewBranchId] = useState("");
   const [newDeptName, setNewDeptName] = useState("");
+  const [newDeptId, setNewDeptId] = useState("");
 
   // States for hierarchical company-branch-department mapping
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>("TPP-Group");
   const [selectedBranchId, setSelectedBranchId] = useState<string>("TPP-CTY");
+
+  // Editing states for company, branch, and department
+  const [editingCompanyId, setEditingCompanyId] = useState<string | null>(null);
+  const [editingCompanyName, setEditingCompanyName] = useState<string>("");
+  const [editingCompanyIdInput, setEditingCompanyIdInput] = useState<string>("");
+  const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
+  const [editingBranchName, setEditingBranchName] = useState<string>("");
+  const [editingBranchIdInput, setEditingBranchIdInput] = useState<string>("");
+  const [editingDeptId, setEditingDeptId] = useState<string | null>(null);
+  const [editingDeptName, setEditingDeptName] = useState<string>("");
+  const [editingDeptIdInput, setEditingDeptIdInput] = useState<string>("");
+
+  const [companyIdConfirmDlt, setCompanyIdConfirmDlt] = useState<string | null>(null);
+  const [userIdConfirmDlt, setUserIdConfirmDlt] = useState<string | null>(null);
+
+  // Edit User State
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editFullName, setEditFullName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editDepartment, setEditDepartment] = useState("");
+  const [editBranch, setEditBranch] = useState("");
+  const [editRole, setEditRole] = useState<UserRole>(UserRole.STAFF);
+  const [editStatus, setEditStatus] = useState<UserStatus>(UserStatus.PENDING);
+
+  const handleStartEditUser = (u: User) => {
+    setEditingUser(u);
+    setEditFullName(u.fullName);
+    setEditPhone(u.phone);
+    setEditDepartment(u.department);
+    setEditBranch(u.branch);
+    setEditRole(u.role);
+    setEditStatus(u.status);
+  };
+
+  const handleSaveEditedUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    const updatedUser: User = {
+      ...editingUser,
+      fullName: editFullName.trim(),
+      phone: editPhone.trim(),
+      department: editDepartment,
+      branch: editBranch,
+      role: editRole,
+      status: editStatus,
+    };
+    if (onUpdateUser) {
+      onUpdateUser(updatedUser);
+    }
+    setEditingUser(null);
+  };
+
+  const getLocalBranchCodeSuffix = (branchId: string) => {
+    const activeBranch = branches.find((b) => b.id === branchId);
+    if (!activeBranch) return ` (${branchId})`;
+    const brName = activeBranch.name;
+    const match = brName.match(/\(([^)]+)\)/);
+    let code = match ? match[1] : "";
+    if (!code) {
+      const nameWithoutAccents = brName
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z40-9\s]/g, "");
+      const words = nameWithoutAccents.split(/\s+/).filter(Boolean);
+      const lastWord = words[words.length - 1];
+      if (lastWord && lastWord === lastWord.toUpperCase() && lastWord.length >= 2) {
+        code = lastWord;
+      } else {
+        code = words.map(w => w[0]?.toUpperCase()).join("");
+      }
+    }
+    return ` (${code})`;
+  };
 
   const handleSelectCompany = (compId: string) => {
     setSelectedCompanyId(compId);
@@ -637,6 +721,15 @@ export default function DashboardDesktop({
                             </td>
                             <td className="p-4 text-center">
                               <div className="flex justify-center items-center gap-2 select-none">
+                                <button
+                                  onClick={() => handleStartEditUser(u)}
+                                  className="p-1 px-2.5 text-[#1e3a8a] bg-blue-50 border border-blue-200 hover:bg-blue-100 rounded cursor-pointer text-[10px] font-bold flex items-center gap-1 transition-colors"
+                                  title="Chỉnh sửa thông tin"
+                                >
+                                  <Edit className="w-2.5 h-2.5" />
+                                  <T>SỬA</T>
+                                </button>
+
                                 {u.status === UserStatus.PENDING && (
                                   <button
                                     onClick={() => onUpdateUserStatus(u.id, UserStatus.ACTIVE)}
@@ -669,17 +762,35 @@ export default function DashboardDesktop({
                                 )}
 
                                 {!isSelf && (
-                                  <button
-                                    onClick={() => {
-                                      if (confirm(`Bạn chắc chắn muốn xóa nhân sự ${u.fullName} khỏi hệ thống?`)) {
-                                        onDeleteUser(u.id);
-                                      }
-                                    }}
-                                    className="p-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded cursor-pointer"
-                                    title="Xóa nhân viên"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
+                                  userIdConfirmDlt === u.id ? (
+                                    <div className="flex items-center gap-1 justify-end">
+                                      <button
+                                        onClick={() => {
+                                          onDeleteUser(u.id);
+                                          setUserIdConfirmDlt(null);
+                                        }}
+                                        className="bg-rose-650 hover:bg-rose-700 text-white font-extrabold text-[9px] px-1.5 py-0.5 rounded transition-colors cursor-pointer uppercase shrink-0"
+                                      >
+                                        <span translate="no" className="notranslate">Xóa</span>
+                                      </button>
+                                      <button
+                                        onClick={() => setUserIdConfirmDlt(null)}
+                                        className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold text-[9px] px-1.5 py-0.5 rounded transition-colors cursor-pointer uppercase shrink-0"
+                                      >
+                                        <span translate="no" className="notranslate">Hủy</span>
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => {
+                                        setUserIdConfirmDlt(u.id);
+                                      }}
+                                      className="p-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded cursor-pointer"
+                                      title="Xóa nhân viên"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )
                                 )}
                               </div>
                             </td>
@@ -690,6 +801,151 @@ export default function DashboardDesktop({
                   </table>
                 </div>
               </div>
+
+              {/* Edit User Modal */}
+              {editingUser && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-[999] transition-all">
+                  <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-6 max-w-md w-full relative">
+                    <button
+                      onClick={() => setEditingUser(null)}
+                      className="absolute top-4 right-4 w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-800 flex items-center justify-center text-xs font-bold transition-all cursor-pointer"
+                      title="Đóng"
+                    >
+                      ✕
+                    </button>
+
+                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+                      <Edit className="w-4 h-4 text-[#1e3a8a]" />
+                      <T>CHỈNH SỬA THÔNG TIN NHÂN VIÊN</T>
+                    </h3>
+
+                    <form onSubmit={handleSaveEditedUser} className="space-y-4">
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">
+                          <T>Họ và tên nhân viên</T>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={editFullName}
+                          onChange={(e) => setEditFullName(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">
+                          <T>Mã nhân sự (Không thể sửa)</T>
+                        </label>
+                        <input
+                          type="text"
+                          disabled
+                          value={editingUser.id}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-400 bg-slate-100 select-none cursor-not-allowed"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">
+                          <T>Số điện thoại</T>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={editPhone}
+                          onChange={(e) => setEditPhone(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">
+                          <T>Bộ phận / Đơn vị</T>
+                        </label>
+                        <select
+                          value={editDepartment}
+                          onChange={(e) => setEditDepartment(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all cursor-pointer"
+                        >
+                          {departments.map((dept) => (
+                            <option key={dept.id} value={dept.name}>
+                              {dept.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">
+                          <T>Chi nhánh đại diện</T>
+                        </label>
+                        <select
+                          value={editBranch}
+                          onChange={(e) => setEditBranch(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all cursor-pointer"
+                        >
+                          {branches.map((br) => (
+                            <option key={br.id} value={br.name}>
+                              {br.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">
+                            <T>Vai trò</T>
+                          </label>
+                          <select
+                            value={editRole}
+                            disabled={editingUser.id === currentUser.id}
+                            onChange={(e) => setEditRole(e.target.value as UserRole)}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all cursor-pointer"
+                          >
+                            <option value={UserRole.ADMIN}>{UserRole.ADMIN}</option>
+                            <option value={UserRole.REVIEWER}>{UserRole.REVIEWER}</option>
+                            <option value={UserRole.STAFF}>{UserRole.STAFF}</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">
+                            <T>Trạng thái</T>
+                          </label>
+                          <select
+                            value={editStatus}
+                            disabled={editingUser.id === currentUser.id}
+                            onChange={(e) => setEditStatus(e.target.value as UserStatus)}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all cursor-pointer"
+                          >
+                            <option value={UserStatus.ACTIVE}>{UserStatus.ACTIVE}</option>
+                            <option value={UserStatus.PENDING}>{UserStatus.PENDING}</option>
+                            <option value={UserStatus.LOCKED}>{UserStatus.LOCKED}</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="pt-3 flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditingUser(null)}
+                          className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg transition-all cursor-pointer uppercase"
+                        >
+                          <T>HỦY BỎ</T>
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-4 py-2 bg-[#1e3a8a] hover:bg-[#152862] text-white text-xs font-bold rounded-lg shadow-md transition-all cursor-pointer uppercase flex items-center gap-1"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          <T>CẬP NHẬT</T>
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -724,45 +980,161 @@ export default function DashboardDesktop({
                   <div className="flex-1 mt-4 space-y-2.5 overflow-y-auto pr-1">
                     {companies.map((c) => {
                       const isSelected = selectedCompanyId === c.id;
+                      const isEditing = editingCompanyId === c.id;
+
                       return (
                         <div
                           key={c.id}
-                          onClick={() => handleSelectCompany(c.id)}
+                          onClick={() => !isEditing && handleSelectCompany(c.id)}
                           className={`p-3 rounded-lg flex justify-between items-center border transition-all cursor-pointer ${
                             isSelected
                               ? "bg-purple-50 border-purple-300 shadow-sm font-bold text-purple-900"
                               : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700"
                           }`}
                         >
-                          <div className="flex items-center gap-2">
-                            {isSelected && <Check className="w-3.5 h-3.5 text-purple-600 shrink-0" />}
-                            <span translate="no" className="notranslate text-xs font-bold leading-normal">{c.name}</span>
-                          </div>
-                          <span translate="no" className="notranslate text-[9px] text-slate-400 font-mono shrink-0">ID: {c.id}</span>
+                          {isEditing ? (
+                            <div className="flex flex-col gap-2 flex-1 w-full p-2 bg-white rounded border border-purple-200" onClick={(e) => e.stopPropagation()}>
+                              <div>
+                                <label className="text-[10px] text-purple-700 font-bold block mb-1">TÊN CÔNG TY</label>
+                                <input
+                                  type="text"
+                                  value={editingCompanyName}
+                                  onChange={(e) => setEditingCompanyName(e.target.value)}
+                                  className="bg-slate-50 border border-slate-200 rounded px-2.5 py-1 text-xs text-slate-800 w-full focus:outline-none focus:ring-1 focus:ring-purple-500 font-normal animate-none"
+                                  autoFocus
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-purple-700 font-bold block mb-1">MÃ ID CÔNG TY</label>
+                                <input
+                                  type="text"
+                                  value={editingCompanyIdInput}
+                                  onChange={(e) => setEditingCompanyIdInput(e.target.value.replace(/\s+/g, ""))}
+                                  className="bg-slate-50 border border-slate-200 rounded px-2.5 py-1 text-xs text-slate-800 w-full focus:outline-none focus:ring-1 focus:ring-purple-500 font-normal font-mono"
+                                />
+                              </div>
+                              <div className="flex gap-2 justify-end mt-1">
+                                <button
+                                  onClick={() => {
+                                    if (!editingCompanyName.trim()) return;
+                                    const finalId = editingCompanyIdInput.trim() || c.id;
+                                    if (onUpdateCompany) {
+                                      onUpdateCompany(c.id, { id: finalId, name: editingCompanyName.trim() });
+                                    }
+                                    setEditingCompanyId(null);
+                                  }}
+                                  className="px-2.5 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded text-[10px] font-bold transition-colors cursor-pointer shrink-0"
+                                >
+                                  <span translate="no" className="notranslate">Lưu</span>
+                                </button>
+                                <button
+                                  onClick={() => setEditingCompanyId(null)}
+                                  className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-[10px] font-bold transition-colors cursor-pointer shrink-0"
+                                >
+                                  <span translate="no" className="notranslate">Hủy</span>
+                                </button>
+                              </div>
+                            </div>
+                          ) : companyIdConfirmDlt === c.id ? (
+                            <div className="flex items-center justify-between w-full" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center gap-1.5 min-w-0 mr-1.5">
+                                <span className="text-[10px] text-rose-600 font-extrabold select-none uppercase tracking-wider">
+                                  <span translate="no" className="notranslate">Xác nhận xóa?</span>
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  onClick={() => {
+                                    onDeleteCompany(c.id);
+                                    if (selectedCompanyId === c.id) {
+                                      const remaining = companies.filter(item => item.id !== c.id);
+                                      if (remaining.length > 0) {
+                                        handleSelectCompany(remaining[0].id);
+                                      } else {
+                                        setSelectedCompanyId("");
+                                        setSelectedBranchId("");
+                                      }
+                                    }
+                                    setCompanyIdConfirmDlt(null);
+                                  }}
+                                  className="bg-rose-650 hover:bg-rose-700 text-white font-extrabold text-[9px] px-2 py-1 rounded transition-colors cursor-pointer uppercase shrink-0"
+                                >
+                                  <span translate="no" className="notranslate">Xóa</span>
+                                </button>
+                                <button
+                                  onClick={() => setCompanyIdConfirmDlt(null)}
+                                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold text-[9px] px-2 py-1 rounded transition-colors cursor-pointer uppercase shrink-0"
+                                >
+                                  <span translate="no" className="notranslate">Hủy</span>
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-between w-full">
+                              <div className="flex items-center gap-2 min-w-0 mr-2">
+                                {isSelected && <Check className="w-3.5 h-3.5 text-purple-600 shrink-0" />}
+                                <span translate="no" className="notranslate text-xs font-bold leading-normal truncate block">{c.name}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                <span translate="no" className="notranslate text-[9px] text-slate-400 font-mono">ID: {c.id}</span>
+                                <button
+                                  onClick={() => {
+                                    setEditingCompanyId(c.id);
+                                    setEditingCompanyName(c.name);
+                                    setEditingCompanyIdInput(c.id);
+                                  }}
+                                  className="text-slate-400 hover:text-purple-650 p-1 rounded hover:bg-slate-200/50 transition-colors cursor-pointer"
+                                  title="Chỉnh sửa tên và ID Công ty"
+                                >
+                                  <Edit className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setCompanyIdConfirmDlt(c.id);
+                                  }}
+                                  className="text-slate-400 hover:text-rose-650 p-1 rounded hover:bg-slate-200/50 transition-colors cursor-pointer shrink-0"
+                                  title="Xóa vĩnh viễn Công ty"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
                   </div>
 
-                  <div className="mt-4 pt-4 border-t border-slate-100 flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Nhập tên Công ty..."
-                      value={newCompanyName}
-                      onChange={(e) => setNewCompanyName(e.target.value)}
-                      className="flex-1 bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-purple-500 shadow-sm"
-                    />
+                  <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        placeholder="Tên Công ty..."
+                        value={newCompanyName}
+                        onChange={(e) => setNewCompanyName(e.target.value)}
+                        className="bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-purple-500 shadow-sm"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Mã ID (tùy chọn)..."
+                        value={newCompanyId}
+                        onChange={(e) => setNewCompanyId(e.target.value.replace(/\s+/g, ""))}
+                        className="bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-purple-500 shadow-sm font-mono"
+                      />
+                    </div>
                     <button
                       onClick={() => {
                         if (!newCompanyName.trim()) return;
-                        const newId = `COMP-${Date.now()}`;
-                        onAddCompany({ id: newId, name: newCompanyName.trim() });
-                        setSelectedCompanyId(newId);
+                        const finalId = newCompanyId.trim() || `COMP-${Date.now()}`;
+                        onAddCompany({ id: finalId, name: newCompanyName.trim() });
+                        setSelectedCompanyId(finalId);
                         setNewCompanyName("");
+                        setNewCompanyId("");
                       }}
-                      className="px-3 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs font-bold transition-colors cursor-pointer shadow-sm flex items-center justify-center"
+                      className="w-full py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs font-bold transition-colors cursor-pointer shadow-sm flex items-center justify-center gap-1"
                     >
                       <Plus className="w-4 h-4" />
+                      <span translate="no" className="notranslate">Thêm Công ty</span>
                     </button>
                   </div>
                 </div>
@@ -793,66 +1165,156 @@ export default function DashboardDesktop({
                     ) : (
                       activeCompanyBranches.map((b) => {
                         const isSelected = activeBranchId === b.id;
+                        const isEditing = editingBranchId === b.id;
+
                         return (
                           <div
                             key={b.id}
-                            onClick={() => setSelectedBranchId(b.id)}
+                            onClick={() => !isEditing && setSelectedBranchId(b.id)}
                             className={`p-3 rounded-lg flex justify-between items-center border transition-all cursor-pointer ${
                               isSelected
                                 ? "bg-emerald-50 border-emerald-300 shadow-sm font-bold text-emerald-900"
                                 : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700"
                             }`}
                           >
-                            <div className="flex-1 min-w-0 pr-2">
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
-                                <span translate="no" className="notranslate text-xs font-bold truncate block">{b.name}</span>
+                            {isEditing ? (
+                              <div className="flex flex-col gap-2 flex-1 w-full p-2 bg-white rounded border border-emerald-200" onClick={(e) => e.stopPropagation()}>
+                                <div>
+                                  <label className="text-[10px] text-emerald-700 font-bold block mb-1">TÊN CHI NHÁNH / VPĐD</label>
+                                  <input
+                                    type="text"
+                                    value={editingBranchName}
+                                    onChange={(e) => setEditingBranchName(e.target.value)}
+                                    className="bg-slate-50 border border-slate-200 rounded px-2.5 py-1 text-xs text-slate-800 w-full focus:outline-none focus:ring-1 focus:ring-emerald-500 font-normal"
+                                    autoFocus
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-emerald-700 font-bold block mb-1">MÃ ID CHI NHÁNH</label>
+                                  <input
+                                    type="text"
+                                    value={editingBranchIdInput}
+                                    onChange={(e) => setEditingBranchIdInput(e.target.value.replace(/\s+/g, ""))}
+                                    className="bg-slate-50 border border-slate-200 rounded px-2.5 py-1 text-xs text-slate-800 w-full focus:outline-none focus:ring-1 focus:ring-emerald-500 font-normal font-mono"
+                                  />
+                                </div>
+                                <div className="flex gap-2 justify-end mt-1">
+                                  <button
+                                    onClick={() => {
+                                      if (!editingBranchName.trim()) return;
+                                      const finalId = editingBranchIdInput.trim() || b.id;
+                                      if (onUpdateBranch) {
+                                        onUpdateBranch(b.id, { ...b, id: finalId, name: editingBranchName.trim() });
+                                      }
+                                      setEditingBranchId(null);
+                                    }}
+                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold transition-colors cursor-pointer shrink-0"
+                                  >
+                                    <span translate="no" className="notranslate">Lưu</span>
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingBranchId(null)}
+                                    className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-[10px] font-bold transition-colors cursor-pointer shrink-0"
+                                  >
+                                    <span translate="no" className="notranslate">Hủy</span>
+                                  </button>
+                                </div>
                               </div>
-                              {b.isScoring && (
-                                <span translate="no" className="notranslate text-[8px] text-rose-600 font-extrabold uppercase mt-0.5 block tracking-wider font-mono">
-                                  CÓ ĐÁNH GIÁ 4M1E1I
-                                </span>
-                              )}
-                            </div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onDeleteBranch(b.id);
-                              }}
-                              className="text-slate-400 hover:text-rose-650 p-1.5 rounded hover:bg-slate-200/50 transition-colors cursor-pointer shrink-0"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            ) : (
+                              <>
+                                <div className="flex-1 min-w-0 pr-2">
+                                  <div className="flex items-center gap-1.5">
+                                    {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                                    <span translate="no" className="notranslate text-xs font-bold text-slate-800 block truncate leading-normal">
+                                      {b.name}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 mt-0.5 select-none">
+                                    <span translate="no" className="notranslate text-[9px] text-slate-400 font-mono font-medium">ID: {b.id}</span>
+                                    {b.isScoring && (
+                                      <span translate="no" className="notranslate text-[8px] font-bold bg-rose-50 text-rose-600 border border-rose-200 px-1 rounded uppercase tracking-wide">
+                                        ĐÁNH GIÁ 4M1E1I
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    onClick={() => {
+                                      if (onUpdateBranch) {
+                                        onUpdateBranch(b.id, { ...b, isScoring: !b.isScoring });
+                                      }
+                                    }}
+                                    className={`p-1.5 rounded hover:bg-slate-200/50 transition-colors cursor-pointer shrink-0 ${
+                                      b.isScoring ? "text-rose-600 hover:text-rose-700" : "text-slate-400 hover:text-emerald-600"
+                                    }`}
+                                    title={b.isScoring ? "Tắt Đánh Giá 4M1E1I" : "Bật Đánh Giá 4M1E1I"}
+                                  >
+                                    <CheckSquare className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setEditingBranchId(b.id);
+                                      setEditingBranchName(b.name);
+                                      setEditingBranchIdInput(b.id);
+                                    }}
+                                    className="text-slate-400 hover:text-emerald-650 p-1.5 rounded hover:bg-slate-200/50 transition-colors cursor-pointer"
+                                    title="Chỉnh sửa Chi nhánh"
+                                  >
+                                    <Edit className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      onDeleteBranch(b.id);
+                                    }}
+                                    className="text-slate-400 hover:text-rose-650 p-1.5 rounded hover:bg-slate-200/50 transition-colors cursor-pointer shrink-0"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </>
+                            )}
                           </div>
                         );
                       })
                     )}
                   </div>
 
-                  <div className="mt-4 pt-4 border-t border-slate-100 flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Nhập tên Chi nhánh..."
-                      value={newBranchName}
-                      onChange={(e) => setNewBranchName(e.target.value)}
-                      className="flex-1 bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-sm"
-                    />
+                  <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        placeholder="Tên Chi nhánh..."
+                        value={newBranchName}
+                        onChange={(e) => setNewBranchName(e.target.value)}
+                        className="flex-1 bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-sm"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Mã ID (tùy chọn)..."
+                        value={newBranchId}
+                        onChange={(e) => setNewBranchId(e.target.value.replace(/\s+/g, ""))}
+                        className="bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-sm font-mono"
+                      />
+                    </div>
                     <button
                       onClick={() => {
                         if (!newBranchName.trim()) return;
-                        const newId = `BRANCH-${Date.now()}`;
+                        const finalId = newBranchId.trim() || `BRANCH-${Date.now()}`;
                         onAddBranch({
-                           id: newId,
+                           id: finalId,
                            name: newBranchName.trim(),
                            companyId: selectedCompanyId,
                            isScoring: true
                         });
-                        setSelectedBranchId(newId);
+                        setSelectedBranchId(finalId);
                         setNewBranchName("");
+                        setNewBranchId("");
                       }}
-                      className="px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold transition-colors cursor-pointer shadow-sm flex items-center justify-center"
+                      className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold transition-colors cursor-pointer shadow-sm flex items-center justify-center gap-1"
                     >
                       <Plus className="w-4 h-4" />
+                      <span translate="no" className="notranslate">Thêm Chi nhánh</span>
                     </button>
                   </div>
                 </div>
@@ -879,51 +1341,143 @@ export default function DashboardDesktop({
                         <span translate="no" className="notranslate">Chưa có bộ phận nào thuộc chi nhánh này.</span>
                       </div>
                     ) : (
-                      activeBranchDepartments.map((d) => (
-                        <div key={d.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-lg flex justify-between items-center border border-slate-200">
-                          <div>
-                            <span translate="no" className="notranslate text-xs font-bold text-slate-800 block">{d.name}</span>
-                            {d.name.startsWith(STANDARDIZED_QC_DEPT) && (
-                              <span translate="no" className="notranslate text-[8px] bg-blue-50 text-blue-700 px-1.5 py-[1.5px] rounded border border-blue-200 tracking-wider inline-block font-mono font-bold mt-1">
-                                BP TIÊU CHUẨN
-                              </span>
+                      activeBranchDepartments.map((d) => {
+                        const isEditing = editingDeptId === d.id;
+                        return (
+                          <div key={d.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-lg flex justify-between items-center border border-slate-200">
+                            {isEditing ? (
+                              <div className="flex flex-col gap-2 flex-1 w-full p-2 bg-white rounded border border-amber-200" onClick={(e) => e.stopPropagation()}>
+                                <div>
+                                  <label className="text-[10px] text-amber-700 font-bold block mb-1">TÊN BỘ PHẬN / ĐƠN VỊ</label>
+                                  <input
+                                    type="text"
+                                    value={editingDeptName}
+                                    onChange={(e) => setEditingDeptName(e.target.value)}
+                                    className="bg-slate-50 border border-slate-200 rounded px-2.5 py-1 text-xs text-slate-800 w-full focus:outline-none focus:ring-1 focus:ring-amber-500 font-normal"
+                                    autoFocus
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-amber-700 font-bold block mb-1">MÃ ID BỘ PHẬN</label>
+                                  <input
+                                    type="text"
+                                    value={editingDeptIdInput}
+                                    onChange={(e) => setEditingDeptIdInput(e.target.value.replace(/\s+/g, ""))}
+                                    className="bg-slate-50 border border-slate-200 rounded px-2.5 py-1 text-xs text-slate-800 w-full focus:outline-none focus:ring-1 focus:ring-amber-500 font-normal font-mono"
+                                  />
+                                </div>
+                                <div className="flex gap-2 justify-end mt-1">
+                                  <button
+                                    onClick={() => {
+                                      if (!editingDeptName.trim()) return;
+                                      let cleanName = editingDeptName.trim();
+                                      const suffix = getLocalBranchCodeSuffix(d.branchId);
+                                      if (!cleanName.endsWith(suffix)) {
+                                        cleanName = cleanName.replace(/\s\([A-Z0-9-]+\)$/, "").trim();
+                                        cleanName = `${cleanName}${suffix}`;
+                                      }
+                                      const finalId = editingDeptIdInput.trim() || d.id;
+                                      if (onUpdateDepartment) {
+                                        onUpdateDepartment(d.id, { ...d, id: finalId, name: cleanName });
+                                      }
+                                      setEditingDeptId(null);
+                                    }}
+                                    className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-[10px] font-bold transition-colors cursor-pointer shrink-0"
+                                  >
+                                    <span translate="no" className="notranslate">Lưu</span>
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingDeptId(null)}
+                                    className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-[10px] font-bold transition-colors cursor-pointer shrink-0"
+                                  >
+                                    <span translate="no" className="notranslate">Hủy</span>
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="min-w-0 flex-1 pr-2">
+                                  <span translate="no" className="notranslate text-xs font-bold text-slate-800 block leading-normal break-words">{d.name}</span>
+                                  <div className="flex items-center gap-1.5 mt-1 select-none flex-wrap">
+                                    <span translate="no" className="notranslate text-[9px] text-slate-400 font-mono font-medium">ID: {d.id}</span>
+                                    {d.name.startsWith(STANDARDIZED_QC_DEPT) && (
+                                      <span translate="no" className="notranslate text-[8px] bg-blue-50 text-blue-700 px-1 py-[0.5px] rounded border border-blue-200 tracking-wider font-mono font-bold">
+                                        BP TIÊU CHUẨN
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    onClick={() => {
+                                      const suffix = getLocalBranchCodeSuffix(d.branchId);
+                                      let displayName = d.name;
+                                      if (displayName.endsWith(suffix)) {
+                                        displayName = displayName.substring(0, displayName.length - suffix.length);
+                                      } else {
+                                        displayName = displayName.replace(/\s\([A-Z0-9-]+\)$/, "").trim();
+                                      }
+                                      setEditingDeptId(d.id);
+                                      setEditingDeptName(displayName);
+                                      setEditingDeptIdInput(d.id);
+                                    }}
+                                    className="text-slate-400 hover:text-amber-650 p-1.5 rounded hover:bg-slate-200/50 transition-colors cursor-pointer"
+                                    title="Chỉnh sửa Bộ phận"
+                                  >
+                                    <Edit className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => onDeleteDepartment(d.id)}
+                                    className="text-slate-400 hover:text-rose-650 p-1.5 rounded hover:bg-slate-200/50 transition-colors cursor-pointer shrink-0"
+                                    disabled={d.name.startsWith(STANDARDIZED_QC_DEPT)} // Cannot delete default standardized
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5 disabled:opacity-30" />
+                                  </button>
+                                </div>
+                              </>
                             )}
                           </div>
-                          <button
-                            onClick={() => onDeleteDepartment(d.id)}
-                            className="text-slate-400 hover:text-rose-650 p-1.5 rounded hover:bg-slate-200/50 transition-colors cursor-pointer"
-                            disabled={d.name.startsWith(STANDARDIZED_QC_DEPT)} // Cannot delete default standardized
-                          >
-                            <Trash2 className="w-3.5 h-3.5 disabled:opacity-30" />
-                          </button>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
 
-                  <div className="mt-4 pt-4 border-t border-slate-100 flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Nhập tên Bộ phận..."
-                      value={newDeptName}
-                      disabled={activeBranchId === ""}
-                      onChange={(e) => setNewDeptName(e.target.value)}
-                      className="flex-1 bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm disabled:opacity-55"
-                    />
+                  <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        placeholder="Nhập tên Bộ phận..."
+                        value={newDeptName}
+                        disabled={activeBranchId === ""}
+                        onChange={(e) => setNewDeptName(e.target.value)}
+                        className="bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm disabled:opacity-55"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Mã ID (tùy chọn)..."
+                        value={newDeptId}
+                        disabled={activeBranchId === ""}
+                        onChange={(e) => setNewDeptId(e.target.value.replace(/\s+/g, ""))}
+                        className="bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm font-mono disabled:opacity-55"
+                      />
+                    </div>
                     <button
                       onClick={() => {
                         if (!newDeptName.trim() || activeBranchId === "") return;
+                        const finalId = newDeptId.trim() || `DEPT-${Date.now()}`;
                         onAddDepartment({
-                          id: `DEPT-${Date.now()}`,
+                          id: finalId,
                           name: newDeptName.trim(),
                           branchId: activeBranchId
                         });
                         setNewDeptName("");
+                        setNewDeptId("");
                       }}
                       disabled={activeBranchId === ""}
-                      className="px-3 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs font-bold transition-colors cursor-pointer shadow-sm flex items-center justify-center disabled:opacity-55"
+                      className="w-full py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs font-bold transition-colors cursor-pointer shadow-sm flex items-center justify-center gap-1 disabled:opacity-55"
                     >
                       <Plus className="w-4 h-4" />
+                      <span translate="no" className="notranslate">Thêm Bộ phận</span>
                     </button>
                   </div>
                 </div>

@@ -107,23 +107,36 @@ export default function App() {
 
   const [companies, setCompanies] = useState<Company[]>(() => {
     const saved = localStorage.getItem("4m1e1i_companies");
-    return saved ? JSON.parse(saved) : initialCompanies;
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return parsed.filter((c: any) => {
+        const idUpper = (c.id || "").toUpperCase();
+        const nameUpper = (c.name || "").toUpperCase();
+        return !idUpper.includes("DNP") && !nameUpper.includes("DNP");
+      });
+    }
+    return initialCompanies;
   });
 
   const [branches, setBranches] = useState<Branch[]>(() => {
     const saved = localStorage.getItem("4m1e1i_branches");
     if (saved) {
-      const parsed = JSON.parse(saved).map((b: any) => ({
-        ...b,
-        name: b.name
-          .replace(" (CNBN)", "")
-          .replace(" (CNLA)", "")
-          .replace(" (NM314)", ""),
-        isScoring: b.id === "TPP-CTY" ? true : b.isScoring
-      }));
-      if (parsed.length >= 4 && parsed.some((b: any) => b.id === "TPP-314")) {
-        return parsed;
-      }
+      const parsed = JSON.parse(saved);
+      return parsed
+        .filter((b: any) => {
+          const idUpper = (b.id || "").toUpperCase();
+          const coIdUpper = (b.companyId || "").toUpperCase();
+          const nameUpper = (b.name || "").toUpperCase();
+          return !idUpper.includes("DNP") && !coIdUpper.includes("DNP") && !nameUpper.includes("DNP");
+        })
+        .map((b: any) => ({
+          ...b,
+          name: b.name
+            .replace(" (CNBN)", "")
+            .replace(" (CNLA)", "")
+            .replace(" (NM314)", ""),
+          isScoring: b.id === "TPP-CTY" ? true : b.isScoring
+        }));
     }
     return initialBranches;
   });
@@ -132,26 +145,30 @@ export default function App() {
     const saved = localStorage.getItem("4m1e1i_departments");
     if (saved) {
       const parsed = JSON.parse(saved);
-      const formatted = parsed.map((d: any) => {
-        let cleanName = d.name || "";
-        cleanName = cleanName.replace(/Quản\s+lí/gi, "Quản Lý");
-        cleanName = cleanName.replace(/quản\s+lí/gi, "Quản Lý");
-        cleanName = cleanName.replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng");
-        cleanName = cleanName.replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
+      return parsed
+        .filter((d: any) => {
+          const idUpper = (d.id || "").toUpperCase();
+          const brIdUpper = (d.branchId || "").toUpperCase();
+          const nameUpper = (d.name || "").toUpperCase();
+          return !idUpper.includes("DNP") && !brIdUpper.includes("DNP") && !nameUpper.includes("DNP");
+        })
+        .map((d: any) => {
+          let cleanName = d.name || "";
+          cleanName = cleanName.replace(/Quản\s+lí/gi, "Quản Lý");
+          cleanName = cleanName.replace(/quản\s+lí/gi, "Quản Lý");
+          cleanName = cleanName.replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng");
+          cleanName = cleanName.replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
 
-        const suffix = ` (${d.branchId})`;
-        if (cleanName.endsWith(suffix)) {
-          cleanName = cleanName.substring(0, cleanName.length - suffix.length);
-        }
-        cleanName = cleanName.replace(/\s\([A-Z0-9-]+\)$/, "").trim();
-        return {
-          ...d,
-          name: `${cleanName}${suffix}`
-        };
-      });
-      if (formatted.length >= 10 && formatted.some((d: any) => d.branchId === "TPP-314")) {
-        return formatted;
-      }
+          const suffix = ` (${d.branchId})`;
+          if (cleanName.endsWith(suffix)) {
+            cleanName = cleanName.substring(0, cleanName.length - suffix.length);
+          }
+          cleanName = cleanName.replace(/\s\([A-Z0-9-]+\)$/, "").trim();
+          return {
+            ...d,
+            name: `${cleanName}${suffix}`
+          };
+        });
     }
     return initialDepartments;
   });
@@ -215,6 +232,36 @@ export default function App() {
   const [showMobilePreview, setShowMobilePreview] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingReport, setEditingReport] = useState<QualityReport | null>(null);
+
+  const [mobileUIConfig, setMobileUIConfig] = useState(() => {
+    const saved = localStorage.getItem("4m1e1i_mobile_ui_config");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (err) {
+        // ignore
+      }
+    }
+    return {
+      displayRule: "clean",
+      columns: 2,
+      padding: "normal",
+      colorTheme: "blue",
+      fontSize: "xs",
+      customAliases: {
+        "TPP-CTY": "VP Công Ty",
+        "TPP-BNI": "Bắc Ninh",
+        "TPP-LAN": "Long An",
+        "TPP-314": "Nhà máy 314"
+      }
+    };
+  });
+
+  useEffect(() => {
+    localStorage.setItem("4m1e1i_mobile_ui_config", JSON.stringify(mobileUIConfig));
+  }, [mobileUIConfig]);
+
+  const [showConfigPanel, setShowConfigPanel] = useState(false);
 
   // Sign up and login screens
   const [authScreen, setAuthScreen] = useState<"LOGIN" | "REGISTER">("LOGIN");
@@ -771,13 +818,127 @@ export default function App() {
     setUsers((prev) => [...prev, user]);
   };
 
+  const handleUpdateUser = (updatedUser: User) => {
+    setUsers((prev) => prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)));
+    if (currentUser && currentUser.id === updatedUser.id) {
+      setCurrentUser(updatedUser);
+    }
+    if (dbConnected) {
+      saveDocument(COLLECTIONS.USERS, updatedUser.id, updatedUser).catch(console.error);
+    }
+  };
+
   // Code list lookup managers
   const handleAddCompany = (c: Company) => {
     setCompanies((prev) => [...prev, c]);
   };
 
+  const handleUpdateCompany = (oldId: string, updated: Company) => {
+    // 1. If ID was modified, cascade update all branches' companyId
+    if (oldId !== updated.id) {
+      setBranches((prev) => prev.map((b) => b.companyId === oldId ? { ...b, companyId: updated.id } : b));
+    }
+    // 2. Replace the company
+    setCompanies((prev) => {
+      const filtered = prev.filter((c) => c.id !== oldId);
+      return [...filtered, updated];
+    });
+  };
+
+  const getBranchCodeSuffix = (brName: string) => {
+    const match = brName.match(/\(([^)]+)\)/);
+    let code = match ? match[1] : "";
+    if (!code) {
+      const nameWithoutAccents = brName
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z40-9\s]/g, "");
+      const words = nameWithoutAccents.split(/\s+/).filter(Boolean);
+      const lastWord = words[words.length - 1];
+      if (lastWord && lastWord === lastWord.toUpperCase() && lastWord.length >= 2) {
+        code = lastWord;
+      } else {
+        code = words.map(w => w[0]?.toUpperCase()).join("");
+      }
+    }
+    return ` (${code})`;
+  };
+
   const handleAddBranch = (b: Branch) => {
     setBranches((prev) => [...prev, b]);
+  };
+
+  const handleUpdateBranch = (oldId: string, updated: Branch) => {
+    const oldBranch = branches.find(b => b.id === oldId);
+    const oldName = oldBranch ? oldBranch.name : "";
+    const newName = updated.name;
+
+    // 1. Cascade update parent references if branch ID changed
+    if (oldId !== updated.id) {
+      setDepartments((prev) => prev.map((d) => d.branchId === oldId ? { ...d, branchId: updated.id } : d));
+    }
+
+    if (oldName && oldName !== newName) {
+      // 1. Cascade update reports' factory names
+      setReports((prevReports) => prevReports.map((r) => {
+        if (r.factory === oldName) {
+          return { ...r, factory: newName };
+        }
+        return r;
+      }));
+
+      // 2. Cascade update users' branch names
+      setUsers((prevUsers) => prevUsers.map((u) => {
+        if (u.branch === oldName) {
+          return { ...u, branch: newName };
+        }
+        return u;
+      }));
+      if (currentUser && currentUser.branch === oldName) {
+        setCurrentUser((prev) => prev ? { ...prev, branch: newName } : null);
+      }
+
+      // 3. Cascade update department suffix codes belonging to this branch
+      const oldSuffix = getBranchCodeSuffix(oldName);
+      const newSuffix = getBranchCodeSuffix(newName);
+      setDepartments((prevDepts) => prevDepts.map((d) => {
+        const dBranchId = d.branchId === oldId ? updated.id : d.branchId;
+        if (d.branchId === oldId || d.branchId === updated.id) {
+          let cleanDeptName = d.name;
+          if (cleanDeptName.endsWith(oldSuffix)) {
+            cleanDeptName = cleanDeptName.substring(0, cleanDeptName.length - oldSuffix.length);
+          } else {
+            cleanDeptName = cleanDeptName.replace(/\s\([A-Z0-9-]+\)$/, "").trim();
+          }
+          return { ...d, branchId: dBranchId, name: `${cleanDeptName}${newSuffix}` };
+        }
+        return d;
+      }));
+    } else if (oldId !== updated.id) {
+      // Branch ID changed but name didn't. Still need to update department suffix if it was based on old branch ID!
+      const oldSuffix = ` (${oldId})`;
+      const newSuffix = ` (${updated.id})`;
+      const oldNameSuffix = getBranchCodeSuffix(oldName);
+      setDepartments((prevDepts) => prevDepts.map((d) => {
+        if (d.branchId === oldId) {
+          let cleanDeptName = d.name;
+          if (cleanDeptName.endsWith(oldNameSuffix)) {
+            return { ...d, branchId: updated.id };
+          }
+          if (cleanDeptName.endsWith(oldSuffix)) {
+            cleanDeptName = cleanDeptName.substring(0, cleanDeptName.length - oldSuffix.length);
+            return { ...d, branchId: updated.id, name: `${cleanDeptName}${newSuffix}` };
+          }
+          return { ...d, branchId: updated.id };
+        }
+        return d;
+      }));
+    }
+
+    setBranches((prev) => {
+      const filtered = prev.filter((b) => b.id !== oldId);
+      return [...filtered, updated];
+    });
   };
 
   const handleAddDepartment = (d: Department) => {
@@ -788,7 +949,9 @@ export default function App() {
     cleanName = cleanName.replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng");
     cleanName = cleanName.replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
 
-    const suffix = ` (${d.branchId})`;
+    const activeBranch = branches.find((b) => b.id === d.branchId);
+    const suffix = activeBranch ? getBranchCodeSuffix(activeBranch.name) : ` (${d.branchId})`;
+
     if (!cleanName.endsWith(suffix)) {
       cleanName = cleanName.replace(/\s\([A-Z0-9-]+\)$/, "").trim();
     } else {
@@ -805,6 +968,65 @@ export default function App() {
     setDepartments((prev) => [...prev, d]);
   };
 
+  const handleUpdateDepartment = (oldId: string, updated: Department) => {
+    let cleanName = updated.name.trim();
+    // Auto-correct spelling issues:
+    cleanName = cleanName.replace(/Quản\s+lí/gi, "Quản Lý");
+    cleanName = cleanName.replace(/quản\s+lí/gi, "Quản Lý");
+    cleanName = cleanName.replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng");
+    cleanName = cleanName.replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
+
+    const activeBranch = branches.find((b) => b.id === updated.branchId);
+    const suffix = activeBranch ? getBranchCodeSuffix(activeBranch.name) : ` (${updated.branchId})`;
+
+    if (!cleanName.endsWith(suffix)) {
+      cleanName = cleanName.replace(/\s\([A-Z0-9-]+\)$/, "").trim();
+      cleanName = `${cleanName}${suffix}`;
+    }
+
+    updated = {
+      ...updated,
+      name: cleanName
+    };
+
+    const oldDept = departments.find(d => d.id === oldId);
+    const oldName = oldDept ? oldDept.name : "";
+    const newName = updated.name;
+
+    if (oldName && oldName !== newName) {
+      // Cascade update reports' department names (both field aliases for safety)
+      setReports((prevReports) => prevReports.map((r) => {
+        let changed = false;
+        const updatedReport = { ...r };
+        if (r.uploaderDepartment === oldName) {
+          updatedReport.uploaderDepartment = newName;
+          changed = true;
+        }
+        if ((r as any).department === oldName) {
+          (updatedReport as any).department = newName;
+          changed = true;
+        }
+        return changed ? updatedReport : r;
+      }));
+
+      // Cascade update users' department names
+      setUsers((prevUsers) => prevUsers.map((u) => {
+        if (u.department === oldName) {
+          return { ...u, department: newName };
+        }
+        return u;
+      }));
+      if (currentUser && currentUser.department === oldName) {
+        setCurrentUser((prev) => prev ? { ...prev, department: newName } : null);
+      }
+    }
+
+    setDepartments((prev) => {
+      const filtered = prev.filter((d) => d.id !== oldId);
+      return [...filtered, updated];
+    });
+  };
+
   const handleDeleteBranch = (id: string) => {
     setBranches((prev) => prev.filter((b) => b.id !== id));
     if (dbConnected) {
@@ -819,6 +1041,13 @@ export default function App() {
     }
   };
 
+  const handleDeleteCompany = (id: string) => {
+    setCompanies((prev) => prev.filter((c) => c.id !== id));
+    if (dbConnected) {
+      deleteDocument(COLLECTIONS.COMPANIES, id);
+    }
+  };
+
   // Broadcaster Notice
   const handleAddBroadcast = (notice: string, type: string) => {
     const newNotice: BroadcastNotice = {
@@ -826,7 +1055,7 @@ export default function App() {
       type,
       content: notice,
       sender: currentUser?.fullName || "Hệ thống",
-      timestamp: new Date().toLocaleDateString("vi-VN")
+      timestamp: new Date().toLocaleDateString("vi-VN").replace(/\/\d{2}(\d{2})$/, "/$1")
     };
     setBroadcasts((prev) => [newNotice, ...prev]);
   };
@@ -1334,15 +1563,19 @@ export default function App() {
             onAddUser={handleAddUser}
             onDeleteUser={handleDeleteUser}
             onAddCompany={handleAddCompany}
+            onUpdateCompany={handleUpdateCompany}
             onAddBranch={handleAddBranch}
+            onUpdateBranch={handleUpdateBranch}
             onAddDepartment={handleAddDepartment}
-            onDeleteCompany={() => {}} // No delete on companies
+            onUpdateDepartment={handleUpdateDepartment}
+            onDeleteCompany={handleDeleteCompany}
             onDeleteBranch={handleDeleteBranch}
             onDeleteDepartment={handleDeleteDepartment}
             onAddBroadcast={handleAddBroadcast}
             onAddChatMessage={handleAddChatMessage}
             onLogout={() => setCurrentUser(null)}
             onToggleMobilePreview={() => setShowMobilePreview((prev) => !prev)}
+            onUpdateUser={handleUpdateUser}
 
             productionRequests={productionRequests}
             setProductionRequests={setProductionRequests}
@@ -1360,10 +1593,145 @@ export default function App() {
 
         {/* Floating/Docked elegant iPhone mockup frame on the right side if active */}
         {showMobilePreview && (
-          <div className="hidden lg:flex w-[420px] bg-[#F7F9FC] border-l border-slate-200 p-6 flex-col items-center justify-center shrink-0 overflow-y-auto select-none shadow-inner">
-            <T className="text-[10px] text-slate-500 font-extrabold uppercase tracking-widest block mb-4">
-              📱 Xem trước giao diện di động (Mobile Preview)
-            </T>
+          <div className="hidden lg:flex w-[420px] bg-[#F7F9FC] border-l border-slate-200 p-6 flex-col items-center shrink-0 overflow-y-auto select-none shadow-inner">
+            <div className="w-full flex items-center justify-between mb-4 header-mobile-controls">
+              <T className="text-[10px] text-slate-500 font-extrabold uppercase tracking-widest block">
+                📱 Xem trước giao diện di động (Mobile Preview)
+              </T>
+              <button
+                onClick={() => setShowConfigPanel(!showConfigPanel)}
+                className="text-[10px] bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-1 rounded font-bold transition-all flex items-center gap-1 cursor-pointer"
+              >
+                <span>⚙️</span>
+                <T>{showConfigPanel ? "Đóng cài đặt" : "Cấu hình di động"}</T>
+              </button>
+            </div>
+
+            {showConfigPanel && (
+              <div className="w-full bg-white p-3.5 rounded-xl border border-blue-200 shadow-md mb-4 text-slate-800 space-y-3 shrink-0">
+                <div className="border-b border-slate-105 pb-1.5">
+                  <span className="text-[11px] font-black text-[#1e3a8a] uppercase block"><T>⚙️ CHI TIẾT TÙY BIẾN GIAO DIỆN</T></span>
+                  <span className="text-[9px] text-slate-400 block leading-snug mt-0.5">
+                    <T>Khắc phục tràn chữ bằng cách gán bí danh hoặc thu giảm cỡ chữ, số cột trên điện thoại.</T>
+                  </span>
+                </div>
+
+                {/* Grid columns selector */}
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-[10px] font-extrabold text-slate-750 uppercase shrink-0"><T>Số cột hiển thị:</T></span>
+                  <div className="flex bg-slate-100 rounded-lg p-0.5">
+                    <button
+                      onClick={() => setMobileUIConfig((prev: any) => ({ ...prev, columns: 1 }))}
+                      className={`px-2.5 py-0.5 text-[10px] font-bold rounded-md ${mobileUIConfig.columns === 1 ? "bg-[#1e3a8a] text-white shadow-xs" : "text-slate-600 bg-transparent"}`}
+                    >
+                      <T>1 Cột</T>
+                    </button>
+                    <button
+                      onClick={() => setMobileUIConfig((prev: any) => ({ ...prev, columns: 2 }))}
+                      className={`px-2.5 py-0.5 text-[10px] font-bold rounded-md ${mobileUIConfig.columns === 2 ? "bg-[#1e3a8a] text-white shadow-xs" : "text-slate-600 bg-transparent"}`}
+                    >
+                      <T>2 Cột</T>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Display Rule selector */}
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] font-extrabold text-slate-750 uppercase"><T>Kiểu hiển thị tên:</T></span>
+                  <div className="grid grid-cols-3 bg-slate-100 rounded-lg p-0.5">
+                    <button
+                      onClick={() => setMobileUIConfig((prev: any) => ({ ...prev, displayRule: "clean" }))}
+                      className={`px-1 py-1 text-[9px] font-bold rounded-md ${mobileUIConfig.displayRule === "clean" ? "bg-[#1e3a8a] text-white" : "text-slate-600"}`}
+                    >
+                      <T>Mã sạch</T>
+                    </button>
+                    <button
+                      onClick={() => setMobileUIConfig((prev: any) => ({ ...prev, displayRule: "full" }))}
+                      className={`px-1 py-1 text-[9px] font-bold rounded-md ${mobileUIConfig.displayRule === "full" ? "bg-[#1e3a8a] text-white" : "text-slate-600"}`}
+                    >
+                      <T>Đầy đủ</T>
+                    </button>
+                    <button
+                      onClick={() => setMobileUIConfig((prev: any) => ({ ...prev, displayRule: "custom" }))}
+                      className={`px-1 py-1 text-[9px] font-bold rounded-md ${mobileUIConfig.displayRule === "custom" ? "bg-[#1e3a8a] text-white" : "text-slate-600"}`}
+                    >
+                      <T>Bí danh ✏️</T>
+                    </button>
+                  </div>
+                </div>
+
+                {/* FontSize selector */}
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-[10px] font-extrabold text-slate-750 uppercase shrink-0"><T>Cỡ chữ tên:</T></span>
+                  <div className="flex bg-slate-100 rounded-lg p-0.5">
+                    {["xs", "sm", "base"].map(sz => (
+                      <button
+                        key={sz}
+                        onClick={() => setMobileUIConfig((prev: any) => ({ ...prev, fontSize: sz }))}
+                        className={`px-2 py-0.5 text-[9px] font-bold rounded-md uppercase ${mobileUIConfig.fontSize === sz ? "bg-[#1e3a8a] text-white" : "text-slate-600"}`}
+                      >
+                        {sz}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Button theme selectors */}
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] font-extrabold text-slate-755 uppercase"><T>Chủ đề màu sắc (Active Theme):</T></span>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {[
+                      { id: "blue", hex: "#1e3a8a", name: "Thép xanh" },
+                      { id: "indigo", hex: "#4f46e5", name: "Chàm tối" },
+                      { id: "emerald", hex: "#0d9488", name: "Ngọc bích" },
+                      { id: "amber", hex: "#f59e0b", name: "Hổ phách" },
+                      { id: "rose", hex: "#e11d48", name: "Hồng đào" },
+                      { id: "slate", hex: "#475569", name: "Than mộc" }
+                    ].map(theme => (
+                      <button
+                        key={theme.id}
+                        type="button"
+                        onClick={() => setMobileUIConfig((prev: any) => ({ ...prev, colorTheme: theme.id }))}
+                        className={`px-2 py-0.5 rounded border text-[8px] font-bold flex items-center gap-1 transition-all ${mobileUIConfig.colorTheme === theme.id ? "border-blue-600 ring-1 ring-blue-100 bg-blue-50 text-[#1e3a8a]" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ backgroundColor: theme.hex }}></span>
+                        <span>{theme.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Custom Aliases Editor if "custom" is chosen */}
+                {mobileUIConfig.displayRule === "custom" && (
+                  <div className="border-t border-slate-100 pt-2 space-y-1.5">
+                    <span className="text-[9px] font-black text-blue-800 uppercase block"><T>✍️ BIÊN TẬP BÍ DANH CHI NHÁNH:</T></span>
+                    {branches.filter(b => b.isScoring).map(b => (
+                      <div key={b.id} className="flex items-center gap-1.5">
+                        <span className="text-[9px] font-extrabold text-slate-500 w-20 truncate block" title={b.name}>
+                          {b.name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn Phòng ", "").replace(/\s*\(TPP-[^)]+\)/, "")}
+                        </span>
+                        <input
+                          type="text"
+                          value={mobileUIConfig.customAliases?.[b.id] || ""}
+                          placeholder="Bí danh di động"
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setMobileUIConfig((prev: any) => ({
+                              ...prev,
+                              customAliases: {
+                                ...prev.customAliases,
+                                [b.id]: val
+                              }
+                            }));
+                          }}
+                          className="flex-1 px-2 py-0.5 bg-slate-50 border border-slate-200 rounded text-[10px] focus:ring-1 focus:ring-blue-500 outline-none"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {isFormOpen ? (
               <ReportForm
@@ -1375,6 +1743,8 @@ export default function App() {
                 }}
                 onSubmitReport={handleSubmitReport}
                 offlineMode={offlineMode}
+                branches={branches}
+                mobileUIConfig={mobileUIConfig}
               />
             ) : (
               <MobileFrame
@@ -1386,6 +1756,7 @@ export default function App() {
                 offlineMode={offlineMode}
                 currentUser={currentUser}
                 onUpdateReport={handleUpdateReport}
+                mobileUIConfig={mobileUIConfig}
               />
             )}
           </div>
@@ -1406,6 +1777,8 @@ export default function App() {
                 }}
                 onSubmitReport={handleSubmitReport}
                 offlineMode={offlineMode}
+                branches={branches}
+                mobileUIConfig={mobileUIConfig}
               />
             ) : (
               <MobileFrame
@@ -1417,6 +1790,7 @@ export default function App() {
                 offlineMode={offlineMode}
                 currentUser={currentUser}
                 onUpdateReport={handleUpdateReport}
+                mobileUIConfig={mobileUIConfig}
               />
             )}
 

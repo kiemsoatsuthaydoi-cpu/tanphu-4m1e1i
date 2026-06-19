@@ -35,6 +35,13 @@ import {
   ProductionRequestStatus
 } from "../types";
 
+const formatDateToShort = (d: Date = new Date()): string => {
+  const date = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = String(d.getFullYear()).slice(-2);
+  return `${date}/${month}/${year}`;
+};
+
 // Design SVGs to act as high-fidelity diagram presets for the Sales and PMC team
 const drawYokoThauRo = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='150' height='100' viewBox='0 0 150 100'><rect width='100%' height='100%' fill='%23fee2e2'/><ellipse cx='75' cy='50' rx='50' ry='25' fill='none' stroke='%23dc2626' stroke-width='2'/><ellipse cx='75' cy='55' rx='35' ry='15' fill='none' stroke='%23fca5a5' stroke-dasharray='3'/><path d='M25,50 L25,40 M125,50 L125,40' stroke='%23dc2626' stroke-width='2'/><text x='75' y='25' font-family='sans-serif' font-size='8' font-weight='bold' fill='%237f1d1d' text-anchor='middle'>SƠ ĐỒ THAU RỔ YOKO</text><text x='75' y='60' font-family='sans-serif' font-size='6' fill='%23991b1b' text-anchor='middle'>Vị trí dán Decal cách miệng 4cm</text></svg>";
 
@@ -381,7 +388,7 @@ export default function OrderPipeline({
     const newPr: ProductionRequest = {
       id: newPrId,
       requestNo: cleanNo,
-      requestDate: new Date().toLocaleDateString("vi-VN"),
+      requestDate: formatDateToShort(),
       targetBranch: newPrBranch,
       contact: newPrContact,
       department: newPrDept,
@@ -662,7 +669,7 @@ export default function OrderPipeline({
       safetyStandardDetail: oiSafetyStandardDetail,
       
       creatorName: `${currentUser.fullName} (PMC SCM)`,
-      createdAt: new Date().toLocaleDateString("vi-VN")
+      createdAt: formatDateToShort()
     };
 
     // Append to list & update parent request link

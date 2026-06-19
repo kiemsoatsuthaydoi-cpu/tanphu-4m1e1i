@@ -81,6 +81,14 @@ interface MobileFrameProps {
   offlineMode: boolean;
   currentUser?: User | null;
   onUpdateReport?: (report: QualityReport) => void;
+  mobileUIConfig?: {
+    displayRule?: "clean" | "full" | "custom";
+    columns?: number;
+    padding?: "compact" | "normal" | "spacious";
+    colorTheme?: "blue" | "indigo" | "emerald" | "amber" | "rose" | "slate";
+    fontSize?: "xs" | "sm" | "base";
+    customAliases?: Record<string, string>;
+  };
 }
 
 export default function MobileFrame({
@@ -91,8 +99,28 @@ export default function MobileFrame({
   onEditReport,
   offlineMode,
   currentUser,
-  onUpdateReport
+  onUpdateReport,
+  mobileUIConfig
 }: MobileFrameProps) {
+  const config = mobileUIConfig || {};
+  const displayRule = config.displayRule || "clean";
+  const customAliases = config.customAliases || {};
+
+  const getFactoryDisplayName = (factoryName: string) => {
+    const match = factoryName.match(/\(((?:TPP|BBM)-[^)]+)\)/i);
+    const branchId = match ? match[1].toUpperCase() : null;
+
+    if (displayRule === "custom" && branchId && customAliases[branchId]) {
+      return customAliases[branchId];
+    }
+
+    const cleanPrefix = factoryName.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn Phòng ", "");
+    if (displayRule === "clean") {
+      return cleanPrefix.replace(/\s*\(((?:TPP|BBM)-[^)]+)\)/i, "");
+    }
+    return factoryName;
+  };
+
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -693,7 +721,7 @@ App Link: ${window.location.origin}`;
                 {/* Header card info */}
                 <div className="px-3 py-2.5 bg-slate-50 border-b border-slate-100 flex justify-between items-start">
                   <div>
-                    <T className="font-bold text-[#1e3a8a] text-xs block leading-tight">{report.factory}</T>
+                    <T className="font-bold text-[#1e3a8a] text-xs block leading-tight">{getFactoryDisplayName(report.factory)}</T>
                     <T className="text-[9px] text-slate-400 block mt-0.5">{report.timestamp}</T>
                   </div>
                   {report.isAbnormal && (
