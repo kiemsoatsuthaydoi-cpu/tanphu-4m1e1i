@@ -222,6 +222,8 @@ export default function MobileFrame({
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showLocalConfigPanel, setShowLocalConfigPanel] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
+  const lastScrollTopRef = useRef(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Notification states
@@ -517,7 +519,16 @@ App Link: ${window.location.origin}`;
 
   const handleScroll = () => {
     if (scrollContainerRef.current) {
-      setShowScrollTop(scrollContainerRef.current.scrollTop > 100);
+      const scrollTop = scrollContainerRef.current.scrollTop;
+      setShowScrollTop(scrollTop > 100);
+
+      // Hide filters when scrolling down, show filters when scrolling up or near the top
+      if (scrollTop > lastScrollTopRef.current && scrollTop > 60) {
+        setShowFilters(false);
+      } else if (scrollTop < lastScrollTopRef.current || scrollTop <= 15) {
+        setShowFilters(true);
+      }
+      lastScrollTopRef.current = scrollTop;
     }
   };
 
@@ -787,86 +798,93 @@ App Link: ${window.location.origin}`;
           >
             <RotateCw className="w-[18px] h-[18px] text-white" />
           </button>
-          {/* Settings gear trigger for real mobile phones */}
-          <button 
-            onClick={() => setShowLocalConfigPanel(true)}
-            className="hover:scale-115 active:scale-95 transition-transform"
-            title="Cấu hình di động"
-          >
-            <Settings className="w-[18px] h-[18px] text-white" />
-          </button>
+          {/* Settings gear trigger for real mobile phones - Admin only */}
+          {currentUser?.role === UserRole.ADMIN && (
+            <button 
+              type="button"
+              onClick={() => setShowLocalConfigPanel(true)}
+              className="hover:scale-115 active:scale-95 transition-transform cursor-pointer border-none bg-transparent"
+              title="Cấu hình di động"
+            >
+              <Settings className="w-[18px] h-[18px] text-white" />
+            </button>
+          )}
         </div>
       </div>
 
       {/* Internal layout controls (Search inputs) */}
-      <div className="bg-white px-3 py-2 border-b border-slate-200 shadow-sm shrink-0 flex flex-col gap-1.5">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Tìm kiếm nhà máy, người đăng..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 bg-slate-100 rounded-full text-xs focus:ring-1 focus:ring-blue-500 outline-none placeholder:text-slate-400 text-slate-700 font-medium"
-          />
-        </div>
-        {/* Factory/Branch quick filter chips */}
-        <div className="flex py-0.5 gap-1.5 overflow-x-auto no-scrollbar scroll-smooth border-b border-slate-100 pb-1.5" id="factory-filter-chips">
-          <button
-            onClick={() => setSelectedFactoryFilter(null)}
-            className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase shrink-0 transition-all ${
-              selectedFactoryFilter === null
-                ? `${theme.bg} text-white shadow`
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            }`}
-          >
-            <span translate="no" className="notranslate">TẤT CẢ ĐV</span>
-          </button>
-          {[
-            { key: "TPP-BNI", label: "TPP-BNI" },
-            { key: "TPP-LAN", label: "TPP-LAN" },
-            { key: "TPP-CTY", label: "TPP-CTY" },
-            { key: "TPP-314", label: "TPP-314" },
-            { key: "DNP", label: "DNP" }
-          ].map((item) => (
+      <div className={`transition-all duration-300 overflow-hidden shrink-0 ${
+        showFilters ? "max-h-[160px] opacity-100" : "max-h-0 opacity-0 pointer-events-none"
+      }`}>
+        <div className="bg-white px-3 py-2 border-b border-slate-200 shadow-sm flex flex-col gap-1.5">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Tìm kiếm nhà máy, người đăng..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-3 py-1.5 bg-slate-100 rounded-full text-xs focus:ring-1 focus:ring-blue-500 outline-none placeholder:text-slate-400 text-slate-700 font-medium"
+            />
+          </div>
+          {/* Factory/Branch quick filter chips */}
+          <div className="flex py-0.5 gap-1.5 overflow-x-auto no-scrollbar scroll-smooth border-b border-slate-100 pb-1.5" id="factory-filter-chips">
             <button
-              key={item.key}
-              onClick={() => setSelectedFactoryFilter(item.key)}
-              className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase shrink-0 transition-all ${
-                selectedFactoryFilter === item.key
-                  ? "bg-sky-600 text-white shadow"
+              onClick={() => setSelectedFactoryFilter(null)}
+              className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase shrink-0 transition-all ${
+                selectedFactoryFilter === null
+                  ? `${theme.bg} text-white shadow`
                   : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               }`}
             >
-              <span translate="no" className="notranslate">{item.label}</span>
+              <span translate="no" className="notranslate">TẤT CẢ ĐV</span>
             </button>
-          ))}
-        </div>
-        {/* Rapid filter chips */}
-        <div className="flex py-0.5 gap-1.5 overflow-x-auto no-scrollbar scroll-smooth">
-          <button
-            onClick={() => setSelectedCategory(null)}
-            className={`px-3 py-1 rounded-full text-[9px] font-extrabold uppercase shrink-0 transition-all ${
-              selectedCategory === null
-                ? `${theme.bg} text-white shadow-sm`
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            }`}
-          >
-            <T>TẤT CẢ</T>
-          </button>
-          {(["CON NGƯỜI", "MÁY MÓC", "NGUYÊN VẬT LIỆU", "PHƯƠNG PHÁP", "MÔI TRƯỜNG", "THÔNG TIN"] as Category4M1E1I[]).map((cat) => (
+            {[
+              { key: "TPP-BNI", label: "TPP-BNI" },
+              { key: "TPP-LAN", label: "TPP-LAN" },
+              { key: "TPP-CTY", label: "TPP-CTY" },
+              { key: "TPP-314", label: "TPP-314" },
+              { key: "DNP", label: "DNP" }
+            ].map((item) => (
+              <button
+                key={item.key}
+                onClick={() => setSelectedFactoryFilter(item.key)}
+                className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase shrink-0 transition-all ${
+                  selectedFactoryFilter === item.key
+                    ? "bg-sky-600 text-white shadow"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                <span translate="no" className="notranslate">{item.label}</span>
+              </button>
+            ))}
+          </div>
+          {/* Rapid filter chips */}
+          <div className="flex py-0.5 gap-1.5 overflow-x-auto no-scrollbar scroll-smooth">
             <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-2 py-1 rounded-full text-[9px] font-bold uppercase shrink-0 transition-all ${
-                selectedCategory === cat
+              onClick={() => setSelectedCategory(null)}
+              className={`px-3 py-1 rounded-full text-[9px] font-extrabold uppercase shrink-0 transition-all ${
+                selectedCategory === null
                   ? `${theme.bg} text-white shadow-sm`
                   : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               }`}
             >
-              <T>{cat}</T>
+              <T>TẤT CẢ</T>
             </button>
-          ))}
+            {(["CON NGƯỜI", "MÁY MÓC", "NGUYÊN VẬT LIỆU", "PHƯƠNG PHÁP", "MÔI TRƯỜNG", "THÔNG TIN"] as Category4M1E1I[]).map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-2 py-1 rounded-full text-[9px] font-bold uppercase shrink-0 transition-all ${
+                  selectedCategory === cat
+                    ? `${theme.bg} text-white shadow-sm`
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                <T>{cat}</T>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -894,8 +912,8 @@ App Link: ${window.location.origin}`;
               <div
                 id={`report-card-${report.id}`}
                 key={report.id}
-                className={`bg-white rounded-xl shadow-lg border overflow-hidden transition-all duration-200 hover:-translate-y-0.5 ${
-                  report.isAbnormal ? "border-red-400" : "border-slate-200"
+                className={`bg-white rounded-xl shadow-lg border-2 overflow-hidden transition-all duration-200 hover:-translate-y-0.5 ${
+                  report.isAbnormal ? "border-red-400" : "border-blue-500"
                 }`}
               >
                 {/* Header card info */}
@@ -1215,9 +1233,9 @@ App Link: ${window.location.origin}`;
       {/* Blue Circular float creation trigger */}
       <button
         onClick={onOpenReportForm}
-        className={`absolute bottom-20 right-5 w-11 h-11 text-white rounded-xl flex items-center justify-center shadow-xl hover:scale-110 active:scale-90 transition-transform z-20 ${theme.hoverBg}`}
+        className={`absolute bottom-20 right-5 w-10 h-10 text-white rounded-xl flex items-center justify-center shadow-xl hover:scale-110 active:scale-90 transition-transform z-20 ${theme.hoverBg}`}
       >
-        <Plus className="w-6 h-6 text-white stroke-[3px]" />
+        <Plus className="w-5 h-5 text-white stroke-[2.5px]" />
       </button>
 
       {/* Mock navigation bottom bar on appsheet */}

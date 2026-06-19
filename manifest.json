@@ -1,0 +1,17 @@
+{
+  "short_name": "4M",
+  "name": "Phòng kiểm soát thay đổi 4M1E1I",
+  "icons": [
+    {
+      "src": "/src/assets/images/logo_4m_1781860612926.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#1e3a8a",
+  "theme_color": "#1e3a8a",
+  "display": "standalone",
+  "orientation": "portrait"
+}

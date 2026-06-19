@@ -197,7 +197,7 @@ export const initialUsers: User[] = [
     phone: "0919922883",
     department: "Phòng Tài chính Kế toán (TPP-314)",
     branch: "Nhà máy 314 (TPP-314)",
-    role: UserRole.STAFF,
+    role: UserRole.REVIEWER,
     status: UserStatus.ACTIVE,
     password: "123456"
   }
