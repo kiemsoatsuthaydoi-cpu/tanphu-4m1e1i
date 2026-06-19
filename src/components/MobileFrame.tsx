@@ -510,13 +510,8 @@ App Link: ${window.location.origin}`;
       return true;
     }
     
-    // 3. Duyệt viên bìnht thường luôn được quyền xóa
-    if (currentUser.role === UserRole.REVIEWER) {
-      return true;
-    }
-    
-    // 4. Nhân viên chỉ được xóa bài của chính mình trong vòng 5 phút kể từ khi đăng
-    if (currentUser.role === UserRole.STAFF && report.uploaderId === currentUser.id) {
+    // 3. Người đăng tin (uploader) chỉ được xóa bài của chính mình trong vòng 5 phút kể từ khi đăng
+    if (report.uploaderId === currentUser.id) {
       const reportDate = parseReportTimestamp(report.timestamp);
       const now = new Date();
       const diffMs = now.getTime() - reportDate.getTime();
@@ -664,6 +659,15 @@ App Link: ${window.location.origin}`;
     // 2. Đặc cách cho Duyệt viên hoặc Nhân viên của chi nhánh hiện tại
     if (currentUser.canSpeciallyEditDelete && currentUser.branch === report.factory) {
       return true;
+    }
+
+    // 3. Người đăng tin (uploader) chỉ được sửa bài của chính mình trong vòng 5 phút kể từ khi đăng
+    if (report.uploaderId === currentUser.id) {
+      const reportDate = parseReportTimestamp(report.timestamp);
+      const now = new Date();
+      const diffMs = now.getTime() - reportDate.getTime();
+      const diffMin = diffMs / (1000 * 60);
+      return diffMin >= 0 && diffMin <= 5; // Hợp lệ dưới 5 phút
     }
     
     return false;
@@ -1118,6 +1122,13 @@ App Link: ${window.location.origin}`;
                 <div className="bg-slate-50 border-t border-slate-100 px-3 py-2 flex justify-between items-center select-none text-[10px] font-semibold text-slate-600">
                   <div className="flex items-center gap-4">
                     {(() => {
+                      const isUploader = currentUser?.id === report.uploaderId;
+                      const isSpeciallyAuthorized = currentUser?.canSpeciallyEditDelete && currentUser?.branch === report.factory;
+                      const isAdmin = currentUser?.role === UserRole.ADMIN;
+                      const shouldShow = isUploader || isSpeciallyAuthorized || isAdmin;
+
+                      if (!shouldShow) return null;
+
                       const allowed = isDeleteAllowed(report);
                       if (allowed) {
                         return (
@@ -1140,7 +1151,7 @@ App Link: ${window.location.origin}`;
                             type="button"
                             disabled
                             className="flex items-center justify-center p-1 text-slate-300 opacity-40 cursor-not-allowed select-none border-none bg-transparent"
-                            title="Bạn không thể xóa bản tin này"
+                            title="Nút xóa đã bị vô hiệu hóa (quá 5 phút)"
                           >
                             <Trash2 className="w-[18px] h-[18px] stroke-[1.8px] text-slate-300" />
                           </button>
@@ -1149,6 +1160,13 @@ App Link: ${window.location.origin}`;
                     })()}
 
                     {(() => {
+                      const isUploader = currentUser?.id === report.uploaderId;
+                      const isSpeciallyAuthorized = currentUser?.canSpeciallyEditDelete && currentUser?.branch === report.factory;
+                      const isAdmin = currentUser?.role === UserRole.ADMIN;
+                      const shouldShow = isUploader || isSpeciallyAuthorized || isAdmin;
+
+                      if (!shouldShow) return null;
+
                       const allowed = isEditAllowed(report);
                       if (allowed) {
                         return (
@@ -1167,7 +1185,7 @@ App Link: ${window.location.origin}`;
                             type="button"
                             disabled
                             className="flex items-center justify-center p-1 text-slate-300 opacity-40 cursor-not-allowed select-none border-none bg-transparent"
-                            title="Bạn không thể chỉnh sửa bản tin này"
+                            title="Nút chỉnh sửa đã bị vô hiệu hóa (quá 5 phút)"
                           >
                             <Edit className="w-[18px] h-[18px] stroke-[1.8px] text-slate-300" />
                           </button>
