@@ -67,11 +67,9 @@ export default function ReportForm({
     if (displayRule === "custom" && customAliases[b.id]) {
       baseName = customAliases[b.id];
     } else {
-      const cleanPrefix = b.name.replace(/^(Chi Nhánh|Nhà [mM]áy|Văn [pP]hòng)\s+/i, "");
+      const cleanPrefix = b.name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn Phòng ", "");
       if (displayRule === "clean") {
-        baseName = cleanPrefix.replace(/\s*\(((?:TPP|BBM|DNP)-[^)]+)\)/i, "");
-      } else {
-        baseName = cleanPrefix;
+        baseName = cleanPrefix.replace(/\s*\(TPP-[^)]+\)/, "");
       }
     }
     return `${baseName} (${b.companyId})`;

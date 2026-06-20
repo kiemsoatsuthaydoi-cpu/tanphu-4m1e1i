@@ -207,54 +207,18 @@ export default function MobileFrame({
   const contentFontSizeClass = getContentFontSizeClass(config.fontSize);
 
   const getFactoryDisplayName = (factoryName: string) => {
-    if (!factoryName) return "";
+    const match = factoryName.match(/\(((?:TPP|BBM)-[^)]+)\)/i);
+    const branchId = match ? match[1].toUpperCase() : null;
 
-    // 1. Find matching branch from database to get the correct companyId
-    const foundBranch = branches?.find((b) => {
-      if (b.name === factoryName || b.id === factoryName) return true;
-      const bClean = b.name.replace(/^(Chi Nhánh|Nhà [mM]áy|Văn [pP]hòng)\s+/i, "").replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
-      const factoryClean = factoryName.replace(/^(Chi Nhánh|Nhà [mM]áy|Văn [pP]hòng)\s+/i, "").replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
-      return bClean === factoryClean;
-    });
-
-    if (foundBranch) {
-      if (displayRule === "custom" && customAliases[foundBranch.id]) {
-        return customAliases[foundBranch.id];
-      }
-
-      let baseName = foundBranch.name;
-      if (displayRule === "clean") {
-        baseName = baseName.replace(/^(Chi Nhánh|Nhà [mM]áy|Văn [pP]hòng)\s+/i, "");
-        // Strip branch ID in parentheses if matched under clean rule
-        baseName = baseName.replace(/\s*\(((?:TPP|BBM|DNP)-[^)]+)\)/i, "");
-      }
-
-      const suffix = `(${foundBranch.companyId})`;
-      if (baseName.endsWith(suffix)) {
-        return baseName;
-      }
-      return `${baseName} ${suffix}`;
+    if (displayRule === "custom" && branchId && customAliases[branchId]) {
+      return customAliases[branchId];
     }
 
-    // 2. Fallback regex-based parser
-    const match = factoryName.match(/\(([^)-]+)(?:-[^)]+)?\)/i);
-    const extractedCompany = match ? match[1].toUpperCase() : null;
-
-    let baseName = factoryName;
+    const cleanPrefix = factoryName.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn Phòng ", "");
     if (displayRule === "clean") {
-      baseName = factoryName.replace(/^(Chi Nhánh|Nhà [mM]áy|Văn [pP]hòng)\s+/i, "");
-      baseName = baseName.replace(/\s*\(((?:TPP|BBM|DNP)-[^)]+)\)/i, "");
+      return cleanPrefix.replace(/\s*\(((?:TPP|BBM)-[^)]+)\)/i, "");
     }
-
-    if (extractedCompany) {
-      const suffix = `(${extractedCompany})`;
-      if (baseName.endsWith(suffix)) {
-        return baseName;
-      }
-      return `${baseName} ${suffix}`;
-    }
-
-    return baseName;
+    return factoryName;
   };
 
   // Tính số lượng người online thực tế theo Presence Heartbeat
@@ -972,7 +936,7 @@ App Link: ${window.location.origin}`;
                       if (displayRule === "custom" && customAliases[b.id]) {
                         label = customAliases[b.id];
                       } else if (displayRule === "clean") {
-                        label = b.name.replace(/^(Chi Nhánh|Nhà [mM]áy|Văn [pP]hòng)\s+/i, "").replace(/\s*\(((?:TPP|BBM|DNP)-[^)]+)\)/i, "");
+                        label = b.name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn Phòng ", "").replace(/\s*\(((?:TPP|BBM)-[^)]+)\)/i, "");
                       }
                       return { key: b.id, label };
                     })
