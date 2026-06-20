@@ -20,6 +20,7 @@ interface ReportFormProps {
     fontSize?: "xs" | "sm" | "base";
     customAliases?: Record<string, string>;
   };
+  onShowToast?: (message: string, type: "success" | "error" | "warning" | "info") => void;
 }
 
 export default function ReportForm({
@@ -29,7 +30,8 @@ export default function ReportForm({
   onSubmitReport,
   offlineMode,
   branches = initialBranches,
-  mobileUIConfig
+  mobileUIConfig,
+  onShowToast
 }: ReportFormProps) {
   // Config fallbacks
   const config = mobileUIConfig || {};
@@ -87,25 +89,100 @@ export default function ReportForm({
     }
     return `${baseName} (${compAbbr})`;
   };
+
+  const triggerNotification = (message: string, type: "success" | "error" | "warning" | "info" = "warning") => {
+    if (onShowToast) {
+      onShowToast(message, type);
+    } else {
+      alert(message);
+    }
+  };
+
   // Fields state
+  const findMatchingBranch = (targetNameOrId: string, deptName?: string): Branch | undefined => {
+    if (!targetNameOrId && !deptName) return undefined;
+
+    // 1. Try exact name or ID match
+    if (targetNameOrId) {
+      const exactMatch = branches.find(b => b.name === targetNameOrId || b.id === targetNameOrId);
+      if (exactMatch) return exactMatch;
+    }
+
+    // 2. Try matching by ID extracted from targetNameOrId in parentheses (e.g. "Văn Phòng Công Ty (TPP-CTY)" -> extract TPP-CTY)
+    if (targetNameOrId) {
+      const parenMatch = targetNameOrId.match(/\(([^)]+)\)/);
+      if (parenMatch) {
+         const extractedId = parenMatch[1].trim().toUpperCase();
+         const branchById = branches.find(b => b.id.toUpperCase() === extractedId);
+         if (branchById) return branchById;
+      }
+    }
+
+    // 3. Try matching by ID extracted from user's department name (e.g. "Phòng Quản Lý Chất Lượng (TPP-CTY)" -> extract TPP-CTY)
+    if (deptName) {
+      const parenMatchDept = deptName.match(/\(([^)]+)\)/);
+      if (parenMatchDept) {
+         const extractedId = parenMatchDept[1].trim().toUpperCase();
+         const branchById = branches.find(b => b.id.toUpperCase() === extractedId);
+         if (branchById) return branchById;
+      }
+    }
+
+    // 4. Try matching if user branch or department contains the branch ID directly (e.g. "TPP-CTY")
+    for (const b of branches) {
+      if (b.id && b.id.length >= 2) {
+        const idUpper = b.id.toUpperCase();
+        if (targetNameOrId && targetNameOrId.toUpperCase().includes(idUpper)) {
+          return b;
+        }
+        if (deptName && deptName.toUpperCase().includes(idUpper)) {
+          return b;
+        }
+      }
+    }
+
+    // 5. Try clean and normalized name matching (e.g. "Văn Phòng Công Ty" matching "Văn Phòng Công Ty (TPP-CTY)" or vice versa)
+    const normalize = (str: string) => {
+      return str
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "") // remove diacritics
+        .replace(/\([^)]+\)/g, "") // remove parentheses content
+        .replace(/[^a-z0-9]/g, "") // keep only lower-case alphanumeric
+        .trim();
+    };
+
+    if (targetNameOrId) {
+      const normalizedTarget = normalize(targetNameOrId);
+      if (normalizedTarget) {
+        // Try clean equality first
+        const normalizedMatch = branches.find(b => normalize(b.name) === normalizedTarget);
+        if (normalizedMatch) return normalizedMatch;
+
+        // Try clean inclusion
+        const inclusionMatch = branches.find(b => {
+          const bNorm = normalize(b.name);
+          return bNorm.includes(normalizedTarget) || normalizedTarget.includes(bNorm);
+        });
+        if (inclusionMatch) return inclusionMatch;
+      }
+    }
+
+    return undefined;
+  };
+
   const [selectedBranch, setSelectedBranch] = useState<string>(() => {
     const editFactory = editingReport?.factory;
     if (editFactory) {
-      const exists = branches.some(b => b.name === editFactory);
-      if (exists) return editFactory;
-      
-      const match = editFactory.match(/\(((?:TPP|BBM)-[^)]+)\)/i);
-      if (match) {
-        const bId = match[1].toUpperCase();
-        const foundBranch = branches.find(b => b.id === bId);
-        if (foundBranch) return foundBranch.name;
-      }
+      const matched = findMatchingBranch(editFactory);
+      if (matched) return matched.name;
     }
     
-    const userBranch = currentUser?.branch;
-    if (userBranch) {
-      const exists = branches.some(b => b.name === userBranch);
-      if (exists) return userBranch;
+    const userBranch = currentUser?.branch || "";
+    const userDept = currentUser?.department || "";
+    const matchedUserBranch = findMatchingBranch(userBranch, userDept);
+    if (matchedUserBranch) {
+      return matchedUserBranch.name;
     }
     
     const isAdmin = currentUser?.role === UserRole.ADMIN;
@@ -117,6 +194,8 @@ export default function ReportForm({
     return scoringBranches.length > 0 ? scoringBranches[0].name : (branches[0]?.name || "");
   });
 
+  const [isOpenBranchDropdown, setIsOpenBranchDropdown] = useState(false);
+
   // Calculate dynamic display for selected standard branch
   const foundBranchObj = branches.find((b) => b.name === selectedBranch);
   const displaySelectedBranch = foundBranchObj ? getBranchDisplayName(foundBranchObj) : selectedBranch;
@@ -127,21 +206,21 @@ export default function ReportForm({
       const isAdmin = currentUser?.role === UserRole.ADMIN;
       const exists = branches.some((b) => b.name === selectedBranch && (isAdmin ? true : b.isScoring));
       if (!exists) {
-        // Fallback to matching standard branches
-        const match = selectedBranch.match(/\(((?:TPP|BBM)-[^)]+)\)/i);
-        if (match) {
-          const bId = match[1].toUpperCase();
-          const foundBranch = branches.find((b) => b.id === bId && (isAdmin ? true : b.isScoring));
-          if (foundBranch) {
-            setSelectedBranch(foundBranch.name);
-            return;
-          }
+        // Try finding standard or user branch matching the current selectedBranch
+        const matched = findMatchingBranch(selectedBranch);
+        if (matched && (isAdmin ? true : matched.isScoring)) {
+          setSelectedBranch(matched.name);
+          return;
         }
-        
-        const userBranchExists = branches.find((b) => b.name === currentUser?.branch && (isAdmin ? true : b.isScoring));
-        if (userBranchExists) {
-          setSelectedBranch(userBranchExists.name);
+
+        // Try finding direct link to user's branch
+        const userBranch = currentUser?.branch || "";
+        const userDept = currentUser?.department || "";
+        const matchedUserBranch = findMatchingBranch(userBranch, userDept);
+        if (matchedUserBranch && (isAdmin ? true : matchedUserBranch.isScoring)) {
+          setSelectedBranch(matchedUserBranch.name);
         } else {
+          // Fallback to first scoring or first in list
           const firstScoring = isAdmin ? branches[0] : branches.find(b => b.isScoring);
           if (firstScoring) {
             setSelectedBranch(firstScoring.name);
@@ -286,7 +365,7 @@ export default function ReportForm({
     if (!file) return;
 
     if (images.length >= 3) {
-      alert("Quý khách chỉ được chọn tối đa 3 hình ảnh.");
+      triggerNotification("Quý khách chỉ được chọn tối đa 3 hình ảnh.", "warning");
       return;
     }
 
@@ -317,7 +396,7 @@ export default function ReportForm({
         return updated;
       });
     } catch (err) {
-      alert("Không kham nạp được file hình ảnh do lỗi bộ giải mã.");
+      triggerNotification("Không kham nạp được file hình ảnh do lỗi bộ giải mã.", "error");
     } finally {
       setIsCompressing(false);
     }
@@ -362,12 +441,12 @@ export default function ReportForm({
   // Submit report handler
   const handleSendForm = () => {
     if (!content.trim()) {
-      alert("Quý khách hãy bổ sung mô tả sự thay đổi chất lượng.");
+      triggerNotification("Quý khách hãy bổ sung mô tả sự thay đổi chất lượng.", "warning");
       return;
     }
 
     if (images.length === 0) {
-      alert("Hãy đính kèm hình ảnh minh chứng để đảm bảo tính xác thực.");
+      triggerNotification("Hãy đính kèm hình ảnh minh chứng để đảm bảo tính xác thực.", "warning");
       return;
     }
 
@@ -435,24 +514,43 @@ export default function ReportForm({
 
           {currentUser?.role === UserRole.ADMIN ? (
             <div className="relative">
-              <select
-                value={selectedBranch}
-                onChange={(e) => setSelectedBranch(e.target.value)}
-                className="w-full bg-white border border-slate-200 text-slate-700 text-xs font-black rounded-xl py-3 px-3.5 pr-10 shadow-xs appearance-none focus:outline-none focus:ring-2 focus:ring-[#1e3a8a] focus:border-[#1e3a8a] transition-all cursor-pointer font-sans"
+              <button
+                type="button"
+                onClick={() => setIsOpenBranchDropdown(!isOpenBranchDropdown)}
+                className="w-full flex items-center justify-between bg-white border border-slate-200 text-slate-700 text-xs font-black rounded-xl py-3 px-3.5 pr-4 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a8a] focus:border-[#1e3a8a] transition-all cursor-pointer font-sans text-left"
               >
-                {branches.filter((b) => currentUser?.role === UserRole.ADMIN ? true : b.isScoring).map((b) => {
-                  const br = b.name;
-                  const displayName = getBranchDisplayName(b);
-                  return (
-                    <option key={br} value={br} className="font-bold text-slate-700 font-sans">
-                      {displayName}
-                    </option>
-                  );
-                })}
-              </select>
-              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-500">
-                <ChevronDown className="w-4 h-4 text-slate-500" />
-              </div>
+                <span><T>{displaySelectedBranch}</T></span>
+                <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" />
+              </button>
+
+              {isOpenBranchDropdown && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setIsOpenBranchDropdown(false)} />
+                  <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-40 py-1.5 max-h-[220px] overflow-y-auto animate-fade-in divide-y divide-slate-100">
+                    {branches.filter((b) => currentUser?.role === UserRole.ADMIN ? true : b.isScoring).map((b) => {
+                      const br = b.name;
+                      const displayName = getBranchDisplayName(b);
+                      const isSelected = selectedBranch === br;
+                      return (
+                        <button
+                          key={br}
+                          type="button"
+                          onClick={() => {
+                            setSelectedBranch(br);
+                            setIsOpenBranchDropdown(false);
+                          }}
+                          className={`w-full text-left px-3.5 py-2.5 text-xs font-semibold font-sans flex items-center justify-between transition-colors hover:bg-slate-50 cursor-pointer ${
+                            isSelected ? "bg-blue-50/70 text-blue-800 font-bold border-l-2 border-blue-600 pl-3" : "text-slate-700"
+                          }`}
+                        >
+                          <span><T>{displayName}</T></span>
+                          {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 font-bold" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between shadow-xs">

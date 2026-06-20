@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { AlertCircle, LogIn, Heart, ShieldCheck, Wifi, WifiOff, RefreshCw, Smartphone, Monitor, Lock, Building, ChevronDown, Briefcase, User as UserIcon } from "lucide-react";
+import { AlertCircle, LogIn, Heart, ShieldCheck, Wifi, WifiOff, RefreshCw, Smartphone, Monitor, Lock, Building, ChevronDown, Briefcase, User as UserIcon, Check, CheckCircle, XCircle, AlertTriangle, Info } from "lucide-react";
 import { T } from "./components/TranslateText";
 import {
   User,
@@ -338,6 +338,28 @@ export default function App() {
   const [regPassword, setRegPassword] = useState("");
   const [regConfirmPassword, setRegConfirmPassword] = useState("");
 
+  const [isOpenRegCompany, setIsOpenRegCompany] = useState(false);
+  const [isOpenRegBranch, setIsOpenRegBranch] = useState(false);
+  const [isOpenRegDept, setIsOpenRegDept] = useState(false);
+
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error" | "warning" | "info";
+  } | null>(null);
+
+  const showToast = (message: string, type: "success" | "error" | "warning" | "info" = "success") => {
+    setToast({ message, type });
+  };
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
   // Synchronize and Cascade registration selections with master data lists
   useEffect(() => {
     if (companies && companies.length > 0) {
@@ -477,7 +499,7 @@ export default function App() {
       setDbLoading(false);
       setDbStatus("Chế độ Offline/Local (VITE_FIREBASE_CONF chưa được khai báo)");
       if (isManual) {
-        alert("Chế độ Offline/Local (Không dùng Firestore)");
+        showToast("Chế độ Offline/Local (Không dùng Firestore)", "info");
       }
       return;
     }
@@ -637,13 +659,13 @@ export default function App() {
       setSyncCompleted(true);
       setDbStatus("Đồng bộ liên kết với server thành công!");
       if (isManual) {
-        alert("🔄 Đã tải lại và đồng bộ dữ liệu mới nhất thành công!");
+        showToast("Đã tải lại và đồng bộ dữ liệu mới nhất thành công!", "success");
       }
     } catch (error) {
       console.error("Firestore loading error:", error);
       setDbStatus("Đồng bộ thất bại, chuyển chế độ ngoại tuyến");
       if (isManual) {
-        alert("❌ Lỗi khi tải lại dữ liệu từ server!");
+        showToast("Lỗi khi tải lại dữ liệu từ server!", "error");
       }
     } finally {
       setDbLoading(false);
@@ -939,7 +961,7 @@ export default function App() {
         ...prev
       ]);
       setOfflineQueue([]);
-      alert("✅ Khôi phục kết nối mạng thành công! Toàn bộ tệp hàng đợi offline đã được đồng bộ đồng nhất lên máy chủ.");
+      showToast("Khôi phục kết nối mạng thành công! Toàn bộ tệp hàng đợi offline đã được đồng bộ đồng nhất lên máy chủ.", "success");
     }
   };
 
@@ -1495,7 +1517,7 @@ export default function App() {
         id: `OFFLINE-${Date.now()}`
       };
       setOfflineQueue((prev) => [offlineItem, ...prev]);
-      alert("⚠️ Đang ngắt mạng. Đã lưu báo cáo cục bộ vào hàng chờ offline thành công!");
+      showToast("Đang ngắt mạng. Đã lưu báo cáo cục bộ vào hàng chờ offline thành công!", "warning");
     } else {
       if (editingReport) {
         // Edit flow
@@ -1539,7 +1561,7 @@ export default function App() {
           });
         }
 
-        alert("✅ Đã cập nhật tệp tin biến động chất lượng thành công!");
+        showToast("Đã cập nhật tệp tin biến động chất lượng thành công!", "success");
       } else {
         // New report flow
         const newId = `R-${Date.now()}`;
@@ -1558,9 +1580,9 @@ export default function App() {
         
         // Auto alert sound simulator if abnormal
         if (payload.isAbnormal) {
-          alert(`🚨 CẢNH BÁO BẤT THƯỜNG: Nhân viên ${payload.uploaderName} vừa phát hiện và đẩy báo cáo bất thường tại ${payload.factory}. Hệ thống đã gửi thông báo khẩn cho Admin!`);
+          showToast(`CẢNH BÁO BẤT THƯỜNG: Nhân viên ${payload.uploaderName} vừa phát hiện báo cáo tại ${payload.factory}. Hệ thống đã gửi thông báo khẩn cho Admin!`, "warning");
         } else {
-          alert("✅ Đã gửi báo cáo chất lượng 4M1E1I lên máy chủ thành công!");
+          showToast("Đã gửi báo cáo chất lượng 4M1E1I lên máy chủ thành công!", "success");
         }
       }
     }
@@ -1921,7 +1943,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="select-none">
+              <div className="select-none relative z-40">
                 <label className="text-[11px] text-slate-500 font-bold uppercase block mb-1">
                   <T>CÔNG TY THÀNH VIÊN</T>
                 </label>
@@ -1929,28 +1951,48 @@ export default function App() {
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none select-none z-10 text-slate-400">
                     <Building className="w-4 h-4" />
                   </div>
-                  <select
-                    value={regCompany}
-                    onChange={(e) => {
-                      setRegCompany(e.target.value);
-                      setRegBranch("");
-                      setRegDepartment("");
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOpenRegCompany(!isOpenRegCompany);
+                      setIsOpenRegBranch(false);
+                      setIsOpenRegDept(false);
                     }}
-                    className="w-full bg-[#FFFFFF] border border-slate-200 rounded-xl pl-9 pr-8 py-2.5 text-xs text-slate-850 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm appearance-none"
+                    className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-8 py-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm text-left flex items-center justify-between cursor-pointer"
                   >
-                    {companies.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
-                    <ChevronDown className="w-4 h-4" />
-                  </div>
+                    <span>{companies.find((c) => c.id === regCompany)?.name || regCompany}</span>
+                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                  </button>
+
+                  {isOpenRegCompany && (
+                    <>
+                      <div className="fixed inset-0 z-45" onClick={() => setIsOpenRegCompany(false)} />
+                      <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 max-h-[220px] overflow-y-auto">
+                        {companies.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => {
+                              setRegCompany(c.id);
+                              setRegBranch("");
+                              setRegDepartment("");
+                              setIsOpenRegCompany(false);
+                            }}
+                            className={`w-full text-left px-4 py-2.5 text-xs font-semibold flex items-center justify-between hover:bg-slate-50 cursor-pointer ${
+                              regCompany === c.id ? "bg-blue-50/70 text-blue-800 font-bold" : "text-slate-800"
+                            }`}
+                          >
+                            <span>{c.name}</span>
+                            {regCompany === c.id && <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
-              <div className="select-none">
+              <div className="select-none relative z-30">
                 <label className="text-[11px] text-emerald-700 font-bold uppercase block mb-1">
                   <T>CHI NHÁNH/ VĂN PHÒNG ĐẠI DIỆN *</T>
                 </label>
@@ -1958,37 +2000,70 @@ export default function App() {
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none select-none z-10 text-emerald-600">
                     <Building className="w-4 h-4" />
                   </div>
-                  <select
-                    value={regBranch}
-                    onChange={(e) => {
-                      setRegBranch(e.target.value);
-                      setRegDepartment("");
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOpenRegBranch(!isOpenRegBranch);
+                      setIsOpenRegCompany(false);
+                      setIsOpenRegDept(false);
                     }}
                     style={{ borderColor: "#10b981" }}
-                    className="w-full bg-[#FFFFFF] border border-emerald-500 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500 rounded-xl pl-9 pr-8 py-2.5 text-xs text-slate-850 focus:outline-none shadow-sm appearance-none"
+                    className="w-full bg-white border border-emerald-500 rounded-xl pl-9 pr-8 py-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-sm text-left flex items-center justify-between cursor-pointer animate-fade-in"
                   >
-                    <option value="">--- Chọn Chi nhánh/ Văn Phòng đại diện ---</option>
-                    {(() => {
-                      const filteredBranches = branches.filter((b) => b.companyId === regCompany);
-                      return filteredBranches.map((b) => {
-                        const nameWithSuffix = b.name.includes("(") 
-                          ? b.name 
-                          : `${b.name.replace(/\s*\([^)]+\)$/, "").trim()} (${b.companyId})`;
-                        return (
-                          <option key={b.id} value={nameWithSuffix}>
-                            {nameWithSuffix}
-                          </option>
-                        );
-                      });
-                    })()}
-                  </select>
-                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-emerald-600">
-                    <ChevronDown className="w-4 h-4" />
-                  </div>
+                    <span className={regBranch ? "text-slate-800 font-semibold" : "text-slate-400 font-semibold"}>
+                      {regBranch || "--- Chọn Chi nhánh/ Văn Phòng đại diện ---"}
+                    </span>
+                    <ChevronDown className="w-4 h-4 text-emerald-600" />
+                  </button>
+
+                  {isOpenRegBranch && (
+                    <>
+                      <div className="fixed inset-0 z-35" onClick={() => setIsOpenRegBranch(false)} />
+                      <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 max-h-[220px] overflow-y-auto">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRegBranch("");
+                            setRegDepartment("");
+                            setIsOpenRegBranch(false);
+                          }}
+                          className="w-full text-left px-4 py-2.5 text-xs font-semibold text-slate-400 hover:bg-slate-50 cursor-pointer"
+                        >
+                          --- Chọn Chi nhánh/ Văn Phòng đại diện ---
+                        </button>
+                        {(() => {
+                          const filteredBranches = branches.filter((b) => b.companyId === regCompany);
+                          return filteredBranches.map((b) => {
+                            const nameWithSuffix = b.name.includes("(") 
+                              ? b.name 
+                              : `${b.name.replace(/\s*\([^)]+\)$/, "").trim()} (${b.companyId})`;
+                            const isSelected = regBranch === nameWithSuffix;
+                            return (
+                              <button
+                                key={b.id}
+                                type="button"
+                                onClick={() => {
+                                  setRegBranch(nameWithSuffix);
+                                  setRegDepartment("");
+                                  setIsOpenRegBranch(false);
+                                }}
+                                className={`w-full text-left px-4 py-2.5 text-xs font-semibold flex items-center justify-between hover:bg-slate-50 cursor-pointer ${
+                                  isSelected ? "bg-emerald-50 text-emerald-800 font-bold border-l-2 border-emerald-500 pl-3.5" : "text-slate-850"
+                                }`}
+                              >
+                                <span>{nameWithSuffix}</span>
+                                {isSelected && <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />}
+                              </button>
+                            );
+                          });
+                        })()}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
-              <div className="select-none">
+              <div className="select-none relative z-20">
                 <label className="text-[11px] text-emerald-700 font-bold uppercase block mb-1">
                   <T>BỘ PHẬN/ ĐƠN VỊ *</T>
                 </label>
@@ -1996,39 +2071,73 @@ export default function App() {
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none select-none z-10 text-emerald-600">
                     <Briefcase className="w-4 h-4" />
                   </div>
-                  <select
-                    value={regDepartment}
-                    onChange={(e) => setRegDepartment(e.target.value)}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOpenRegDept(!isOpenRegDept);
+                      setIsOpenRegCompany(false);
+                      setIsOpenRegBranch(false);
+                    }}
                     style={{ borderColor: "#10b981" }}
-                    className="w-full bg-[#FFFFFF] border border-emerald-500 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500 rounded-xl pl-9 pr-8 py-2.5 text-xs text-slate-850 focus:outline-none shadow-sm appearance-none"
+                    className="w-full bg-white border border-emerald-500 rounded-xl pl-9 pr-8 py-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-sm text-left flex items-center justify-between cursor-pointer animate-fade-in"
                   >
-                    <option value="">--- Chọn Bộ phận/ Đơn vị làm việc ---</option>
-                    {(() => {
-                      const selectedB = branches.find((b) => {
-                        const nameWithSuffix = b.name.includes("(") 
-                          ? b.name 
-                          : `${b.name.replace(/\s*\([^)]+\)$/, "").trim()} (${b.companyId})`;
-                        return b.name === regBranch || nameWithSuffix === regBranch;
-                      });
-                      const filteredDepts = selectedB
-                        ? departments.filter((d) => d.branchId === selectedB.id)
-                        : [];
-                      return filteredDepts.map((d) => {
-                        const branchSuffix = selectedB ? selectedB.id : d.branchId;
-                        const nameWithSuffix = d.name.includes("(")
-                          ? d.name
-                          : `${d.name.replace(/\s*\([^)]+\)$/, "").trim()} (${branchSuffix})`;
-                        return (
-                          <option key={d.id} value={nameWithSuffix}>
-                            {nameWithSuffix}
-                          </option>
-                        );
-                      });
-                    })()}
-                  </select>
-                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-emerald-600">
-                    <ChevronDown className="w-4 h-4" />
-                  </div>
+                    <span className={regDepartment ? "text-slate-800 font-semibold" : "text-slate-400 font-semibold"}>
+                      {regDepartment || "--- Chọn Bộ phận/ Đơn vị làm việc ---"}
+                    </span>
+                    <ChevronDown className="w-4 h-4 text-emerald-600" />
+                  </button>
+
+                  {isOpenRegDept && (
+                    <>
+                      <div className="fixed inset-0 z-25" onClick={() => setIsOpenRegDept(false)} />
+                      <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 max-h-[220px] overflow-y-auto">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRegDepartment("");
+                            setIsOpenRegDept(false);
+                          }}
+                          className="w-full text-left px-4 py-2.5 text-xs font-semibold text-slate-400 hover:bg-slate-50 cursor-pointer"
+                        >
+                          --- Chọn Bộ phận/ Đơn vị làm việc ---
+                        </button>
+                        {(() => {
+                          const selectedB = branches.find((b) => {
+                            const nameWithSuffix = b.name.includes("(") 
+                              ? b.name 
+                              : `${b.name.replace(/\s*\([^)]+\)$/, "").trim()} (${b.companyId})`;
+                            return b.name === regBranch || nameWithSuffix === regBranch;
+                          });
+                          const filteredDepts = selectedB
+                            ? departments.filter((d) => d.branchId === selectedB.id)
+                            : [];
+                          return filteredDepts.map((d) => {
+                            const branchSuffix = selectedB ? selectedB.id : d.branchId;
+                            const nameWithSuffix = d.name.includes("(")
+                              ? d.name
+                              : `${d.name.replace(/\s*\([^)]+\)$/, "").trim()} (${branchSuffix})`;
+                            const isSelected = regDepartment === nameWithSuffix;
+                            return (
+                              <button
+                                key={d.id}
+                                type="button"
+                                onClick={() => {
+                                  setRegDepartment(nameWithSuffix);
+                                  setIsOpenRegDept(false);
+                                }}
+                                className={`w-full text-left px-4 py-2.5 text-xs font-semibold flex items-center justify-between hover:bg-slate-50 cursor-pointer ${
+                                  isSelected ? "bg-emerald-50 text-emerald-800 font-bold border-l-2 border-emerald-500 pl-3.5" : "text-slate-850"
+                                }`}
+                              >
+                                <span>{nameWithSuffix}</span>
+                                {isSelected && <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />}
+                              </button>
+                            );
+                          });
+                        })()}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -2301,6 +2410,7 @@ export default function App() {
                 offlineMode={offlineMode}
                 branches={branches}
                 mobileUIConfig={mobileUIConfig}
+                onShowToast={showToast}
               />
             ) : (
               <MobileFrame
@@ -2342,6 +2452,7 @@ export default function App() {
                 offlineMode={offlineMode}
                 branches={branches}
                 mobileUIConfig={mobileUIConfig}
+                onShowToast={showToast}
               />
             ) : (
               <MobileFrame
@@ -2364,6 +2475,46 @@ export default function App() {
               />
             )}
           </div>
+        </div>
+      )}
+
+      {/* High-fidelity elegant Custom Toast system */}
+      {toast && (
+        <div 
+          style={{ zIndex: 100000 }} 
+          className="fixed top-6 left-1/2 -translate-x-1/2 max-w-[90vw] w-fit min-w-[300px] bg-slate-900/95 backdrop-blur-md text-white rounded-2xl p-4 shadow-2xl flex items-center gap-3 border border-slate-700/50 select-none animate-fadeIn transition-all"
+        >
+          {toast.type === "success" && (
+            <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+              <Check className="w-4 h-4" />
+            </div>
+          )}
+          {toast.type === "error" && (
+            <div className="w-7 h-7 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
+              <AlertCircle className="w-4 h-4" />
+            </div>
+          )}
+          {toast.type === "warning" && (
+            <div className="w-7 h-7 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-4 h-4" />
+            </div>
+          )}
+          {toast.type === "info" && (
+            <div className="w-7 h-7 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
+              <Info className="w-4 h-4" />
+            </div>
+          )}
+          
+          <div className="flex-1 text-left text-[11px] font-bold leading-normal text-slate-100 pr-2">
+            <T>{toast.message}</T>
+          </div>
+          
+          <button
+            onClick={() => setToast(null)}
+            className="text-slate-400 hover:text-white transition-colors cursor-pointer text-xs font-semibold px-1 rounded-sm active:scale-95"
+          >
+            ✕
+          </button>
         </div>
       )}
     </div>
