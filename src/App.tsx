@@ -821,6 +821,77 @@ export default function App() {
     };
   }, [currentUser, dbConnected]);
 
+  // Nhịp tim hiện diện (Presence Heartbeat) để cập nhật trạng thái hoạt động thực tế định kỳ 45 giây
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const updatePresence = async () => {
+      try {
+        const now = Date.now();
+        // Cập nhật local state ngay lập tức để người dùng xem chính xác trạng thái của mình
+        setUsers((prev) =>
+          prev.map((u) => (u.id === currentUser.id ? { ...u, lastActive: now } : u))
+        );
+
+        if (dbConnected && !dbLoading) {
+          // Lưu trạng thái lastActive lên Firestore
+          await saveDocument(COLLECTIONS.USERS, currentUser.id, {
+            ...currentUser,
+            lastActive: now
+          });
+        }
+      } catch (err) {
+        console.warn("Cập nhật trạng thái hoạt động thất bại (bỏ qua lỗi chạy ngầm):", err);
+      }
+    };
+
+    // Cập nhật ngay khi login/vừa mở app
+    updatePresence();
+
+    // Định kỳ gửi 45 giây một lần khi trang đang hiển thị
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        updatePresence();
+      }
+    }, 45000);
+
+    return () => clearInterval(interval);
+  }, [currentUser?.id, dbConnected, dbLoading]);
+
+  // Định kỳ tải lại danh sách user để cập nhật trạng thái online của mọi người (60 giây một lần)
+  useEffect(() => {
+    if (!currentUser || currentUser.status === UserStatus.PENDING || !dbConnected || dbLoading) {
+      return;
+    }
+
+    const intervalId = setInterval(async () => {
+      try {
+        if (typeof document !== "undefined" && document.visibilityState === "visible") {
+          const latestUsers = await fetchCollection<User>(COLLECTIONS.USERS);
+          if (latestUsers && latestUsers.length > 0) {
+            setUsers((prev) => {
+              // Cập nhật lastActive từ server, nhưng bảo toàn các thông tin cục bộ chưa sync nếu có
+              return prev.map((u) => {
+                const fetched = latestUsers.find((lu) => lu.id === u.id);
+                if (fetched) {
+                  return {
+                    ...u,
+                    lastActive: fetched.lastActive || u.lastActive
+                  };
+                }
+                return u;
+              });
+            });
+          }
+        }
+      } catch (err) {
+        console.warn("Lỗi cập nhật danh sách người dùng online tự động:", err);
+      }
+    }, 60000);
+
+    return () => clearInterval(intervalId);
+  }, [currentUser, dbConnected, dbLoading]);
+
   // Automatic screen detect and fully immersive fullscreen for mobile devices with tap, double-click, and double-tap listeners
   useEffect(() => {
     const isMobileDevice = window.innerWidth < 1024 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -2220,6 +2291,7 @@ export default function App() {
                 onLogout={() => setCurrentUser(null)}
                 branches={branches}
                 onManualRefresh={syncFromDb}
+                users={users}
               />
             )}
           </div>
@@ -2258,6 +2330,7 @@ export default function App() {
                 onLogout={() => setCurrentUser(null)}
                 branches={branches}
                 onManualRefresh={syncFromDb}
+                users={users}
               />
             )}
 

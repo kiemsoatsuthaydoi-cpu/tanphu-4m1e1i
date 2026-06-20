@@ -93,6 +93,7 @@ interface MobileFrameProps {
   onLogout?: () => void;
   branches?: Branch[];
   onManualRefresh?: (isManual?: boolean) => void;
+  users?: User[];
 }
 
 export default function MobileFrame({
@@ -108,7 +109,8 @@ export default function MobileFrame({
   onUpdateMobileUIConfig,
   onLogout,
   branches,
-  onManualRefresh
+  onManualRefresh,
+  users
 }: MobileFrameProps) {
   const config = mobileUIConfig || {};
   const displayRule = config.displayRule || "clean";
@@ -219,20 +221,21 @@ export default function MobileFrame({
     return factoryName;
   };
 
-  const [onlineCount, setOnlineCount] = useState<number>(() => {
-    return Math.floor(Math.random() * 4) + 8;
-  });
+  // Tính số lượng người online thực tế theo Presence Heartbeat
+  const getOnlineCount = () => {
+    if (!users || users.length === 0) {
+      return 1; // Mặc định có ít nhất chính mình
+    }
+    const now = Date.now();
+    const onlineUsers = users.filter((u) => {
+      if (!u.lastActive) return false;
+      // Sai lệch thời gian nhỏ hơn hoặc bằng 4 phút (240.000 ms)
+      return Math.abs(now - u.lastActive) <= 240000;
+    });
+    return Math.max(1, onlineUsers.length);
+  };
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setOnlineCount((prev) => {
-        const change = Math.random() > 0.5 ? 1 : -1;
-        const next = prev + change;
-        return Math.max(5, Math.min(next, 25));
-      });
-    }, 15000);
-    return () => clearInterval(interval);
-  }, []);
+  const onlineCount = getOnlineCount();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -830,16 +833,14 @@ App Link: ${window.location.origin}`;
         <div className="flex items-center gap-3">
           {/* Bong bóng số báo tổng số người online */}
           <div 
-            className="flex items-center gap-1 bg-[#10b981]/15 border border-[#10b981]/30 rounded-full px-2 py-0.5 select-none hover:bg-[#10b981]/25 transition-all text-xs"
+            className="relative hover:scale-115 active:scale-95 transition-all p-1 cursor-pointer"
             title="Số nhân viên đang online"
           >
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#10b981] opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#10b981]"></span>
-            </span>
-            <Users className="w-3 h-3 text-[#34d399]" />
-            <span translate="no" className="notranslate font-extrabold text-[10px] text-[#a7f3d0] font-mono leading-none">
-              {onlineCount}
+            <Users className="w-[18px] h-[18px] text-emerald-300" />
+            <span className="absolute -top-1 -right-1 bg-emerald-500 text-[8px] text-white font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border border-slate-900 leading-none shadow-sm animate-pulse">
+              <span translate="no" className="notranslate font-mono select-none">
+                {onlineCount}
+              </span>
             </span>
           </div>
           <button

@@ -21,6 +21,7 @@ export interface User {
   status: UserStatus;
   password?: string;
   isOnline?: boolean;
+  lastActive?: number;
   company?: string;
   canSpeciallyEditDelete?: boolean;
 }
