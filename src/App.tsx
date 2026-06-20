@@ -747,7 +747,10 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_chats", JSON.stringify(chats));
-  }, [chats]);
+    if (syncCompleted && dbConnected && !dbLoading) {
+      chats.forEach((c) => saveDocument(COLLECTIONS.CHATS, c.id, c));
+    }
+  }, [chats, dbConnected, dbLoading, syncCompleted]);
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_offline_queue", JSON.stringify(offlineQueue));
@@ -1495,7 +1498,7 @@ export default function App() {
   };
 
   // Forum message
-  const handleAddChatMessage = (msg: string) => {
+  const handleAddChatMessage = (msg: string, reportRefId?: string) => {
     if (!currentUser) return;
     const newChat: ChatMessage = {
       id: `CHAT-${Date.now()}`,
@@ -1503,7 +1506,8 @@ export default function App() {
       senderRole: currentUser.role,
       senderPhone: currentUser.phone,
       message: msg,
-      timestamp: new Date().toLocaleString("vi-VN")
+      timestamp: new Date().toLocaleString("vi-VN"),
+      ...(reportRefId ? { reportRefId } : {})
     };
     setChats((prev) => [...prev, newChat]);
   };
@@ -2430,6 +2434,8 @@ export default function App() {
                 users={users}
                 companies={companies}
                 onSwitchToDesktop={() => setShowMobilePreview(false)}
+                chats={chats}
+                onAddChatMessage={handleAddChatMessage}
               />
             )}
           </div>
@@ -2472,6 +2478,8 @@ export default function App() {
                 users={users}
                 companies={companies}
                 onSwitchToDesktop={() => setShowMobilePreview(false)}
+                chats={chats}
+                onAddChatMessage={handleAddChatMessage}
               />
             )}
           </div>

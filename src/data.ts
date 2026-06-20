@@ -218,6 +218,8 @@ export const initialReports: QualityReport[] = [
     uploaderId: "2022.00129",
     uploaderDepartment: STANDARDIZED_QC_DEPT,
     isAbnormal: false,
+    isSpotlight: true,
+    reportType: "DSA",
     notes: "Đoàn khách đánh giá cao khâu vệ sinh 5S."
   },
   {
@@ -234,6 +236,8 @@ export const initialReports: QualityReport[] = [
     uploaderId: "2022.00129",
     uploaderDepartment: STANDARDIZED_QC_DEPT,
     isAbnormal: true,
+    isSpotlight: false,
+    reportType: "KPH",
     notes: "Lập biên bản chấn chỉnh khẩn cấp tổ sản xuất."
   },
   {
@@ -250,6 +254,8 @@ export const initialReports: QualityReport[] = [
     uploaderId: "2024.00912",
     uploaderDepartment: STANDARDIZED_QC_DEPT,
     isAbnormal: false,
+    isSpotlight: false,
+    reportType: "NORMAL",
     notes: "Đã truyền thông cho toàn bộ tổ trưởng sản xuất."
   },
   {
@@ -266,6 +272,8 @@ export const initialReports: QualityReport[] = [
     uploaderId: "2023.00481",
     uploaderDepartment: STANDARDIZED_QC_DEPT,
     isAbnormal: false,
+    isSpotlight: true,
+    reportType: "DSA",
     notes: "Chuẩn bị mặt bằng thi công xưởng chính."
   },
   {
@@ -282,6 +290,8 @@ export const initialReports: QualityReport[] = [
     uploaderId: "2023.00481",
     uploaderDepartment: STANDARDIZED_QC_DEPT,
     isAbnormal: true,
+    isSpotlight: false,
+    reportType: "KPH",
     notes: "Phát hiện gioăng bị mòn nhẹ, đề xuất thay thế tuần tới."
   },
   {
@@ -298,6 +308,8 @@ export const initialReports: QualityReport[] = [
     uploaderId: "2023.00481",
     uploaderDepartment: STANDARDIZED_QC_DEPT,
     isAbnormal: true,
+    isSpotlight: false,
+    reportType: "KPH",
     notes: "Điều chuyển nhân lực từ bộ phận bọc màng bù đắp tạm thời."
   },
   {
@@ -314,6 +326,8 @@ export const initialReports: QualityReport[] = [
     uploaderId: "2023.00481",
     uploaderDepartment: STANDARDIZED_QC_DEPT,
     isAbnormal: true,
+    isSpotlight: false,
+    reportType: "KPH",
     notes: "Mẫu không đạt chất lượng kiểm định ngoại quan ngoại quan bình."
   }
 ];

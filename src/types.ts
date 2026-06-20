@@ -56,7 +56,9 @@ export interface QualityReport {
   uploaderId: string;
   uploaderDepartment: string;
   notes?: string;
-  isAbnormal: boolean; // Is abnormal/alert report
+  isAbnormal: boolean; // Is abnormal/alert report (Không phù hợp - KPH)
+  isSpotlight?: boolean; // Is spotlight (Điểm sáng - DSA)
+  reportType?: "KPH" | "DSA" | "NORMAL"; // Classification of the report
   googleDrivePath?: string;
   directives?: QualityReportDirective[];
   likedBy?: string[];

@@ -58,22 +58,21 @@ export async function generateDailyReportPDF(options: PDFExportOptions): Promise
   `;
 
   // Summary Metrics Widgets
-  const summaryAbnormalCount = reports.filter((r) => r.isAbnormal).length;
+  const summaryAbnormalCount = reports.filter((r) => r.reportType === "KPH" || r.isAbnormal).length;
+  const summarySpotlightCount = reports.filter((r) => r.reportType === "DSA" || r.isSpotlight).length;
   const summaryStatsHtml = `
     <div style="display: flex; gap: 15px; margin-bottom: 30px;">
       <div style="flex: 1; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; text-align: center; background-color: #f8fafc;">
-        <div style="font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: bold;">Tổng số biến động ghi nhận</div>
+        <div style="font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: bold;">Tổng số bản tin ghi nhận</div>
         <div style="font-size: 22px; font-weight: bold; color: #1e3a8a; margin-top: 4px;">${reports.length}</div>
       </div>
       <div style="flex: 1; border: 1px solid #fee2e2; border-radius: 6px; padding: 12px; text-align: center; background-color: #fef2f2;">
-        <div style="font-size: 10px; color: #b91c1c; text-transform: uppercase; font-weight: bold;">Sự cố bất thường (Abnormal)</div>
+        <div style="font-size: 10px; color: #b91c1c; text-transform: uppercase; font-weight: bold;">Không Phù Hợp (KPH)</div>
         <div style="font-size: 22px; font-weight: bold; color: #ef4444; margin-top: 4px;">${summaryAbnormalCount}</div>
       </div>
-      <div style="flex: 1; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; text-align: center; background-color: #f8fafc;">
-        <div style="font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: bold;">Tỷ lệ an toàn hoạt động</div>
-        <div style="font-size: 22px; font-weight: bold; color: #16a34a; margin-top: 4px;">
-          ${reports.length > 0 ? Math.round(((reports.length - summaryAbnormalCount) / reports.length) * 100) : 100}%
-        </div>
+      <div style="flex: 1; border: 1px solid #d1fae5; border-radius: 6px; padding: 12px; text-align: center; background-color: #f0fdf4;">
+        <div style="font-size: 10px; color: #065f46; text-transform: uppercase; font-weight: bold;">Điểm Sáng (DSA)</div>
+        <div style="font-size: 22px; font-weight: bold; color: #10b981; margin-top: 4px;">${summarySpotlightCount}</div>
       </div>
     </div>
   `;
@@ -97,9 +96,11 @@ export async function generateDailyReportPDF(options: PDFExportOptions): Promise
         report.category === "PHƯƠNG PHÁP" ? "#d97706" :
         report.category === "MÔI TRƯỜNG" ? "#0d9488" : "#475569";
 
-      const statusBadge = report.isAbnormal
-        ? `<span style="background-color: #fee2e2; color: #b91c1c; padding: 3px 8px; border-radius: 4px; font-size: 9px; font-weight: bold; text-transform: uppercase;">BẤT THƯỜNG</span>`
-        : `<span style="background-color: #f1f5f9; color: #475569; padding: 3px 8px; border-radius: 4px; font-size: 9px; font-weight: bold; text-transform: uppercase;">BÌNH THƯỜNG</span>`;
+      const statusBadge = report.reportType === "KPH" || report.isAbnormal
+        ? `<span style="background-color: #fee2e2; color: #b91c1c; padding: 3px 8px; border-radius: 4px; font-size: 9px; font-weight: bold; text-transform: uppercase;">KPH</span>`
+        : (report.reportType === "DSA" || report.isSpotlight
+          ? `<span style="background-color: #d1fae5; color: #065f46; padding: 3px 8px; border-radius: 4px; font-size: 9px; font-weight: bold; text-transform: uppercase;">DSA</span>`
+          : `<span style="background-color: #f1f5f9; color: #475569; padding: 3px 8px; border-radius: 4px; font-size: 9px; font-weight: bold; text-transform: uppercase;">THƯỜNG</span>`);
 
       tableRows += `
         <tr style="border-bottom: 1px solid #e2e8f0;">

@@ -49,7 +49,14 @@ import {
   Pie,
   Cell,
   AreaChart,
-  Area
+  Area,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+  Line,
+  ComposedChart
 } from "recharts";
 import { T } from "./TranslateText";
 import {
@@ -621,6 +628,202 @@ export default function DashboardDesktop({
       "Tổng Biến Động": map[name].total,
       "Sự Cố Bất Thường": map[name].abnormal
     }));
+  };
+
+  // --- STATS FILTER BY BRANCH & ADVANCED STATISTICAL FUNCTIONS ---
+  const [statsBranchFilter, setStatsBranchFilter] = useState("Tất cả");
+
+  const getFilteredStatsReports = () => {
+    if (statsBranchFilter === "Tất cả") return reports;
+    return reports.filter((r) => r.factory === statsBranchFilter);
+  };
+
+  // Helper values for current dynamic filter stats
+  const getStatsCountersValue = () => {
+    const sReports = getFilteredStatsReports();
+    const total = sReports.length;
+    const kph = sReports.filter((r) => r.reportType === "KPH" || r.isAbnormal).length;
+    const dsa = sReports.filter((r) => r.reportType === "DSA" || r.isSpotlight).length;
+    const safeRate = total > 0 ? Math.round(((total - kph) / total) * 100) : 100;
+    return { total, kph, dsa, safeRate };
+  };
+
+  // 1. Radar data: Số lượng sự cố KPH (Không Phù Hợp) phát sinh theo từng yếu tố 4M1E1I
+  const getRadarKphData = () => {
+    const sReports = getFilteredStatsReports();
+    const counts: Record<Category4M1E1I, number> = {
+      "CON NGƯỜI": 0,
+      "NGUYÊN VẬT LIỆU": 0,
+      "MÁY MÓC": 0,
+      "PHƯƠNG PHÁP": 0,
+      "MÔI TRƯỜNG": 0,
+      "THÔNG TIN": 0
+    };
+    let hasData = false;
+    sReports.forEach((r) => {
+      const isKph = r.reportType === "KPH" || r.isAbnormal;
+      if (isKph && counts[r.category] !== undefined) {
+        counts[r.category]++;
+        hasData = true;
+      }
+    });
+    // In case of 0, fill with very tiny fractions or zeros to keep Radar beautifully visible
+    return Object.keys(counts).map((key) => ({
+      subject: key,
+      "Không Phù Hợp (KPH)": counts[key as Category4M1E1I],
+      fullMark: 10
+    }));
+  };
+
+  // 2. So sánh các Chi nhánh: số lượng DSA (Điểm Sáng) vs KPH (Không Phù Hợp)
+  const getBranchComparisonData = () => {
+    const map: Record<string, { kph: number; dsa: number }> = {};
+    branches.forEach((b) => {
+      if (b.isScoring) {
+        map[b.name] = { kph: 0, dsa: 0 };
+      }
+    });
+
+    reports.forEach((r) => {
+      if (map[r.factory]) {
+        if (r.reportType === "KPH" || r.isAbnormal) {
+          map[r.factory].kph++;
+        } else if (r.reportType === "DSA" || r.isSpotlight) {
+          map[r.factory].dsa++;
+        }
+      }
+    });
+
+    return Object.keys(map).map((name) => ({
+      name: name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn phòng ", "VP "),
+      "Không Phù Hợp (KPH)": map[name].kph,
+      "Điểm Sáng (DSA)": map[name].dsa
+    }));
+  };
+
+  // 3. Phân tích Pareto cho các nguyên nhân / danh mục sự cố Không Phù Hợp (KPH)
+  const getParetoData = () => {
+    const sReports = getFilteredStatsReports();
+    const counts: Record<Category4M1E1I, number> = {
+      "CON NGƯỜI": 0,
+      "NGUYÊN VẬT LIỆU": 0,
+      "MÁY MÓC": 0,
+      "PHƯƠNG PHÁP": 0,
+      "MÔI TRƯỜNG": 0,
+      "THÔNG TIN": 0
+    };
+    
+    let totalKph = 0;
+    sReports.forEach((r) => {
+      const isKph = r.reportType === "KPH" || r.isAbnormal;
+      if (isKph && counts[r.category] !== undefined) {
+        counts[r.category]++;
+        totalKph++;
+      }
+    });
+
+    // Sort in descending order
+    const sorted = Object.keys(counts)
+      .map((key) => ({
+        category: key,
+        frequency: counts[key as Category4M1E1I]
+      }))
+      .sort((a, b) => b.frequency - a.frequency);
+
+    let accum = 0;
+    return sorted.map((item) => {
+      accum += item.frequency;
+      const percentage = totalKph > 0 ? Math.round((item.frequency / totalKph) * 100) : 0;
+      const cumulativePercentage = totalKph > 0 ? Math.round((accum / totalKph) * 100) : 0;
+      return {
+        category: item.category,
+        "Số lỗi (Tần suất)": item.frequency,
+        "Phần trăm lũy kế (%)": cumulativePercentage,
+        percentage
+      };
+    });
+  };
+
+  // 4. Phòng cố vấn AI Chuyên Gia Chất Lượng 4M1E1I recommendations
+  const getAiExpertRecommendations = () => {
+    const sReports = getFilteredStatsReports();
+    const kphReports = sReports.filter((r) => r.reportType === "KPH" || r.isAbnormal);
+    const dsaReports = sReports.filter((r) => r.reportType === "DSA" || r.isSpotlight);
+
+    const recons: { id: string; title: string; content: string; level: "CRITICAL" | "WARNING" | "INFO"; action: string }[] = [];
+
+    // Category with highest KPH count
+    const counts: Record<string, number> = {};
+    kphReports.forEach((r) => {
+      counts[r.category] = (counts[r.category] || 0) + 1;
+    });
+    
+    let topCategory = "";
+    let maxCount = 0;
+    Object.keys(counts).forEach((cat) => {
+      if (counts[cat] > maxCount) {
+        maxCount = counts[cat];
+        topCategory = cat;
+      }
+    });
+
+    if (topCategory && maxCount > 0) {
+      const pct = Math.round((maxCount / kphReports.length) * 100);
+      recons.push({
+        id: "REC-PARETO",
+        title: `Phân tích Pareto khuyên cải tiến nhóm: ${topCategory}`,
+        content: `Hệ thống thống kê Pareto chỉ ra nhóm yếu tố ${topCategory} hiện chiếm tỷ lệ cao nhất (${pct}% tổng lỗi KPH của ${statsBranchFilter}). Cần ưu tiên dồn tài nguyên cải tiến điểm này để đạt hiệu quả cao nhất (Nguyên lý 80/20).`,
+        level: "CRITICAL",
+        action: `Thực hiện đánh giá nội bộ đột xuất khu sản xuất và tổ chức đợt huấn luyện nghiệp vụ liên quan đến ${topCategory}.`
+      });
+    } else {
+      recons.push({
+        id: "REC-STABLE",
+        title: "Chỉ số vận hành an toàn đạt mức Tuyệt đối",
+        content: `Không phát hiện bất kỳ điểm nào Không Phù Hợp (KPH) tại ${statsBranchFilter}. Chất lượng đang được duy trì đặc biệt tốt.`,
+        level: "INFO",
+        action: "Khuyến khích duy trì hoạt động 5S và lưu trữ báo cáo định kỳ theo đúng quy chuẩn chung."
+      });
+    }
+
+    // Individual KPH scan for critical severity keywords
+    kphReports.slice(0, 3).forEach((r) => {
+      const hasDirectives = r.directives && r.directives.length > 0;
+      const descText = r.content?.toLowerCase() || "";
+      let isSevere = r.isAbnormal;
+      let reason = "Mức độ khẩn cấp đỏ";
+
+      if (descText.includes("dừng máy") || descText.includes("hỏng") || descText.includes("trục trặc") || descText.includes("phế phẩm")) {
+        isSevere = true;
+        reason = "Rủi ro đình trệ dây chuyền máy móc";
+      }
+      if (descText.includes("chấn thương") || descText.includes("nguy hiểm") || descText.includes("an toàn") || descText.includes("điện")) {
+        isSevere = true;
+        reason = "Rủi ro an toàn lao động";
+      }
+
+      recons.push({
+        id: `REC-KPH-${r.id}`,
+        title: `Rủi ro cao từ điểm lỗi tại ${r.factory}`,
+        content: `Phát hiện điểm KPH "${r.content}" (Yếu tố: ${r.category}) thuộc nhóm nguy cơ cao: [${reason}]. ${hasDirectives ? "Đã được ghi nhận chỉ đạo điều hành." : "Cảnh báo chưa có chỉ đạo tức thời từ Quản lý chi nhánh."}`,
+        level: isSevere ? "CRITICAL" : "WARNING",
+        action: `Đề xuất BP QA/QC chi nhánh cử giám sát xuống hiện trường xác minh và lập biểu kiểm soát khắc phục CAPA.`
+      });
+    });
+
+    // Praise top DSA
+    if (dsaReports.length > 0) {
+      const topDsa = dsaReports[dsaReports.length - 1];
+      recons.push({
+        id: "REC-DSA",
+        title: `Sáng kiến Điểm Sáng (DSA) xuất sắc từ ${topDsa.uploaderName}`,
+        content: `Ghi nhận sáng kiến đột phá tại ${topDsa.factory}: "${topDsa.content}". Định hướng cải tiến thuộc nhóm ${topDsa.category} mang lại giá trị tích cực cho môi trường vận hành sạch và tinh gọn.`,
+        level: "INFO",
+        action: `Biên soạn sáng kiến này thành cẩm nang đào tạo SOP mẫu để nhân rộng áp dụng cho toàn bộ các chi nhánh/vpđd còn lại.`
+      });
+    }
+
+    return recons;
   };
 
   // Handler to export daily reports and simulate uploading file to Drive
@@ -2020,91 +2223,274 @@ export default function DashboardDesktop({
           )}
 
           {/* TAB 3: THỐNG KÊ (Business Analytics) */}
-          {activeTab === "THỐNG_KÊ" && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-lg font-bold text-slate-850 flex items-center gap-2">
-                  <BarChart4 className="w-5 h-5 text-emerald-500" />
-                  <T>Trung tâm Thống kê Phân tích Chất lượng</T>
-                </h2>
-                <T className="text-xs text-slate-500 mt-1 block">Biểu đồ hóa các yếu tố biến động theo phân loại 4M1E1I, tỷ lệ sự cố tại 4 nhà máy và lượng lưu trữ WebP tiết kiệm.</T>
-              </div>
+          {activeTab === "THỐNG_KÊ" && (() => {
+            const { total, kph, dsa, safeRate } = getStatsCountersValue();
+            const aiRecons = getAiExpertRecommendations();
 
-              {/* Status numerical board */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                  <T className="text-[10px] text-slate-500 block font-bold uppercase tracking-wide">TỔNG SỐ BIẾN ĐỘNG</T>
-                  <T className="text-2xl font-bold block text-blue-600 mt-1">{totalReportsCount}</T>
-                  <T className="text-[9px] text-slate-450 block">Ổn định tích lũy 30 ngày qua</T>
-                </div>
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-red-650">
-                  <T className="text-[10px] text-red-500 block font-bold uppercase tracking-wide">SỰ CỐ BẤT THƯỜNG</T>
-                  <T className="text-2xl font-extrabold block mt-1">{abnormalReportsCount}</T>
-                  <T className="text-[9px] text-slate-450 block">Yêu cầu can thiệp khẩn cấp</T>
-                </div>
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-emerald-650">
-                  <T className="text-[10px] text-emerald-600 block font-bold uppercase tracking-wide">VẬN HÀNH AN TOÀN</T>
-                  <T className="text-2xl font-bold block mt-1">{safeReportsCount}</T>
-                  <T className="text-[9px] text-slate-450 block">Được phê duyệt bởi QC</T>
-                </div>
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-purple-650">
-                  <T className="text-[10px] text-purple-650 block font-bold uppercase tracking-wide">TIẾT KIỆM BĂNG THÔNG</T>
-                  <T className="text-2xl font-bold block mt-1">74%</T>
-                  <T className="text-[9px] text-slate-450 block">Nhờ động cơ ảnh nén WebP</T>
-                </div>
-              </div>
+            return (
+              <div className="space-y-6">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                  <div>
+                    <h2 className="text-xl font-black text-slate-850 flex items-center gap-2">
+                      <BarChart4 className="w-6 h-6 text-emerald-600" />
+                      <T><span translate="no" className="notranslate">Trung tâm Thống kê & Phân tích Chất lượng 4M1E1I</span></T>
+                    </h2>
+                    <T className="text-xs text-slate-500 mt-1 block">
+                      <span translate="no" className="notranslate">Trung tâm vận hành thống kê thông minh: tích hợp Ma trận Radar 4M1E1I, Phổ điều tần Pareto kiểm soát lỗi trọng yếu, so sánh nâng cao hiệu suất các xưởng sản xuất và Phòng cố vấn Độc lập AI.</span>
+                    </T>
+                  </div>
 
-              {/* Vector charts grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* 1. Categorized Proportion Chart (4M1E1I Proportion) */}
-                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                  <T className="text-xs font-extrabold uppercase tracking-widest text-emerald-650 pb-3 border-b border-slate-100 block mb-4">
-                    Tỉ Lệ Đóng Góp 4M1E1I Chất Lượng
-                  </T>
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                           data={getCategoryStats()}
-                           cx="50%"
-                           cy="50%"
-                           outerRadius={80}
-                           paddingAngle={3}
-                           dataKey="value"
+                  {/* Branch / VP segment selector */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-200 shadow-inner">
+                    <span className="text-[10px] uppercase font-mono font-extrabold text-slate-500 px-2 tracking-wider">
+                      <T><span translate="no" className="notranslate">Lọc Chi nhánh:</span></T>
+                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      <button
+                        onClick={() => setStatsBranchFilter("Tất cả")}
+                        className={`px-3 py-1 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                          statsBranchFilter === "Tất cả"
+                            ? "bg-slate-800 text-white shadow"
+                            : "text-slate-600 hover:bg-slate-200"
+                        }`}
+                      >
+                        <T><span translate="no" className="notranslate">Tất cả</span></T>
+                      </button>
+                      {branches.filter(b => b.isScoring).map((b) => (
+                        <button
+                          key={b.id}
+                          onClick={() => setStatsBranchFilter(b.name)}
+                          className={`px-3 py-1 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                            statsBranchFilter === b.name
+                              ? "bg-indigo-650 bg-indigo-600 text-white shadow"
+                              : "text-slate-600 hover:bg-slate-200"
+                          }`}
                         >
-                          {getCategoryStats().map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={colorMap[entry.name as Category4M1E1I] || "#64748b"} />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                        <Legend wrapperStyle={{ fontSize: "10px", marginTop: "10px" }} />
-                      </PieChart>
-                    </ResponsiveContainer>
+                          <T><span translate="no" className="notranslate">{b.name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn phòng ", "VP ")}</span></T>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
-                {/* 2. Defect abnormal rates across 4 factories */}
-                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                  <T className="text-xs font-extrabold uppercase tracking-widest text-blue-650 pb-3 border-b border-slate-100 block mb-4">
-                    Phân Tích Biến Động Theo Từng Nhà Máy (4 Xưởng)
-                  </T>
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={getFactoryStats()}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                        <XAxis dataKey="name" stroke="#64748b" style={{ fontSize: "10px" }} />
-                        <YAxis stroke="#64748b" style={{ fontSize: "10px" }} />
-                        <Tooltip />
-                        <Legend wrapperStyle={{ fontSize: "10px" }} />
-                        <Bar dataKey="Tổng Biến Động" fill="#4f46e5" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="Sự Cố Bất Thường" fill="#f43f5e" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
+                {/* Status board relative to selected filter */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm transition-all hover:shadow-md">
+                    <span className="text-[10px] text-slate-500 block font-bold uppercase tracking-widest">
+                      <T><span translate="no" className="notranslate">TỔNG BIẾN ĐỘNG PHÁT SINH</span></T>
+                    </span>
+                    <span className="text-3xl font-black block text-blue-600 mt-1.5">
+                      {total}
+                    </span>
+                    <span className="text-[9px] text-slate-400 block mt-1">
+                      <T><span translate="no" className="notranslate">Toàn bộ hồ sơ nhật ký dữ liệu</span></T>
+                    </span>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm transition-all hover:shadow-md text-red-600">
+                    <span className="text-[10px] text-red-500 block font-bold uppercase tracking-widest">
+                      <T><span translate="no" className="notranslate">KHÔNG PHÙ HỢP KPH</span></T>
+                    </span>
+                    <span className="text-3xl font-black block mt-1.5">
+                      {kph}
+                    </span>
+                    <span className="text-[9px] text-red-400 block mt-1">
+                      <T><span translate="no" className="notranslate">Sự cố khuyết tật, bất thường</span></T>
+                    </span>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm transition-all hover:shadow-md text-emerald-600">
+                    <span className="text-[10px] text-emerald-600 block font-bold uppercase tracking-widest">
+                      <T><span translate="no" className="notranslate">ĐIỂM SÁNG CHẤT LƯỢNG (DSA)</span></T>
+                    </span>
+                    <span className="text-3xl font-black block mt-1.5">
+                      {dsa}
+                    </span>
+                    <span className="text-[9px] text-emerald-400 block mt-1">
+                      <T><span translate="no" className="notranslate">Sáng kiến cải tiến thực tiễn tốt</span></T>
+                    </span>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm transition-all hover:shadow-md text-indigo-650">
+                    <span className="text-[10px] text-indigo-600 block font-bold uppercase tracking-widest">
+                      <T><span translate="no" className="notranslate">CHỈ SỐ AN TOÀN VẬN HÀNH</span></T>
+                    </span>
+                    <span className="text-3xl font-black block text-indigo-650 mt-1.5">
+                      {safeRate}%
+                    </span>
+                    <span className="text-[9px] text-indigo-400 block mt-1">
+                      <T><span translate="no" className="notranslate">Tỉ số không sai hỏng mục tiêu</span></T>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Analytical charts grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* CHART 1: RADAR CHART analyses KPH distribution across 4M1E1I */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <span className="text-xs font-black uppercase tracking-widest text-[#ef4444] pb-2 border-b border-slate-100 block mb-4">
+                        <T><span translate="no" className="notranslate">1. Biểu Đồ Radar: Thống Kê Điểm Không Phù Hợp (KPH) theo 4M1E1I</span></T>
+                      </span>
+                      <p className="text-[10px] text-slate-500 mb-2 leading-relaxed">
+                        <T><span translate="no" className="notranslate">Xác định phân hệ phân bố lỗi chất lượng để biết yếu tố nào trong 6 trụ cột (Con người, Nguyên vật liệu, Máy móc, Phương pháp, Môi trường, Thông tin) đang suy giảm nặng nề nhất.</span></T>
+                      </p>
+                    </div>
+                    <div className="h-64 mt-4">
+                      {kph > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <RadarChart cx="50%" cy="50%" outerRadius="80%" data={getRadarKphData()}>
+                            <PolarGrid stroke="#cbd5e1" />
+                            <PolarAngleAxis dataKey="subject" tick={{ fill: '#334155', fontSize: 9, fontWeight: 700 }} />
+                            <PolarRadiusAxis angle={30} domain={[0, 'auto']} tick={{ fill: '#64748b', fontSize: 8 }} />
+                            <Radar name="Số lỗi KPH" dataKey="Không Phù Hợp (KPH)" stroke="#ef4444" fill="#f87171" fillOpacity={0.35} />
+                            <Tooltip />
+                          </RadarChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="h-full flex items-center justify-center border border-dashed border-slate-200 rounded-xl bg-slate-50">
+                          <p className="text-xs text-slate-400 italic">
+                            <T><span translate="no" className="notranslate">Không có dữ liệu lỗi KPH để vẽ giản đồ Radar</span></T>
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* CHART 2: PARETO CHART */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <span className="text-xs font-black uppercase tracking-widest text-indigo-650 pb-2 border-b border-slate-100 block mb-4">
+                        <T><span translate="no" className="notranslate">2. Sơ Đồ Pareto: Tầng Lỗi & Phần Trăm Lũy Kế 80/20</span></T>
+                      </span>
+                      <p className="text-[10px] text-slate-500 mb-2 leading-relaxed">
+                        <T><span translate="no" className="notranslate">Sắp xếp lỗi theo tần suất xuất hiện giảm dần cùng đường tích lũy phần trăm. Giúp nhà quản lý dồn sức xử lý đúng 20% nguyên nhân cốt lõi để loại bỏ 80% phế phẩm chất lượng.</span></T>
+                      </p>
+                    </div>
+                    <div className="h-64 mt-4">
+                      {kph > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <ComposedChart data={getParetoData()}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                            <XAxis dataKey="category" tick={{ fill: '#475569', fontSize: 8, fontWeight: 700 }} />
+                            <YAxis yAxisId="left" label={{ value: 'Tần suất lỗi', angle: -90, position: 'insideLeft', style: { fontSize: 8, fill: '#475569' } }} tick={{ fill: '#64748b', fontSize: 9 }} />
+                            <YAxis yAxisId="right" orientation="right" label={{ value: 'Lũy kế (%)', angle: 90, position: 'insideRight', style: { fontSize: 8, fill: '#d97706' } }} domain={[0, 100]} tick={{ fill: '#64748b', fontSize: 9 }} />
+                            <Tooltip />
+                            <Legend wrapperStyle={{ fontSize: "10px" }} />
+                            <Bar yAxisId="left" dataKey="Số lỗi (Tần suất)" fill="#3b82f6" barSize={25} radius={[4, 4, 0, 0]} />
+                            <Line yAxisId="right" type="monotone" dataKey="Phần trăm lũy kế (%)" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, fill: '#f59e0b' }} />
+                          </ComposedChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="h-full flex items-center justify-center border border-dashed border-slate-200 rounded-xl bg-slate-50">
+                          <p className="text-xs text-slate-400 italic">
+                            <T><span translate="no" className="notranslate">Không có dữ liệu lỗi sản xuất để vẽ đồ thị Pareto</span></T>
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* CHART 3: PERFORMANCE GRAPH (DSA vs KPH comparativeness) */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between lg:col-span-2">
+                    <div>
+                      <span className="text-xs font-black uppercase tracking-widest text-[#0d9488] pb-2 border-b border-slate-100 block mb-4">
+                        <T><span translate="no" className="notranslate">3. So Sánh Hiệu Suất Chất Lũơng: Điểm Sáng (DSA) Vs Điểm Lỗi (KPH) Giữa Các Chi Nhánh</span></T>
+                      </span>
+                      <p className="text-[10px] text-slate-500 mb-2 leading-relaxed">
+                        <T><span translate="no" className="notranslate">Biểu hiện của tính đối sáng thi đua giữa tất cả xưởng và văn phòng toàn bộ lãnh thổ Tân Phú. Cho thấy ngay đơn vị nào đang có tỷ lệ cải tiến DSA xuất sắc đột phá và đơn vị nào còn tồn vướng nhiều điểm Không Phù Hợp KPH để ban giám đốc QC giám sát chỉ đạo.</span></T>
+                      </p>
+                    </div>
+                    <div className="h-72 mt-4">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={getBranchComparisonData()}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                          <XAxis dataKey="name" tick={{ fill: '#334155', fontSize: 9, fontWeight: 700 }} />
+                          <YAxis tick={{ fill: '#64748b', fontSize: 9 }} />
+                          <Tooltip />
+                          <Legend wrapperStyle={{ fontSize: "10px" }} />
+                          <Bar dataKey="Điểm Sáng (DSA)" fill="#10b981" barSize={35} radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="Không Phù Hợp (KPH)" fill="#ef4444" barSize={35} radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+
+                {/* AI ADVICE PANEL */}
+                <div className="bg-slate-900 text-white rounded-3xl p-6 border border-slate-800 shadow-xl relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-8 transform translate-x-12 -translate-y-12 w-64 h-64 bg-indigo-600 rounded-full filter blur-[100px] opacity-20 pointer-events-none" />
+                  <div className="absolute bottom-0 left-0 p-8 transform -translate-x-12 translate-y-12 w-64 h-64 bg-emerald-600 rounded-full filter blur-[100px] opacity-15 pointer-events-none" />
+                  
+                  <div className="relative z-10 space-y-4">
+                    <div className="flex items-center justify-between gap-2 pb-4 border-b border-slate-850">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-5 h-5 text-indigo-400 animate-pulse" />
+                        <h3 className="text-base font-black uppercase tracking-wider text-slate-100">
+                          <T><span translate="no" className="notranslate">Phòng Tham Mưu Cố Vấn Tri Thức Trí Tuệ Nhân Tạo (Advanced AI Quality Advisor)</span></T>
+                        </h3>
+                      </div>
+                      <span className="bg-indigo-900 text-indigo-200 border border-indigo-700 text-[9px] px-2 py-0.5 rounded font-mono font-bold">
+                        <T><span translate="no" className="notranslate">LIVE DIAGNOSTICS ACTIVE</span></T>
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-300 leading-relaxed max-w-4xl">
+                      <T><span translate="no" className="notranslate">Dưới đây là các khuyến nghị chất lượng được huấn luyện riêng biệt dựa trên thuật toán rà soát dữ liệu thô KPH/DSA, so sánh tần suất Pareto và phân tích sắc thái nghiêm trọng thông qua hội thoại trao đổi thực tế của nhân viên kỹ thuật:</span></T>
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                      {aiRecons.map((item, idx) => (
+                        <div 
+                          key={item.id} 
+                          className={`p-4 rounded-2xl border transition-all hover:bg-opacity-100 ${
+                            item.level === "CRITICAL"
+                              ? "bg-red-950/40 border-red-900/60 hover:bg-red-950/60"
+                              : item.level === "WARNING"
+                              ? "bg-amber-950/30 border-amber-900/50 hover:bg-amber-950/50"
+                              : "bg-indigo-950/30 border-indigo-900/50 hover:bg-indigo-950/50"
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 justify-between">
+                            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${
+                              item.level === "CRITICAL"
+                                ? "bg-red-500/20 text-red-300 border border-red-500/30"
+                                : item.level === "WARNING"
+                                ? "bg-amber-500/25 text-amber-300 border border-amber-500/30"
+                                : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                            }`}>
+                              <T><span translate="no" className="notranslate">{item.level === "CRITICAL" ? "KHẨN CẤP" : item.level === "WARNING" ? "CẢNH BÁO" : "THÔNG TIN"}</span></T>
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-mono font-bold">#{item.id}</span>
+                          </div>
+
+                          <h4 className="text-sm font-extrabold text-slate-100 mt-2 flex items-center gap-1.5">
+                            {item.level === "CRITICAL" && <span>🚨</span>}
+                            {item.level === "WARNING" && <span>⚠️</span>}
+                            {item.level === "INFO" && <span>💡</span>}
+                            <T><span translate="no" className="notranslate">{item.title}</span></T>
+                          </h4>
+
+                          <p className="text-xs text-slate-300 mt-1 pb-3 border-b border-slate-800/60 leading-relaxed font-normal">
+                            <T><span translate="no" className="notranslate">{item.content}</span></T>
+                          </p>
+
+                          <div className="pt-2 text-[11px] text-indigo-300 space-y-1">
+                            <strong className="text-indigo-400 block font-black uppercase text-[10px] tracking-wide">
+                              <T><span translate="no" className="notranslate">» HÀNH ĐỘNG QC KHUYẾN NGHỊ:</span></T>
+                            </strong>
+                            <p className="leading-snug">
+                              <T><span translate="no" className="notranslate">{item.action}</span></T>
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* TAB 4: DỮ LIỆU (Database history & PDF exports) */}
           {activeTab === "DỮ_LỆU" && (
@@ -2249,6 +2635,7 @@ export default function DashboardDesktop({
                         <th className="p-4 text-center">Người Thích</th>
                         <th className="p-4 text-center">BP/ĐV Tiếp Nhận</th>
                         <th className="p-4 text-center">Hình ảnh</th>
+                        <th className="p-4 text-center"><T>Phân loại</T></th>
                         <th className="p-4 text-center">Trạng thái</th>
                       </tr>
                     </thead>
@@ -2373,7 +2760,7 @@ export default function DashboardDesktop({
                             </td>
                             <td className="p-4 min-w-[120px]">
                               {r.sharedBy && r.sharedBy.length > 0 ? (
-                                <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto max-w-[145px]">
+                                <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto max-w-[140px]">
                                   {r.sharedBy.map((name, i) => (
                                     <span key={i} className="bg-sky-50 text-sky-800 text-[9px] px-1.5 py-0.5 rounded border border-sky-100 font-bold whitespace-nowrap">
                                       <T>{name}</T>
@@ -2389,6 +2776,21 @@ export default function DashboardDesktop({
                                 <DesktopThumbnailSlider imageUrls={r.imageUrls} fallbackUrl={r.imageUrl} />
                               ) : (
                                 <T className="text-slate-400 text-[10px]">Trống</T>
+                              )}
+                            </td>
+                            <td className="p-4 text-center select-none whitespace-nowrap font-mono font-bold text-xs font-black">
+                              {r.reportType === "KPH" || r.isAbnormal ? (
+                                <span className="bg-red-100 text-red-800 border border-red-200 font-black text-[10px] px-2.5 py-1 rounded tracking-wider">
+                                  <T>KPH</T>
+                                </span>
+                              ) : r.reportType === "DSA" || r.isSpotlight ? (
+                                <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 font-black text-[10px] px-2.5 py-1 rounded tracking-wider">
+                                  <T>DSA</T>
+                                </span>
+                              ) : (
+                                <span className="bg-slate-100 text-slate-600 border border-slate-205 font-bold text-[10px] px-2.5 py-1 rounded tracking-wide">
+                                  <T>NORMAL</T>
+                                </span>
                               )}
                             </td>
                             <td className="p-4 text-center select-none whitespace-nowrap">

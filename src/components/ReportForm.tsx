@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { ArrowLeft, Camera, RotateCw, Check, Scissors, AlertTriangle, RefreshCw, ChevronDown } from "lucide-react";
+import { ArrowLeft, Camera, RotateCw, Check, Scissors, AlertTriangle, RefreshCw, ChevronDown, X } from "lucide-react";
 import { T } from "./TranslateText";
 import { Category4M1E1I, QualityReport, User, Branch, UserRole } from "../types";
 import { initialBranches, STANDARDIZED_QC_DEPT } from "../data";
@@ -203,37 +203,47 @@ export default function ReportForm({
   // Make sure selectedBranch stays in sync with branches list modifications
   useEffect(() => {
     if (branches && branches.length > 0) {
-      const isAdmin = currentUser?.role === UserRole.ADMIN;
-      const exists = branches.some((b) => b.name === selectedBranch && (isAdmin ? true : b.isScoring));
-      if (!exists) {
-        // Try finding standard or user branch matching the current selectedBranch
-        const matched = findMatchingBranch(selectedBranch);
-        if (matched && (isAdmin ? true : matched.isScoring)) {
+      // 1. If currently selectedBranch is still in the branches list, keep it! (no change/override needed)
+      const existsInList = branches.some((b) => b.name === selectedBranch);
+      if (existsInList) {
+        return;
+      }
+
+      // 2. Otherwise (or on initial load sync), try to find a matching branch for the current editingReport
+      const editFactory = editingReport?.factory;
+      if (editFactory) {
+        const matched = findMatchingBranch(editFactory);
+        if (matched) {
           setSelectedBranch(matched.name);
           return;
         }
+      }
 
-        // Try finding direct link to user's branch
-        const userBranch = currentUser?.branch || "";
-        const userDept = currentUser?.department || "";
-        const matchedUserBranch = findMatchingBranch(userBranch, userDept);
-        if (matchedUserBranch && (isAdmin ? true : matchedUserBranch.isScoring)) {
-          setSelectedBranch(matchedUserBranch.name);
-        } else {
-          // Fallback to first scoring or first in list
-          const firstScoring = isAdmin ? branches[0] : branches.find(b => b.isScoring);
-          if (firstScoring) {
-            setSelectedBranch(firstScoring.name);
-          }
-        }
+      // 3. Try to find a matching branch for the currentUser's branch or department
+      const userBranch = currentUser?.branch || "";
+      const userDept = currentUser?.department || "";
+      const matchedUserBranch = findMatchingBranch(userBranch, userDept);
+      if (matchedUserBranch) {
+        setSelectedBranch(matchedUserBranch.name);
+        return;
+      }
+
+      // 4. Default fallback: first scoring branch or first branch in list
+      const isAdmin = currentUser?.role === UserRole.ADMIN;
+      const firstScoring = branches.find(b => b.isScoring);
+      if (firstScoring) {
+        setSelectedBranch(firstScoring.name);
+      } else {
+        setSelectedBranch(branches[0].name);
       }
     }
-  }, [branches, currentUser, selectedBranch]);
+  }, [branches, currentUser, selectedBranch, editingReport]);
   const [selectedCategory, setSelectedCategory] = useState<Category4M1E1I>(editingReport?.category || "CON NGƯỜI");
   const [timestamp, setTimestamp] = useState("");
   const [content, setContent] = useState(editingReport?.content || "");
   const [notes, setNotes] = useState(editingReport?.notes || "");
-  const [isAbnormal, setIsAbnormal] = useState(editingReport?.isAbnormal || false);
+  const [isAbnormal, setIsAbnormal] = useState(editingReport?.isAbnormal || editingReport?.reportType === "KPH" || false);
+  const [isSpotlight, setIsSpotlight] = useState(editingReport?.isSpotlight || editingReport?.reportType === "DSA" || false);
 
   // Multiple Images Management (Max 3)
   interface ProcessedImage {
@@ -467,7 +477,9 @@ export default function ReportForm({
       uploaderId: currentUser.id,
       uploaderDepartment: currentUser.department || STANDARDIZED_QC_DEPT,
       notes: notes.trim() ? notes : undefined,
-      isAbnormal
+      isAbnormal,
+      isSpotlight,
+      reportType: isAbnormal ? "KPH" : (isSpotlight ? "DSA" : "NORMAL")
     };
 
     onSubmitReport(reportPayload);
@@ -779,21 +791,65 @@ export default function ReportForm({
           )}
         </div>
 
-        {/* 5. Warning abnormal toggle switch */}
-        <div className="bg-white p-3 rounded-xl border border-slate-200 flex items-center justify-between">
-          <div>
-            <T className="text-xs font-bold text-slate-800 block">Sự cố bất thường?</T>
-            <T className="text-[9px] text-slate-400 block mt-0.5">Sẽ gửi thông báo đỏ kích hoạt còi cảnh báo cho Admin</T>
-          </div>
-          <label className="relative inline-flex items-center cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={isAbnormal}
-              onChange={(e) => setIsAbnormal(e.target.checked)}
-              className="sr-only peer"
-            />
-            <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-500" />
-          </label>
+        {/* 5. Classification controls (KPH / DSA) */}
+        <div className="grid grid-cols-2 gap-3">
+          {/* Left panel: Điểm Không Phù Hợp */}
+          <button
+            type="button"
+            onClick={() => {
+              if (isAbnormal) {
+                setIsAbnormal(false);
+              } else {
+                setIsAbnormal(true);
+                setIsSpotlight(false);
+              }
+            }}
+            className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all h-[80px] cursor-pointer ${
+              isAbnormal
+                ? "bg-red-50 border-red-500 text-red-900 ring-2 ring-red-200 font-extrabold"
+                : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+            }`}
+          >
+            <div className="flex items-center justify-between w-full">
+              <span className="text-xs font-black flex items-center gap-1.5 text-red-700">
+                <X size={14} className="stroke-[3.5] text-red-600" />
+                <T>KPH</T>
+              </span>
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${isAbnormal ? "bg-red-600 text-white shadow-sm ring-2 ring-red-350" : "bg-slate-100 border border-slate-300 text-slate-400"}`}>
+                <X size={11} className="stroke-[4]" />
+              </div>
+            </div>
+            <span className="text-[9px] text-slate-500 block leading-tight font-bold mt-auto"><T>Điểm Không Phù Hợp</T></span>
+          </button>
+
+          {/* Right panel: Điểm Sáng */}
+          <button
+            type="button"
+            onClick={() => {
+              if (isSpotlight) {
+                setIsSpotlight(false);
+              } else {
+                setIsSpotlight(true);
+                setIsAbnormal(false);
+              }
+            }}
+            className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all h-[80px] cursor-pointer ${
+              isSpotlight
+                ? "bg-emerald-50 border-emerald-500 text-emerald-950 ring-2 ring-emerald-200 font-extrabold"
+                : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+            }`}
+          >
+            <div className="flex items-center justify-between w-full">
+              <span className="text-xs font-black flex items-center gap-1.5 text-emerald-700">
+                <Check size={14} className="stroke-[3.5] text-emerald-600" />
+                <T>DSA</T>
+              </span>
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${isSpotlight ? "bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-350" : "bg-slate-100 border border-slate-300 text-slate-400"}`}>
+                <Check size={11} className="stroke-[4]" />
+              </div>
+            </div>
+            <span className="text-[9px] text-slate-500 block leading-tight font-bold mt-auto"><T>Điểm Sáng (Tin tốt)</T></span>
+          </button>
         </div>
 
         {/* 6. Content statement description (Nội dung thay đổi*) */}

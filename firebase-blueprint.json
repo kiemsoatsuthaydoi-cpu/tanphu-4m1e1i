@@ -32,6 +32,8 @@
         "description": { "type": "string" },
         "action": { "type": "string" },
         "isAbnormal": { "type": "boolean" },
+        "isSpotlight": { "type": "boolean" },
+        "reportType": { "type": "string" },
         "timestamp": { "type": "string" },
         "uploaderId": { "type": "string" },
         "uploaderName": { "type": "string" },

@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Search, RotateCw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor } from "lucide-react";
-import { QualityReport, Category4M1E1I, User, UserRole, Branch, Company } from "../types";
+import { Search, RotateCw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock } from "lucide-react";
+import { QualityReport, Category4M1E1I, User, UserRole, Branch, Company, ChatMessage } from "../types";
 import { T } from "./TranslateText";
 
 interface AutoImageSliderProps {
   imageUrls?: string[];
   fallbackUrl: string;
   isAbnormal?: boolean;
+  isSpotlight?: boolean;
+  reportType?: "KPH" | "DSA" | "NORMAL";
 }
 
-export function AutoImageSlider({ imageUrls, fallbackUrl, isAbnormal }: AutoImageSliderProps) {
+export function AutoImageSlider({ imageUrls, fallbackUrl, isAbnormal, isSpotlight, reportType }: AutoImageSliderProps) {
   const list = imageUrls && imageUrls.length > 0 ? imageUrls : [fallbackUrl];
   const [index, setIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -94,14 +96,21 @@ export function AutoImageSlider({ imageUrls, fallbackUrl, isAbnormal }: AutoImag
           </div>
         )}
 
-        {isAbnormal && (
-          <div className="absolute top-0 inset-x-0 bg-red-600 bg-opacity-85 text-white py-1px px-3 flex items-center gap-1.5 z-20 py-1">
+        {isAbnormal || reportType === "KPH" ? (
+          <div className="absolute top-0 inset-x-0 bg-red-650 bg-opacity-90 text-white py-1 px-3 flex items-center gap-1.5 z-20">
             <span className="w-2 h-2 rounded-full bg-white animate-pulse block shrink-0" />
-            <T className="text-[10px] font-bold block uppercase tracking-wide leading-none select-none">
-              PHÁT HIỆN BIẾN ĐỘNG BẤT THƯỜNG
+            <T className="text-[10px] font-black block uppercase tracking-wide leading-none select-none">
+              ⚠️ ĐIỂM KHÔNG PHÙ HỢP (KPH)
             </T>
           </div>
-        )}
+        ) : isSpotlight || reportType === "DSA" ? (
+          <div className="absolute top-0 inset-x-0 bg-emerald-650 bg-opacity-90 text-white py-1 px-3 flex items-center gap-1.5 z-20">
+            <span className="w-2 h-2 rounded-full bg-white block shrink-0" />
+            <T className="text-[10px] font-black block uppercase tracking-wide leading-none select-none">
+              ⭐ ĐIỂM SÁNG PHÁT TRIỂN (DSA)
+            </T>
+          </div>
+        ) : null}
       </div>
 
       {/* Fullscreen Shopee-style Lightbox Overlay Modal */}
@@ -234,6 +243,26 @@ interface MobileFrameProps {
   users?: User[];
   companies?: Company[];
   onSwitchToDesktop?: () => void;
+  chats?: ChatMessage[];
+  onAddChatMessage?: (msg: string, reportRefId?: string) => void;
+}
+
+function formatTimestampToDMY(tsStr: string): string {
+  if (!tsStr) return "";
+  try {
+    const dates = tsStr.split(" ");
+    if (dates.length === 2) {
+      const datePart = dates[0].replace(/\/20(\d{2})/, "/$1");
+      const timeParts = dates[1].split(":");
+      const timePart = timeParts.length >= 2 ? `${timeParts[0]}:${timeParts[1]}` : dates[1];
+      return `${timePart} ${datePart}`;
+    }
+    let cleaned = tsStr.replace(/\/20(\d{2})/, "/$1");
+    cleaned = cleaned.replace(/:(\d{2}):(\d{2})/, ":$1");
+    return cleaned;
+  } catch (error) {
+    return tsStr;
+  }
 }
 
 export default function MobileFrame({
@@ -252,7 +281,9 @@ export default function MobileFrame({
   onManualRefresh,
   users,
   companies,
-  onSwitchToDesktop
+  onSwitchToDesktop,
+  chats,
+  onAddChatMessage
 }: MobileFrameProps) {
   const config = mobileUIConfig || {};
   const displayRule = config.displayRule || "clean";
@@ -409,8 +440,69 @@ export default function MobileFrame({
   const onlineCount = getOnlineCount();
 
   const [searchTerm, setSearchTerm] = useState("");
+  const [openChatReportId, setOpenChatReportId] = useState<string | null>(null);
+
+  useEffect(() => {
+    function handleDocumentClick(e: MouseEvent) {
+      if (!openChatReportId) return;
+      const target = e.target as HTMLElement;
+      if (target.closest(`.chat-box-${openChatReportId}`) || target.closest(`.chat-btn-${openChatReportId}`)) {
+        return;
+      }
+      setOpenChatReportId(null);
+    }
+    document.addEventListener("mousedown", handleDocumentClick);
+    return () => {
+      document.removeEventListener("mousedown", handleDocumentClick);
+    };
+  }, [openChatReportId]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedFactoryFilter, setSelectedFactoryFilter] = useState<string | null>(null);
+  const [activeBottomTab, setActiveBottomTab] = useState<"BAO_CAO" | "PHAN_TICH">("BAO_CAO");
+  const [mobileBranchFilter, setMobileBranchFilter] = useState<string>("Tất cả");
+  const [mobileTimeFilter, setMobileTimeFilter] = useState<"NGAY" | "TUAN" | "THANG">("THANG");
+
+  const filterByTimeRange = (reportDate: Date) => {
+    const now = new Date();
+    const diffMs = Math.abs(now.getTime() - reportDate.getTime());
+    if (mobileTimeFilter === "NGAY") {
+      return diffMs <= 24 * 60 * 60 * 1000;
+    } else if (mobileTimeFilter === "TUAN") {
+      return diffMs <= 7 * 24 * 60 * 60 * 1000;
+    } else {
+      return diffMs <= 30 * 24 * 60 * 60 * 1000;
+    }
+  };
+
+  const getMobileStats = () => {
+    const filtered = reports.filter((r) => {
+      const matchesBranch = mobileBranchFilter === "Tất cả" || matchSelectedFactory(r.factory, mobileBranchFilter);
+      const rDate = parseReportTimestamp(r.timestamp);
+      const matchesTime = filterByTimeRange(rDate);
+      return matchesBranch && matchesTime;
+    });
+
+    const total = filtered.length;
+    const kph = filtered.filter((r) => r.reportType === "KPH" || r.isAbnormal).length;
+    const dsa = filtered.filter((r) => r.reportType === "DSA" || r.isSpotlight).length;
+    const safeRate = total > 0 ? Math.round(((total - kph) / total) * 100) : 100;
+
+    const counts: Record<Category4M1E1I, number> = {
+      "CON NGƯỜI": 0,
+      "NGUYÊN VẬT LIỆU": 0,
+      "MÁY MÓC": 0,
+      "PHƯƠNG PHÁP": 0,
+      "MÔI TRƯỜNG": 0,
+      "THÔNG TIN": 0
+    };
+    filtered.forEach((r) => {
+      if (counts[r.category] !== undefined) {
+        counts[r.category]++;
+      }
+    });
+
+    return { total, kph, dsa, safeRate, counts, filteredReports: filtered };
+  };
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -471,6 +563,12 @@ export default function MobileFrame({
   useEffect(() => {
     localStorage.setItem("4m1e1i_liked_reports", JSON.stringify(likedReports));
   }, [likedReports]);
+
+  useEffect(() => {
+    if (activeBottomTab === "PHAN_TICH" && currentUser?.role !== UserRole.ADMIN) {
+      setActiveBottomTab("BAO_CAO");
+    }
+  }, [activeBottomTab, currentUser]);
 
   const toggleLike = (reportId: string) => {
     const report = reports.find((r) => r.id === reportId);
@@ -1087,9 +1185,10 @@ App Link: ${window.location.origin}`;
       </div>
 
       {/* Internal layout controls (Search inputs) */}
-      <div className={`transition-all duration-300 overflow-hidden shrink-0 ${
-        showFilters ? "max-h-[160px] opacity-100" : "max-h-0 opacity-0 pointer-events-none"
-      }`}>
+      {activeBottomTab === "BAO_CAO" && (
+        <div className={`transition-all duration-300 overflow-hidden shrink-0 ${
+          showFilters ? "max-h-[160px] opacity-100" : "max-h-0 opacity-0 pointer-events-none"
+        }`}>
         <div className="bg-white px-3 py-2 border-b border-slate-200 shadow-sm flex flex-col gap-1.5">
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400" />
@@ -1175,6 +1274,7 @@ App Link: ${window.location.origin}`;
           </div>
         </div>
       </div>
+      )}
 
       {/* Offline Alert Sticky Banner */}
       {offlineMode && (
@@ -1184,11 +1284,281 @@ App Link: ${window.location.origin}`;
       )}
 
       {/* Main card list scroll area */}
-      <div
-        ref={scrollContainerRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto p-3 space-y-3.5 bg-slate-50 relative"
-      >
+      {activeBottomTab === "PHAN_TICH" ? (
+        <div className="flex-1 overflow-y-auto p-4 bg-slate-50 space-y-4 select-none">
+          {/* Header Analysis info with custom icon */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+              <div className={`p-1.5 rounded-xl text-white ${theme.bg} flex items-center justify-center`}>
+                <BarChart2 className="w-4 h-4 text-white" />
+              </div>
+              <h2 className={`text-xs font-black tracking-tight ${theme.text}`}>
+                <T><span translate="no" className="notranslate">Phân Tích Chất Lượng 4M1E1I</span></T>
+              </h2>
+            </div>
+            <p className="text-[10px] text-slate-500 leading-normal">
+              <T><span translate="no" className="notranslate">Theo dõi trực quan phân bổ lỗi Không Phù Hợp (KPH) & Điểm Sáng chất lượng (DSA) trên toàn bộ hệ thống Tân Phú.</span></T>
+            </p>
+          </div>
+
+          {/* Combined Filters Panel for chi nhánh and date ranges */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-6xs space-y-2.5">
+            {/* Filter 1: Chọn Chi Nhánh */}
+            <div className="space-y-0.5">
+              <label className="text-[9px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                <span>🏭</span>
+                <T><span translate="no" className="notranslate">Chọn Chi Nhánh:</span></T>
+              </label>
+              <div className="relative">
+                <select
+                  value={mobileBranchFilter}
+                  onChange={(e) => setMobileBranchFilter(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-[10px] font-bold focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-3xs text-slate-800 transition-all cursor-pointer appearance-none"
+                >
+                  <option value="Tất cả" translate="no" className="notranslate">
+                    Tất cả Chi nhánh
+                  </option>
+                  {(branches || [])
+                    .filter((b) => b.isScoring)
+                    .map((b) => (
+                      <option key={b.id} value={b.id} translate="no" className="notranslate">
+                        {getFactoryDisplayName(b.name)}
+                      </option>
+                    ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-400">
+                  <span className="text-[8px]">▼</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Filter 2: Định kỳ Thống kê */}
+            <div className="space-y-0.5">
+              <label className="text-[9px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                <span>📅</span>
+                <T><span translate="no" className="notranslate">Chu Kỳ Thống Kê:</span></T>
+              </label>
+              <div className="grid grid-cols-3 gap-1 bg-slate-50 p-0.5 rounded-lg border border-slate-100 shadow-inner">
+                <button
+                  type="button"
+                  onClick={() => setMobileTimeFilter("NGAY")}
+                  className={`py-1 rounded text-[9px] font-black uppercase transition-all select-none cursor-pointer border-none bg-transparent ${
+                    mobileTimeFilter === "NGAY"
+                      ? `${theme.bg} text-white shadow-3xs`
+                      : "text-slate-550 hover:bg-slate-200/50"
+                  }`}
+                >
+                  <T><span translate="no" className="notranslate">Đọc NGÀY</span></T>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMobileTimeFilter("TUAN")}
+                  className={`py-1 rounded text-[9px] font-black uppercase transition-all select-none cursor-pointer border-none bg-transparent ${
+                    mobileTimeFilter === "TUAN"
+                      ? `${theme.bg} text-white shadow-3xs`
+                      : "text-slate-550 hover:bg-slate-200/50"
+                  }`}
+                >
+                  <T><span translate="no" className="notranslate">Đọc TUẦN</span></T>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMobileTimeFilter("THANG")}
+                  className={`py-1 rounded text-[9px] font-black uppercase transition-all select-none cursor-pointer border-none bg-transparent ${
+                    mobileTimeFilter === "THANG"
+                      ? `${theme.bg} text-white shadow-3xs`
+                      : "text-slate-550 hover:bg-slate-200/50"
+                  }`}
+                >
+                  <T><span translate="no" className="notranslate">Đọc THÁNG</span></T>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Calculated Statistics block */}
+          {(() => {
+            const stats = getMobileStats();
+            return (
+              <>
+                {/* Scorecards */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-3xs flex flex-col justify-between">
+                    <span className="text-[8px] text-slate-550 font-extrabold uppercase tracking-wider block">
+                      <T><span translate="no" className="notranslate">Tổng Biến Động</span></T>
+                    </span>
+                    <span className={`text-lg font-black block mt-0.5 ${theme.text}`}>
+                      {stats.total}
+                    </span>
+                    <span className="text-[7px] text-slate-400 block">
+                      <T><span translate="no" className="notranslate">Bản tin ghi nhận</span></T>
+                    </span>
+                  </div>
+
+                  <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-3xs flex flex-col justify-between border-l-4 border-l-red-500">
+                    <span className="text-[8px] text-rose-600 font-extrabold uppercase tracking-wider block">
+                      <T><span translate="no" className="notranslate">Lỗi KPH</span></T>
+                    </span>
+                    <span className="text-lg font-black block text-red-600 mt-0.5">
+                      {stats.kph}
+                    </span>
+                    <span className="text-[7px] text-red-400 block">
+                      <T><span translate="no" className="notranslate">Bất thường</span></T>
+                    </span>
+                  </div>
+
+                  <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-3xs flex flex-col justify-between border-l-4 border-l-emerald-500">
+                    <span className="text-[8px] text-emerald-600 font-extrabold uppercase tracking-wider block">
+                      <T><span translate="no" className="notranslate">Điểm Sáng DSA</span></T>
+                    </span>
+                    <span className="text-lg font-black block text-emerald-600 mt-0.5">
+                      {stats.dsa}
+                    </span>
+                    <span className="text-[7px] text-emerald-400 block">
+                      <T><span translate="no" className="notranslate">Sáng kiến tốt</span></T>
+                    </span>
+                  </div>
+
+                  <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-3xs flex flex-col justify-between border-l-4 border-l-indigo-500">
+                    <span className="text-[8px] text-indigo-600 font-extrabold uppercase tracking-wider block">
+                      <T><span translate="no" className="notranslate">An Toàn</span></T>
+                    </span>
+                    <span className="text-lg font-black block text-indigo-650 mt-0.5">
+                      {stats.safeRate}%
+                    </span>
+                    <span className="text-[7px] text-indigo-400 block">
+                      <T><span translate="no" className="notranslate">Đạt chuẩn SOP</span></T>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Categories progress */}
+                <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-3xs space-y-2">
+                  <h3 className="text-[9px] font-black uppercase text-slate-600 tracking-wider">
+                    <T><span translate="no" className="notranslate">Phân bổ theo M-E-I (4M1E1I)</span></T>
+                  </h3>
+                  <div className="space-y-2">
+                    {(["CON NGƯỜI", "MÁY MÓC", "NGUYÊN VẬT LIỆU", "PHƯƠNG PHÁP", "MÔI TRƯỜNG", "THÔNG TIN"] as Category4M1E1I[]).map((cat) => {
+                      const count = stats.counts[cat] || 0;
+                      const pct = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0;
+                      
+                      let barColor = "bg-slate-400";
+                      if (cat === "CON NGƯỜI") barColor = "bg-indigo-500";
+                      else if (cat === "MÁY MÓC") barColor = "bg-green-500";
+                      else if (cat === "NGUYÊN VẬT LIỆU") barColor = "bg-fuchsia-400";
+                      else if (cat === "PHƯƠNG PHÁP") barColor = "bg-amber-500";
+                      else if (cat === "MÔI TRƯỜNG") barColor = "bg-teal-500";
+                      else if (cat === "THÔNG TIN") barColor = "bg-slate-500";
+
+                      return (
+                        <div key={cat} className="space-y-0.5">
+                          <div className="flex justify-between items-center text-[9px] font-bold">
+                            <span className="text-slate-700 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full inline-block bg-slate-300"></span>
+                              <T><span translate="no" className="notranslate">{cat}</span></T>
+                            </span>
+                            <span className="text-slate-505 font-mono">
+                              <span translate="no" className="notranslate">{count}</span>
+                              <span className="text-[8px] opacity-60 ml-0.5">({pct}%)</span>
+                            </span>
+                          </div>
+                          <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200/30 relative">
+                            <div 
+                              className={`h-full rounded-full transition-all duration-300 ${barColor}`} 
+                              style={{ width: `${Math.max(3, pct)}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* AI Advice Advisor */}
+                <div className="bg-amber-50 rounded-xl border border-amber-200 p-3 shadow-3xs text-[10px] text-amber-900 leading-relaxed font-semibold">
+                  <div className="flex items-center gap-1 font-bold text-amber-800 text-[9px] uppercase mb-1">
+                    <span>💡</span>
+                    <T><span translate="no" className="notranslate">Khuyến Nghị Cố Vấn QC Độc Lập</span></T>
+                  </div>
+                  <p>
+                    {stats.kph > 0 ? (
+                      <T><span translate="no" className="notranslate">Hệ thống phát hiện {stats.kph} điểm lỗi KPH tồn đọng trong chu kỳ. Đề xuất ban kiểm soát ngay lập tức hạ cấp dây chuyền, đánh giá tuân thủ quy chuẩn SOP đối với các yếu tố biến động cao.</span></T>
+                    ) : (
+                      <T><span translate="no" className="notranslate">Chỉ số an toàn của phân xưởng ghi nhận mức hoàn hảo (100%). Hãy tiếp tục nhân rộng các sáng kiến điểm sáng chất lượng và tuân thủ chặt SOP vận hành mẫu chuẩn.</span></T>
+                    )}
+                  </p>
+                </div>
+
+                {/* Filtered logs */}
+                <div className="space-y-1.5 pb-2">
+                  <div className="text-[9px] font-black uppercase text-slate-500 flex items-center gap-1">
+                    <span>📋</span>
+                    <T><span translate="no" className="notranslate">Nhật Ký Biến Động Liên Quan ({stats.filteredReports.length}):</span></T>
+                  </div>
+                  {stats.filteredReports.length === 0 ? (
+                    <div className="text-center py-4 bg-white border border-slate-200 rounded-xl text-[9.5px] italic text-slate-400">
+                      <T><span translate="no" className="notranslate">Không có nhật ký phù hợp.</span></T>
+                    </div>
+                  ) : (
+                    stats.filteredReports.slice(0, 5).map((rep) => {
+                      let dateDisplay = rep.timestamp;
+                      try {
+                        const parsed = parseReportTimestamp(rep.timestamp);
+                        const d = String(parsed.getDate()).padStart(2, "0");
+                        const m = String(parsed.getMonth() + 1).padStart(2, "0");
+                        const y = String(parsed.getFullYear()).slice(-2);
+                        dateDisplay = `${d}/${m}/${y}`;
+                      } catch {
+                        // fallback
+                      }
+                      return (
+                        <div 
+                          key={rep.id} 
+                          className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-3xs flex flex-col gap-1 active:scale-98 transition-all cursor-pointer"
+                          onClick={() => {
+                            setActiveBottomTab("BAO_CAO");
+                            setSearchTerm(rep.uploaderName);
+                          }}
+                        >
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <span translate="no" className="notranslate text-[9.5px] font-black text-slate-800 block leading-tight">
+                                {getFactoryDisplayName(rep.factory)}
+                              </span>
+                              <span className="text-[7.5px] font-mono text-slate-405 block mt-0.5">
+                                <T><span translate="no" className="notranslate">{dateDisplay}</span></T>
+                                <span className="mx-1">|</span>
+                                <span translate="no" className="notranslate">{rep.uploaderName}</span>
+                              </span>
+                            </div>
+                            {rep.reportType === "KPH" || rep.isAbnormal ? (
+                              <span className="bg-rose-500 text-white font-sans font-black text-[7px] px-1 rounded uppercase tracking-wide">
+                                KPH
+                              </span>
+                            ) : (
+                              <span className="bg-emerald-500 text-white font-sans font-black text-[7px] px-1 rounded uppercase tracking-wide">
+                                DSA
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[9.5px] leading-relaxed text-slate-600 font-bold truncate">
+                            <T><span translate="no" className="notranslate">{rep.content}</span></T>
+                          </p>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </>
+            );
+          })()}
+        </div>
+      ) : (
+        <div
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto p-3 space-y-3.5 bg-slate-50 relative"
+        >
         {sortedReports.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-6 bg-white rounded-2xl border border-slate-200 bg-opacity-70">
             <T className="text-slate-400 text-xs font-semibold">Không tìm thấy báo cáo nào phù hợp.</T>
@@ -1201,7 +1571,11 @@ App Link: ${window.location.origin}`;
                 id={`report-card-${report.id}`}
                 key={report.id}
                 className={`bg-white rounded-xl shadow-lg border-2 overflow-hidden transition-all duration-200 hover:-translate-y-0.5 ${
-                  report.isAbnormal ? "border-red-400" : "border-blue-500"
+                  report.reportType === "KPH" || report.isAbnormal
+                    ? "border-red-400"
+                    : report.reportType === "DSA" || report.isSpotlight
+                    ? "border-emerald-400"
+                    : "border-blue-500"
                 }`}
               >
                 {/* Header card info */}
@@ -1210,11 +1584,15 @@ App Link: ${window.location.origin}`;
                     <T className={`font-bold block leading-tight ${theme.text} ${fontSizeClass}`}>{getFactoryDisplayName(report.factory)}</T>
                     <T className="text-[9px] text-slate-400 block mt-0.5">{report.timestamp}</T>
                   </div>
-                  {report.isAbnormal && (
+                  {report.reportType === "KPH" || report.isAbnormal ? (
                     <T className="bg-red-500 text-white font-black text-[7px] px-1.5 py-0.5 rounded tracking-wider uppercase block">
-                      CẢNH BÁO
+                      KPH
                     </T>
-                  )}
+                  ) : report.reportType === "DSA" || report.isSpotlight ? (
+                    <T className="bg-emerald-500 text-white font-black text-[7px] px-1.5 py-0.5 rounded tracking-wider uppercase block">
+                      DSA
+                    </T>
+                  ) : null}
                 </div>
 
                 {/* Update Information Sub-bar (Hidden in UI as requested, but still recorded in data) */}
@@ -1245,6 +1623,8 @@ App Link: ${window.location.origin}`;
                     imageUrls={report.imageUrls}
                     fallbackUrl={report.imageUrl}
                     isAbnormal={report.isAbnormal}
+                    isSpotlight={report.isSpotlight}
+                    reportType={report.reportType}
                   />
                 )}
 
@@ -1555,6 +1935,45 @@ App Link: ${window.location.origin}`;
 
                   <div className="flex items-center gap-4">
                     {(() => {
+                      const reportChats = (chats || []).filter((c) => c.reportRefId === report.id);
+                      const chatCount = reportChats.length;
+                      const isOpen = openChatReportId === report.id;
+                      
+                      return (
+                        <div className={`flex items-center gap-1.5 bg-slate-50 border border-slate-100 rounded-lg py-0.5 px-1.5 chat-btn-${report.id}`}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenChatReportId(isOpen ? null : report.id);
+                            }}
+                            className={`flex items-center justify-center p-1 transition-all hover:scale-115 active:scale-95 cursor-pointer border-none bg-transparent ${
+                              isOpen ? "text-blue-600" : "text-slate-400 hover:text-blue-500"
+                            }`}
+                            title="Thảo luận / Hỏi đáp"
+                          >
+                            <MessageSquare className={`w-[17px] h-[17px] stroke-[2.3px] ${isOpen ? "fill-blue-500 text-blue-600" : ""}`} />
+                          </button>
+                          
+                          <button
+                            type="button"
+                            disabled={chatCount === 0}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenChatReportId(isOpen ? null : report.id);
+                            }}
+                            className={`text-[10px] font-black font-sans px-1.5 py-0.5 rounded cursor-pointer transition-all border-none ${
+                              chatCount > 0 
+                                ? "text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 hover:scale-105" 
+                                : "text-slate-300 bg-transparent cursor-default"
+                            }`}
+                          >
+                            <T>{chatCount}</T>
+                          </button>
+                        </div>
+                      );
+                    })()}
+                    {(() => {
                       const isReportLiked = report.likedBy?.includes(currentUser?.fullName || "Kiểm soát viên") || likedReports[report.id];
                       const likesCount = report.likedBy?.length || 0;
                       return (
@@ -1608,14 +2027,112 @@ App Link: ${window.location.origin}`;
                     })()}
                   </div>
                 </div>
+
+                {/* Collapsible Chat Box Panel downward drawer */}
+                {openChatReportId === report.id && (
+                  <div 
+                    className={`bg-slate-50 border-t border-slate-100 p-3 flex flex-col gap-2 chat-box-${report.id} select-text`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {/* Header line of Active discussion */}
+                    <div className="flex justify-between items-center pb-1.5 border-b border-slate-200 select-none">
+                      <div className="flex items-center gap-1.5 font-bold text-slate-700 text-[10px] tracking-wide uppercase font-sans">
+                        <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
+                        <span translate="no" className="notranslate"><T>TRAO ĐỔI THẢO LUẬN</T></span>
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={() => setOpenChatReportId(null)}
+                        className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer rounded-full hover:bg-slate-200 transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Chat Bubble container (Maximum height with scrollbar) */}
+                    <div className="max-h-52 overflow-y-auto flex flex-col gap-2.5 p-1">
+                      {(() => {
+                        const reportChats = (chats || []).filter((c) => c.reportRefId === report.id);
+                        if (reportChats.length === 0) {
+                          return (
+                            <div className="text-center py-6 text-slate-400 italic text-[10px] select-none">
+                              <span translate="no" className="notranslate"><T>Chưa có ý kiến thảo luận. Hãy đặt câu hỏi thảo luận tại đây!</T></span>
+                            </div>
+                          );
+                        }
+                        return reportChats.map((msg) => {
+                          const isMyself = msg.senderName === currentUser?.fullName || msg.senderPhone === currentUser?.phone;
+                          return (
+                            <div 
+                              key={msg.id} 
+                              className={`flex flex-col max-w-[85%] ${isMyself ? "self-end items-end" : "self-start items-start"}`}
+                            >
+                              {/* Metadata block containing sender title and role details */}
+                              <div className="text-[8.5px] font-bold text-slate-500 mb-0.5 px-0.5 select-none flex items-center gap-1 flex-wrap">
+                                <span translate="no" className="notranslate">{msg.senderName}</span>
+                                <span className="opacity-60 text-[7px] font-normal font-mono">({msg.senderRole})</span>
+                              </div>
+
+                              {/* Rich comment bubble text styled blue for myself and white for others */}
+                              <div 
+                                className={`rounded-xl px-2.5 py-1.5 text-xs font-semibold leading-normal shadow-xs ${
+                                  isMyself 
+                                    ? "bg-blue-600 text-white rounded-tr-none text-right" 
+                                    : "bg-white text-slate-800 border border-slate-200 rounded-tl-none text-left"
+                                }`}
+                              >
+                                <span translate="no" className="notranslate">{msg.message}</span>
+                              </div>
+
+                              {/* Formatted Date value displayed as dd/mm/yy */}
+                              <div className="text-[7.5px] font-mono text-slate-400 mt-0.5 px-0.5 select-none">
+                                {formatTimestampToDMY(msg.timestamp)}
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+
+                    {/* Instant reply send input section */}
+                    <form 
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const form = e.currentTarget;
+                        const input = form.elements.namedItem("messageText") as HTMLInputElement;
+                        const text = input.value.trim();
+                        if (text && onAddChatMessage) {
+                          onAddChatMessage(text, report.id);
+                          input.value = "";
+                        }
+                      }}
+                      className="flex items-center gap-1.5 mt-1 border-t border-slate-150 pt-2"
+                    >
+                      <input 
+                        type="text"
+                        name="messageText"
+                        placeholder="Nhập nội dung trao đổi..."
+                        autoComplete="off"
+                        className="flex-1 text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-blue-500 font-medium text-slate-800"
+                      />
+                      <button 
+                        type="submit"
+                        className="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-extrabold rounded-lg py-1 px-3.5 text-[9.5px] font-sans tracking-tight cursor-pointer border-none uppercase transition-all shadow-xs h-[30px] flex items-center justify-center shrink-0"
+                      >
+                        <span translate="no" className="notranslate"><T>GỬI</T></span>
+                      </button>
+                    </form>
+                  </div>
+                )}
               </div>
             );
           })
         )}
-      </div>
+        </div>
+      )}
 
       {/* Scroll to Top floating button */}
-      {showScrollTop && (
+      {showScrollTop && activeBottomTab === "BAO_CAO" && (
         <button
           type="button"
           onClick={scrollToTop}
@@ -1627,30 +2144,61 @@ App Link: ${window.location.origin}`;
       )}
 
       {/* Blue Circular float creation trigger */}
-      <button
-        onClick={onOpenReportForm}
-        className={`absolute bottom-20 right-5 w-10 h-10 text-white rounded-xl flex items-center justify-center shadow-xl hover:scale-110 active:scale-90 transition-transform z-20 ${theme.hoverBg}`}
-      >
-        <Plus className="w-5 h-5 text-white stroke-[2.5px]" />
-      </button>
+      {activeBottomTab === "BAO_CAO" && (
+        <button
+          onClick={onOpenReportForm}
+          className={`absolute bottom-20 right-5 w-10 h-10 text-white rounded-xl flex items-center justify-center shadow-xl hover:scale-110 active:scale-90 transition-transform z-20 ${theme.hoverBg}`}
+        >
+          <Plus className="w-5 h-5 text-white stroke-[2.5px]" />
+        </button>
+      )}
 
-      {/* Mock navigation bottom bar on appsheet */}
-      <div className="bg-slate-50 border-t border-slate-200 grid grid-cols-3 py-2 text-center text-slate-400 text-[10px] font-semibold select-none shrink-0 font-sans shadow-inner">
-        <div className="flex flex-col items-center justify-center py-0.5">
-          <Heart className="w-4 h-4 mx-auto mb-0.5 text-slate-400" />
-          <T>Đóng Góp</T>
-        </div>
-        <div className={`flex flex-col items-center justify-center py-0.5 ${theme.text}`}>
-          <FileText className="w-4 h-4 mx-auto mb-0.5" />
-          <T>Báo Cáo</T>
-        </div>
+      {/* Modern bottom navigation tab bar containing Phân Tích & Báo Cáo */}
+      <div className="bg-slate-50 border-t border-slate-200 grid grid-cols-3 py-2 text-center text-slate-400 text-[10px] font-bold select-none shrink-0 font-sans shadow-inner shrink-0">
+        <button
+          type="button"
+          onClick={() => {
+            if (currentUser?.role === UserRole.ADMIN) {
+              setActiveBottomTab("PHAN_TICH");
+            } else {
+              showToast("Tính năng Phân Tích đang tạm khóa, chỉ dành cho Admin! 🔒");
+            }
+          }}
+          className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors ${
+            currentUser?.role !== UserRole.ADMIN
+              ? "opacity-50 text-slate-400 cursor-not-allowed"
+              : activeBottomTab === "PHAN_TICH"
+              ? theme.text
+              : "text-slate-400 hover:text-slate-600"
+          }`}
+        >
+          <div className="relative">
+            <BarChart2 className="w-4 h-4 mx-auto mb-0.5 transition-transform hover:scale-110" />
+            {currentUser?.role !== UserRole.ADMIN && (
+              <Lock className="w-2.5 h-2.5 text-rose-500 absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 border border-slate-200" />
+            )}
+          </div>
+          <T><span translate="no" className="notranslate">Phân Tích</span></T>
+        </button>
+        
+        <button
+          type="button"
+          onClick={() => setActiveBottomTab("BAO_CAO")}
+          className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors ${
+            activeBottomTab === "BAO_CAO" ? theme.text : "text-slate-400 hover:text-slate-600"
+          }`}
+        >
+          <FileText className="w-4 h-4 mx-auto mb-0.5 transition-transform hover:scale-110" />
+          <T><span translate="no" className="notranslate">Báo Cáo</span></T>
+        </button>
+
         <button
           type="button"
           onClick={() => setShowLogoutConfirm(true)}
           className="flex flex-col items-center justify-center py-0.5 text-slate-500 hover:text-rose-600 transition-colors cursor-pointer select-none border-none bg-transparent"
         >
-          <LogOut className="w-4 h-4 mx-auto mb-0.5 text-slate-500 hover:text-rose-600" />
-          <T>Đăng Xuất</T>
+          <LogOut className="w-4 h-4 mx-auto mb-0.5 text-slate-550 hover:text-rose-600 hover:scale-110 transition-transform" />
+          <T><span translate="no" className="notranslate">Đăng Xuất</span></T>
         </button>
       </div>
 
