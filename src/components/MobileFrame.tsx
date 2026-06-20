@@ -349,15 +349,13 @@ export default function MobileFrame({
   const contentFontSizeClass = getContentFontSizeClass(config.fontSize);
 
   const getFactoryDisplayName = (factoryName: string) => {
-    const match = factoryName.match(/\(((?:TPP|BBM)-[^)]+)\)/i);
+    const match = factoryName.match(/\(((?:TPP|BBM|DNP)-[^)]+)\)/i);
     const branchId = match ? match[1].toUpperCase() : null;
 
     if (displayRule === "custom" && branchId && customAliases[branchId]) {
       return customAliases[branchId];
     }
 
-    const cleanPrefix = factoryName.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn Phòng ", "");
-    
     // Find the company suffix
     const foundBranch = branches?.find(
       (b) => b.name === factoryName || b.id === factoryName || factoryName.includes(b.id) || b.name.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase() === factoryName.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase()
@@ -384,7 +382,7 @@ export default function MobileFrame({
     }
 
     if (displayRule === "clean") {
-      const baseName = cleanPrefix.replace(/\s*\(((?:TPP|BBM|DNP)-[^)]+)\)/i, "").replace(/\s*\(TPP-[^)]+\)/i, "");
+      const baseName = factoryName.split("(")[0].trim().replace(/\s*\(((?:TPP|BBM|DNP)-[^)]+)\)/i, "").replace(/\s*\(TPP-[^)]+\)/i, "");
       return compAbbr ? `${baseName} (${compAbbr})` : baseName;
     }
 

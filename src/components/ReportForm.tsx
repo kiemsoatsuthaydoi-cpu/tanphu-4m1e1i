@@ -66,13 +66,26 @@ export default function ReportForm({
     let baseName = b.name;
     if (displayRule === "custom" && customAliases[b.id]) {
       baseName = customAliases[b.id];
+    } else if (displayRule === "clean") {
+      baseName = b.name.split("(")[0].trim().replace(/\s*\(((?:TPP|BBM|DNP)-[^)]+)\)/i, "").replace(/\s*\(TPP-[^)]+\)/, "");
+    }
+    
+    let compAbbr = b.companyId;
+    if (b.companyId === "TPP-Group" || b.companyId.toLowerCase().includes("tanphu") || b.companyId.toLowerCase().includes("tân phú")) {
+      compAbbr = "TPP";
+    } else if (b.companyId === "DNP" || b.companyId.toLowerCase().includes("dnp")) {
+      compAbbr = "DNP";
     } else {
-      const cleanPrefix = b.name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn Phòng ", "");
-      if (displayRule === "clean") {
-        baseName = cleanPrefix.replace(/\s*\(TPP-[^)]+\)/, "");
+      compAbbr = b.companyId.replace("-Group", "").replace("-CTY", "").trim();
+      if (compAbbr.length > 5) {
+        compAbbr = compAbbr.slice(0, 4).toUpperCase();
       }
     }
-    return `${baseName} (${b.companyId})`;
+
+    if (baseName.toLowerCase().includes(`(${compAbbr.toLowerCase()})`)) {
+      return baseName;
+    }
+    return `${baseName} (${compAbbr})`;
   };
   // Fields state
   const [selectedBranch, setSelectedBranch] = useState<string>(() => {
@@ -95,6 +108,11 @@ export default function ReportForm({
       if (exists) return userBranch;
     }
     
+    const isAdmin = currentUser?.role === UserRole.ADMIN;
+    if (isAdmin && branches.length > 0) {
+      return branches[0].name;
+    }
+
     const scoringBranches = branches.filter(b => b.isScoring);
     return scoringBranches.length > 0 ? scoringBranches[0].name : (branches[0]?.name || "");
   });
@@ -106,24 +124,25 @@ export default function ReportForm({
   // Make sure selectedBranch stays in sync with branches list modifications
   useEffect(() => {
     if (branches && branches.length > 0) {
-      const exists = branches.some((b) => b.name === selectedBranch && b.isScoring);
+      const isAdmin = currentUser?.role === UserRole.ADMIN;
+      const exists = branches.some((b) => b.name === selectedBranch && (isAdmin ? true : b.isScoring));
       if (!exists) {
         // Fallback to matching standard branches
         const match = selectedBranch.match(/\(((?:TPP|BBM)-[^)]+)\)/i);
         if (match) {
           const bId = match[1].toUpperCase();
-          const foundBranch = branches.find((b) => b.id === bId && b.isScoring);
+          const foundBranch = branches.find((b) => b.id === bId && (isAdmin ? true : b.isScoring));
           if (foundBranch) {
             setSelectedBranch(foundBranch.name);
             return;
           }
         }
         
-        const userBranchExists = branches.find((b) => b.name === currentUser?.branch && b.isScoring);
+        const userBranchExists = branches.find((b) => b.name === currentUser?.branch && (isAdmin ? true : b.isScoring));
         if (userBranchExists) {
           setSelectedBranch(userBranchExists.name);
         } else {
-          const firstScoring = branches.find(b => b.isScoring);
+          const firstScoring = isAdmin ? branches[0] : branches.find(b => b.isScoring);
           if (firstScoring) {
             setSelectedBranch(firstScoring.name);
           }
@@ -421,7 +440,7 @@ export default function ReportForm({
                 onChange={(e) => setSelectedBranch(e.target.value)}
                 className="w-full bg-white border border-slate-200 text-slate-700 text-xs font-black rounded-xl py-3 px-3.5 pr-10 shadow-xs appearance-none focus:outline-none focus:ring-2 focus:ring-[#1e3a8a] focus:border-[#1e3a8a] transition-all cursor-pointer font-sans"
               >
-                {branches.filter((b) => b.isScoring).map((b) => {
+                {branches.filter((b) => currentUser?.role === UserRole.ADMIN ? true : b.isScoring).map((b) => {
                   const br = b.name;
                   const displayName = getBranchDisplayName(b);
                   return (
