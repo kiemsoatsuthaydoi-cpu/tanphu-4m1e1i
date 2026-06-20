@@ -486,199 +486,113 @@ export default function App() {
       // 1. Seed default data if users collection is empty
       await seedFirestoreIfNeeded();
 
-      // 2. Load and SMART MERGE collections to prevent data loss or staleness
+      // 2. Load Firestore collections directly to ensure full synchronization and prevent deleted records from resurrecting
       const fUsers = await fetchCollection<User>(COLLECTIONS.USERS);
       if (fUsers.length > 0) {
-        setUsers((prev) => {
-          const cleanedFetched = fUsers.map((u) => {
-            let userPwd = u.password;
-            if (u.id === "2018.00281" && (!userPwd || userPwd === "123456")) {
-              userPwd = "111222";
-            } else {
-              const isAdmin = u.role === UserRole.ADMIN;
-              if (!isAdmin) {
-                if (!userPwd || userPwd === "password123" || userPwd === "111222" || userPwd.startsWith("password") || userPwd === "password" || userPwd.toLowerCase().includes("password")) {
-                  userPwd = "123456";
-                }
+        const cleanedFetched = fUsers.map((u) => {
+          let userPwd = u.password;
+          if (u.id === "2018.00281" && (!userPwd || userPwd === "123456")) {
+            userPwd = "111222";
+          } else {
+            const isAdmin = u.role === UserRole.ADMIN;
+            if (!isAdmin) {
+              if (!userPwd || userPwd === "password123" || userPwd === "111222" || userPwd.startsWith("password") || userPwd === "password" || userPwd.toLowerCase().includes("password")) {
+                userPwd = "123456";
               }
             }
-            let deptName = u.department || "";
-            deptName = deptName.replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
-            deptName = deptName.replace(/\s\([^)]+\)$/, "").trim();
-            
-            let suffix = "";
-            let branchName = u.branch || "";
-            if (branchName.includes("TPP-CTY") || branchName.includes("Văn Phòng")) {
-              suffix = " (TPP-CTY)";
-            } else if (branchName.includes("TPP-BNI") || branchName.includes("Bắc Ninh")) {
-              suffix = " (TPP-BNI)";
-            } else if (branchName.includes("TPP-LAN") || branchName.includes("Long An")) {
-              suffix = " (TPP-LAN)";
-            } else if (branchName.includes("TPP-314") || branchName.includes("314")) {
-              suffix = " (TPP-314)";
-            }
-            
-            return {
-              ...u,
-              password: userPwd,
-              department: suffix ? `${deptName}${suffix}` : deptName
-            };
-          });
-          const merged = [...cleanedFetched];
-          prev.forEach((u) => {
-            if (!merged.some((mu) => mu.id === u.id)) {
-              // Ensure local unsynced users also have sanitized passwords and department names
-              let userPwd = u.password;
-              if (u.id === "2018.00281" && (!userPwd || userPwd === "123456")) {
-                userPwd = "111222";
-              } else {
-                const isAdmin = u.role === UserRole.ADMIN;
-                if (!isAdmin) {
-                  if (!userPwd || userPwd === "password123" || userPwd === "111222" || userPwd.startsWith("password") || userPwd === "password" || userPwd.toLowerCase().includes("password")) {
-                    userPwd = "123456";
-                  }
-                }
-              }
-              merged.push({ ...u, password: userPwd });
-            }
-          });
-          return merged;
+          }
+          let deptName = u.department || "";
+          deptName = deptName.replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
+          deptName = deptName.replace(/\s\([^)]+\)$/, "").trim();
+          
+          let suffix = "";
+          let branchName = u.branch || "";
+          if (branchName.includes("TPP-CTY") || branchName.includes("Văn Phòng")) {
+            suffix = " (TPP-CTY)";
+          } else if (branchName.includes("TPP-BNI") || branchName.includes("Bắc Ninh")) {
+            suffix = " (TPP-BNI)";
+          } else if (branchName.includes("TPP-LAN") || branchName.includes("Long An")) {
+            suffix = " (TPP-LAN)";
+          } else if (branchName.includes("TPP-314") || branchName.includes("314")) {
+            suffix = " (TPP-314)";
+          }
+          
+          return {
+            ...u,
+            password: userPwd,
+            department: suffix ? `${deptName}${suffix}` : deptName
+          };
         });
+        setUsers(cleanedFetched);
       }
 
       const fReports = await fetchCollection<QualityReport>(COLLECTIONS.REPORTS);
       if (fReports.length > 0) {
-        setReports((prev) => {
-          const merged = [...fReports];
-          prev.forEach((localReport) => {
-            const dbIndex = merged.findIndex((dbReport) => dbReport.id === localReport.id);
-            if (dbIndex === -1) {
-              merged.push(localReport);
-            } else {
-              const dbReport = merged[dbIndex];
-              const localTime = parseReportDate(localReport.updatedAt || localReport.timestamp);
-              const dbTime = parseReportDate(dbReport.updatedAt || dbReport.timestamp);
-              if (localTime > dbTime) {
-                merged[dbIndex] = localReport;
-              }
-            }
-          });
-          return merged;
-        });
+        setReports(fReports);
       }
 
       const fCompanies = await fetchCollection<Company>(COLLECTIONS.COMPANIES);
       if (fCompanies.length > 0) {
-        setCompanies((prev) => {
-          const merged = [...fCompanies];
-          prev.forEach((c) => {
-            if (!merged.some((mc) => mc.id === c.id)) {
-              merged.push(c);
-            }
-          });
-          return merged;
-        });
+        setCompanies(fCompanies);
       }
 
       const fBranches = await fetchCollection<Branch>(COLLECTIONS.BRANCHES);
       if (fBranches.length > 0) {
-        setBranches((prev) => {
-          const merged = [...fBranches];
-          prev.forEach((b) => {
-            if (!merged.some((mb) => mb.id === b.id)) {
-              merged.push(b);
-            }
-          });
-          return merged;
-        });
+         setBranches(fBranches);
       }
 
       const fDepts = await fetchCollection<Department>(COLLECTIONS.DEPARTMENTS);
       if (fDepts.length > 0) {
-        setDepartments((prev) => {
-          // Read latest branches for helper suffix formatting
-          const latestBranches = fBranches.length > 0 ? fBranches : initialBranches;
-          const cleanedFetched = fDepts.map((d) => {
-            let cleanName = d.name || "";
-            cleanName = cleanName.replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
-            cleanName = cleanName.replace(/\s\([^)]+\)$/, "").trim();
+        const latestBranches = fBranches.length > 0 ? fBranches : initialBranches;
+        const cleanedFetched = fDepts.map((d) => {
+          let cleanName = d.name || "";
+          cleanName = cleanName.replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
+          cleanName = cleanName.replace(/\s\([^)]+\)$/, "").trim();
 
-            let suffix = "";
-            const br = latestBranches.find((b) => b.id === d.branchId);
-            if (br) {
-              const match = br.name.match(/\(([^)]+)\)/);
-              if (match) {
-                suffix = ` (${match[1]})`;
-              } else {
-                const words = br.name.trim().split(/\s+/);
-                const lastWord = words[words.length - 1];
-                if (lastWord === lastWord.toUpperCase() && lastWord.length >= 2) {
-                  suffix = ` (${lastWord})`;
-                }
-              }
+          let suffix = "";
+          const br = latestBranches.find((b) => b.id === d.branchId);
+          if (br) {
+            const match = br.name.match(/\(([^)]+)\)/);
+            if (match) {
+              suffix = ` (${match[1]})`;
             } else {
-              if (!d.branchId.startsWith("BRANCH-") && !d.branchId.startsWith("DEPT-") && d.branchId.length <= 10) {
-                suffix = ` (${d.branchId})`;
+              const words = br.name.trim().split(/\s+/);
+              const lastWord = words[words.length - 1];
+              if (lastWord === lastWord.toUpperCase() && lastWord.length >= 2) {
+                suffix = ` (${lastWord})`;
               }
             }
-
-            if (suffix.includes("BRANCH-") || suffix.includes("DEPT-") || suffix.length > 15) {
-              suffix = "";
+          } else {
+            if (!d.branchId.startsWith("BRANCH-") && !d.branchId.startsWith("DEPT-") && d.branchId.length <= 10) {
+              suffix = ` (${d.branchId})`;
             }
+          }
 
-            return {
-              ...d,
-              name: suffix ? `${cleanName}${suffix}` : cleanName
-            };
-          });
+          if (suffix.includes("BRANCH-") || suffix.includes("DEPT-") || suffix.length > 15) {
+            suffix = "";
+          }
 
-          const merged = [...cleanedFetched];
-          prev.forEach((d) => {
-            if (!merged.some((md) => md.id === d.id)) {
-              merged.push(d);
-            }
-          });
-          return merged;
+          return {
+            ...d,
+            name: suffix ? `${cleanName}${suffix}` : cleanName
+          };
         });
+        setDepartments(cleanedFetched);
       }
 
       const fBroadcasts = await fetchCollection<BroadcastNotice>(COLLECTIONS.BROADCASTS);
       if (fBroadcasts.length > 0) {
-        setBroadcasts((prev) => {
-          const merged = [...fBroadcasts];
-          prev.forEach((b) => {
-            if (!merged.some((mb) => mb.id === b.id)) {
-              merged.push(b);
-            }
-          });
-          return merged;
-        });
+        setBroadcasts(fBroadcasts);
       }
 
       const fChats = await fetchCollection<ChatMessage>(COLLECTIONS.CHATS);
       if (fChats.length > 0) {
-        setChats((prev) => {
-          const merged = [...fChats];
-          prev.forEach((c) => {
-            if (!merged.some((mc) => mc.id === c.id)) {
-              merged.push(c);
-            }
-          });
-          return merged;
-        });
+        setChats(fChats);
       }
 
       const fProdRequests = await fetchCollection<ProductionRequest>(COLLECTIONS.PRODUCTION_REQUESTS);
       if (fProdRequests.length > 0) {
-        setProductionRequests((prev) => {
-          const merged = [...fProdRequests];
-          prev.forEach((pr) => {
-            if (!merged.some((mpr) => mpr.id === pr.id)) {
-              merged.push(pr);
-            }
-          });
-          return merged;
-        });
+        setProductionRequests(fProdRequests);
       }
 
       const fRequestItems = await fetchCollection<{ prId: string; items: any[] }>(COLLECTIONS.PRODUCTION_REQUEST_ITEMS);
@@ -687,51 +601,22 @@ export default function App() {
         fRequestItems.forEach((x) => {
           if (x.prId) itemsMap[x.prId] = x.items || [];
         });
-        setProductionRequestItemsMap((prev) => {
-          return {
-            ...prev,
-            ...itemsMap
-          };
-        });
+        setProductionRequestItemsMap(itemsMap);
       }
 
       const fOrderImpls = await fetchCollection<OrderImplementation>(COLLECTIONS.ORDER_IMPLEMENTATIONS);
       if (fOrderImpls.length > 0) {
-        setOrderImplementations((prev) => {
-          const merged = [...fOrderImpls];
-          prev.forEach((oi) => {
-            if (!merged.some((moi) => moi.id === oi.id)) {
-              merged.push(oi);
-            }
-          });
-          return merged;
-        });
+         setOrderImplementations(fOrderImpls);
       }
 
       const fProducts = await fetchCollection<CatalogProduct>(COLLECTIONS.PRODUCTS_CATALOG);
       if (fProducts.length > 0) {
-        setProductsCatalog((prev) => {
-          const merged = [...fProducts];
-          prev.forEach((p) => {
-            if (!merged.some((mp) => mp.code === p.code)) {
-              merged.push(p);
-            }
-          });
-          return merged;
-        });
+        setProductsCatalog(fProducts);
       }
 
       const fMolds = await fetchCollection<CatalogMold>(COLLECTIONS.MOLDS_CATALOG);
       if (fMolds.length > 0) {
-        setMoldsCatalog((prev) => {
-          const merged = [...fMolds];
-          prev.forEach((m) => {
-            if (!merged.some((mm) => mm.code === m.code)) {
-              merged.push(m);
-            }
-          });
-          return merged;
-        });
+        setMoldsCatalog(fMolds);
       }
 
       try {
@@ -2433,6 +2318,8 @@ export default function App() {
                 branches={branches}
                 onManualRefresh={syncFromDb}
                 users={users}
+                companies={companies}
+                onSwitchToDesktop={() => setShowMobilePreview(false)}
               />
             )}
           </div>
@@ -2472,18 +2359,9 @@ export default function App() {
                 branches={branches}
                 onManualRefresh={syncFromDb}
                 users={users}
+                companies={companies}
+                onSwitchToDesktop={() => setShowMobilePreview(false)}
               />
-            )}
-
-            {/* floating switch back screen toggle at bottom-left corner */}
-            {currentUser?.role === UserRole.ADMIN && (
-              <button
-                onClick={() => setShowMobilePreview(false)}
-                className="absolute bottom-20 left-4 bg-slate-950/95 text-white rounded-full p-3 shadow-2xl border border-white/15 hover:scale-105 active:scale-95 transition-transform z-30 flex items-center justify-center cursor-pointer"
-                title="Quay lại giao diện máy tính"
-              >
-                <Monitor className="w-4.5 h-4.5 text-slate-300" />
-              </button>
             )}
           </div>
         </div>

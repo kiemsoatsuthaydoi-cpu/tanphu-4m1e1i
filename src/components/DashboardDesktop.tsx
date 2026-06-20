@@ -360,6 +360,40 @@ export default function DashboardDesktop({
     return userDeptText;
   };
 
+  const getFactoryDisplayName = (factoryName: string) => {
+    if (!factoryName) return "";
+    
+    // Find the company suffix
+    const foundBranch = branches?.find(
+      (b) => b.name === factoryName || b.id === factoryName || b.name.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase() === factoryName.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase()
+    );
+    
+    const getAbbreviation = (cid: string) => {
+      if (!cid) return "";
+      if (cid === "TPP-Group" || cid.toLowerCase().includes("tanphu") || cid.toLowerCase().includes("tân phú")) return "TPP";
+      if (cid === "DNP" || cid.toLowerCase().includes("dnp")) return "DNP";
+      const cleanId = cid.replace("-Group", "").replace("-CTY", "").trim();
+      return cleanId.length <= 5 ? cleanId.toUpperCase() : cleanId.slice(0, 4).toUpperCase();
+    };
+
+    let compAbbr = "";
+    if (foundBranch) {
+      compAbbr = getAbbreviation(foundBranch.companyId);
+    } else {
+      // Fallback: search for uploader's company or parse from string
+      const matchComp = factoryName.match(/\(([^)]+)\)/);
+      if (matchComp) {
+        const innerCode = matchComp[1];
+        compAbbr = getAbbreviation(innerCode.includes("-") ? innerCode.split("-")[0] : innerCode);
+      }
+    }
+
+    if (compAbbr && !factoryName.includes(`(${compAbbr})`)) {
+      return `${factoryName} (${compAbbr})`;
+    }
+    return factoryName;
+  };
+
   const handleStartEditUser = (u: User) => {
     setEditingUser(u);
     setEditFullName(u.fullName);
@@ -2165,7 +2199,7 @@ export default function DashboardDesktop({
                   >
                     <option value="Tất cả">Tất cả</option>
                     {branches.filter((b) => b.isScoring).map((b) => (
-                      <option key={b.id} value={b.name}>{b.name}</option>
+                      <option key={b.id} value={b.name}>{getFactoryDisplayName(b.name)}</option>
                     ))}
                   </select>
                 </div>
@@ -2237,7 +2271,7 @@ export default function DashboardDesktop({
                           <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
                             <td className="p-4 text-center font-mono text-slate-400">{index + 1}</td>
                             <td className="p-4 font-mono font-semibold text-slate-500 whitespace-nowrap">{r.timestamp}</td>
-                            <td className="p-4 font-bold text-slate-800 whitespace-nowrap">{r.factory}</td>
+                            <td className="p-4 font-bold text-slate-800 whitespace-nowrap">{getFactoryDisplayName(r.factory)}</td>
                             <td className="p-4 text-center select-none whitespace-nowrap">
                               <span
                                 className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase text-white block"

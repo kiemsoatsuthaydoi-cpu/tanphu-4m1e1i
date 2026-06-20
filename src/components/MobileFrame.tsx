@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Search, RotateCw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut } from "lucide-react";
-import { QualityReport, Category4M1E1I, User, UserRole, Branch } from "../types";
+import { Search, RotateCw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor } from "lucide-react";
+import { QualityReport, Category4M1E1I, User, UserRole, Branch, Company } from "../types";
 import { T } from "./TranslateText";
 
 interface AutoImageSliderProps {
@@ -12,52 +12,190 @@ interface AutoImageSliderProps {
 export function AutoImageSlider({ imageUrls, fallbackUrl, isAbnormal }: AutoImageSliderProps) {
   const list = imageUrls && imageUrls.length > 0 ? imageUrls : [fallbackUrl];
   const [index, setIndex] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+
+  // For touch swipe gesture support
+  const touchStartX = useRef<number | null>(null);
+  const touchEndX = useRef<number | null>(null);
 
   useEffect(() => {
-    if (list.length <= 1) return;
+    if (list.length <= 1 || lightboxOpen) return; // Pause automatic rotation when lightbox is active
     const interval = setInterval(() => {
       setIndex((prev) => (prev + 1) % list.length);
-    }, 3000);
+    }, 3500);
     return () => clearInterval(interval);
-  }, [list]);
+  }, [list, lightboxOpen]);
+
+  // Sync index to lightbox index when opening
+  const handleOpenLightbox = () => {
+    setLightboxIndex(index);
+    setLightboxOpen(true);
+  };
+
+  const handleNext = () => {
+    setLightboxIndex((prev) => (prev + 1) % list.length);
+  };
+
+  const handlePrev = () => {
+    setLightboxIndex((prev) => (prev - 1 + list.length) % list.length);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartX.current === null || touchEndX.current === null) return;
+    const diff = touchStartX.current - touchEndX.current;
+    const threshold = 40; // minimum distance for swipe
+    if (diff > threshold) {
+      handleNext();
+    } else if (diff < -threshold) {
+      handlePrev();
+    }
+    touchStartX.current = null;
+    touchEndX.current = null;
+  };
 
   return (
-    <div className="relative group bg-slate-900 border-b border-slate-100 flex items-center justify-center overflow-hidden h-44 w-full select-none">
-      {list.map((url, i) => (
-        <img
-          key={url + i}
-          src={url}
-          alt={`Slide ${i}`}
-          referrerPolicy="no-referrer"
-          className={`absolute inset-0 w-full h-full object-cover transition-all duration-1000 ${
-            i === index ? "opacity-100 scale-100 z-10" : "opacity-0 scale-95 z-0"
-          }`}
-        />
-      ))}
-      
-      {/* Indicator Dots */}
-      {list.length > 1 && (
-        <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex gap-1 z-20 bg-black/60 px-2 py-1 rounded-full">
-          {list.map((_, i) => (
-            <div
-              key={i}
-              className={`w-1.5 h-1.5 rounded-full transition-all ${
-                i === index ? "bg-white scale-110" : "bg-white/40"
-              }`}
-            />
-          ))}
-        </div>
-      )}
+    <>
+      <div 
+        onClick={handleOpenLightbox}
+        className="relative group bg-slate-900 border-b border-slate-100 flex items-center justify-center overflow-hidden h-44 w-full select-none cursor-pointer"
+      >
+        {list.map((url, i) => (
+          <img
+            key={url + i}
+            src={url}
+            alt={`Slide ${i}`}
+            referrerPolicy="no-referrer"
+            className={`absolute inset-0 w-full h-full object-cover transition-all duration-1000 ${
+              i === index ? "opacity-100 scale-100 z-10" : "opacity-0 scale-95 z-0"
+            }`}
+          />
+        ))}
+        
+        {/* Indicator Dots */}
+        {list.length > 1 && (
+          <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex gap-1 z-20 bg-black/60 px-2 py-1 rounded-full">
+            {list.map((_, i) => (
+              <div
+                key={i}
+                className={`w-1.5 h-1.5 rounded-full transition-all ${
+                  i === index ? "bg-white scale-110" : "bg-white/40"
+                }`}
+              />
+            ))}
+          </div>
+        )}
 
-      {isAbnormal && (
-        <div className="absolute top-0 inset-x-0 bg-red-600 bg-opacity-85 text-white py-1px px-3 flex items-center gap-1.5 z-20 py-1">
-          <span className="w-2 h-2 rounded-full bg-white animate-pulse block shrink-0" />
-          <T className="text-[10px] font-bold block uppercase tracking-wide leading-none select-none">
-            PHÁT HIỆN BIẾN ĐỘNG BẤT THƯỜNG
-          </T>
+        {isAbnormal && (
+          <div className="absolute top-0 inset-x-0 bg-red-600 bg-opacity-85 text-white py-1px px-3 flex items-center gap-1.5 z-20 py-1">
+            <span className="w-2 h-2 rounded-full bg-white animate-pulse block shrink-0" />
+            <T className="text-[10px] font-bold block uppercase tracking-wide leading-none select-none">
+              PHÁT HIỆN BIẾN ĐỘNG BẤT THƯỜNG
+            </T>
+          </div>
+        )}
+      </div>
+
+      {/* Fullscreen Shopee-style Lightbox Overlay Modal */}
+      {lightboxOpen && (
+        <div 
+          className="fixed inset-0 bg-black/95 z-[99999] flex flex-col items-center justify-between py-6 px-4 animate-fade-in touch-none select-none"
+          onClick={() => setLightboxOpen(false)}
+        >
+          {/* Header Area with Status and Close button */}
+          <div className="w-full flex justify-between items-center z-[100000] px-2">
+            <div className="bg-black/40 text-white rounded-full px-3 py-1 text-xs font-semibold">
+              <span translate="no" className="notranslate">{lightboxIndex + 1} / {list.length}</span>
+            </div>
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                setLightboxOpen(false);
+              }}
+              className="w-10 h-10 rounded-full bg-white/15 active:bg-white/30 text-white flex items-center justify-center transition-all focus:outline-none"
+              aria-label="Close image viewer"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+
+          {/* Active Image Centered Area */}
+          <div 
+            className="flex-1 w-full flex items-center justify-center relative my-4"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            {/* Left navigation arrow button (visible/active if list.length > 1) */}
+            {list.length > 1 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handlePrev();
+                }}
+                className="absolute left-2 w-10 h-10 rounded-full bg-black/50 hover:bg-black/75 active:scale-95 text-white flex items-center justify-center z-[100001] transition-transform"
+              >
+                <span className="text-xl font-bold font-mono">◀</span>
+              </button>
+            )}
+
+            <img
+              src={list[lightboxIndex]}
+              alt={`Full view ${lightboxIndex}`}
+              referrerPolicy="no-referrer"
+              className="max-h-[80vh] max-w-full object-contain select-none pointer-events-auto cursor-default transition-transform duration-300 transform scale-100 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+
+            {/* Right navigation arrow button (visible/active if list.length > 1) */}
+            {list.length > 1 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleNext();
+                }}
+                className="absolute right-2 w-10 h-10 rounded-full bg-black/50 hover:bg-black/75 active:scale-95 text-white flex items-center justify-center z-[100001] transition-transform"
+              >
+                <span className="text-xl font-bold font-mono">▶</span>
+              </button>
+            )}
+          </div>
+
+          {/* Footer Area with Dot Indicators and Swiping help instruction */}
+          <div className="w-full flex flex-col items-center gap-2 z-[100000]" onClick={(e) => e.stopPropagation()}>
+            {list.length > 1 && (
+              <>
+                {/* Dot Indicators */}
+                <div className="flex gap-1.5 bg-black/45 px-3 py-1.5 rounded-full mb-1">
+                  {list.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setLightboxIndex(i)}
+                      className={`w-2 h-2 rounded-full transition-all focus:outline-none ${
+                        i === lightboxIndex ? "bg-white scale-125" : "bg-white/35 hover:bg-white/60"
+                      }`}
+                    />
+                  ))}
+                </div>
+                
+                {/* Visual swipe instruction */}
+                <T className="text-[11px] text-white/50 tracking-wider font-semibold uppercase animate-pulse">
+                  Vuốt ngang để chuyển hình ◀ ▶
+                </T>
+              </>
+            )}
+          </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -94,6 +232,8 @@ interface MobileFrameProps {
   branches?: Branch[];
   onManualRefresh?: (isManual?: boolean) => void;
   users?: User[];
+  companies?: Company[];
+  onSwitchToDesktop?: () => void;
 }
 
 export default function MobileFrame({
@@ -110,7 +250,9 @@ export default function MobileFrame({
   onLogout,
   branches,
   onManualRefresh,
-  users
+  users,
+  companies,
+  onSwitchToDesktop
 }: MobileFrameProps) {
   const config = mobileUIConfig || {};
   const displayRule = config.displayRule || "clean";
@@ -215,8 +357,39 @@ export default function MobileFrame({
     }
 
     const cleanPrefix = factoryName.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn Phòng ", "");
+    
+    // Find the company suffix
+    const foundBranch = branches?.find(
+      (b) => b.name === factoryName || b.id === factoryName || factoryName.includes(b.id) || b.name.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase() === factoryName.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase()
+    );
+    
+    const getAbbreviation = (cid: string) => {
+      if (!cid) return "";
+      if (cid === "TPP-Group" || cid.toLowerCase().includes("tanphu") || cid.toLowerCase().includes("tân phú")) return "TPP";
+      if (cid === "DNP" || cid.toLowerCase().includes("dnp")) return "DNP";
+      const cleanId = cid.replace("-Group", "").replace("-CTY", "").trim();
+      return cleanId.length <= 5 ? cleanId.toUpperCase() : cleanId.slice(0, 4).toUpperCase();
+    };
+
+    let compAbbr = "";
+    if (foundBranch) {
+      compAbbr = getAbbreviation(foundBranch.companyId);
+    } else {
+      // Fallback: search for uploader's company or parse from string
+      const matchComp = factoryName.match(/\(([^)]+)\)/);
+      if (matchComp) {
+        const innerCode = matchComp[1];
+        compAbbr = getAbbreviation(innerCode.includes("-") ? innerCode.split("-")[0] : innerCode);
+      }
+    }
+
     if (displayRule === "clean") {
-      return cleanPrefix.replace(/\s*\(((?:TPP|BBM)-[^)]+)\)/i, "");
+      const baseName = cleanPrefix.replace(/\s*\(((?:TPP|BBM|DNP)-[^)]+)\)/i, "").replace(/\s*\(TPP-[^)]+\)/i, "");
+      return compAbbr ? `${baseName} (${compAbbr})` : baseName;
+    }
+
+    if (compAbbr && !factoryName.includes(`(${compAbbr})`)) {
+      return `${factoryName} (${compAbbr})`;
     }
     return factoryName;
   };
@@ -866,6 +1039,21 @@ App Link: ${window.location.origin}`;
               </span>
             </span>
           </div>
+
+          {/* Icon màn hình quay lại giao diện máy tính */}
+          {currentUser?.role === UserRole.ADMIN && onSwitchToDesktop && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onSwitchToDesktop();
+              }}
+              className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer shrink-0"
+              title="Quay lại giao diện máy tính"
+            >
+              <Monitor className="w-[18px] h-[18px] text-white" />
+            </button>
+          )}
+
           <button
             onClick={() => setShowNotifDrawer(true)}
             className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
@@ -935,8 +1123,8 @@ App Link: ${window.location.origin}`;
                       let label = b.id;
                       if (displayRule === "custom" && customAliases[b.id]) {
                         label = customAliases[b.id];
-                      } else if (displayRule === "clean") {
-                        label = b.name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn Phòng ", "").replace(/\s*\(((?:TPP|BBM)-[^)]+)\)/i, "");
+                      } else {
+                        label = getFactoryDisplayName(b.name);
                       }
                       return { key: b.id, label };
                     })
@@ -1598,8 +1786,14 @@ App Link: ${window.location.origin}`}
       )}
 
       {showLikesListReport && (
-        <div className="absolute inset-0 bg-slate-900/65 backdrop-blur-xs flex items-end justify-center z-50 select-none animate-fadeIn">
-          <div className="bg-white rounded-t-3xl w-full max-h-[70%] overflow-hidden flex flex-col shadow-2xl border-t border-slate-100 animate-slideUp">
+        <div 
+          onClick={() => setShowLikesListReport(null)}
+          className="absolute inset-0 bg-slate-900/65 backdrop-blur-xs flex items-end justify-center z-50 select-none animate-fadeIn cursor-pointer"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-t-3xl w-full max-h-[70%] overflow-hidden flex flex-col shadow-2xl border-t border-slate-100 animate-slideUp cursor-default"
+          >
             {/* Header */}
             <div className="flex justify-between items-center px-4 py-3.5 border-b border-rose-100 shrink-0 bg-rose-50/50">
               <div className="flex items-center gap-1.5 text-rose-600">
