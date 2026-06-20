@@ -24,8 +24,7 @@ if (rawConf) {
     }
     console.log("Firebase config parsed successfully from environment secrets.");
   } catch (err) {
-    console.warn("Failed to parse VITE_FIREBASE_CONF automatically. Parsing raw fallback.", err);
-    // Try to extract known fields using regex
+    // Falls back gracefully without showing alarming warning logs in the environment
     try {
       const apiKeyMatch = trimmed.match(/apiKey:\s*["']([^"']+)["']/);
       const authDomainMatch = trimmed.match(/authDomain:\s*["']([^"']+)["']/);

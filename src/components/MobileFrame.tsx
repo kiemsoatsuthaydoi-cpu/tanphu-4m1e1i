@@ -207,18 +207,54 @@ export default function MobileFrame({
   const contentFontSizeClass = getContentFontSizeClass(config.fontSize);
 
   const getFactoryDisplayName = (factoryName: string) => {
-    const match = factoryName.match(/\(((?:TPP|BBM)-[^)]+)\)/i);
-    const branchId = match ? match[1].toUpperCase() : null;
+    if (!factoryName) return "";
 
-    if (displayRule === "custom" && branchId && customAliases[branchId]) {
-      return customAliases[branchId];
+    // 1. Find matching branch from database to get the correct companyId
+    const foundBranch = branches?.find((b) => {
+      if (b.name === factoryName || b.id === factoryName) return true;
+      const bClean = b.name.replace(/^(Chi Nhánh|Nhà [mM]áy|Văn [pP]hòng)\s+/i, "").replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
+      const factoryClean = factoryName.replace(/^(Chi Nhánh|Nhà [mM]áy|Văn [pP]hòng)\s+/i, "").replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
+      return bClean === factoryClean;
+    });
+
+    if (foundBranch) {
+      if (displayRule === "custom" && customAliases[foundBranch.id]) {
+        return customAliases[foundBranch.id];
+      }
+
+      let baseName = foundBranch.name;
+      if (displayRule === "clean") {
+        baseName = baseName.replace(/^(Chi Nhánh|Nhà [mM]áy|Văn [pP]hòng)\s+/i, "");
+        // Strip branch ID in parentheses if matched under clean rule
+        baseName = baseName.replace(/\s*\(((?:TPP|BBM|DNP)-[^)]+)\)/i, "");
+      }
+
+      const suffix = `(${foundBranch.companyId})`;
+      if (baseName.endsWith(suffix)) {
+        return baseName;
+      }
+      return `${baseName} ${suffix}`;
     }
 
-    const cleanPrefix = factoryName.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn Phòng ", "");
+    // 2. Fallback regex-based parser
+    const match = factoryName.match(/\(([^)-]+)(?:-[^)]+)?\)/i);
+    const extractedCompany = match ? match[1].toUpperCase() : null;
+
+    let baseName = factoryName;
     if (displayRule === "clean") {
-      return cleanPrefix.replace(/\s*\(((?:TPP|BBM)-[^)]+)\)/i, "");
+      baseName = factoryName.replace(/^(Chi Nhánh|Nhà [mM]áy|Văn [pP]hòng)\s+/i, "");
+      baseName = baseName.replace(/\s*\(((?:TPP|BBM|DNP)-[^)]+)\)/i, "");
     }
-    return factoryName;
+
+    if (extractedCompany) {
+      const suffix = `(${extractedCompany})`;
+      if (baseName.endsWith(suffix)) {
+        return baseName;
+      }
+      return `${baseName} ${suffix}`;
+    }
+
+    return baseName;
   };
 
   // Tính số lượng người online thực tế theo Presence Heartbeat
@@ -242,11 +278,34 @@ export default function MobileFrame({
   const [selectedFactoryFilter, setSelectedFactoryFilter] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
-  const [showLocalConfigPanel, setShowLocalConfigPanel] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [editingDirectiveId, setEditingDirectiveId] = useState<string | null>(null);
+  const [editingDirectiveText, setEditingDirectiveText] = useState("");
+  const [showLikesListReport, setShowLikesListReport] = useState<QualityReport | null>(null);
   const lastScrollTopRef = useRef(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  const handleRefreshClick = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    setSelectedCategory(null);
+    setSearchTerm("");
+    setSelectedFactoryFilter(null);
+    
+    try {
+      if (onManualRefresh) {
+        await onManualRefresh(true);
+      }
+    } catch (err) {
+      console.error("Refresh error:", err);
+    } finally {
+      setTimeout(() => {
+        setIsRefreshing(false);
+      }, 800);
+    }
+  };
 
   // Notification states
   const [showNotifDrawer, setShowNotifDrawer] = useState(false);
@@ -828,7 +887,7 @@ App Link: ${window.location.origin}`;
           <div className="bg-white text-[9px] font-black px-1.5 py-0.5 rounded flex items-center justify-center font-sans tracking-tighter" style={{ color: "var(--color-primary, #1e3a8a)" }}>
             <T>TANPHU</T>
           </div>
-          <T className="font-bold text-sm tracking-wide">4M1E1I REPORT</T>
+          <T className="font-bold text-[13.6px] tracking-wide">4M1E1I REPORT</T>
         </div>
         <div className="flex items-center gap-3">
           {/* Bong bóng số báo tổng số người online */}
@@ -867,29 +926,13 @@ App Link: ${window.location.origin}`;
             )}
           </button>
           <button 
-            onClick={() => { 
-              setSelectedCategory(null); 
-              setSearchTerm(""); 
-              if (onManualRefresh) {
-                onManualRefresh(true);
-              }
-            }} 
-            className="hover:scale-115 active:scale-95 transition-transform"
+            onClick={handleRefreshClick} 
+            className="hover:scale-115 active:scale-95 transition-transform cursor-pointer"
             title="Tải lại dữ liệu"
+            disabled={isRefreshing}
           >
-            <RotateCw className="w-[18px] h-[18px] text-white" />
+            <RotateCw className={`w-[18px] h-[18px] text-white ${isRefreshing ? "animate-spin" : ""}`} />
           </button>
-          {/* Settings gear trigger for real mobile phones - Admin only */}
-          {currentUser?.role === UserRole.ADMIN && (
-            <button 
-              type="button"
-              onClick={() => setShowLocalConfigPanel(true)}
-              className="hover:scale-115 active:scale-95 transition-transform cursor-pointer border-none bg-transparent"
-              title="Cấu hình di động"
-            >
-              <Settings className="w-[18px] h-[18px] text-white" />
-            </button>
-          )}
         </div>
       </div>
 
@@ -924,7 +967,15 @@ App Link: ${window.location.origin}`;
               const activeFactoryChips = branches && branches.length > 0
                 ? branches
                     .filter((b) => b.isScoring)
-                    .map((b) => ({ key: b.id, label: b.id }))
+                    .map((b) => {
+                      let label = b.id;
+                      if (displayRule === "custom" && customAliases[b.id]) {
+                        label = customAliases[b.id];
+                      } else if (displayRule === "clean") {
+                        label = b.name.replace(/^(Chi Nhánh|Nhà [mM]áy|Văn [pP]hòng)\s+/i, "").replace(/\s*\(((?:TPP|BBM|DNP)-[^)]+)\)/i, "");
+                      }
+                      return { key: b.id, label };
+                    })
                 : [
                     { key: "TPP-BNI", label: "TPP-BNI" },
                     { key: "TPP-LAN", label: "TPP-LAN" },
@@ -1079,19 +1130,107 @@ App Link: ${window.location.origin}`;
                       <div className="space-y-2 mb-2.5 w-full block">
                         <div className="text-[10px] text-amber-700 font-extrabold flex items-center gap-1 uppercase select-none">
                           <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                          <T>Bộ Chỉ Huy / Chỉ Đạo:</T>
+                          <T>CHỈ ĐẠO:</T>
                         </div>
-                        <div className="space-y-1.5 block max-h-36 overflow-y-auto pr-1">
+                        <div className="space-y-1.5 block max-h-48 overflow-y-auto pr-1">
                           {report.directives.map((dir) => (
                             <div key={dir.id} className="bg-amber-50 border border-amber-100 rounded p-2 block text-[11px] leading-relaxed text-amber-900 shadow-3xs">
                               <div className="flex justify-between items-center text-[9px] text-slate-400 font-bold mb-1 select-none">
-                                <span className="text-amber-800 font-extrabold flex items-center gap-0.5">
+                                <span className="text-amber-800 font-extrabold flex items-center gap-0.5 animate-shimmer">
                                   <span>🛡️</span>
                                   <T>{dir.author}</T>
                                 </span>
                                 <span>{dir.timestamp}</span>
                               </div>
-                              <T className="block font-medium">{dir.text}</T>
+                              {editingDirectiveId === dir.id ? (
+                                <div className="mt-1.5 space-y-1">
+                                  <textarea
+                                    value={editingDirectiveText}
+                                    onChange={(e) => setEditingDirectiveText(e.target.value)}
+                                    className="w-full bg-white border border-amber-200 text-[11px] rounded p-1.5 focus:outline-none focus:ring-1 focus:ring-amber-500 font-sans text-slate-800 resize-y"
+                                    rows={2}
+                                  />
+                                  <div className="flex justify-end gap-1.5 select-none">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingDirectiveId(null);
+                                        setEditingDirectiveText("");
+                                      }}
+                                      className="p-1 px-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-[9px] font-sans font-black rounded flex items-center gap-0.5 border-none h-6 cursor-pointer"
+                                    >
+                                      <X className="w-3 h-3" />
+                                      <T>HỦY</T>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const trimmed = editingDirectiveText.trim();
+                                        if (!trimmed) return;
+                                        
+                                        const updatedDirectives = report.directives.map((d) => {
+                                          if (d.id === dir.id) {
+                                            return { ...d, text: trimmed };
+                                          }
+                                          return d;
+                                        });
+                                        
+                                        if (onUpdateReport) {
+                                          onUpdateReport({
+                                            ...report,
+                                            directives: updatedDirectives
+                                          });
+                                        }
+                                        setEditingDirectiveId(null);
+                                        setEditingDirectiveText("");
+                                      }}
+                                      className="p-1 px-1.5 bg-amber-500 hover:bg-amber-600 text-white text-[9px] font-sans font-black rounded flex items-center gap-0.5 border-none h-6 cursor-pointer"
+                                    >
+                                      <Check className="w-3 h-3" />
+                                      <T>LƯU</T>
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex justify-between items-start gap-2">
+                                  <T className="block font-medium flex-1 break-words">{dir.text}</T>
+                                  <div className="flex gap-1 shrink-0 select-none items-center mt-0.5">
+                                    {((dir.author === currentUser?.fullName) || currentUser?.role === UserRole.ADMIN) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingDirectiveId(dir.id);
+                                          setEditingDirectiveText(dir.text);
+                                        }}
+                                        className="text-slate-400 hover:text-amber-600 transition-colors cursor-pointer border-none bg-transparent p-0.5"
+                                        title="Chỉnh sửa chỉ đạo"
+                                      >
+                                        <Edit className="w-3 h-3" />
+                                      </button>
+                                    )}
+                                    {currentUser?.role === UserRole.ADMIN && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (confirm("Chủ quản có chắc muốn XÓA chỉ đạo này không?")) {
+                                            const updatedDirectives = report.directives.filter((d) => d.id !== dir.id);
+                                            if (onUpdateReport) {
+                                              onUpdateReport({
+                                                ...report,
+                                                directives: updatedDirectives
+                                              });
+                                            }
+                                          }
+                                        }}
+                                        className="text-slate-400 hover:text-rose-600 transition-colors cursor-pointer border-none bg-transparent p-0.5"
+                                        title="Xóa chỉ đạo (Admin)"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -1267,17 +1406,38 @@ App Link: ${window.location.origin}`;
                   <div className="flex items-center gap-4">
                     {(() => {
                       const isReportLiked = report.likedBy?.includes(currentUser?.fullName || "Kiểm soát viên") || likedReports[report.id];
+                      const likesCount = report.likedBy?.length || 0;
                       return (
-                        <button
-                          type="button"
-                          onClick={() => toggleLike(report.id)}
-                          className={`flex items-center justify-center p-1 transition-all hover:scale-110 active:scale-95 cursor-pointer border-none bg-transparent ${
-                            isReportLiked ? "text-rose-600" : "text-slate-400 hover:text-rose-500"
-                          }`}
-                          title={isReportLiked ? "Bỏ thích" : "Thích"}
-                        >
-                          <Heart className={`w-[18px] h-[18px] stroke-[2.2px] ${isReportLiked ? "fill-rose-500 text-rose-600" : ""}`} />
-                        </button>
+                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-100 rounded-lg py-0.5 px-1.5">
+                          <button
+                            type="button"
+                            onClick={() => toggleLike(report.id)}
+                            className={`flex items-center justify-center p-1 transition-all hover:scale-115 active:scale-90 cursor-pointer border-none bg-transparent ${
+                              isReportLiked ? "text-rose-650" : "text-slate-400 hover:text-rose-500"
+                            }`}
+                            title={isReportLiked ? "Bỏ thích" : "Thích"}
+                          >
+                            <Heart className={`w-[17px] h-[17px] stroke-[2.3px] ${isReportLiked ? "fill-rose-500 text-rose-600" : ""}`} />
+                          </button>
+                          
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (likesCount > 0) {
+                                setShowLikesListReport(report);
+                              }
+                            }}
+                            disabled={likesCount === 0}
+                            className={`text-[10px] font-black font-sans px-1.5 py-0.5 rounded cursor-pointer transition-all border-none ${
+                              likesCount > 0 
+                                ? "text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 hover:scale-105" 
+                                : "text-slate-300 bg-transparent cursor-default"
+                            }`}
+                            title={likesCount > 0 ? "Xem ai đã thích" : "Chưa có lượt thích"}
+                          >
+                            <T>{likesCount}</T>
+                          </button>
+                        </div>
                       );
                     })()}
                     {(() => {
@@ -1286,12 +1446,13 @@ App Link: ${window.location.origin}`;
                         <button
                           type="button"
                           onClick={() => toggleAcknowledge(report.id)}
-                          className={`flex items-center justify-center p-1 transition-all hover:scale-110 active:scale-95 cursor-pointer border-none bg-transparent ${
-                            isAcknowledged ? "text-sky-700 animate-pulse" : "text-slate-400 hover:text-sky-600"
+                          className={`flex items-center gap-1.5 p-1 px-2 rounded-lg border transition-all hover:scale-110 active:scale-95 cursor-pointer bg-transparent ${
+                            isAcknowledged ? "text-sky-700 border-sky-200 bg-sky-50 animate-pulse" : "text-slate-400 hover:text-sky-600 border-slate-200 bg-white"
                           }`}
                           title={isAcknowledged ? "Đã tiếp nhận" : "Tiếp nhận"}
                         >
-                          <Check className={`w-[18px] h-[18px] ${isAcknowledged ? "stroke-[3.2px] text-sky-700" : "stroke-[2.2px]"}`} />
+                          <Check className={`w-3.5 h-3.5 ${isAcknowledged ? "stroke-[3px] text-sky-700" : "stroke-[2px]"}`} />
+                          <span className="text-[9.5px] font-black font-sans uppercase tracking-tight"><T>Tiếp nhận/ Xử lý</T></span>
                         </button>
                       );
                     })()}
@@ -1472,6 +1633,57 @@ App Link: ${window.location.origin}`}
         </div>
       )}
 
+      {showLikesListReport && (
+        <div className="absolute inset-0 bg-slate-900/65 backdrop-blur-xs flex items-end justify-center z-50 select-none animate-fadeIn">
+          <div className="bg-white rounded-t-3xl w-full max-h-[70%] overflow-hidden flex flex-col shadow-2xl border-t border-slate-100 animate-slideUp">
+            {/* Header */}
+            <div className="flex justify-between items-center px-4 py-3.5 border-b border-rose-100 shrink-0 bg-rose-50/50">
+              <div className="flex items-center gap-1.5 text-rose-600">
+                <Heart className="w-4 h-4 fill-rose-500 text-rose-600 animate-pulse" />
+                <span className="font-extrabold text-[12px] uppercase tracking-tight font-sans">
+                  <T>DANH SÁCH LƯỢT THÍCH ({showLikesListReport.likedBy?.length || 0})</T>
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowLikesListReport(null)}
+                className="w-7 h-7 rounded-full bg-slate-150 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-xs border-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* List of Who Liked */}
+            <div className="flex-1 overflow-y-auto p-4 bg-slate-50/30 space-y-2 pb-8">
+              {!showLikesListReport.likedBy || showLikesListReport.likedBy.length === 0 ? (
+                <div className="py-10 text-center text-slate-400 text-xs font-medium">
+                  <T>Chưa có ai yêu thích nội dung này.</T>
+                </div>
+              ) : (
+                showLikesListReport.likedBy.map((name, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between p-2.5 rounded-xl border border-slate-150 bg-white shadow-3xs"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7.5 h-7.5 rounded-full bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 text-xs font-extrabold select-none">
+                        {name.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="text-xs font-extrabold text-slate-800">
+                        <T>{name}</T>
+                      </span>
+                    </div>
+                    <span className="text-[9px] bg-rose-50 text-rose-700 font-extrabold px-2.5 py-0.5 rounded-full border border-rose-100 tracking-tight flex items-center gap-0.5">
+                      ❤️ <T>Thích</T>
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Dynamic Notifications System Drawer Overlay */}
       {showNotifDrawer && (
         <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-end justify-center z-50 select-none animate-fadeIn">
@@ -1576,163 +1788,6 @@ App Link: ${window.location.origin}`}
                   );
                 })
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showLocalConfigPanel && (
-        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-end justify-center z-50 select-none animate-fadeIn">
-          <div className="bg-white rounded-t-3xl w-full max-h-[85%] overflow-y-auto p-5 pb-8 flex flex-col shadow-2xl border-t border-slate-100 animate-slideUp">
-            {/* Header */}
-            <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-4 shrink-0">
-              <div className="flex items-center gap-1.5">
-                <span className="text-base">⚙️</span>
-                <span className="font-extrabold text-[13px] text-slate-800 tracking-tight uppercase">
-                  <span translate="no" className="notranslate"><T>Cấu hình hiển thị</T></span>
-                </span>
-              </div>
-              <button
-                onClick={() => setShowLocalConfigPanel(false)}
-                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-xs"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {/* Columns Selector */}
-              <div>
-                <label className="text-[10px] uppercase font-black text-slate-400 block mb-1.5 tracking-wider">
-                  <span translate="no" className="notranslate"><T>Số cột hiển thị</T></span>
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => onUpdateMobileUIConfig && onUpdateMobileUIConfig({ ...config, columns: 1 })}
-                    className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
-                      (config.columns ?? 2) === 1
-                        ? "bg-slate-900 border-slate-900 text-white shadow-xs"
-                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
-                    }`}
-                  >
-                    1 <span translate="no" className="notranslate"><T>Cột (Dọc)</T></span>
-                  </button>
-                  <button
-                    onClick={() => onUpdateMobileUIConfig && onUpdateMobileUIConfig({ ...config, columns: 2 })}
-                    className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
-                      (config.columns ?? 2) === 2
-                        ? "bg-slate-900 border-slate-900 text-white shadow-xs"
-                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
-                    }`}
-                  >
-                    2 <span translate="no" className="notranslate"><T>Cột (Giao diện lưới)</T></span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Theme Color Selector */}
-              <div>
-                <label className="text-[10px] uppercase font-black text-slate-400 block mb-1.5 tracking-wider">
-                  <span translate="no" className="notranslate"><T>Màu sắc chủ đạo (Theme)</T></span>
-                </label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {[
-                    { id: "blue", label: "Xanh biển", bg: "bg-blue-650" },
-                    { id: "indigo", label: "Chàm tối", bg: "bg-[#4f46e5]" },
-                    { id: "emerald", label: "Ngọc bích", bg: "bg-[#0d9488]" },
-                    { id: "amber", label: "Hổ phách", bg: "bg-[#f59e0b]" },
-                    { id: "rose", label: "Hồng đào", bg: "bg-[#e11d48]" },
-                    { id: "slate", label: "Than mộc", bg: "bg-[#475569]" }
-                  ].map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => onUpdateMobileUIConfig && onUpdateMobileUIConfig({ ...config, colorTheme: t.id })}
-                      className={`px-2 py-1.5 rounded-xl border text-[10px] font-bold flex items-center justify-center gap-1 transition-all ${
-                        (config.colorTheme || "blue") === t.id
-                          ? "bg-slate-900 border-slate-900 text-white shadow-xs"
-                          : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
-                      }`}
-                    >
-                      <span className={`w-2 h-2 rounded-full shrink-0 ${t.bg}`}></span>
-                      <T>{t.label}</T>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Font Size Selector */}
-              <div>
-                <label className="text-[10px] uppercase font-black text-slate-400 block mb-1.5 tracking-wider">
-                  <span translate="no" className="notranslate"><T>Cỡ chữ nội dung</T></span>
-                </label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {[
-                    { id: "xs", label: "Cực nhỏ" },
-                    { id: "sm", label: "Vừa phải" },
-                    { id: "base", label: "Lớn" }
-                  ].map((f) => (
-                    <button
-                      key={f.id}
-                      onClick={() => onUpdateMobileUIConfig && onUpdateMobileUIConfig({ ...config, fontSize: f.id })}
-                      className={`px-2 py-1.5 rounded-xl border text-[10px] font-bold transition-all ${
-                        (config.fontSize || "xs") === f.id
-                          ? "bg-slate-900 border-slate-900 text-white shadow-xs"
-                          : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
-                      }`}
-                    >
-                      <T>{f.label}</T>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Name Display Rule */}
-              <div>
-                <label className="text-[10px] uppercase font-black text-slate-400 block mb-1.5 tracking-wider">
-                  <span translate="no" className="notranslate"><T>Quy tắc hiển thị tên cơ sở</T></span>
-                </label>
-                <div className="flex flex-col gap-1.5">
-                  <button
-                    onClick={() => onUpdateMobileUIConfig && onUpdateMobileUIConfig({ ...config, displayRule: "clean" })}
-                    className={`px-3 py-1.5 rounded-xl text-left text-[11px] font-bold border transition-all flex flex-col justify-center ${
-                      displayRule === "clean"
-                        ? "bg-slate-900 border-slate-900 text-white shadow-xs"
-                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
-                    }`}
-                  >
-                    <span translate="no" className="notranslate"><T>Chỉ giữ Tên tinh gọn</T></span>
-                    <span className={`text-[9px] mt-0.5 font-normal ${displayRule === "clean" ? "text-slate-300" : "text-slate-400"}`}>
-                      Ví dũ: "Bắc Ninh" thay vì "Chi Nhánh Bắc Ninh (TPP-BNI)"
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => onUpdateMobileUIConfig && onUpdateMobileUIConfig({ ...config, displayRule: "full" })}
-                    className={`px-3 py-1.5 rounded-xl text-left text-[11px] font-bold border transition-all flex flex-col justify-center ${
-                      displayRule === "full"
-                        ? "bg-slate-900 border-slate-900 text-white shadow-xs"
-                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
-                    }`}
-                  >
-                    <span translate="no" className="notranslate"><T>Tên Đầy đủ nguyên bản</T></span>
-                    <span className={`text-[9px] mt-0.5 font-normal ${displayRule === "full" ? "text-slate-300" : "text-slate-400"}`}>
-                      Ví dụ: "Chi Nhánh Bắc Ninh (TPP-BNI)"
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => onUpdateMobileUIConfig && onUpdateMobileUIConfig({ ...config, displayRule: "custom" })}
-                    className={`px-3 py-1.5 rounded-xl text-left text-[11px] font-bold border transition-all flex flex-col justify-center ${
-                      displayRule === "custom"
-                        ? "bg-slate-900 border-slate-900 text-white shadow-xs"
-                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
-                    }`}
-                  >
-                    <span translate="no" className="notranslate"><T>Tên Viết tắt tùy chỉnh</T></span>
-                    <span className={`text-[9px] mt-0.5 font-normal ${displayRule === "custom" ? "text-slate-300" : "text-slate-400"}`}>
-                      Hiển thị theo bí danh quy định ở cài đặt máy tính
-                    </span>
-                  </button>
-                </div>
-              </div>
             </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
-import { ArrowLeft, Camera, RotateCw, Check, Scissors, AlertTriangle, RefreshCw } from "lucide-react";
+import { ArrowLeft, Camera, RotateCw, Check, Scissors, AlertTriangle, RefreshCw, ChevronDown } from "lucide-react";
 import { T } from "./TranslateText";
-import { Category4M1E1I, QualityReport, User, Branch } from "../types";
+import { Category4M1E1I, QualityReport, User, Branch, UserRole } from "../types";
 import { initialBranches, STANDARDIZED_QC_DEPT } from "../data";
 import { loadImage, processImage, CompressingResult } from "../utils/imageProcessor";
 
@@ -63,17 +63,76 @@ export default function ReportForm({
   const activeStyles = activeColorMap[colorTheme] || activeColorMap.blue;
 
   const getBranchDisplayName = (b: Branch) => {
+    let baseName = b.name;
     if (displayRule === "custom" && customAliases[b.id]) {
-      return customAliases[b.id];
+      baseName = customAliases[b.id];
+    } else {
+      const cleanPrefix = b.name.replace(/^(Chi Nhánh|Nhà [mM]áy|Văn [pP]hòng)\s+/i, "");
+      if (displayRule === "clean") {
+        baseName = cleanPrefix.replace(/\s*\(((?:TPP|BBM|DNP)-[^)]+)\)/i, "");
+      } else {
+        baseName = cleanPrefix;
+      }
     }
-    const cleanPrefix = b.name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn Phòng ", "");
-    if (displayRule === "clean") {
-      return cleanPrefix.replace(/\s*\(TPP-[^)]+\)/, "");
-    }
-    return b.name;
+    return `${baseName} (${b.companyId})`;
   };
   // Fields state
-  const [selectedBranch, setSelectedBranch] = useState(editingReport?.factory || currentUser?.branch || (branches.length > 1 ? branches[1].name : (branches[0]?.name || ""))); // Tự động nhận diện chi nhánh người dùng
+  const [selectedBranch, setSelectedBranch] = useState<string>(() => {
+    const editFactory = editingReport?.factory;
+    if (editFactory) {
+      const exists = branches.some(b => b.name === editFactory);
+      if (exists) return editFactory;
+      
+      const match = editFactory.match(/\(((?:TPP|BBM)-[^)]+)\)/i);
+      if (match) {
+        const bId = match[1].toUpperCase();
+        const foundBranch = branches.find(b => b.id === bId);
+        if (foundBranch) return foundBranch.name;
+      }
+    }
+    
+    const userBranch = currentUser?.branch;
+    if (userBranch) {
+      const exists = branches.some(b => b.name === userBranch);
+      if (exists) return userBranch;
+    }
+    
+    const scoringBranches = branches.filter(b => b.isScoring);
+    return scoringBranches.length > 0 ? scoringBranches[0].name : (branches[0]?.name || "");
+  });
+
+  // Calculate dynamic display for selected standard branch
+  const foundBranchObj = branches.find((b) => b.name === selectedBranch);
+  const displaySelectedBranch = foundBranchObj ? getBranchDisplayName(foundBranchObj) : selectedBranch;
+
+  // Make sure selectedBranch stays in sync with branches list modifications
+  useEffect(() => {
+    if (branches && branches.length > 0) {
+      const exists = branches.some((b) => b.name === selectedBranch && b.isScoring);
+      if (!exists) {
+        // Fallback to matching standard branches
+        const match = selectedBranch.match(/\(((?:TPP|BBM)-[^)]+)\)/i);
+        if (match) {
+          const bId = match[1].toUpperCase();
+          const foundBranch = branches.find((b) => b.id === bId && b.isScoring);
+          if (foundBranch) {
+            setSelectedBranch(foundBranch.name);
+            return;
+          }
+        }
+        
+        const userBranchExists = branches.find((b) => b.name === currentUser?.branch && b.isScoring);
+        if (userBranchExists) {
+          setSelectedBranch(userBranchExists.name);
+        } else {
+          const firstScoring = branches.find(b => b.isScoring);
+          if (firstScoring) {
+            setSelectedBranch(firstScoring.name);
+          }
+        }
+      }
+    }
+  }, [branches, currentUser, selectedBranch]);
   const [selectedCategory, setSelectedCategory] = useState<Category4M1E1I>(editingReport?.category || "CON NGƯỜI");
   const [timestamp, setTimestamp] = useState("");
   const [content, setContent] = useState(editingReport?.content || "");
@@ -326,8 +385,7 @@ export default function ReportForm({
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div className="flex-1">
-          <T className="font-bold text-xs uppercase text-blue-200 tracking-widest block font-serif">PHẦN MỀM TÂN PHÚ</T>
-          <T className="font-bold text-sm block">Đăng ký sự thay đổi (Form)</T>
+          <T className="font-bold text-[15px] block">GHI NHẬN 4M1E1I</T>
         </div>
         <div className="bg-white text-[#1e3a8a] text-[8px] font-black px-1 py-0.5 rounded tracking-tighter">
           <T>4M1E1I</T>
@@ -357,30 +415,41 @@ export default function ReportForm({
               </span>
             )}
           </label>
-          <div className={`grid ${colsClass} gap-1.5`}>
-            {branches.filter((b) => b.isScoring).map((b) => {
-              const br = b.name;
-              const isSel = selectedBranch === br;
-              const displayName = getBranchDisplayName(b);
-              return (
-                <button
-                  key={br}
-                  type="button"
-                  onClick={() => setSelectedBranch(br)}
-                  className={`${paddingClass} ${fontClass} rounded-lg text-left border transition-all ${
-                    isSel
-                      ? activeStyles.btnClass
-                      : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <T>{displayName}</T>
-                    {isSel && <Check className={`w-3.5 h-3.5 ${activeStyles.checkClass} shrink-0 ml-1`} />}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+
+          {currentUser?.role === UserRole.ADMIN ? (
+            <div className="relative">
+              <select
+                value={selectedBranch}
+                onChange={(e) => setSelectedBranch(e.target.value)}
+                className="w-full bg-white border border-slate-200 text-slate-700 text-xs font-black rounded-xl py-3 px-3.5 pr-10 shadow-xs appearance-none focus:outline-none focus:ring-2 focus:ring-[#1e3a8a] focus:border-[#1e3a8a] transition-all cursor-pointer font-sans"
+              >
+                {branches.filter((b) => b.isScoring).map((b) => {
+                  const br = b.name;
+                  const displayName = getBranchDisplayName(b);
+                  return (
+                    <option key={br} value={br} className="font-bold text-slate-700 font-sans">
+                      {displayName}
+                    </option>
+                  );
+                })}
+              </select>
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-500">
+                <ChevronDown className="w-4 h-4 text-slate-500" />
+              </div>
+            </div>
+          ) : (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between shadow-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-emerald-500 font-bold shrink-0 text-xs">🛡️</span>
+                <span className="text-xs font-extrabold text-slate-705">
+                  <T>{displaySelectedBranch}</T>
+                </span>
+              </div>
+              <span className="text-[8.5px] bg-emerald-50 text-emerald-700 font-black px-2 py-0.5 rounded border border-emerald-100 uppercase tracking-widest leading-none">
+                <T>Đóng vai trò cố định</T>
+              </span>
+            </div>
+          )}
         </div>
 
         {/* 2. Timestamp view-only indicator */}

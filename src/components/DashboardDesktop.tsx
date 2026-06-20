@@ -32,7 +32,9 @@ import {
   ShoppingCart,
   FileText,
   CheckSquare,
-  Info
+  Info,
+  RefreshCw,
+  AlertTriangle
 } from "lucide-react";
 import {
   BarChart,
@@ -113,6 +115,8 @@ interface DashboardDesktopProps {
   setMoldsCatalog: React.Dispatch<React.SetStateAction<CatalogMold[]>>;
   onUpdateReport?: (report: QualityReport) => void;
   onUpdateUser?: (updatedUser: User) => void;
+  onForceSyncMetadata?: () => Promise<void>;
+  onForceSyncUsers?: () => Promise<void>;
 }
 
 interface DesktopThumbnailSliderProps {
@@ -263,11 +267,30 @@ export default function DashboardDesktop({
   moldsCatalog,
   setMoldsCatalog,
   onUpdateReport,
-  onUpdateUser
+  onUpdateUser,
+  onForceSyncMetadata,
+  onForceSyncUsers
 }: DashboardDesktopProps) {
   const [activeTab, setActiveTab] = useState<
     "PHÊ_DUYỆT" | "MÃ_HÓA" | "THỐNG_KÊ" | "DỮ_LIỆU" | "QUY_CHẾ" | "CÁ_NHÂN" | "THÔNG_BÁO" | "TRAO_ĐỔI" | "TRIỂN_KHAI"
   >("PHÊ_DUYỆT");
+
+  const [forceSyncState, setForceSyncState] = useState<"idle" | "syncing" | "success" | "error">("idle");
+  const [forceSyncUsersState, setForceSyncUsersState] = useState<"idle" | "syncing" | "success" | "error">("idle");
+  const [branchNameFormat, setBranchNameFormat] = useState<'standard' | 'with-company-id'>(() => {
+    return (localStorage.getItem("4m1e1i_branch_format") as any) || 'standard';
+  });
+  const [deptNameFormat, setDeptNameFormat] = useState<'standard' | 'with-branch-id'>(() => {
+    return (localStorage.getItem("4m1e1i_dept_format") as any) || 'standard';
+  });
+
+  useEffect(() => {
+    localStorage.setItem("4m1e1i_branch_format", branchNameFormat);
+  }, [branchNameFormat]);
+
+  useEffect(() => {
+    localStorage.setItem("4m1e1i_dept_format", deptNameFormat);
+  }, [deptNameFormat]);
 
   // Local entry inputs for Mã hóa lookup creation
   const [newCompanyName, setNewCompanyName] = useState("");
@@ -306,18 +329,50 @@ export default function DashboardDesktop({
   const [editPassword, setEditPassword] = useState("");
   const [editCompany, setEditCompany] = useState("");
 
+  const getFormattedUserBranch = (userBranchText: string, companyId?: string) => {
+    if (!userBranchText) return "";
+    if (/\([^)]+\)$/.test(userBranchText)) {
+      return userBranchText;
+    }
+    const foundBranch = branches.find(
+      (b) => b.name === userBranchText || b.name.replace(/\s*\([^)]+\)$/, "").trim() === userBranchText.replace(/\s*\([^)]+\)$/, "").trim()
+    );
+    if (foundBranch) {
+      return `${userBranchText} (${foundBranch.companyId})`;
+    }
+    if (companyId) {
+      return `${userBranchText} (${companyId})`;
+    }
+    return userBranchText;
+  };
+
+  const getFormattedUserDept = (userDeptText: string, userBranchText: string) => {
+    if (!userDeptText) return "";
+    if (/\([^)]+\)$/.test(userDeptText)) {
+      return userDeptText;
+    }
+    const foundBranch = branches.find(
+      (b) => b.name === userBranchText || b.name.replace(/\s*\([^)]+\)$/, "").trim() === userBranchText.replace(/\s*\([^)]+\)$/, "").trim()
+    );
+    if (foundBranch) {
+      return `${userDeptText} (${foundBranch.id})`;
+    }
+    return userDeptText;
+  };
+
   const handleStartEditUser = (u: User) => {
     setEditingUser(u);
     setEditFullName(u.fullName);
     setEditPhone(u.phone);
-    setEditDepartment(u.department);
-    setEditBranch(u.branch);
 
     // Find representing company based on the user's branch
     const userBranch = branches.find((b) => b.name === u.branch);
     const userCompany = userBranch ? companies.find((c) => c.id === userBranch.companyId) : null;
     const initialCompanyVal = u.company || (userCompany ? userCompany.name : (companies[0]?.name || "TÂN PHÚ VIỆT NAM"));
     setEditCompany(initialCompanyVal);
+
+    setEditBranch(getFormattedUserBranch(u.branch, userCompany?.id || ""));
+    setEditDepartment(getFormattedUserDept(u.department, u.branch));
     setEditPassword(u.password || "123456");
 
     setEditRole(u.role);
@@ -327,30 +382,66 @@ export default function DashboardDesktop({
   // Cascade link: Company -> Branch -> Department
   useEffect(() => {
     if (editingUser && editCompany) {
-      const selectedC = companies.find((c) => c.name === editCompany);
+      let currentCompany = editCompany;
+      const exists = companies.some((c) => c.name === editCompany);
+      if (!exists && companies.length > 0) {
+        currentCompany = companies[0].name;
+        setEditCompany(companies[0].name);
+      }
+      
+      const selectedC = companies.find((c) => c.name === currentCompany);
       if (selectedC) {
         const companyBranches = branches.filter((b) => b.companyId === selectedC.id);
         if (companyBranches.length > 0) {
-          const hasCurrentBranch = companyBranches.some((b) => b.name === editBranch);
+          const hasCurrentBranch = companyBranches.some((b) => {
+            const nameWithSuffix = b.name.includes(`(${b.id})`) 
+              ? b.name 
+              : b.name.includes(`(${b.companyId})`)
+              ? b.name
+              : `${b.name.replace(/\s*\([^)]+\)$/, "").trim()} (${b.companyId})`;
+            return b.name === editBranch || nameWithSuffix === editBranch;
+          });
           if (!hasCurrentBranch) {
-            setEditBranch(companyBranches[0].name);
+            const firstBranch = companyBranches[0];
+            const nameWithSuffix = firstBranch.name.includes(`(${firstBranch.id})`) 
+              ? firstBranch.name 
+              : firstBranch.name.includes(`(${firstBranch.companyId})`)
+              ? firstBranch.name
+              : `${firstBranch.name.replace(/\s*\([^)]+\)$/, "").trim()} (${firstBranch.companyId})`;
+            setEditBranch(nameWithSuffix);
           }
         } else {
           setEditBranch("");
         }
       }
     }
-  }, [editCompany, companies, branches, editingUser]);
+  }, [editCompany, companies, branches, editingUser, editBranch]);
 
   useEffect(() => {
     if (editingUser && editBranch) {
-      const selectedB = branches.find((b) => b.name === editBranch);
+      const selectedB = branches.find((b) => {
+        const nameWithSuffix = b.name.includes(`(${b.id})`) 
+          ? b.name 
+          : b.name.includes(`(${b.companyId})`)
+          ? b.name
+          : `${b.name.replace(/\s*\([^)]+\)$/, "").trim()} (${b.companyId})`;
+        return b.name === editBranch || nameWithSuffix === editBranch;
+      });
       if (selectedB) {
         const branchDepts = departments.filter((d) => d.branchId === selectedB.id);
         if (branchDepts.length > 0) {
-          const hasCurrentDept = branchDepts.some((d) => d.name === editDepartment);
+          const hasCurrentDept = branchDepts.some((d) => {
+            const nameWithSuffix = d.name.includes(`(${selectedB.id})`)
+              ? d.name
+              : `${d.name.replace(/\s*\([^)]+\)$/, "").trim()} (${selectedB.id})`;
+            return d.name === editDepartment || nameWithSuffix === editDepartment;
+          });
           if (!hasCurrentDept) {
-            setEditDepartment(branchDepts[0].name);
+            const firstDept = branchDepts[0];
+            const nameWithSuffix = firstDept.name.includes(`(${selectedB.id})`)
+              ? firstDept.name
+              : `${firstDept.name.replace(/\s*\([^)]+\)$/, "").trim()} (${selectedB.id})`;
+            setEditDepartment(nameWithSuffix);
           }
         } else {
           setEditDepartment("");
@@ -700,6 +791,57 @@ export default function DashboardDesktop({
                   </h2>
                   <T className="text-xs text-slate-500 mt-1 block">Quản lý duyệt cấp phép truy cập, chỉnh sửa phân quyền và kích hoạt tài khoản của nhân viên các xưởng.</T>
                 </div>
+
+                <div translate="no" className="notranslate shrink-0 self-start md:self-center">
+                  <button
+                    onClick={async () => {
+                      if (onForceSyncUsers) {
+                        try {
+                          setForceSyncUsersState("syncing");
+                          await onForceSyncUsers();
+                          setForceSyncUsersState("success");
+                          setTimeout(() => setForceSyncUsersState("idle"), 3000);
+                        } catch (err) {
+                          console.error(err);
+                          setForceSyncUsersState("error");
+                          setTimeout(() => setForceSyncUsersState("idle"), 3000);
+                        }
+                      }
+                    }}
+                    disabled={forceSyncUsersState === "syncing" || offlineMode}
+                    className={`flex items-center gap-2 px-4 py-2.5 text-xs font-black rounded-xl shadow-md border transition-all cursor-pointer select-none uppercase tracking-wide shrink-0 ${
+                      forceSyncUsersState === "syncing"
+                        ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
+                        : forceSyncUsersState === "success"
+                        ? "bg-emerald-600 border-emerald-700 text-white hover:bg-emerald-700"
+                        : forceSyncUsersState === "error"
+                        ? "bg-rose-600 border-rose-700 text-white hover:bg-rose-700"
+                        : "bg-purple-600 hover:bg-purple-700 text-white border-purple-700 hover:shadow-lg transform active:scale-95"
+                    }`}
+                  >
+                    {forceSyncUsersState === "syncing" ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
+                        <span translate="no" className="notranslate">Đang đồng bộ phong tỏa...</span>
+                      </>
+                    ) : forceSyncUsersState === "success" ? (
+                      <>
+                        <CheckCircle className="w-4 h-4 text-white shrink-0" />
+                        <span translate="no" className="notranslate">Đồng bộ Đám mây OK</span>
+                      </>
+                    ) : forceSyncUsersState === "error" ? (
+                      <>
+                        <AlertTriangle className="w-4 h-4 text-white shrink-0" />
+                        <span translate="no" className="notranslate">Lỗi đồng bộ đám mây</span>
+                      </>
+                    ) : (
+                      <>
+                        <CloudLightning className="w-4 h-4 text-white shrink-0" />
+                        <span translate="no" className="notranslate">Lưu cưỡng bức lên Đám mây</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
 
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
@@ -760,8 +902,8 @@ export default function DashboardDesktop({
                                 </div>
                               </td>
                               <td className="p-4 leading-relaxed">
-                                <div className="text-slate-800 font-extrabold text-[11.5px]">{u.department}</div>
-                                <div className="text-slate-400 text-[10.5px] font-medium">{u.branch}</div>
+                                <div className="text-slate-800 font-extrabold text-[11.5px]">{getFormattedUserDept(u.department, u.branch)}</div>
+                                <div className="text-slate-400 text-[10.5px] font-medium">{getFormattedUserBranch(u.branch, u.company)}</div>
                               </td>
                               <td className="p-4 select-none">
                                 <select
@@ -1050,11 +1192,16 @@ export default function DashboardDesktop({
                             if (companyBranches.length === 0) {
                               return <option value="">Chưa có chi nhánh</option>;
                             }
-                            return companyBranches.map((br) => (
-                              <option key={br.id} value={br.name}>
-                                {br.name}
-                              </option>
-                            ));
+                            return companyBranches.map((br) => {
+                              const nameWithSuffix = br.name.includes("(") 
+                                ? br.name 
+                                : `${br.name.replace(/\s*\([^)]+\)$/, "").trim()} (${br.companyId})`;
+                              return (
+                                <option key={br.id} value={nameWithSuffix}>
+                                  {nameWithSuffix}
+                                </option>
+                              );
+                            });
                           })()}
                         </select>
                       </div>
@@ -1070,18 +1217,29 @@ export default function DashboardDesktop({
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all cursor-pointer"
                         >
                           {(() => {
-                            const selectedB = branches.find((b) => b.name === editBranch);
+                            const selectedB = branches.find((b) => {
+                              const nameWithSuffix = b.name.includes("(") 
+                                ? b.name 
+                                : `${b.name.replace(/\s*\([^)]+\)$/, "").trim()} (${b.companyId})`;
+                              return b.name === editBranch || nameWithSuffix === editBranch;
+                            });
                             const filteredDepts = selectedB
                               ? departments.filter((d) => d.branchId === selectedB.id)
                               : [];
                             if (filteredDepts.length === 0) {
                               return <option value="">Chưa có bộ phận</option>;
                             }
-                            return filteredDepts.map((dept) => (
-                              <option key={dept.id} value={dept.name}>
-                                {dept.name}
-                              </option>
-                            ));
+                            return filteredDepts.map((dept) => {
+                              const branchSuffix = selectedB ? selectedB.id : dept.branchId;
+                              const nameWithSuffix = dept.name.includes("(")
+                                ? dept.name
+                                : `${dept.name.replace(/\s*\([^)]+\)$/, "").trim()} (${branchSuffix})`;
+                              return (
+                                <option key={dept.id} value={nameWithSuffix}>
+                                  {nameWithSuffix}
+                                </option>
+                              );
+                            });
                           })()}
                         </select>
                       </div>
@@ -1147,15 +1305,68 @@ export default function DashboardDesktop({
           {/* TAB 2: MÃ HÓA (Encoding structural registries) */}
           {activeTab === "MÃ_HÓA" && (
             <div className="space-y-6">
-              <div>
-                <h2 className="text-lg font-bold text-slate-850 flex items-center gap-2">
-                  <Sliders className="w-5 h-5 text-purple-500" />
-                  <span translate="no" className="notranslate">Khai báo và Mã hóa Dữ liệu Đồng bộ</span>
-                </h2>
-                <div className="mt-2 bg-blue-50 border border-blue-100 p-3 rounded-lg text-xs text-blue-800 leading-relaxed font-medium">
-                  <span translate="no" className="notranslate">
-                    {"Cấu trúc danh mục gồm 3 Cấp (Cột 1: Công ty -> Cột 2: Chi nhánh/VPĐD -> Cột 3: Bộ phận/Đơn vị) đã được cập nhật hoàn chỉnh, đồng bộ trực tiếp lên Cloud Firestore (config/company_mappings) và bộ nhớ đệm localStorage của trình duyệt:"}
-                  </span>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-850 flex items-center gap-2">
+                    <Sliders className="w-5 h-5 text-purple-500" />
+                    <span translate="no" className="notranslate">Khai báo và Mã hóa Dữ liệu Đồng bộ</span>
+                  </h2>
+                  <div className="mt-2 bg-blue-50 border border-blue-100 p-3 rounded-lg text-xs text-blue-800 leading-relaxed font-medium">
+                    <span translate="no" className="notranslate">
+                      {"Cấu trúc danh mục gồm 3 Cấp (Cột 1: Công ty -> Cột 2: Chi nhánh/VPĐD -> Cột 3: Bộ phận/Đơn vị) đã được cập nhật hoàn chỉnh, đồng bộ trực tiếp lên Cloud Firestore (config/company_mappings) và bộ nhớ đệm localStorage của trình duyệt:"}
+                    </span>
+                  </div>
+                </div>
+
+                <div translate="no" className="notranslate shrink-0 self-start sm:self-center">
+                  <button
+                    onClick={async () => {
+                      if (onForceSyncMetadata) {
+                        try {
+                          setForceSyncState("syncing");
+                          await onForceSyncMetadata();
+                          setForceSyncState("success");
+                          setTimeout(() => setForceSyncState("idle"), 3000);
+                        } catch (err) {
+                          console.error(err);
+                          setForceSyncState("error");
+                          setTimeout(() => setForceSyncState("idle"), 3000);
+                        }
+                      }
+                    }}
+                    disabled={forceSyncState === "syncing" || offlineMode}
+                    className={`flex items-center gap-2 px-4 py-2.5 text-xs font-black rounded-xl shadow-md border transition-all cursor-pointer select-none uppercase tracking-wide shrink-0 ${
+                      forceSyncState === "syncing"
+                        ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
+                        : forceSyncState === "success"
+                        ? "bg-emerald-600 border-emerald-700 text-white hover:bg-emerald-700"
+                        : forceSyncState === "error"
+                        ? "bg-rose-600 border-rose-700 text-white hover:bg-rose-700"
+                        : "bg-purple-600 hover:bg-purple-700 text-white border-purple-700 hover:shadow-lg transform active:scale-95"
+                    }`}
+                  >
+                    {forceSyncState === "syncing" ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
+                        <span translate="no" className="notranslate">Đang đồng bộ phong tỏa...</span>
+                      </>
+                    ) : forceSyncState === "success" ? (
+                      <>
+                        <CheckCircle className="w-4 h-4 text-white shrink-0" />
+                        <span translate="no" className="notranslate">Đồng bộ Đám mây OK</span>
+                      </>
+                    ) : forceSyncState === "error" ? (
+                      <>
+                        <AlertTriangle className="w-4 h-4 text-white shrink-0" />
+                        <span translate="no" className="notranslate">Lỗi đồng bộ đám mây</span>
+                      </>
+                    ) : (
+                      <>
+                        <CloudLightning className="w-4 h-4 text-white shrink-0" />
+                        <span translate="no" className="notranslate">Lưu cưỡng bức lên Đám mây</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
 
@@ -1341,6 +1552,41 @@ export default function DashboardDesktop({
                       <Building className="w-4 h-4 text-emerald-500" />
                       <span translate="no" className="notranslate font-bold text-xs uppercase tracking-wider text-emerald-700">2. Chi nhánh / VPĐD</span>
                     </div>
+
+                    {/* FORMAT SWITCHER BUTTON GROUP FOR COLUMN 2 */}
+                    <div translate="no" className="notranslate flex bg-slate-105/90 p-0.5 rounded-lg text-[9px] font-bold shrink-0 border border-slate-200">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setBranchNameFormat('standard');
+                        }}
+                        className={`px-1.5 py-0.5 rounded text-[8px] leading-tight select-none cursor-pointer transition-all ${
+                          branchNameFormat === 'standard' 
+                            ? 'bg-white shadow text-emerald-700 font-extrabold' 
+                            : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                        title="Định dạng nguyên bản gốc"
+                      >
+                        <span translate="no" className="notranslate">Gốc</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setBranchNameFormat('with-company-id');
+                        }}
+                        className={`px-1.5 py-0.5 rounded text-[8px] leading-tight select-none cursor-pointer transition-all ${
+                          branchNameFormat === 'with-company-id' 
+                            ? 'bg-white shadow text-emerald-700 font-extrabold' 
+                            : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                        title="Định dạng kèm ID công ty thành viên"
+                      >
+                        <span translate="no" className="notranslate">+ID Cty</span>
+                      </button>
+                    </div>
+
                     <span className="text-[10px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold font-mono">
                       {activeCompanyBranches.length}
                     </span>
@@ -1421,7 +1667,9 @@ export default function DashboardDesktop({
                                   <div className="flex items-center gap-1.5">
                                     {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
                                     <span translate="no" className="notranslate text-xs font-bold text-slate-800 block truncate leading-normal">
-                                      {b.name}
+                                      {branchNameFormat === 'with-company-id' 
+                                        ? `${b.name.replace(/\s*\([^)]+\)$/, "").trim()} (${b.companyId})` 
+                                        : b.name}
                                     </span>
                                   </div>
                                   <div className="flex items-center gap-1.5 mt-0.5 select-none">
@@ -1521,6 +1769,41 @@ export default function DashboardDesktop({
                       <Building className="w-4 h-4 text-amber-500" />
                       <span translate="no" className="notranslate font-bold text-xs uppercase tracking-wider text-amber-700">3. Bộ phận / Đơn vị</span>
                     </div>
+
+                    {/* FORMAT SWITCHER BUTTON GROUP FOR COLUMN 3 */}
+                    <div translate="no" className="notranslate flex bg-slate-105/90 p-0.5 rounded-lg text-[9px] font-bold shrink-0 border border-slate-200">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeptNameFormat('standard');
+                        }}
+                        className={`px-1.5 py-0.5 rounded text-[8px] leading-tight select-none cursor-pointer transition-all ${
+                          deptNameFormat === 'standard' 
+                            ? 'bg-white shadow text-amber-700 font-extrabold' 
+                            : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                        title="Định dạng nguyên bản gốc"
+                      >
+                        <span translate="no" className="notranslate">Gốc</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeptNameFormat('with-branch-id');
+                        }}
+                        className={`px-1.5 py-0.5 rounded text-[8px] leading-tight select-none cursor-pointer transition-all ${
+                          deptNameFormat === 'with-branch-id' 
+                            ? 'bg-white shadow text-amber-700 font-extrabold' 
+                            : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                        title="Định dạng kèm ID chi nhánh/VPĐD"
+                      >
+                        <span translate="no" className="notranslate">+ID CN</span>
+                      </button>
+                    </div>
+
                     <span className="text-[10px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-bold font-mono">
                       {activeBranchDepartments.length}
                     </span>
@@ -1592,7 +1875,11 @@ export default function DashboardDesktop({
                             ) : (
                               <>
                                 <div className="min-w-0 flex-1 pr-2">
-                                  <span translate="no" className="notranslate text-xs font-bold text-slate-800 block leading-normal break-words">{d.name}</span>
+                                  <span translate="no" className="notranslate text-xs font-bold text-slate-800 block leading-normal break-words">
+                                    {deptNameFormat === 'with-branch-id' 
+                                      ? `${d.name.replace(/\s*\([^)]+\)$/, "").trim()} (${d.branchId})` 
+                                      : d.name}
+                                  </span>
                                   <div className="flex items-center gap-1.5 mt-1 select-none flex-wrap">
                                     <span translate="no" className="notranslate text-[9px] text-slate-400 font-mono font-medium">ID: {d.id}</span>
                                     {d.name.startsWith(STANDARDIZED_QC_DEPT) && (
@@ -2192,11 +2479,11 @@ export default function DashboardDesktop({
                   </div>
                   <div>
                     <T className="text-slate-500 block uppercase text-[10px]">Bộ phận tiêu chuẩn</T>
-                    <T className="text-slate-800 block mt-1 text-sm font-bold">{currentUser.department || STANDARDIZED_QC_DEPT}</T>
+                    <T className="text-slate-800 block mt-1 text-sm font-bold">{getFormattedUserDept(currentUser.department, currentUser.branch) || STANDARDIZED_QC_DEPT}</T>
                   </div>
                   <div>
                     <T className="text-slate-500 block uppercase text-[10px]">Tập đoàn chủ quản và Chi nhánh</T>
-                    <T className="text-slate-800 block mt-1 text-sm font-bold">{currentUser.branch}</T>
+                    <T className="text-slate-800 block mt-1 text-sm font-bold">{getFormattedUserBranch(currentUser.branch, currentUser.company)}</T>
                   </div>
                 </div>
               </div>

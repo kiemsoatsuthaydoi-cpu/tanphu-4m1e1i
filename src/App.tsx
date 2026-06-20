@@ -319,8 +319,6 @@ export default function App() {
     }
   }, [mobileUIConfig, dbConnected, dbLoading, syncCompleted]);
 
-  const [showConfigPanel, setShowConfigPanel] = useState(false);
-
   // Sign up and login screens
   const [authScreen, setAuthScreen] = useState<"LOGIN" | "REGISTER">("LOGIN");
   const [loginId, setLoginId] = useState("");
@@ -339,6 +337,105 @@ export default function App() {
   const [regRole, setRegRole] = useState<UserRole>(UserRole.STAFF);
   const [regPassword, setRegPassword] = useState("");
   const [regConfirmPassword, setRegConfirmPassword] = useState("");
+
+  // Synchronize and Cascade registration selections with master data lists
+  useEffect(() => {
+    if (companies && companies.length > 0) {
+      const exists = companies.some((c) => c.id === regCompany);
+      if (!exists) {
+        setRegCompany(companies[0].id);
+        const filteredB = branches.filter((b) => b.companyId === companies[0].id);
+        const fb = filteredB.find(b => b.isScoring) || filteredB[0];
+        setRegBranch(fb ? fb.name : "");
+        setRegDepartment("");
+      }
+    }
+  }, [companies, regCompany, branches]);
+
+  useEffect(() => {
+    const companyBranches = branches.filter((b) => b.companyId === regCompany);
+    if (companyBranches.length > 0) {
+      const hasCurrentBranch = companyBranches.some((b) => {
+        const nameWithSuffix = b.name.includes("(") 
+          ? b.name 
+          : `${b.name.replace(/\s*\([^)]+\)$/, "").trim()} (${b.companyId})`;
+        return b.name === regBranch || nameWithSuffix === regBranch;
+      });
+      if (!hasCurrentBranch) {
+        const firstBranch = companyBranches.find(b => b.isScoring) || companyBranches[0];
+        const nameWithSuffix = firstBranch.name.includes("(") 
+          ? firstBranch.name 
+          : `${firstBranch.name.replace(/\s*\([^)]+\)$/, "").trim()} (${firstBranch.companyId})`;
+        setRegBranch(nameWithSuffix);
+        setRegDepartment("");
+      }
+    } else {
+      setRegBranch("");
+      setRegDepartment("");
+    }
+  }, [regCompany, branches, regBranch]);
+
+  useEffect(() => {
+    const selectedB = branches.find((b) => {
+      const nameWithSuffix = b.name.includes("(") 
+        ? b.name 
+        : `${b.name.replace(/\s*\([^)]+\)$/, "").trim()} (${b.companyId})`;
+      return b.name === regBranch || nameWithSuffix === regBranch;
+    });
+    if (selectedB) {
+      const branchDepts = departments.filter((d) => d.branchId === selectedB.id);
+      if (branchDepts.length > 0) {
+        const hasCurrentDept = branchDepts.some((d) => {
+          const nameWithSuffix = d.name.includes(`(${selectedB.id})`)
+            ? d.name
+            : `${d.name.replace(/\s*\([^)]+\)$/, "").trim()} (${selectedB.id})`;
+          return d.name === regDepartment || nameWithSuffix === regDepartment;
+        });
+        if (!hasCurrentDept) {
+          const firstDept = branchDepts[0];
+          const nameWithSuffix = firstDept.name.includes(`(${selectedB.id})`)
+            ? firstDept.name
+            : `${firstDept.name.replace(/\s*\([^)]+\)$/, "").trim()} (${selectedB.id})`;
+          setRegDepartment(nameWithSuffix);
+        }
+      } else {
+        setRegDepartment("");
+      }
+    } else {
+      setRegDepartment("");
+    }
+  }, [regBranch, branches, departments, regDepartment]);
+
+  const getFormattedUserBranch = (userBranchText: string, companyId?: string) => {
+    if (!userBranchText) return "";
+    if (/\([^)]+\)$/.test(userBranchText)) {
+      return userBranchText;
+    }
+    const foundBranch = branches.find(
+      (b) => b.name === userBranchText || b.name.replace(/\s*\([^)]+\)$/, "").trim() === userBranchText.replace(/\s*\([^)]+\)$/, "").trim()
+    );
+    if (foundBranch) {
+      return `${userBranchText} (${foundBranch.companyId})`;
+    }
+    if (companyId) {
+      return `${userBranchText} (${companyId})`;
+    }
+    return userBranchText;
+  };
+
+  const getFormattedUserDept = (userDeptText: string, userBranchText: string) => {
+    if (!userDeptText) return "";
+    if (/\([^)]+\)$/.test(userDeptText)) {
+      return userDeptText;
+    }
+    const foundBranch = branches.find(
+      (b) => b.name === userBranchText || b.name.replace(/\s*\([^)]+\)$/, "").trim() === userBranchText.replace(/\s*\([^)]+\)$/, "").trim()
+    );
+    if (foundBranch) {
+      return `${userDeptText} (${foundBranch.id})`;
+    }
+    return userDeptText;
+  };
 
   // Format employee ID helper (auto-insertion of dot, restricts length of 10, allows numbers and dot, removes spaces)
   const formatEmployeeId = (value: string, prevValue: string) => {
@@ -673,13 +770,10 @@ export default function App() {
     syncFromDb();
   }, []);
 
-  // Save changes to localStorage on any state modification + back up to Firestore
+  // Save changes to localStorage on any state modification
   useEffect(() => {
     localStorage.setItem("4m1e1i_users", JSON.stringify(users));
-    if (syncCompleted && dbConnected && !dbLoading) {
-      users.forEach((u) => saveDocument(COLLECTIONS.USERS, u.id, u));
-    }
-  }, [users, dbConnected, dbLoading, syncCompleted]);
+  }, [users]);
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_reports", JSON.stringify(reports));
@@ -690,24 +784,15 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_companies", JSON.stringify(companies));
-    if (syncCompleted && dbConnected && !dbLoading) {
-      companies.forEach((c) => saveDocument(COLLECTIONS.COMPANIES, c.id, c));
-    }
-  }, [companies, dbConnected, dbLoading, syncCompleted]);
+  }, [companies]);
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_branches", JSON.stringify(branches));
-    if (syncCompleted && dbConnected && !dbLoading) {
-      branches.forEach((b) => saveDocument(COLLECTIONS.BRANCHES, b.id, b));
-    }
-  }, [branches, dbConnected, dbLoading, syncCompleted]);
+  }, [branches]);
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_departments", JSON.stringify(departments));
-    if (syncCompleted && dbConnected && !dbLoading) {
-      departments.forEach((d) => saveDocument(COLLECTIONS.DEPARTMENTS, d.id, d));
-    }
-  }, [departments, dbConnected, dbLoading, syncCompleted]);
+  }, [departments]);
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_broadcasts", JSON.stringify(broadcasts));
@@ -1134,18 +1219,64 @@ export default function App() {
   // Code list lookup managers
   const handleAddCompany = (c: Company) => {
     setCompanies((prev) => [...prev, c]);
+    if (dbConnected) {
+      saveDocument(COLLECTIONS.COMPANIES, c.id, c).catch(console.error);
+    }
   };
 
   const handleUpdateCompany = (oldId: string, updated: Company) => {
+    const oldC = companies.find(c => c.id === oldId);
+    const oldName = oldC ? oldC.name : "";
+    const newName = updated.name;
+
     // 1. If ID was modified, cascade update all branches' companyId
     if (oldId !== updated.id) {
-      setBranches((prev) => prev.map((b) => b.companyId === oldId ? { ...b, companyId: updated.id } : b));
+      setBranches((prev) => {
+        const nextBranches = prev.map((b) => b.companyId === oldId ? { ...b, companyId: updated.id } : b);
+        if (dbConnected) {
+          nextBranches.forEach(b => {
+            if (b.companyId === updated.id) {
+              saveDocument(COLLECTIONS.BRANCHES, b.id, b).catch(console.error);
+            }
+          });
+        }
+        return nextBranches;
+      });
     }
-    // 2. Replace the company
+
+    // 2. Cascade update users' company names
+    if (oldName && oldName !== newName) {
+      setUsers((prevUsers) => {
+        const nextUsers = prevUsers.map((u) => {
+          if (u.company === oldName) {
+            const nextU = { ...u, company: newName };
+            if (dbConnected) {
+              saveDocument(COLLECTIONS.USERS, nextU.id, nextU).catch(console.error);
+            }
+            return nextU;
+          }
+          return u;
+        });
+        return nextUsers;
+      });
+
+      if (currentUser && currentUser.company === oldName) {
+        setCurrentUser((prev) => prev ? { ...prev, company: newName } : null);
+      }
+    }
+
+    // 3. Replace the company
     setCompanies((prev) => {
       const filtered = prev.filter((c) => c.id !== oldId);
       return [...filtered, updated];
     });
+
+    if (dbConnected) {
+      if (oldId !== updated.id) {
+        deleteDocument(COLLECTIONS.COMPANIES, oldId).catch(console.error);
+      }
+      saveDocument(COLLECTIONS.COMPANIES, updated.id, updated).catch(console.error);
+    }
   };
 
   const getBranchCodeSuffix = (brName: string) => {
@@ -1175,6 +1306,9 @@ export default function App() {
 
   const handleAddBranch = (b: Branch) => {
     setBranches((prev) => [...prev, b]);
+    if (dbConnected) {
+      saveDocument(COLLECTIONS.BRANCHES, b.id, b).catch(console.error);
+    }
   };
 
   const handleUpdateBranch = (oldId: string, updated: Branch) => {
@@ -1184,25 +1318,50 @@ export default function App() {
 
     // 1. Cascade update parent references if branch ID changed
     if (oldId !== updated.id) {
-      setDepartments((prev) => prev.map((d) => d.branchId === oldId ? { ...d, branchId: updated.id } : d));
+      setDepartments((prev) => {
+        const nextDepts = prev.map((d) => d.branchId === oldId ? { ...d, branchId: updated.id } : d);
+        if (dbConnected) {
+          nextDepts.forEach((d) => {
+            if (d.branchId === updated.id) {
+              saveDocument(COLLECTIONS.DEPARTMENTS, d.id, d).catch(console.error);
+            }
+          });
+        }
+        return nextDepts;
+      });
     }
 
     if (oldName && oldName !== newName) {
       // 1. Cascade update reports' factory names
-      setReports((prevReports) => prevReports.map((r) => {
-        if (r.factory === oldName) {
-          return { ...r, factory: newName };
-        }
-        return r;
-      }));
+      setReports((prevReports) => {
+        const nextReports = prevReports.map((r) => {
+          if (r.factory === oldName) {
+            const nextR = { ...r, factory: newName };
+            if (dbConnected) {
+              saveDocument(COLLECTIONS.REPORTS, nextR.id, nextR).catch(console.error);
+            }
+            return nextR;
+          }
+          return r;
+        });
+        return nextReports;
+      });
 
       // 2. Cascade update users' branch names
-      setUsers((prevUsers) => prevUsers.map((u) => {
-        if (u.branch === oldName) {
-          return { ...u, branch: newName };
-        }
-        return u;
-      }));
+      setUsers((prevUsers) => {
+        const nextUsers = prevUsers.map((u) => {
+          if (u.branch === oldName) {
+            const nextU = { ...u, branch: newName };
+            if (dbConnected) {
+              saveDocument(COLLECTIONS.USERS, nextU.id, nextU).catch(console.error);
+            }
+            return nextU;
+          }
+          return u;
+        });
+        return nextUsers;
+      });
+
       if (currentUser && currentUser.branch === oldName) {
         setCurrentUser((prev) => prev ? { ...prev, branch: newName } : null);
       }
@@ -1210,44 +1369,66 @@ export default function App() {
       // 3. Cascade update department suffix codes belonging to this branch
       const oldSuffix = getBranchCodeSuffix(oldName);
       const newSuffix = getBranchCodeSuffix(newName);
-      setDepartments((prevDepts) => prevDepts.map((d) => {
-        const dBranchId = d.branchId === oldId ? updated.id : d.branchId;
-        if (d.branchId === oldId || d.branchId === updated.id) {
-          let cleanDeptName = d.name;
-          if (cleanDeptName.endsWith(oldSuffix)) {
-            cleanDeptName = cleanDeptName.substring(0, cleanDeptName.length - oldSuffix.length);
-          } else {
-            cleanDeptName = cleanDeptName.replace(/\s\([A-Z0-9-]+\)$/, "").trim();
+      setDepartments((prevDepts) => {
+        const nextDepts = prevDepts.map((d) => {
+          const dBranchId = d.branchId === oldId ? updated.id : d.branchId;
+          if (d.branchId === oldId || d.branchId === updated.id) {
+            let cleanDeptName = d.name;
+            if (cleanDeptName.endsWith(oldSuffix)) {
+              cleanDeptName = cleanDeptName.substring(0, cleanDeptName.length - oldSuffix.length);
+            } else {
+              cleanDeptName = cleanDeptName.replace(/\s\([A-Z0-9-]+\)$/, "").trim();
+            }
+            const nextD = { ...d, branchId: dBranchId, name: `${cleanDeptName}${newSuffix}` };
+            if (dbConnected) {
+              saveDocument(COLLECTIONS.DEPARTMENTS, nextD.id, nextD).catch(console.error);
+            }
+            return nextD;
           }
-          return { ...d, branchId: dBranchId, name: `${cleanDeptName}${newSuffix}` };
-        }
-        return d;
-      }));
+          return d;
+        });
+        return nextDepts;
+      });
     } else if (oldId !== updated.id) {
       // Branch ID changed but name didn't. Still need to update department suffix if it was based on old branch ID!
       const oldSuffix = ` (${oldId})`;
       const newSuffix = ` (${updated.id})`;
       const oldNameSuffix = getBranchCodeSuffix(oldName);
-      setDepartments((prevDepts) => prevDepts.map((d) => {
-        if (d.branchId === oldId) {
-          let cleanDeptName = d.name;
-          if (cleanDeptName.endsWith(oldNameSuffix)) {
-            return { ...d, branchId: updated.id };
+      setDepartments((prevDepts) => {
+        const nextDepts = prevDepts.map((d) => {
+          if (d.branchId === oldId) {
+            let cleanDeptName = d.name;
+            let nextD: Department;
+            if (cleanDeptName.endsWith(oldNameSuffix)) {
+              nextD = { ...d, branchId: updated.id };
+            } else if (cleanDeptName.endsWith(oldSuffix)) {
+              cleanDeptName = cleanDeptName.substring(0, cleanDeptName.length - oldSuffix.length);
+              nextD = { ...d, branchId: updated.id, name: `${cleanDeptName}${newSuffix}` };
+            } else {
+              nextD = { ...d, branchId: updated.id };
+            }
+            if (dbConnected) {
+              saveDocument(COLLECTIONS.DEPARTMENTS, nextD.id, nextD).catch(console.error);
+            }
+            return nextD;
           }
-          if (cleanDeptName.endsWith(oldSuffix)) {
-            cleanDeptName = cleanDeptName.substring(0, cleanDeptName.length - oldSuffix.length);
-            return { ...d, branchId: updated.id, name: `${cleanDeptName}${newSuffix}` };
-          }
-          return { ...d, branchId: updated.id };
-        }
-        return d;
-      }));
+          return d;
+        });
+        return nextDepts;
+      });
     }
 
     setBranches((prev) => {
       const filtered = prev.filter((b) => b.id !== oldId);
       return [...filtered, updated];
     });
+
+    if (dbConnected) {
+      if (oldId !== updated.id) {
+        deleteDocument(COLLECTIONS.BRANCHES, oldId).catch(console.error);
+      }
+      saveDocument(COLLECTIONS.BRANCHES, updated.id, updated).catch(console.error);
+    }
   };
 
   const handleAddDepartment = (d: Department) => {
@@ -1277,11 +1458,14 @@ export default function App() {
     // Reinforce spelling check
     cleanName = cleanName.replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
 
-    d = {
+    const newDept = {
       ...d,
       name: suffix ? `${cleanName}${suffix}` : cleanName
     };
-    setDepartments((prev) => [...prev, d]);
+    setDepartments((prev) => [...prev, newDept]);
+    if (dbConnected) {
+      saveDocument(COLLECTIONS.DEPARTMENTS, newDept.id, newDept).catch(console.error);
+    }
   };
 
   const handleUpdateDepartment = (oldId: string, updated: Department) => {
@@ -1318,27 +1502,40 @@ export default function App() {
 
     if (oldName && oldName !== newName) {
       // Cascade update reports' department names (both field aliases for safety)
-      setReports((prevReports) => prevReports.map((r) => {
-        let changed = false;
-        const updatedReport = { ...r };
-        if (r.uploaderDepartment === oldName) {
-          updatedReport.uploaderDepartment = newName;
-          changed = true;
-        }
-        if ((r as any).department === oldName) {
-          (updatedReport as any).department = newName;
-          changed = true;
-        }
-        return changed ? updatedReport : r;
-      }));
+      setReports((prevReports) => {
+        const nextReports = prevReports.map((r) => {
+          let changed = false;
+          const updatedReport = { ...r };
+          if (r.uploaderDepartment === oldName) {
+            updatedReport.uploaderDepartment = newName;
+            changed = true;
+          }
+          if ((r as any).department === oldName) {
+            (updatedReport as any).department = newName;
+            changed = true;
+          }
+          if (changed && dbConnected) {
+            saveDocument(COLLECTIONS.REPORTS, updatedReport.id, updatedReport).catch(console.error);
+          }
+          return changed ? updatedReport : r;
+        });
+        return nextReports;
+      });
 
       // Cascade update users' department names
-      setUsers((prevUsers) => prevUsers.map((u) => {
-        if (u.department === oldName) {
-          return { ...u, department: newName };
-        }
-        return u;
-      }));
+      setUsers((prevUsers) => {
+        const nextUsers = prevUsers.map((u) => {
+          if (u.department === oldName) {
+            const nextU = { ...u, department: newName };
+            if (dbConnected) {
+              saveDocument(COLLECTIONS.USERS, nextU.id, nextU).catch(console.error);
+            }
+            return nextU;
+          }
+          return u;
+        });
+        return nextUsers;
+      });
       if (currentUser && currentUser.department === oldName) {
         setCurrentUser((prev) => prev ? { ...prev, department: newName } : null);
       }
@@ -1348,26 +1545,33 @@ export default function App() {
       const filtered = prev.filter((d) => d.id !== oldId);
       return [...filtered, updated];
     });
+
+    if (dbConnected) {
+      if (oldId !== updated.id) {
+        deleteDocument(COLLECTIONS.DEPARTMENTS, oldId).catch(console.error);
+      }
+      saveDocument(COLLECTIONS.DEPARTMENTS, updated.id, updated).catch(console.error);
+    }
   };
 
   const handleDeleteBranch = (id: string) => {
     setBranches((prev) => prev.filter((b) => b.id !== id));
     if (dbConnected) {
-      deleteDocument(COLLECTIONS.BRANCHES, id);
+      deleteDocument(COLLECTIONS.BRANCHES, id).catch(console.error);
     }
   };
 
   const handleDeleteDepartment = (id: string) => {
     setDepartments((prev) => prev.filter((d) => d.id !== id));
     if (dbConnected) {
-      deleteDocument(COLLECTIONS.DEPARTMENTS, id);
+      deleteDocument(COLLECTIONS.DEPARTMENTS, id).catch(console.error);
     }
   };
 
   const handleDeleteCompany = (id: string) => {
     setCompanies((prev) => prev.filter((c) => c.id !== id));
     if (dbConnected) {
-      deleteDocument(COLLECTIONS.COMPANIES, id);
+      deleteDocument(COLLECTIONS.COMPANIES, id).catch(console.error);
     }
   };
 
@@ -1881,11 +2085,16 @@ export default function App() {
                     <option value="">--- Chọn Chi nhánh/ Văn Phòng đại diện ---</option>
                     {(() => {
                       const filteredBranches = branches.filter((b) => b.companyId === regCompany);
-                      return filteredBranches.map((b) => (
-                        <option key={b.id} value={b.name}>
-                          {b.name}
-                        </option>
-                      ));
+                      return filteredBranches.map((b) => {
+                        const nameWithSuffix = b.name.includes("(") 
+                          ? b.name 
+                          : `${b.name.replace(/\s*\([^)]+\)$/, "").trim()} (${b.companyId})`;
+                        return (
+                          <option key={b.id} value={nameWithSuffix}>
+                            {nameWithSuffix}
+                          </option>
+                        );
+                      });
                     })()}
                   </select>
                   <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-emerald-600">
@@ -1910,15 +2119,26 @@ export default function App() {
                   >
                     <option value="">--- Chọn Bộ phận/ Đơn vị làm việc ---</option>
                     {(() => {
-                      const selectedB = branches.find((b) => b.name === regBranch);
+                      const selectedB = branches.find((b) => {
+                        const nameWithSuffix = b.name.includes("(") 
+                          ? b.name 
+                          : `${b.name.replace(/\s*\([^)]+\)$/, "").trim()} (${b.companyId})`;
+                        return b.name === regBranch || nameWithSuffix === regBranch;
+                      });
                       const filteredDepts = selectedB
                         ? departments.filter((d) => d.branchId === selectedB.id)
                         : [];
-                      return filteredDepts.map((d) => (
-                        <option key={d.id} value={d.name}>
-                          {d.name}
-                        </option>
-                      ));
+                      return filteredDepts.map((d) => {
+                        const branchSuffix = selectedB ? selectedB.id : d.branchId;
+                        const nameWithSuffix = d.name.includes("(")
+                          ? d.name
+                          : `${d.name.replace(/\s*\([^)]+\)$/, "").trim()} (${branchSuffix})`;
+                        return (
+                          <option key={d.id} value={nameWithSuffix}>
+                            {nameWithSuffix}
+                          </option>
+                        );
+                      });
                     })()}
                   </select>
                   <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-emerald-600">
@@ -1997,7 +2217,7 @@ export default function App() {
             <div><strong><T>Họ tên:</T></strong> <span translate="no" className="notranslate">{currentUser.fullName}</span></div>
             <div><strong><T>Số điện thoại:</T></strong> <span translate="no" className="notranslate">{currentUser.phone}</span></div>
             <div><strong><T>Mã nhân sự:</T></strong> <span translate="no" className="notranslate">{currentUser.id}</span></div>
-            <div><strong><T>Bộ phận/Chi nhánh:</T></strong> <span translate="no" className="notranslate">{currentUser.department} - {currentUser.branch}</span></div>
+            <div><strong><T>Bộ phận/Chi nhánh:</T></strong> <span translate="no" className="notranslate">{getFormattedUserDept(currentUser.department, currentUser.branch)} - {getFormattedUserBranch(currentUser.branch, currentUser.company)}</span></div>
           </div>
 
           {/* Polling loading bar */}
@@ -2023,6 +2243,62 @@ export default function App() {
       </div>
     );
   }
+
+  const handleForceSyncMetadata = async () => {
+    if (!dbConnected) {
+      throw new Error("Không có kết nối đến cơ sở dữ liệu Cloud Firestore!");
+    }
+    
+    // 1. Sync Companies
+    const cloudCompanies = await fetchCollection<Company>(COLLECTIONS.COMPANIES);
+    for (const cloudC of cloudCompanies) {
+      if (!companies.some(c => c.id === cloudC.id)) {
+        await deleteDocument(COLLECTIONS.COMPANIES, cloudC.id);
+      }
+    }
+    for (const c of companies) {
+      await saveDocument(COLLECTIONS.COMPANIES, c.id, c);
+    }
+
+    // 2. Sync Branches
+    const cloudBranches = await fetchCollection<Branch>(COLLECTIONS.BRANCHES);
+    for (const cloudB of cloudBranches) {
+      if (!branches.some(b => b.id === cloudB.id)) {
+        await deleteDocument(COLLECTIONS.BRANCHES, cloudB.id);
+      }
+    }
+    for (const b of branches) {
+      await saveDocument(COLLECTIONS.BRANCHES, b.id, b);
+    }
+
+    // 3. Sync Departments
+    const cloudDepts = await fetchCollection<Department>(COLLECTIONS.DEPARTMENTS);
+    for (const cloudD of cloudDepts) {
+      if (!departments.some(d => d.id === cloudD.id)) {
+        await deleteDocument(COLLECTIONS.DEPARTMENTS, cloudD.id);
+      }
+    }
+    for (const d of departments) {
+      await saveDocument(COLLECTIONS.DEPARTMENTS, d.id, d);
+    }
+  };
+
+  const handleForceSyncUsers = async () => {
+    if (!dbConnected) {
+      throw new Error("Không có kết nối đến cơ sở dữ liệu Cloud Firestore!");
+    }
+    
+    // Sync Users
+    const cloudUsers = await fetchCollection<User>(COLLECTIONS.USERS);
+    for (const cloudU of cloudUsers) {
+      if (!users.some(u => u.id === cloudU.id)) {
+        await deleteDocument(COLLECTIONS.USERS, cloudU.id);
+      }
+    }
+    for (const u of users) {
+      await saveDocument(COLLECTIONS.USERS, u.id, u);
+    }
+  };
 
   // Active user view workspace (Integrates Admin Panel and Client Phone Simulator side-by-side)
   return (
@@ -2103,7 +2379,6 @@ export default function App() {
             onLogout={() => setCurrentUser(null)}
             onToggleMobilePreview={() => setShowMobilePreview((prev) => !prev)}
             onUpdateUser={handleUpdateUser}
-
             productionRequests={productionRequests}
             setProductionRequests={setProductionRequests}
             productionRequestItemsMap={productionRequestItemsMap}
@@ -2115,6 +2390,8 @@ export default function App() {
             moldsCatalog={moldsCatalog}
             setMoldsCatalog={setMoldsCatalog}
             onUpdateReport={handleUpdateReport}
+            onForceSyncMetadata={handleForceSyncMetadata}
+            onForceSyncUsers={handleForceSyncUsers}
           />
         </div>
 
@@ -2125,143 +2402,7 @@ export default function App() {
               <T className="text-[10px] text-slate-500 font-extrabold uppercase tracking-widest block font-sans">
                 📱 Xem trước giao diện di động (Mobile Preview)
               </T>
-              {currentUser?.role === UserRole.ADMIN && (
-                <button
-                  type="button"
-                  onClick={() => setShowConfigPanel(!showConfigPanel)}
-                  className="text-[10px] bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-1 rounded font-bold transition-all flex items-center gap-1 cursor-pointer"
-                >
-                  <span>⚙️</span>
-                  <T>{showConfigPanel ? "Đóng cài đặt" : "Cấu hình di động"}</T>
-                </button>
-              )}
             </div>
-
-            {showConfigPanel && (
-              <div className="w-full bg-white p-3.5 rounded-xl border border-blue-200 shadow-md mb-4 text-slate-800 space-y-3 shrink-0">
-                <div className="border-b border-slate-105 pb-1.5">
-                  <span className="text-[11px] font-black text-[#1e3a8a] uppercase block"><T>⚙️ CHI TIẾT TÙY BIẾN GIAO DIỆN</T></span>
-                  <span className="text-[9px] text-slate-400 block leading-snug mt-0.5">
-                    <T>Khắc phục tràn chữ bằng cách gán bí danh hoặc thu giảm cỡ chữ, số cột trên điện thoại.</T>
-                  </span>
-                </div>
-
-                {/* Grid columns selector */}
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-[10px] font-extrabold text-slate-750 uppercase shrink-0"><T>Số cột hiển thị:</T></span>
-                  <div className="flex bg-slate-100 rounded-lg p-0.5">
-                    <button
-                      onClick={() => setMobileUIConfig((prev: any) => ({ ...prev, columns: 1 }))}
-                      className={`px-2.5 py-0.5 text-[10px] font-bold rounded-md ${mobileUIConfig.columns === 1 ? "bg-[#1e3a8a] text-white shadow-xs" : "text-slate-600 bg-transparent"}`}
-                    >
-                      <T>1 Cột</T>
-                    </button>
-                    <button
-                      onClick={() => setMobileUIConfig((prev: any) => ({ ...prev, columns: 2 }))}
-                      className={`px-2.5 py-0.5 text-[10px] font-bold rounded-md ${mobileUIConfig.columns === 2 ? "bg-[#1e3a8a] text-white shadow-xs" : "text-slate-600 bg-transparent"}`}
-                    >
-                      <T>2 Cột</T>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Display Rule selector */}
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] font-extrabold text-slate-750 uppercase"><T>Kiểu hiển thị tên:</T></span>
-                  <div className="grid grid-cols-3 bg-slate-100 rounded-lg p-0.5">
-                    <button
-                      onClick={() => setMobileUIConfig((prev: any) => ({ ...prev, displayRule: "clean" }))}
-                      className={`px-1 py-1 text-[9px] font-bold rounded-md ${mobileUIConfig.displayRule === "clean" ? "bg-[#1e3a8a] text-white" : "text-slate-600"}`}
-                    >
-                      <T>Mã sạch</T>
-                    </button>
-                    <button
-                      onClick={() => setMobileUIConfig((prev: any) => ({ ...prev, displayRule: "full" }))}
-                      className={`px-1 py-1 text-[9px] font-bold rounded-md ${mobileUIConfig.displayRule === "full" ? "bg-[#1e3a8a] text-white" : "text-slate-600"}`}
-                    >
-                      <T>Đầy đủ</T>
-                    </button>
-                    <button
-                      onClick={() => setMobileUIConfig((prev: any) => ({ ...prev, displayRule: "custom" }))}
-                      className={`px-1 py-1 text-[9px] font-bold rounded-md ${mobileUIConfig.displayRule === "custom" ? "bg-[#1e3a8a] text-white" : "text-slate-600"}`}
-                    >
-                      <T>Bí danh ✏️</T>
-                    </button>
-                  </div>
-                </div>
-
-                {/* FontSize selector */}
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-[10px] font-extrabold text-slate-750 uppercase shrink-0"><T>Cỡ chữ tên:</T></span>
-                  <div className="flex bg-slate-100 rounded-lg p-0.5">
-                    {["xs", "sm", "base"].map(sz => (
-                      <button
-                        key={sz}
-                        onClick={() => setMobileUIConfig((prev: any) => ({ ...prev, fontSize: sz }))}
-                        className={`px-2 py-0.5 text-[9px] font-bold rounded-md uppercase ${mobileUIConfig.fontSize === sz ? "bg-[#1e3a8a] text-white" : "text-slate-600"}`}
-                      >
-                        {sz}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Button theme selectors */}
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] font-extrabold text-slate-755 uppercase"><T>Chủ đề màu sắc (Active Theme):</T></span>
-                  <div className="flex gap-1.5 flex-wrap">
-                    {[
-                      { id: "blue", hex: "#1e3a8a", name: "Thép xanh" },
-                      { id: "indigo", hex: "#4f46e5", name: "Chàm tối" },
-                      { id: "emerald", hex: "#0d9488", name: "Ngọc bích" },
-                      { id: "amber", hex: "#f59e0b", name: "Hổ phách" },
-                      { id: "rose", hex: "#e11d48", name: "Hồng đào" },
-                      { id: "slate", hex: "#475569", name: "Than mộc" }
-                    ].map(theme => (
-                      <button
-                        key={theme.id}
-                        type="button"
-                        onClick={() => setMobileUIConfig((prev: any) => ({ ...prev, colorTheme: theme.id }))}
-                        className={`px-2 py-0.5 rounded border text-[8px] font-bold flex items-center gap-1 transition-all ${mobileUIConfig.colorTheme === theme.id ? "border-blue-600 ring-1 ring-blue-100 bg-blue-50 text-[#1e3a8a]" : "border-slate-200 bg-white hover:bg-slate-50"}`}
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ backgroundColor: theme.hex }}></span>
-                        <span>{theme.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Custom Aliases Editor if "custom" is chosen */}
-                {mobileUIConfig.displayRule === "custom" && (
-                  <div className="border-t border-slate-100 pt-2 space-y-1.5">
-                    <span className="text-[9px] font-black text-blue-800 uppercase block"><T>✍️ BIÊN TẬP BÍ DANH CHI NHÁNH:</T></span>
-                    {branches.filter(b => b.isScoring).map(b => (
-                      <div key={b.id} className="flex items-center gap-1.5">
-                        <span className="text-[9px] font-extrabold text-slate-500 w-20 truncate block" title={b.name}>
-                          {b.name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn Phòng ", "").replace(/\s*\(TPP-[^)]+\)/, "")}
-                        </span>
-                        <input
-                          type="text"
-                          value={mobileUIConfig.customAliases?.[b.id] || ""}
-                          placeholder="Bí danh di động"
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setMobileUIConfig((prev: any) => ({
-                              ...prev,
-                              customAliases: {
-                                ...prev.customAliases,
-                                [b.id]: val
-                              }
-                            }));
-                          }}
-                          className="flex-1 px-2 py-0.5 bg-slate-50 border border-slate-200 rounded text-[10px] focus:ring-1 focus:ring-blue-500 outline-none"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
 
             {isFormOpen ? (
               <ReportForm
