@@ -1354,7 +1354,7 @@ App Link: ${window.location.origin}`;
           </div>
           <T className="font-bold text-[13.6px] tracking-wide whitespace-nowrap">META 4M1E1I</T>
         </div>
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-[9.5px]">
           {currentUser?.role !== UserRole.STAFF && (
             <button
               onClick={() => setShowTrash(true)}

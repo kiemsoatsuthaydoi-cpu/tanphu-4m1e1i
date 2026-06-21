@@ -365,10 +365,17 @@ export default function App() {
     if (companies && companies.length > 0) {
       const exists = companies.some((c) => c.id === regCompany);
       if (!exists) {
-        setRegCompany(companies[0].id);
-        const filteredB = branches.filter((b) => b.companyId === companies[0].id);
+        const defaultCompObj = companies.find((c) => 
+          c.name.trim().toUpperCase() === "TÂN PHÚ VIỆT NAM" || 
+          c.id === "TPP-Group" || 
+          c.id.toLowerCase().includes("tpp")
+        ) || companies[0];
+
+        setRegCompany(defaultCompObj.id);
+        const filteredB = branches.filter((b) => b.companyId === defaultCompObj.id);
         const fb = filteredB.find(b => b.isScoring) || filteredB[0];
-        setRegBranch(fb ? fb.name : "");
+        const nameWithSuffix = fb ? (fb.name.includes("(") ? fb.name : `${fb.name.replace(/\s*\([^)]+\)$/, "").trim()} (${fb.companyId})`) : "";
+        setRegBranch(nameWithSuffix);
         setRegDepartment("");
       }
     }
@@ -1735,6 +1742,26 @@ export default function App() {
                 setAuthScreen("REGISTER");
                 setAuthError("");
                 setRegisterSuccessMsg("");
+                // Default CÔNG TY THÀNH VIÊN to TÂN PHÚ VIỆT NAM on click
+                const fitComp = companies.find((c) => 
+                  c.name.trim().toUpperCase() === "TÂN PHÚ VIỆT NAM" || 
+                  c.id === "TPP-Group" || 
+                  c.id.toLowerCase().includes("tpp")
+                ) || companies[0];
+                if (fitComp) {
+                  setRegCompany(fitComp.id);
+                  const companyBranches = branches.filter((b) => b.companyId === fitComp.id);
+                  const firstBranch = companyBranches.find(b => b.isScoring) || companyBranches[0];
+                  if (firstBranch) {
+                    const nameWithSuffix = firstBranch.name.includes("(") 
+                      ? firstBranch.name 
+                      : `${firstBranch.name.replace(/\s*\([^)]+\)$/, "").trim()} (${firstBranch.companyId})`;
+                    setRegBranch(nameWithSuffix);
+                  } else {
+                    setRegBranch("");
+                  }
+                  setRegDepartment("");
+                }
               }}
               className={`flex-1 py-1.5 py-2 text-xs font-bold rounded-lg uppercase tracking-wider transition-all duration-305 cursor-pointer ${
                 authScreen === "REGISTER"
@@ -2069,8 +2096,8 @@ export default function App() {
                           --- Chọn Chi nhánh/ Văn Phòng đại diện ---
                         </button>
                         {(() => {
-                          const filteredBranches = branches.filter((b) => b.companyId === regCompany);
-                          return filteredBranches.map((b) => {
+                          const allBranches = branches;
+                          return allBranches.map((b) => {
                             const nameWithSuffix = b.name.includes("(") 
                               ? b.name 
                               : `${b.name.replace(/\s*\([^)]+\)$/, "").trim()} (${b.companyId})`;
@@ -2081,6 +2108,7 @@ export default function App() {
                                 type="button"
                                 onClick={() => {
                                   setRegBranch(nameWithSuffix);
+                                  setRegCompany(b.companyId); // Automatically sync the company
                                   setRegDepartment("");
                                   setIsOpenRegBranch(false);
                                 }}

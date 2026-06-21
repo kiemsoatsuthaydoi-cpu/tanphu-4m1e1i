@@ -469,6 +469,11 @@ export default function ReportForm({
       return;
     }
 
+    if (!isAbnormal && !isSpotlight) {
+      triggerNotification("Điểm KPH và Điểm sáng bắt buộc phải chọn một.", "warning");
+      return;
+    }
+
     const totalCompressedSizeKb = images.reduce((sum, img) => sum + img.compressedSizeKb, 0);
     const totalOriginalSizeKb = images.reduce((sum, img) => sum + img.originalSizeKb, 0);
 
@@ -806,12 +811,8 @@ export default function ReportForm({
           <button
             type="button"
             onClick={() => {
-              if (isAbnormal) {
-                setIsAbnormal(false);
-              } else {
-                setIsAbnormal(true);
-                setIsSpotlight(false);
-              }
+              setIsAbnormal(true);
+              setIsSpotlight(false);
             }}
             className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all h-[80px] cursor-pointer ${
               isAbnormal
@@ -835,12 +836,8 @@ export default function ReportForm({
           <button
             type="button"
             onClick={() => {
-              if (isSpotlight) {
-                setIsSpotlight(false);
-              } else {
-                setIsSpotlight(true);
-                setIsAbnormal(false);
-              }
+              setIsSpotlight(true);
+              setIsAbnormal(false);
             }}
             className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all h-[80px] cursor-pointer ${
               isSpotlight
