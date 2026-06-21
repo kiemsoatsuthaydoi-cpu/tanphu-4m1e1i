@@ -96,21 +96,7 @@ export function AutoImageSlider({ imageUrls, fallbackUrl, isAbnormal, isSpotligh
           </div>
         )}
 
-        {isAbnormal || reportType === "KPH" ? (
-          <div className="absolute top-0 inset-x-0 bg-red-650 bg-opacity-90 text-white py-1 px-3 flex items-center gap-1.5 z-20">
-            <span className="w-2 h-2 rounded-full bg-white animate-pulse block shrink-0" />
-            <T className="text-[10px] font-black block uppercase tracking-wide leading-none select-none">
-              ⚠️ ĐIỂM KHÔNG PHÙ HỢP (KPH)
-            </T>
-          </div>
-        ) : isSpotlight || reportType === "DSA" ? (
-          <div className="absolute top-0 inset-x-0 bg-emerald-650 bg-opacity-90 text-white py-1 px-3 flex items-center gap-1.5 z-20">
-            <span className="w-2 h-2 rounded-full bg-white block shrink-0" />
-            <T className="text-[10px] font-black block uppercase tracking-wide leading-none select-none">
-              ⭐ ĐIỂM SÁNG PHÁT TRIỂN (DSA)
-            </T>
-          </div>
-        ) : null}
+        {/* Banners removed and moved to card header */}
       </div>
 
       {/* Fullscreen Shopee-style Lightbox Overlay Modal */}
@@ -1579,20 +1565,24 @@ App Link: ${window.location.origin}`;
                 }`}
               >
                 {/* Header card info */}
-                <div className="px-3 py-2.5 bg-slate-50 border-b border-slate-100 flex justify-between items-start">
-                  <div>
-                    <T className={`font-bold block leading-tight ${theme.text} ${fontSizeClass}`}>{getFactoryDisplayName(report.factory)}</T>
-                    <T className="text-[9px] text-slate-400 block mt-0.5">{report.timestamp}</T>
+                <div className="px-3 py-2 bg-slate-50 border-b border-slate-100 flex justify-between items-center gap-2">
+                  <div className="flex-1 min-w-0">
+                    <T className={`font-black block leading-tight truncate ${theme.text} ${fontSizeClass}`}>{getFactoryDisplayName(report.factory)}</T>
+                    <T className="text-[9px] text-slate-400 block font-sans font-semibold mt-0.5">{report.timestamp}</T>
                   </div>
-                  {report.reportType === "KPH" || report.isAbnormal ? (
-                    <T className="bg-red-500 text-white font-black text-[7px] px-1.5 py-0.5 rounded tracking-wider uppercase block">
-                      KPH
-                    </T>
-                  ) : report.reportType === "DSA" || report.isSpotlight ? (
-                    <T className="bg-emerald-500 text-white font-black text-[7px] px-1.5 py-0.5 rounded tracking-wider uppercase block">
-                      DSA
-                    </T>
-                  ) : null}
+                  <div className="shrink-0">
+                    {report.reportType === "KPH" || report.isAbnormal ? (
+                      <span className="text-[9px] font-black text-white flex items-center gap-1 bg-red-600 border border-red-700 px-2 py-1 rounded-md leading-none shadow-3xs shrink-0 select-none">
+                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block" />
+                        <T><span translate="no" className="notranslate">⚠️ ĐIỂM KPH</span></T>
+                      </span>
+                    ) : report.reportType === "DSA" || report.isSpotlight ? (
+                      <span className="text-[9px] font-black text-white flex items-center gap-1 bg-emerald-600 border border-emerald-700 px-2 py-1 rounded-md leading-none shadow-3xs shrink-0 select-none">
+                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block" />
+                        <T><span translate="no" className="notranslate">⭐ ĐIỂM SÁNG (DSA)</span></T>
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
 
                 {/* Update Information Sub-bar (Hidden in UI as requested, but still recorded in data) */}
@@ -1856,8 +1846,8 @@ App Link: ${window.location.origin}`;
                 </div>
 
                 {/* Footer buttons of card (Xóa/Sửa/Like/BP Tiếp Nhận) only for managers or the author */}
-                <div className="bg-slate-50 border-t border-slate-100 px-3 py-2 flex justify-between items-center select-none text-[10px] font-semibold text-slate-600">
-                  <div className="flex items-center gap-4">
+                <div className="bg-slate-50 border-t border-slate-100 px-2 py-1.5 flex justify-between items-center select-none text-[10px] font-semibold text-slate-600 gap-1 flex-nowrap">
+                  <div className="flex items-center gap-2 shrink-0">
                     {(() => {
                       const isUploader = currentUser?.id === report.uploaderId;
                       const isSpeciallyAuthorized = currentUser?.canSpeciallyEditDelete && currentUser?.branch === report.factory;
@@ -1933,14 +1923,14 @@ App Link: ${window.location.origin}`;
                     })()}
                   </div>
 
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1.5 ml-auto shrink-0">
                     {(() => {
                       const reportChats = (chats || []).filter((c) => c.reportRefId === report.id);
                       const chatCount = reportChats.length;
                       const isOpen = openChatReportId === report.id;
                       
                       return (
-                        <div className={`flex items-center gap-1.5 bg-slate-50 border border-slate-100 rounded-lg py-0.5 px-1.5 chat-btn-${report.id}`}>
+                        <div className={`flex items-center gap-1 bg-slate-50 border border-slate-100 rounded-lg py-0.5 px-1.5 shrink-0 chat-btn-${report.id}`}>
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1977,12 +1967,12 @@ App Link: ${window.location.origin}`;
                       const isReportLiked = report.likedBy?.includes(currentUser?.fullName || "Kiểm soát viên") || likedReports[report.id];
                       const likesCount = report.likedBy?.length || 0;
                       return (
-                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-100 rounded-lg py-0.5 px-1.5">
+                        <div className="flex items-center gap-1 bg-slate-50 border border-slate-100 rounded-lg py-0.5 px-1.5 shrink-0">
                           <button
                             type="button"
                             onClick={() => toggleLike(report.id)}
                             className={`flex items-center justify-center p-1 transition-all hover:scale-115 active:scale-90 cursor-pointer border-none bg-transparent ${
-                              isReportLiked ? "text-rose-650" : "text-slate-400 hover:text-rose-500"
+                              isReportLiked ? "text-rose-655" : "text-slate-400 hover:text-rose-505"
                             }`}
                             title={isReportLiked ? "Bỏ thích" : "Thích"}
                           >
@@ -2015,13 +2005,13 @@ App Link: ${window.location.origin}`;
                         <button
                           type="button"
                           onClick={() => toggleAcknowledge(report.id)}
-                          className={`flex items-center gap-1.5 p-1 px-2 rounded-lg border transition-all hover:scale-110 active:scale-95 cursor-pointer bg-transparent ${
+                          className={`flex items-center gap-1 p-1 px-1.5 rounded-lg border transition-all hover:scale-110 active:scale-95 cursor-pointer bg-transparent whitespace-nowrap shrink-0 ${
                             isAcknowledged ? "text-sky-700 border-sky-200 bg-sky-50 animate-pulse" : "text-slate-400 hover:text-sky-600 border-slate-200 bg-white"
                           }`}
                           title={isAcknowledged ? "Đã tiếp nhận" : "Tiếp nhận"}
                         >
-                          <Check className={`w-3.5 h-3.5 ${isAcknowledged ? "stroke-[3px] text-sky-700" : "stroke-[2px]"}`} />
-                          <span className="text-[9.5px] font-black font-sans uppercase tracking-tight"><T>Tiếp nhận/ Xử lý</T></span>
+                          <Check className={`w-3.5 h-3.5 shrink-0 ${isAcknowledged ? "stroke-[3px] text-sky-700" : "stroke-[2px]"}`} />
+                          <span className="text-[9.5px] font-black font-sans uppercase tracking-tight whitespace-nowrap"><T>Tiếp nhận/ Xử lý</T></span>
                         </button>
                       );
                     })()}
