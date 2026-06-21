@@ -1,9 +1,9 @@
 {
-  "short_name": "4M",
-  "name": "Phòng kiểm soát thay đổi 4M1E1I",
+  "short_name": "META 4M1E1I",
+  "name": "META 4M1E1I - Kiểm soát thay đổi",
   "icons": [
     {
-      "src": "/src/assets/images/logo_4m_1781860612926.jpg",
+      "src": "/src/assets/images/logo_meta_4m1e1i_1782048022402.jpg",
       "sizes": "512x512",
       "type": "image/jpeg",
       "purpose": "any maskable"
