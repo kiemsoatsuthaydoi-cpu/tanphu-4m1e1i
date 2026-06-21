@@ -94,9 +94,7 @@ export default function ReportForm({
   };
 
   const handleCancelWithConfirm = () => {
-    if (confirm("Chủ quản có chắc chắn muốn hủy bỏ không? Toàn bộ các nhập liệu chưa lưu sẽ bị mất.")) {
-      onCancel();
-    }
+    setShowCancelConfirm(true);
   };
 
   const triggerNotification = (message: string, type: "success" | "error" | "warning" | "info" = "warning") => {
@@ -253,6 +251,8 @@ export default function ReportForm({
   const [notes, setNotes] = useState(editingReport?.notes || "");
   const [isAbnormal, setIsAbnormal] = useState(editingReport?.isAbnormal || editingReport?.reportType === "KPH" || false);
   const [isSpotlight, setIsSpotlight] = useState(editingReport?.isSpotlight || editingReport?.reportType === "DSA" || false);
+
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   // Multiple Images Management (Max 3)
   interface ProcessedImage {
@@ -498,7 +498,7 @@ export default function ReportForm({
     <div className="w-full h-[100dvh] max-w-[440px] lg:w-[375px] lg:h-[780px] bg-[#f8fafc] text-slate-800 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl flex flex-col relative overflow-hidden select-none">
       {/* Header view standard and title */}
       <div className="bg-[#1e3a8a] text-white px-4 py-3.5 flex items-center shrink-0 border-b border-blue-900 shadow-md">
-        <button onClick={onCancel} className="mr-3 hover:scale-110 active:scale-90 transition-transform">
+        <button onClick={handleCancelWithConfirm} className="mr-3 hover:scale-110 active:scale-90 transition-transform">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div className="flex-1">
@@ -934,6 +934,42 @@ export default function ReportForm({
           <T>{editingReport ? "CẬP NHẬT" : "GỬI BÁO CÁO"}</T>
         </button>
       </div>
+
+      {/* Visual Confirm Cancelation Modal inside Mobile Mockup */}
+      {showCancelConfirm && (
+        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl w-full max-w-[290px] p-5 shadow-2xl border border-slate-100 flex flex-col items-center text-center animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 bg-amber-50 rounded-full flex items-center justify-center mb-3 text-amber-500">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <h3 className="font-bold text-slate-950 text-sm mb-2">
+              <T>Xác nhận hủy bỏ?</T>
+            </h3>
+            <p className="text-slate-500 text-[11px] mb-5 leading-relaxed">
+              <T>Chủ quản có chắc chắn muốn hủy bỏ không? Toàn bộ nhập liệu chưa lưu sẽ bị mất hoàn toàn.</T>
+            </p>
+            <div className="grid grid-cols-2 gap-2.5 w-full">
+              <button
+                type="button"
+                onClick={() => setShowCancelConfirm(false)}
+                className="py-2.5 text-[11px] font-bold border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 active:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <T>QUAY LẠI</T>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCancelConfirm(false);
+                  onCancel();
+                }}
+                className="py-2.5 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl transition-colors shadow-sm cursor-pointer"
+              >
+                <T>ĐỒNG Ý</T>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

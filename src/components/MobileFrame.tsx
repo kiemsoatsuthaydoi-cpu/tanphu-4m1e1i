@@ -762,6 +762,21 @@ export default function MobileFrame({
     localStorage.setItem("4m1e1i_read_notifications", JSON.stringify(readNotifIds));
   }, [readNotifIds]);
 
+  const [deletedNotifIds, setDeletedNotifIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem("4m1e1i_deleted_notifications");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem("4m1e1i_deleted_notifications", JSON.stringify(deletedNotifIds));
+  }, [deletedNotifIds]);
+
+  const [notifIdConfirmDlt, setNotifIdConfirmDlt] = useState<string | null>(null);
+
   const [likedReports, setLikedReports] = useState<Record<string, boolean>>(() => {
     try {
       const saved = localStorage.getItem("4m1e1i_liked_reports");
@@ -1270,8 +1285,11 @@ App Link: ${window.location.origin}`;
       }
     });
 
+    // Filter out deleted notifications
+    const activeList = list.filter((n) => !deletedNotifIds.includes(n.id));
+
     // Sort notifications chronologically descending (newest first)
-    return list.sort((a, b) => {
+    return activeList.sort((a, b) => {
       const tA = parseReportTimestamp(a.timestamp).getTime();
       const tB = parseReportTimestamp(b.timestamp).getTime();
       return tB - tA;
@@ -1336,21 +1354,23 @@ App Link: ${window.location.origin}`;
           </div>
           <T className="font-bold text-[13.6px] tracking-wide whitespace-nowrap">META 4M1E1I</T>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowTrash(true)}
-            className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
-            title="Lưu trữ / Thùng rác"
-          >
-            <Archive className="w-[18px] h-[18px] text-amber-300 hover:text-amber-100" />
-            {reports.filter((r) => r.isDeleted).length > 0 && (
-              <span className="absolute -top-1 -right-0.5 bg-rose-600 text-[8px] text-white font-extrabold w-4 h-4 rounded-full flex items-center justify-center border border-slate-900 leading-none">
-                <span translate="no" className="notranslate">
-                  {reports.filter((r) => r.isDeleted).length}
+        <div className="flex items-center gap-2.5">
+          {currentUser?.role !== UserRole.STAFF && (
+            <button
+              onClick={() => setShowTrash(true)}
+              className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
+              title="Lưu trữ / Thùng rác"
+            >
+              <Archive className="w-[18px] h-[18px] text-amber-300 hover:text-amber-100" />
+              {reports.filter((r) => r.isDeleted).length > 0 && (
+                <span className="absolute -top-1 -right-0.5 bg-rose-600 text-[8px] text-white font-extrabold w-4 h-4 rounded-full flex items-center justify-center border border-slate-900 leading-none">
+                  <span translate="no" className="notranslate">
+                    {reports.filter((r) => r.isDeleted).length}
+                  </span>
                 </span>
-              </span>
-            )}
-          </button>
+              )}
+            </button>
+          )}
 
           {/* Icon màn hình quay lại giao diện máy tính */}
           {currentUser?.role === UserRole.ADMIN && onSwitchToDesktop && (
@@ -2748,26 +2768,67 @@ App Link: ${window.location.origin}`}
                       </div>
 
                       {/* Right Side Info */}
-                      <div className="flex-1 min-w-0 pr-2">
-                        <div className="flex justify-between items-start gap-1.5 flex-wrap">
-                          <span className={`text-[10px] tracking-wide block uppercase ${
-                            isUnread ? "font-black text-blue-900" : "font-extrabold text-slate-700"
-                          }`}>
-                            <T>{notif.title}</T>
+                      {notifIdConfirmDlt === notif.id ? (
+                        <div className="flex-1 flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
+                          <span className="text-[10px] text-rose-650 font-extrabold select-none uppercase tracking-wider">
+                            <span translate="no" className="notranslate">Xác nhận xóa?</span>
                           </span>
-                          <span className="text-[8px] text-slate-400 font-bold shrink-0 font-mono" translate="no">
-                            {notif.timestamp}
-                          </span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              onClick={() => {
+                                setDeletedNotifIds((prev) => [...prev, notif.id]);
+                                setNotifIdConfirmDlt(null);
+                              }}
+                              className="bg-rose-650 hover:bg-rose-700 text-white font-extrabold text-[9px] px-2.5 py-1 rounded transition-colors cursor-pointer uppercase"
+                            >
+                              <span translate="no" className="notranslate">Xóa</span>
+                            </button>
+                            <button
+                              onClick={() => setNotifIdConfirmDlt(null)}
+                              className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold text-[9px] px-2.5 py-1 rounded transition-colors cursor-pointer uppercase"
+                            >
+                              <span translate="no" className="notranslate">Hủy</span>
+                            </button>
+                          </div>
                         </div>
-                        <p className={`text-[10px] mt-1 leading-normal ${
-                          isUnread ? "font-bold text-blue-800" : "font-medium text-slate-500"
-                        }`}>
-                          <T>{notif.description}</T>
-                        </p>
-                        {isUnread && (
-                          <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-rose-600 animate-ping"></span>
-                        )}
-                      </div>
+                      ) : (
+                        <div className="flex-1 min-w-0 pr-1 flex justify-between gap-1.5 items-start">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex justify-between items-start gap-1 flex-wrap">
+                              <span className={`text-[10px] tracking-wide block uppercase ${
+                                isUnread ? "font-black text-blue-900" : "font-extrabold text-slate-700"
+                              }`}>
+                                <T>{notif.title}</T>
+                              </span>
+                              <span className="text-[8px] text-slate-400 font-bold shrink-0 font-mono" translate="no">
+                                {notif.timestamp}
+                              </span>
+                            </div>
+                            <p className={`text-[10px] mt-1 leading-normal ${
+                              isUnread ? "font-bold text-blue-800" : "font-medium text-slate-500"
+                            }`}>
+                              <T>{notif.description}</T>
+                            </p>
+                            {isUnread && (
+                              <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-rose-600 animate-ping"></span>
+                            )}
+                          </div>
+                          
+                          {/* Admin Only Delete Trigger */}
+                          {currentUser?.role === UserRole.ADMIN && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setNotifIdConfirmDlt(notif.id);
+                              }}
+                              className="text-slate-400 hover:text-rose-650 p-1 rounded hover:bg-slate-100 transition-colors cursor-pointer shrink-0 ml-1 mt-0.5"
+                              title="Xóa thông báo"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })

@@ -1689,22 +1689,28 @@ export default function App() {
         <div className="absolute bottom-1/4 right-1/4 w-72 h-72 bg-purple-400 bg-opacity-10 rounded-full blur-[160px] pointer-events-none" />
 
         {/* Action card enclosing everything (branding logo + login/register switcher + forms) */}
-        <div className="w-full max-w-md bg-white border border-slate-200 rounded-[32px] p-6 sm:p-8 shadow-xl relative z-10 animate-scale-in text-slate-800">
+        <div className={`w-full max-w-md bg-white border border-slate-200 shadow-xl relative z-10 animate-scale-in text-slate-800 transition-all duration-300 ${
+          authScreen === "REGISTER" 
+            ? "rounded-2xl p-4 sm:p-5 my-1 max-h-[98vh] overflow-y-auto" 
+            : "rounded-[32px] p-6 sm:p-8"
+        }`}>
           
           {/* Corporate branding header: Logo 4M1E1I as requested */}
-          <div className="flex flex-col items-center mb-6 select-none text-center animate-fade-in">
-            <div className="px-10 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-[18px] flex items-center justify-center shadow-lg border border-blue-400/20 mb-3.5 transform transition hover:scale-105 duration-200">
+          <div className={`flex flex-col items-center select-none text-center animate-fade-in ${authScreen === "REGISTER" ? "mb-2" : "mb-6"}`}>
+            <div className={`px-10 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-[18px] flex items-center justify-center shadow-lg border border-blue-400/20 transform transition hover:scale-105 duration-200 ${
+              authScreen === "REGISTER" ? "mb-1 py-1.5" : "mb-3.5 py-2.5"
+            }`}>
               <span translate="no" className="notranslate font-sans font-black text-2xl tracking-wider text-white leading-none">
                 4M1E1I
               </span>
             </div>
-            <p className="text-[10px] text-slate-500 font-bold tracking-normal mt-1 uppercase">
+            <p className="text-[10px] text-slate-500 font-bold tracking-normal mt-0.5 uppercase">
               <T>HỆ THỐNG KIỂM SOÁT NGUỒN LỰC SX-KD</T>
             </p>
           </div>
           
           {/* Beautiful sliding tab switcher */}
-          <div className="flex bg-slate-100 p-1 rounded-xl mb-6 select-none border border-slate-200">
+          <div className={`flex bg-slate-100 p-1 rounded-xl select-none border border-slate-200 ${authScreen === "REGISTER" ? "mb-3" : "mb-6"}`}>
             <button
               type="button"
               onClick={() => {
@@ -1855,118 +1861,129 @@ export default function App() {
               </div>
             </form>
           ) : (
-            <form onSubmit={handleRegister} className="space-y-4">
+            <form onSubmit={handleRegister} className="space-y-2.5 pt-1">
               <div>
-                <label className="text-[11px] text-slate-500 font-bold block mb-1">
+                <label className="text-[11px] text-slate-500 font-bold block mb-0.5 animate-fade-in">
                   <T>HỌ VÀ TÊN</T>
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none select-none z-10 text-slate-400">
-                    <UserIcon className="w-4 h-4" />
+                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none select-none z-10 text-slate-400">
+                    <UserIcon className="w-3.5 h-3.5" />
                   </div>
                   <input
                     type="text"
                     placeholder="Nhập họ tên đầy đủ..."
                     value={regFullName}
                     onChange={(e) => setRegFullName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-850 shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-850 shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="text-[11px] text-slate-500 font-bold block mb-1">
-                  <T>MÃ NHÂN SỰ</T>
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none select-none z-10 text-slate-400">
-                    <UserIcon className="w-4 h-4" />
+              {/* Grid 1: employee ID and phone number side by side */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[11px] text-slate-500 font-bold block mb-0.5">
+                    <T>MÃ NHÂN SỰ</T>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none select-none z-10 text-slate-400">
+                      <UserIcon className="w-3.5 h-3.5" />
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="2026.00001"
+                      value={regId}
+                      onChange={(e) => setRegId(formatEmployeeId(e.target.value, regId))}
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-8 pr-2 py-1.5 text-xs text-slate-850 font-mono shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
                   </div>
-                  <input
-                    type="text"
-                    placeholder="Ví dụ: 2026.00001"
-                    value={regId}
-                    onChange={(e) => setRegId(formatEmployeeId(e.target.value, regId))}
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-850 font-mono shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
+                  {regId.length > 0 && !isRegIdValid && (
+                    <span translate="no" className="notranslate text-red-500 text-[8px] block mt-0.5 font-bold leading-none">
+                      Sai định dạng YYYY.XXXXX
+                    </span>
+                  )}
                 </div>
-                {regId.length > 0 && !isRegIdValid && (
-                  <span translate="no" className="notranslate text-red-500 text-[10px] block mt-1.5 font-semibold">
-                    Mã nhân sự phải đúng định dạng YYYY.XXXXX (10 ký tự)
-                  </span>
-                )}
-              </div>
 
-              <div>
-                <label className="text-[11px] text-slate-500 font-bold block mb-1">
-                  <T>SỐ ĐIỆN THOẠI</T>
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none select-none z-10 text-slate-400">
-                    <Smartphone className="w-4 h-4" />
+                <div>
+                  <label className="text-[11px] text-slate-500 font-bold block mb-0.5">
+                    <T>SỐ ĐIỆN THOẠI</T>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none select-none z-10 text-slate-400">
+                      <Smartphone className="w-3.5 h-3.5" />
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="090x..."
+                      value={regPhone}
+                      onChange={(e) => setRegPhone(formatPhoneNumber(e.target.value))}
+                      className={`w-full bg-slate-50 border pl-8 pr-2 py-1.5 text-xs text-slate-850 font-mono shadow-sm focus:outline-none transition-colors rounded-xl ${
+                        regPhone.length > 0 && !isRegPhoneValid
+                          ? "border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500"
+                          : "border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      }`}
+                    />
                   </div>
-                  <input
-                    type="text"
-                    placeholder="Ví dụ: 0907 767 304"
-                    value={regPhone}
-                    onChange={(e) => setRegPhone(formatPhoneNumber(e.target.value))}
-                    className={`w-full bg-slate-50 border pl-9 pr-3 py-2.5 text-xs text-slate-850 font-mono shadow-sm focus:outline-none transition-colors rounded-xl ${
-                      regPhone.length > 0 && !isRegPhoneValid
-                        ? "border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500"
-                        : "border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    }`}
-                  />
-                </div>
-                {regPhone.length > 0 && !isRegPhoneValid && (
-                  <span translate="no" className="notranslate text-red-500 text-[10px] block mt-1.5 font-semibold">
-                    Vui lòng nhập đúng SĐT cá nhân gồm 10 chữ số (bắt đầu bằng số 0)
-                  </span>
-                )}
-              </div>
-
-              <div>
-                <label className="text-[11px] text-slate-500 font-bold block mb-1">
-                  <T>MẬT KHẨU</T>
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none select-none z-10 text-slate-400">
-                    <Lock className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="password"
-                    placeholder="Tạo mật khẩu đăng nhập..."
-                    value={regPassword}
-                    onChange={(e) => setRegPassword(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-850 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
-                  />
+                  {regPhone.length > 0 && !isRegPhoneValid && (
+                    <span translate="no" className="notranslate text-red-500 text-[8px] block mt-0.5 font-bold leading-none">
+                      SĐT phải đủ 10 số (0xx)
+                    </span>
+                  )}
                 </div>
               </div>
 
-              <div>
-                <label className="text-[11px] text-slate-500 font-bold block mb-1">
-                  <T>XÁC NHẬN MẬT KHẨU</T>
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none select-none z-10 text-slate-400">
-                    <Lock className="w-4 h-4" />
+              {/* Grid 2: password and confirm password side by side */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[11px] text-slate-500 font-bold block mb-0.5">
+                    <T>MẬT KHẨU</T>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none select-none z-10 text-slate-400">
+                      <Lock className="w-3.5 h-3.5" />
+                    </div>
+                    <input
+                      type="password"
+                      placeholder="Mật khẩu..."
+                      value={regPassword}
+                      onChange={(e) => setRegPassword(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-8 pr-2 py-1.5 text-xs text-slate-850 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
+                    />
                   </div>
-                  <input
-                    type="password"
-                    placeholder="Nhập lại mật khẩu để xác nhận..."
-                    value={regConfirmPassword}
-                    onChange={(e) => setRegConfirmPassword(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-850 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
-                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-slate-500 font-bold block mb-0.5">
+                    <T>XÁC NHẬN</T>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none select-none z-10 text-slate-400">
+                      <Lock className="w-3.5 h-3.5" />
+                    </div>
+                    <input
+                      type="password"
+                      placeholder="Nhập lại..."
+                      value={regConfirmPassword}
+                      onChange={(e) => setRegConfirmPassword(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-8 pr-2 py-1.5 text-xs text-slate-850 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
+                    />
+                  </div>
+                  {regPassword !== regConfirmPassword && regConfirmPassword.length > 0 && (
+                    <span translate="no" className="notranslate text-red-500 text-[8px] block mt-0.5 font-bold leading-none">
+                      Mật khẩu không khớp
+                    </span>
+                  )}
                 </div>
               </div>
 
               <div className="select-none relative z-40">
-                <label className="text-[11px] text-slate-500 font-bold uppercase block mb-1">
+                <label className="text-[11px] text-slate-500 font-bold uppercase block mb-0.5">
                   <T>CÔNG TY THÀNH VIÊN</T>
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none select-none z-10 text-slate-400">
-                    <Building className="w-4 h-4" />
+                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none select-none z-10 text-slate-400">
+                    <Building className="w-3.5 h-3.5" />
                   </div>
                   <button
                     type="button"
@@ -1975,16 +1992,16 @@ export default function App() {
                       setIsOpenRegBranch(false);
                       setIsOpenRegDept(false);
                     }}
-                    className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-8 py-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm text-left flex items-center justify-between cursor-pointer"
+                    className="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-8 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm text-left flex items-center justify-between cursor-pointer"
                   >
                     <span>{companies.find((c) => c.id === regCompany)?.name || regCompany}</span>
-                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                   </button>
 
                   {isOpenRegCompany && (
                     <>
                       <div className="fixed inset-0 z-45" onClick={() => setIsOpenRegCompany(false)} />
-                      <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 max-h-[220px] overflow-y-auto">
+                      <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 max-h-[150px] overflow-y-auto">
                         {companies.map((c) => (
                           <button
                             key={c.id}
@@ -1995,12 +2012,12 @@ export default function App() {
                               setRegDepartment("");
                               setIsOpenRegCompany(false);
                             }}
-                            className={`w-full text-left px-4 py-2.5 text-xs font-semibold flex items-center justify-between hover:bg-slate-50 cursor-pointer ${
-                              regCompany === c.id ? "bg-blue-50/70 text-blue-800 font-bold" : "text-slate-800"
+                            className={`w-full text-left px-4 py-2 text-xs font-semibold flex items-center justify-between hover:bg-slate-50 cursor-pointer ${
+                              regCompany === c.id ? "bg-blue-50/70 text-blue-800 font-bold" : "text-slate-805"
                             }`}
                           >
                             <span>{c.name}</span>
-                            {regCompany === c.id && <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />}
+                            {regCompany === c.id && <ShieldCheck className="w-3.5 h-3.5 text-blue-600 shrink-0" />}
                           </button>
                         ))}
                       </div>
@@ -2010,12 +2027,12 @@ export default function App() {
               </div>
 
               <div className="select-none relative z-30">
-                <label className="text-[11px] text-emerald-700 font-bold uppercase block mb-1">
+                <label className="text-[11px] text-emerald-700 font-bold uppercase block mb-0.5">
                   <T>CHI NHÁNH/ VĂN PHÒNG ĐẠI DIỆN *</T>
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none select-none z-10 text-emerald-600">
-                    <Building className="w-4 h-4" />
+                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none select-none z-10 text-emerald-600">
+                    <Building className="w-3.5 h-3.5" />
                   </div>
                   <button
                     type="button"
@@ -2025,18 +2042,18 @@ export default function App() {
                       setIsOpenRegDept(false);
                     }}
                     style={{ borderColor: "#10b981" }}
-                    className="w-full bg-white border border-emerald-500 rounded-xl pl-9 pr-8 py-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-sm text-left flex items-center justify-between cursor-pointer animate-fade-in"
+                    className="w-full bg-white border border-emerald-500 rounded-xl pl-8 pr-8 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-sm text-left flex items-center justify-between cursor-pointer animate-fade-in"
                   >
-                    <span className={regBranch ? "text-slate-800 font-semibold" : "text-slate-400 font-semibold"}>
+                    <span className={regBranch ? "text-slate-850 font-semibold" : "text-slate-400 font-semibold text-[11px] truncate block max-w-full"}>
                       {regBranch || "--- Chọn Chi nhánh/ Văn Phòng đại diện ---"}
                     </span>
-                    <ChevronDown className="w-4 h-4 text-emerald-600" />
+                    <ChevronDown className="w-3.5 h-3.5 text-emerald-600" />
                   </button>
 
                   {isOpenRegBranch && (
                     <>
                       <div className="fixed inset-0 z-35" onClick={() => setIsOpenRegBranch(false)} />
-                      <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 max-h-[220px] overflow-y-auto">
+                      <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 max-h-[150px] overflow-y-auto">
                         <button
                           type="button"
                           onClick={() => {
@@ -2044,7 +2061,7 @@ export default function App() {
                             setRegDepartment("");
                             setIsOpenRegBranch(false);
                           }}
-                          className="w-full text-left px-4 py-2.5 text-xs font-semibold text-slate-400 hover:bg-slate-50 cursor-pointer"
+                          className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-400 hover:bg-slate-50 cursor-pointer"
                         >
                           --- Chọn Chi nhánh/ Văn Phòng đại diện ---
                         </button>
@@ -2064,12 +2081,12 @@ export default function App() {
                                   setRegDepartment("");
                                   setIsOpenRegBranch(false);
                                 }}
-                                className={`w-full text-left px-4 py-2.5 text-xs font-semibold flex items-center justify-between hover:bg-slate-50 cursor-pointer ${
-                                  isSelected ? "bg-emerald-50 text-emerald-800 font-bold border-l-2 border-emerald-500 pl-3.5" : "text-slate-850"
+                                className={`w-full text-left px-4 py-2 text-xs font-semibold flex items-center justify-between hover:bg-slate-50 cursor-pointer ${
+                                  isSelected ? "bg-emerald-50 text-emerald-800 font-bold border-l-2 border-emerald-500 pl-3.5" : "text-slate-805"
                                 }`}
                               >
                                 <span>{nameWithSuffix}</span>
-                                {isSelected && <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />}
+                                {isSelected && <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
                               </button>
                             );
                           });
@@ -2081,12 +2098,12 @@ export default function App() {
               </div>
 
               <div className="select-none relative z-20">
-                <label className="text-[11px] text-emerald-700 font-bold uppercase block mb-1">
+                <label className="text-[11px] text-emerald-700 font-bold uppercase block mb-0.5">
                   <T>BỘ PHẬN/ ĐƠN VỊ *</T>
                 </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none select-none z-10 text-emerald-600">
-                    <Briefcase className="w-4 h-4" />
+                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none select-none z-10 text-emerald-600">
+                    <Briefcase className="w-3.5 h-3.5" />
                   </div>
                   <button
                     type="button"
@@ -2096,25 +2113,25 @@ export default function App() {
                       setIsOpenRegBranch(false);
                     }}
                     style={{ borderColor: "#10b981" }}
-                    className="w-full bg-white border border-emerald-500 rounded-xl pl-9 pr-8 py-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-sm text-left flex items-center justify-between cursor-pointer animate-fade-in"
+                    className="w-full bg-white border border-emerald-500 rounded-xl pl-8 pr-8 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500 shadow-sm text-left flex items-center justify-between cursor-pointer animate-fade-in"
                   >
-                    <span className={regDepartment ? "text-slate-800 font-semibold" : "text-slate-400 font-semibold"}>
+                    <span className={regDepartment ? "text-slate-850 font-semibold" : "text-slate-400 font-semibold text-[11px] truncate block max-w-full"}>
                       {regDepartment || "--- Chọn Bộ phận/ Đơn vị làm việc ---"}
                     </span>
-                    <ChevronDown className="w-4 h-4 text-emerald-600" />
+                    <ChevronDown className="w-3.5 h-3.5 text-emerald-600" />
                   </button>
 
                   {isOpenRegDept && (
                     <>
                       <div className="fixed inset-0 z-25" onClick={() => setIsOpenRegDept(false)} />
-                      <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 max-h-[220px] overflow-y-auto">
+                      <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 max-h-[150px] overflow-y-auto">
                         <button
                           type="button"
                           onClick={() => {
                             setRegDepartment("");
                             setIsOpenRegDept(false);
                           }}
-                          className="w-full text-left px-4 py-2.5 text-xs font-semibold text-slate-400 hover:bg-slate-50 cursor-pointer"
+                          className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-400 hover:bg-slate-50 cursor-pointer"
                         >
                           --- Chọn Bộ phận/ Đơn vị làm việc ---
                         </button>
@@ -2142,12 +2159,12 @@ export default function App() {
                                   setRegDepartment(nameWithSuffix);
                                   setIsOpenRegDept(false);
                                 }}
-                                className={`w-full text-left px-4 py-2.5 text-xs font-semibold flex items-center justify-between hover:bg-slate-50 cursor-pointer ${
-                                  isSelected ? "bg-emerald-50 text-emerald-800 font-bold border-l-2 border-emerald-500 pl-3.5" : "text-slate-850"
+                                className={`w-full text-left px-4 py-2 text-xs font-semibold flex items-center justify-between hover:bg-slate-50 cursor-pointer ${
+                                  isSelected ? "bg-emerald-50 text-emerald-800 font-bold border-l-2 border-emerald-500 pl-3.5" : "text-slate-805"
                                 }`}
                               >
                                 <span>{nameWithSuffix}</span>
-                                {isSelected && <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />}
+                                {isSelected && <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
                               </button>
                             );
                           });
@@ -2158,17 +2175,19 @@ export default function App() {
                 </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={!isRegIdValid || !isRegPhoneValid || !regBranch || !regDepartment || !regFullName.trim() || !regPassword.trim() || regPassword !== regConfirmPassword}
-                className={`w-full py-3.5 text-white rounded-xl text-xs font-bold uppercase transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer ${
-                  (!isRegIdValid || !isRegPhoneValid || !regBranch || !regDepartment || !regFullName.trim() || !regPassword.trim() || regPassword !== regConfirmPassword)
-                    ? "bg-slate-350 cursor-not-allowed opacity-50 select-none shadow-none"
-                    : "bg-blue-600 hover:bg-blue-700 hover:shadow-lg"
-                }`}
-              >
-                <T>Đăng Ký Tài Khoản</T>
-              </button>
+              <div className="pt-1 select-none">
+                <button
+                  type="submit"
+                  disabled={!isRegIdValid || !isRegPhoneValid || !regBranch || !regDepartment || !regFullName.trim() || !regPassword.trim() || regPassword !== regConfirmPassword}
+                  className={`w-full py-2.5 text-white rounded-xl text-xs font-bold uppercase transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer ${
+                    (!isRegIdValid || !isRegPhoneValid || !regBranch || !regDepartment || !regFullName.trim() || !regPassword.trim() || regPassword !== regConfirmPassword)
+                      ? "bg-slate-350 cursor-not-allowed opacity-50 select-none shadow-none"
+                      : "bg-blue-600 hover:bg-blue-700 hover:shadow-lg"
+                  }`}
+                >
+                  <T>Đăng Ký Tài Khoản</T>
+                </button>
+              </div>
             </form>
           )}
         </div>

@@ -592,6 +592,8 @@ export default function DashboardDesktop({
   const [editingDeptIdInput, setEditingDeptIdInput] = useState<string>("");
 
   const [companyIdConfirmDlt, setCompanyIdConfirmDlt] = useState<string | null>(null);
+  const [branchIdConfirmDlt, setBranchIdConfirmDlt] = useState<string | null>(null);
+  const [deptIdConfirmDlt, setDeptIdConfirmDlt] = useState<string | null>(null);
   const [userIdConfirmDlt, setUserIdConfirmDlt] = useState<string | null>(null);
 
   // Edit User State
@@ -2189,6 +2191,39 @@ export default function DashboardDesktop({
                                   </button>
                                 </div>
                               </div>
+                            ) : branchIdConfirmDlt === b.id ? (
+                              <div className="flex items-center justify-between w-full" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center gap-1.5 min-w-0 mr-1.5">
+                                  <span className="text-[10px] text-rose-600 font-extrabold select-none uppercase tracking-wider">
+                                    <span translate="no" className="notranslate">Xác nhận xóa?</span>
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    onClick={() => {
+                                      onDeleteBranch(b.id);
+                                      if (selectedBranchId === b.id) {
+                                        const remaining = activeCompanyBranches.filter(item => item.id !== b.id);
+                                        if (remaining.length > 0) {
+                                          setSelectedBranchId(remaining[0].id);
+                                        } else {
+                                          setSelectedBranchId("");
+                                        }
+                                      }
+                                      setBranchIdConfirmDlt(null);
+                                    }}
+                                    className="bg-rose-650 hover:bg-rose-700 text-white font-extrabold text-[9px] px-2 py-1 rounded transition-colors cursor-pointer uppercase shrink-0"
+                                  >
+                                    <span translate="no" className="notranslate">Xóa</span>
+                                  </button>
+                                  <button
+                                    onClick={() => setBranchIdConfirmDlt(null)}
+                                    className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold text-[9px] px-2 py-1 rounded transition-colors cursor-pointer uppercase shrink-0"
+                                  >
+                                    <span translate="no" className="notranslate">Hủy</span>
+                                  </button>
+                                </div>
+                              </div>
                             ) : (
                               <>
                                 <div className="flex-1 min-w-0 pr-2">
@@ -2236,11 +2271,10 @@ export default function DashboardDesktop({
                                   </button>
                                   <button
                                     onClick={() => {
-                                      if (confirm("Chủ quản có chắc chắn muốn xóa Chi nhánh / VPĐD này không? Thao tác này sẽ xóa vĩnh viễn dữ liệu.")) {
-                                        onDeleteBranch(b.id);
-                                      }
+                                      setBranchIdConfirmDlt(b.id);
                                     }}
                                     className="text-slate-400 hover:text-rose-650 p-1.5 rounded hover:bg-slate-200/50 transition-colors cursor-pointer shrink-0"
+                                    title="Xóa Chi nhánh"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
@@ -2402,6 +2436,31 @@ export default function DashboardDesktop({
                                   </button>
                                 </div>
                               </div>
+                            ) : deptIdConfirmDlt === d.id ? (
+                              <div className="flex items-center justify-between w-full" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center gap-1.5 min-w-0 mr-1.5">
+                                  <span className="text-[10px] text-rose-600 font-extrabold select-none uppercase tracking-wider">
+                                    <span translate="no" className="notranslate">Xác nhận xóa?</span>
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    onClick={() => {
+                                      onDeleteDepartment(d.id);
+                                      setDeptIdConfirmDlt(null);
+                                    }}
+                                    className="bg-rose-650 hover:bg-rose-700 text-white font-extrabold text-[9px] px-2 py-1 rounded transition-colors cursor-pointer uppercase shrink-0"
+                                  >
+                                    <span translate="no" className="notranslate">Xóa</span>
+                                  </button>
+                                  <button
+                                    onClick={() => setDeptIdConfirmDlt(null)}
+                                    className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold text-[9px] px-2 py-1 rounded transition-colors cursor-pointer uppercase shrink-0"
+                                  >
+                                    <span translate="no" className="notranslate">Hủy</span>
+                                  </button>
+                                </div>
+                              </div>
                             ) : (
                               <>
                                 <div className="min-w-0 flex-1 pr-2">
@@ -2440,12 +2499,11 @@ export default function DashboardDesktop({
                                   </button>
                                   <button
                                     onClick={() => {
-                                      if (confirm("Chủ quản có chắc chắn muốn xóa Bộ phận / Đơn vị này không? Thao tác này sẽ xóa vĩnh viễn dữ liệu.")) {
-                                        onDeleteDepartment(d.id);
-                                      }
+                                      setDeptIdConfirmDlt(d.id);
                                     }}
                                     className="text-slate-400 hover:text-rose-650 p-1.5 rounded hover:bg-slate-200/50 transition-colors cursor-pointer shrink-0"
                                     disabled={d.name.startsWith(STANDARDIZED_QC_DEPT)} // Cannot delete default standardized
+                                    title="Xóa Bộ phận"
                                   >
                                     <Trash2 className="w-3.5 h-3.5 disabled:opacity-30" />
                                   </button>
