@@ -93,6 +93,12 @@ export default function ReportForm({
     return `${baseName} (${compAbbr})`;
   };
 
+  const handleCancelWithConfirm = () => {
+    if (confirm("Chủ quản có chắc chắn muốn hủy bỏ không? Toàn bộ các nhập liệu chưa lưu sẽ bị mất.")) {
+      onCancel();
+    }
+  };
+
   const triggerNotification = (message: string, type: "success" | "error" | "warning" | "info" = "warning") => {
     if (onShowToast) {
       onShowToast(message, type);
@@ -904,7 +910,7 @@ export default function ReportForm({
       {/* Green floating BACK button */}
       <button
         type="button"
-        onClick={onCancel}
+        onClick={handleCancelWithConfirm}
         className="absolute bottom-20 right-5 w-10 h-10 bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-xl flex items-center justify-center shadow-2xl z-20 hover:shadow-emerald-300 transition-all cursor-pointer border-2 border-white"
         title="Quay lại"
       >
@@ -915,7 +921,7 @@ export default function ReportForm({
       <div className="bg-white border-t border-slate-200 p-3.5 grid grid-cols-2 gap-3 shrink-0">
         <button
           type="button"
-          onClick={onCancel}
+          onClick={handleCancelWithConfirm}
           className="py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 active:bg-slate-100 transition-colors cursor-pointer"
         >
           <T>HỦY BỎ</T>

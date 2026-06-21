@@ -2236,7 +2236,9 @@ export default function DashboardDesktop({
                                   </button>
                                   <button
                                     onClick={() => {
-                                      onDeleteBranch(b.id);
+                                      if (confirm("Chủ quản có chắc chắn muốn xóa Chi nhánh / VPĐD này không? Thao tác này sẽ xóa vĩnh viễn dữ liệu.")) {
+                                        onDeleteBranch(b.id);
+                                      }
                                     }}
                                     className="text-slate-400 hover:text-rose-650 p-1.5 rounded hover:bg-slate-200/50 transition-colors cursor-pointer shrink-0"
                                   >
@@ -2437,7 +2439,11 @@ export default function DashboardDesktop({
                                     <Edit className="w-3.5 h-3.5" />
                                   </button>
                                   <button
-                                    onClick={() => onDeleteDepartment(d.id)}
+                                    onClick={() => {
+                                      if (confirm("Chủ quản có chắc chắn muốn xóa Bộ phận / Đơn vị này không? Thao tác này sẽ xóa vĩnh viễn dữ liệu.")) {
+                                        onDeleteDepartment(d.id);
+                                      }
+                                    }}
                                     className="text-slate-400 hover:text-rose-650 p-1.5 rounded hover:bg-slate-200/50 transition-colors cursor-pointer shrink-0"
                                     disabled={d.name.startsWith(STANDARDIZED_QC_DEPT)} // Cannot delete default standardized
                                   >

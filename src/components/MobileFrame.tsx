@@ -1334,7 +1334,7 @@ App Link: ${window.location.origin}`;
           <div className="bg-white text-[9px] font-black px-1.5 py-0.5 rounded flex items-center justify-center font-sans tracking-tighter" style={{ color: "var(--color-primary, #1e3a8a)" }}>
             <T>TANPHU</T>
           </div>
-          <T className="font-bold text-[13.6px] tracking-wide">4M1E1I REPORT</T>
+          <T className="font-bold text-[13.6px] tracking-wide whitespace-nowrap">META 4M1E1I</T>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -1389,14 +1389,16 @@ App Link: ${window.location.origin}`;
               <Maximize className="w-[18px] h-[18px] text-white" />
             )}
           </button>
-          <button 
-            onClick={handleRefreshClick} 
-            className="hover:scale-115 active:scale-95 transition-transform cursor-pointer"
-            title="Tải lại dữ liệu"
-            disabled={isRefreshing}
-          >
-            <RotateCw className={`w-[18px] h-[18px] text-white ${isRefreshing ? "animate-spin" : ""}`} />
-          </button>
+          {currentUser?.role !== UserRole.ADMIN && (
+            <button 
+              onClick={handleRefreshClick} 
+              className="hover:scale-115 active:scale-95 transition-transform cursor-pointer"
+              title="Tải lại dữ liệu"
+              disabled={isRefreshing}
+            >
+              <RotateCw className={`w-[18px] h-[18px] text-white ${isRefreshing ? "animate-spin" : ""}`} />
+            </button>
+          )}
           
           {/* Bong bóng số báo tổng số người online */}
           <div 
