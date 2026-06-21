@@ -1602,11 +1602,24 @@ export default function App() {
   };
 
   // Delete report trigger
-  const handleDeleteReportTrigger = (id: string) => {
-    if (confirm("Kiểm soát chất lượng: Bạn có thật sự muốn xóa hoàn toàn bản báo cáo này?")) {
-      setReports((prev) => prev.filter((r) => r.id !== id));
-      if (dbConnected) {
-        deleteDocument(COLLECTIONS.REPORTS, id);
+  const handleDeleteReportTrigger = (id: string, forcePermanent?: boolean) => {
+    if (forcePermanent) {
+      if (confirm("Kiểm soát chất lượng: Bạn có thật sự muốn XÓA VĨNH VIỄN bản báo cáo này? Thao tác này KHÔNG THỂ KHÔI PHỤC!")) {
+        setReports((prev) => prev.filter((r) => r.id !== id));
+        if (dbConnected) {
+          deleteDocument(COLLECTIONS.REPORTS, id);
+        }
+      }
+    } else {
+      if (confirm("Kiểm soát chất lượng: Bạn có chắc chắn muốn chuyển bản báo cáo này vào Thùng rác?")) {
+        setReports((prev) => prev.map((r) => {
+          if (r.id !== id) return r;
+          return {
+            ...r,
+            isDeleted: true,
+            deletedAt: new Date().toISOString()
+          };
+        }));
       }
     }
   };
@@ -2388,8 +2401,10 @@ export default function App() {
             moldsCatalog={moldsCatalog}
             setMoldsCatalog={setMoldsCatalog}
             onUpdateReport={handleUpdateReport}
+            onDeleteReport={handleDeleteReportTrigger}
             onForceSyncMetadata={handleForceSyncMetadata}
             onForceSyncUsers={handleForceSyncUsers}
+            onShowToast={showToast}
           />
         </div>
 
@@ -2405,6 +2420,7 @@ export default function App() {
             {isFormOpen ? (
               <ReportForm
                 currentUser={currentUser}
+                users={users}
                 editingReport={editingReport}
                 onCancel={() => {
                   setIsFormOpen(false);
@@ -2449,6 +2465,7 @@ export default function App() {
             {isFormOpen ? (
               <ReportForm
                 currentUser={currentUser}
+                users={users}
                 editingReport={editingReport}
                 onCancel={() => {
                   setIsFormOpen(false);

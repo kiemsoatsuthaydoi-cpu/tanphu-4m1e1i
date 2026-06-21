@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Search, RotateCw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock } from "lucide-react";
+import { Search, RotateCw, RotateCcw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive } from "lucide-react";
 import { QualityReport, Category4M1E1I, User, UserRole, Branch, Company, ChatMessage } from "../types";
 import { T } from "./TranslateText";
+import { MentionTextArea, MentionInput } from "./MentionTextArea";
 
 interface AutoImageSliderProps {
   imageUrls?: string[];
@@ -17,9 +18,23 @@ export function AutoImageSlider({ imageUrls, fallbackUrl, isAbnormal, isSpotligh
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
 
+  // States for Zoom and Pan on Mobile
+  const [scale, setScale] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
   // For touch swipe gesture support
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
+  const initialDistance = useRef<number | null>(null);
+  const initialScale = useRef<number>(1);
+
+  const resetZoom = () => {
+    setScale(1);
+    setPosition({ x: 0, y: 0 });
+    setIsDragging(false);
+  };
 
   useEffect(() => {
     if (list.length <= 1 || lightboxOpen) return; // Pause automatic rotation when lightbox is active
@@ -32,36 +47,117 @@ export function AutoImageSlider({ imageUrls, fallbackUrl, isAbnormal, isSpotligh
   // Sync index to lightbox index when opening
   const handleOpenLightbox = () => {
     setLightboxIndex(index);
+    resetZoom();
     setLightboxOpen(true);
   };
 
   const handleNext = () => {
     setLightboxIndex((prev) => (prev + 1) % list.length);
+    resetZoom();
   };
 
   const handlePrev = () => {
     setLightboxIndex((prev) => (prev - 1 + list.length) % list.length);
+    resetZoom();
   };
 
+  const handleZoomIn = () => {
+    setScale((prev) => Math.min(prev + 0.5, 4));
+  };
+
+  const handleZoomOut = () => {
+    setScale((prev) => {
+      const next = prev - 0.5;
+      if (next <= 1) {
+        setPosition({ x: 0, y: 0 });
+        return 1;
+      }
+      return next;
+    });
+  };
+
+  const handleToggleZoom = () => {
+    if (scale > 1) {
+      resetZoom();
+    } else {
+      setScale(2.5);
+    }
+  };
+
+  // Dual-purpose touch handlers
   const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.targetTouches[0].clientX;
+    if (e.targetTouches.length === 2) {
+      // Pinch started
+      const t1 = e.targetTouches[0];
+      const t2 = e.targetTouches[1];
+      const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+      initialDistance.current = dist;
+      initialScale.current = scale;
+    } else if (e.targetTouches.length === 1) {
+      if (scale <= 1) {
+        // Standard swipe start
+        touchStartX.current = e.targetTouches[0].clientX;
+      } else {
+        // Pan zoomed image start
+        setIsDragging(true);
+        const touch = e.targetTouches[0];
+        setDragStart({ x: touch.clientX - position.x, y: touch.clientY - position.y });
+      }
+    }
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    touchEndX.current = e.targetTouches[0].clientX;
+    if (e.targetTouches.length === 2 && initialDistance.current !== null) {
+      const t1 = e.targetTouches[0];
+      const t2 = e.targetTouches[1];
+      const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+      const factor = dist / initialDistance.current;
+      const nextScale = Math.max(1, Math.min(4, initialScale.current * factor));
+      setScale(nextScale);
+      if (nextScale <= 1) {
+        setPosition({ x: 0, y: 0 });
+      }
+    } else if (e.targetTouches.length === 1) {
+      if (scale <= 1) {
+        // Standard swipe move
+        touchEndX.current = e.targetTouches[0].clientX;
+      } else {
+        // Pan zoomed image move
+        if (!isDragging) return;
+        const touch = e.targetTouches[0];
+        const newX = touch.clientX - dragStart.x;
+        const newY = touch.clientY - dragStart.y;
+        
+        const limit = (scale - 1) * 150;
+        setPosition({
+          x: Math.max(-limit, Math.min(limit, newX)),
+          y: Math.max(-limit, Math.min(limit, newY))
+        });
+      }
+    }
   };
 
-  const handleTouchEnd = () => {
-    if (touchStartX.current === null || touchEndX.current === null) return;
-    const diff = touchStartX.current - touchEndX.current;
-    const threshold = 40; // minimum distance for swipe
-    if (diff > threshold) {
-      handleNext();
-    } else if (diff < -threshold) {
-      handlePrev();
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (e.targetTouches.length < 2) {
+      initialDistance.current = null;
     }
-    touchStartX.current = null;
-    touchEndX.current = null;
+
+    if (scale <= 1) {
+      // Standard swipe end
+      if (touchStartX.current === null || touchEndX.current === null) return;
+      const diff = touchStartX.current - touchEndX.current;
+      const threshold = 40; // minimum distance for swipe
+      if (diff > threshold) {
+        handleNext();
+      } else if (diff < -threshold) {
+        handlePrev();
+      }
+      touchStartX.current = null;
+      touchEndX.current = null;
+    } else {
+      // Pan zoomed image end
+      setIsDragging(false);
+    }
   };
 
   return (
@@ -95,8 +191,6 @@ export function AutoImageSlider({ imageUrls, fallbackUrl, isAbnormal, isSpotligh
             ))}
           </div>
         )}
-
-        {/* Banners removed and moved to card header */}
       </div>
 
       {/* Fullscreen Shopee-style Lightbox Overlay Modal */}
@@ -106,16 +200,52 @@ export function AutoImageSlider({ imageUrls, fallbackUrl, isAbnormal, isSpotligh
           onClick={() => setLightboxOpen(false)}
         >
           {/* Header Area with Status and Close button */}
-          <div className="w-full flex justify-between items-center z-[100000] px-2">
-            <div className="bg-black/40 text-white rounded-full px-3 py-1 text-xs font-semibold">
+          <div className="w-full flex justify-between items-center z-[100000] px-2" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-black/60 text-white rounded-full px-3 py-1.5 text-xs font-semibold border border-white/10 flex items-center gap-2">
               <span translate="no" className="notranslate">{lightboxIndex + 1} / {list.length}</span>
+              {scale > 1 && (
+                <span className="text-yellow-400 font-bold border-l border-white/20 pl-2">
+                  <span translate="no" className="notranslate">{scale.toFixed(1)}x</span>
+                </span>
+              )}
             </div>
+            
+            {/* Direct Zoom Action Buttons on Mobile (highly accessible) */}
+            <div className="flex items-center gap-1.5 ml-auto mr-2">
+              <button
+                type="button"
+                onClick={handleZoomOut}
+                disabled={scale <= 1}
+                className="w-9 h-9 bg-white/10 hover:bg-white/20 border border-white/10 text-white rounded-full flex items-center justify-center focus:outline-none transition-all disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+              >
+                <ZoomOut className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={handleZoomIn}
+                disabled={scale >= 4}
+                className="w-9 h-9 bg-white/10 hover:bg-white/20 border border-white/10 text-white rounded-full flex items-center justify-center focus:outline-none transition-all disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+              >
+                <ZoomIn className="w-4 h-4" />
+              </button>
+              {scale > 1 && (
+                <button
+                  type="button"
+                  onClick={resetZoom}
+                  className="w-9 h-9 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 rounded-full flex items-center justify-center focus:outline-none transition-all cursor-pointer"
+                  title="Reset"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
             <button 
               onClick={(e) => {
                 e.stopPropagation();
                 setLightboxOpen(false);
               }}
-              className="w-10 h-10 rounded-full bg-white/15 active:bg-white/30 text-white flex items-center justify-center transition-all focus:outline-none"
+              className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 active:bg-white/30 text-white flex items-center justify-center transition-all focus:outline-none border border-white/10 cursor-pointer"
               aria-label="Close image viewer"
             >
               <X className="w-6 h-6" />
@@ -124,21 +254,21 @@ export function AutoImageSlider({ imageUrls, fallbackUrl, isAbnormal, isSpotligh
 
           {/* Active Image Centered Area */}
           <div 
-            className="flex-1 w-full flex items-center justify-center relative my-4"
+            className="flex-1 w-full flex items-center justify-center relative my-4 overflow-hidden"
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
           >
             {/* Left navigation arrow button (visible/active if list.length > 1) */}
-            {list.length > 1 && (
+            {list.length > 1 && scale === 1 && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   handlePrev();
                 }}
-                className="absolute left-2 w-10 h-10 rounded-full bg-black/50 hover:bg-black/75 active:scale-95 text-white flex items-center justify-center z-[100001] transition-transform"
+                className="absolute left-1 w-10 h-10 rounded-full bg-black/40 border border-white/5 active:scale-90 text-white flex items-center justify-center z-[100001] transition-transform cursor-pointer"
               >
-                <span className="text-xl font-bold font-mono">◀</span>
+                <span className="text-sm font-bold font-mono">◀</span>
               </button>
             )}
 
@@ -146,27 +276,37 @@ export function AutoImageSlider({ imageUrls, fallbackUrl, isAbnormal, isSpotligh
               src={list[lightboxIndex]}
               alt={`Full view ${lightboxIndex}`}
               referrerPolicy="no-referrer"
-              className="max-h-[80vh] max-w-full object-contain select-none pointer-events-auto cursor-default transition-transform duration-300 transform scale-100 shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
+              onClick={handleToggleZoom}
+              style={{
+                transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+                transition: isDragging ? "none" : "transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+              }}
+              className={`max-h-[76vh] max-w-full object-contain select-none shadow-2xl ${
+                scale > 1 ? "cursor-move" : "cursor-zoom-in"
+              }`}
             />
 
             {/* Right navigation arrow button (visible/active if list.length > 1) */}
-            {list.length > 1 && (
+            {list.length > 1 && scale === 1 && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   handleNext();
                 }}
-                className="absolute right-2 w-10 h-10 rounded-full bg-black/50 hover:bg-black/75 active:scale-95 text-white flex items-center justify-center z-[100001] transition-transform"
+                className="absolute right-1 w-10 h-10 rounded-full bg-black/40 border border-white/5 active:scale-90 text-white flex items-center justify-center z-[100001] transition-transform cursor-pointer"
               >
-                <span className="text-xl font-bold font-mono">▶</span>
+                <span className="text-sm font-bold font-mono">▶</span>
               </button>
             )}
           </div>
 
           {/* Footer Area with Dot Indicators and Swiping help instruction */}
           <div className="w-full flex flex-col items-center gap-2 z-[100000]" onClick={(e) => e.stopPropagation()}>
-            {list.length > 1 && (
+            {scale > 1 ? (
+              <T className="text-[10px] text-yellow-400 font-bold tracking-wider uppercase bg-yellow-950/40 px-3 py-1 rounded-full border border-yellow-500/20">
+                <span translate="no" className="notranslate font-semibold">Chạm 2 lần để thu nhỏ rắc về 1x • Vuốt để xem xung quanh</span>
+              </T>
+            ) : list.length > 1 ? (
               <>
                 {/* Dot Indicators */}
                 <div className="flex gap-1.5 bg-black/45 px-3 py-1.5 rounded-full mb-1">
@@ -183,9 +323,13 @@ export function AutoImageSlider({ imageUrls, fallbackUrl, isAbnormal, isSpotligh
                 
                 {/* Visual swipe instruction */}
                 <T className="text-[11px] text-white/50 tracking-wider font-semibold uppercase animate-pulse">
-                  Vuốt ngang để chuyển hình ◀ ▶
+                  <span translate="no" className="notranslate">Chạm 2 lần để phóng to • Vuốt ngang đổi ảnh</span>
                 </T>
               </>
+            ) : (
+              <T className="text-[11px] text-white/50 tracking-wider font-semibold uppercase">
+                <span translate="no" className="notranslate">Chạm kép để phóng to ảnh</span>
+              </T>
             )}
           </div>
         </div>
@@ -209,7 +353,7 @@ interface MobileFrameProps {
   reports: QualityReport[];
   currentUserId: string;
   onOpenReportForm: () => void;
-  onDeleteReport: (id: string) => void;
+  onDeleteReport: (id: string, forcePermanent?: boolean) => void;
   onEditReport: (report: QualityReport) => void;
   offlineMode: boolean;
   currentUser?: User | null;
@@ -249,6 +393,87 @@ function formatTimestampToDMY(tsStr: string): string {
   } catch (error) {
     return tsStr;
   }
+}
+
+function MobileDirectiveForm({
+  report,
+  currentUser,
+  users,
+  onUpdateReport,
+  showToast
+}: {
+  report: QualityReport;
+  currentUser: User | null | undefined;
+  users?: User[];
+  onUpdateReport?: (report: QualityReport) => void;
+  showToast: (msg: string) => void;
+}) {
+  const [text, setText] = useState("");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = text.trim();
+    if (!val) return;
+
+    const dateObj = new Date();
+    const currentSingaporeTime = new Date(dateObj.getTime() + (dateObj.getTimezoneOffset() + 420) * 60000);
+    const yy = String(currentSingaporeTime.getFullYear()).slice(-2);
+    const mm = String(currentSingaporeTime.getMonth() + 1).padStart(2, '0');
+    const dd = String(currentSingaporeTime.getDate()).padStart(2, '0');
+    const timeStr = currentSingaporeTime.toTimeString().split(' ')[0];
+    const stamp = `${timeStr} ${dd}/${mm}/${yy}`;
+
+    const newDir = {
+      id: Math.random().toString(36).substr(2, 9),
+      text: val,
+      author: currentUser?.fullName || "Cấp quản lý",
+      timestamp: stamp
+    };
+
+    const updatedReport = {
+      ...report,
+      directives: [...(report.directives || []), newDir]
+    };
+
+    if (onUpdateReport) {
+      onUpdateReport(updatedReport);
+    }
+    setText("");
+    showToast("Ghi nhận chỉ đạo điều hành thành công! 📑");
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="flex gap-2 items-end">
+      <div className="flex-1">
+        <MentionTextArea
+          users={users}
+          value={text}
+          onChange={setText}
+          placeholder="Chỉ đạo"
+          rows={1}
+          style={{ height: '32px', minHeight: '32px', maxHeight: '72px', resize: 'none' }}
+          onInput={(e) => {
+            const target = e.currentTarget;
+            target.style.height = 'auto';
+            target.style.height = `${Math.min(target.scrollHeight, 72)}px`;
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              e.currentTarget.form?.requestSubmit();
+            }
+          }}
+          className="w-full bg-slate-50 border border-slate-200 text-[11px] rounded-lg px-2.5 py-2 text-slate-800 placeholder-slate-400 font-medium focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all select-text overflow-y-auto thin-scrollbar"
+        />
+      </div>
+      <button
+        type="submit"
+        className="bg-amber-500 hover:bg-amber-600 px-3 py-2 text-[10px] text-white font-extrabold items-center justify-center rounded-lg shadow-sm transition-all active:scale-95 cursor-pointer uppercase shrink-0 h-[32px]"
+      >
+        <T>Gửi</T>
+      </button>
+    </form>
+  );
 }
 
 export default function MobileFrame({
@@ -445,6 +670,7 @@ export default function MobileFrame({
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedFactoryFilter, setSelectedFactoryFilter] = useState<string | null>(null);
   const [activeBottomTab, setActiveBottomTab] = useState<"BAO_CAO" | "PHAN_TICH">("BAO_CAO");
+  const [showTrash, setShowTrash] = useState(false);
   const [mobileBranchFilter, setMobileBranchFilter] = useState<string>("Tất cả");
   const [mobileTimeFilter, setMobileTimeFilter] = useState<"NGAY" | "TUAN" | "THANG">("THANG");
 
@@ -462,6 +688,7 @@ export default function MobileFrame({
 
   const getMobileStats = () => {
     const filtered = reports.filter((r) => {
+      if (r.isDeleted) return false;
       const matchesBranch = mobileBranchFilter === "Tất cả" || matchSelectedFactory(r.factory, mobileBranchFilter);
       const rDate = parseReportTimestamp(r.timestamp);
       const matchesTime = filterByTimeRange(rDate);
@@ -911,6 +1138,7 @@ App Link: ${window.location.origin}`;
 
   // Filter items based on uploader or factory search or description search
   const filteredReports = reports.filter((r) => {
+    if (r.isDeleted) return false;
     const s = searchTerm.toLowerCase();
     const matchesSearch =
       r.factory.toLowerCase().includes(s) ||
@@ -1109,18 +1337,20 @@ App Link: ${window.location.origin}`;
           <T className="font-bold text-[13.6px] tracking-wide">4M1E1I REPORT</T>
         </div>
         <div className="flex items-center gap-3">
-          {/* Bong bóng số báo tổng số người online */}
-          <div 
-            className="relative hover:scale-115 active:scale-95 transition-all p-1 cursor-pointer"
-            title="Số nhân viên đang online"
+          <button
+            onClick={() => setShowTrash(true)}
+            className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
+            title="Lưu trữ / Thùng rác"
           >
-            <Users className="w-[18px] h-[18px] text-emerald-300" />
-            <span className="absolute -top-1 -right-1 bg-emerald-500 text-[8px] text-white font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border border-slate-900 leading-none shadow-sm animate-pulse">
-              <span translate="no" className="notranslate font-mono select-none">
-                {onlineCount}
+            <Archive className="w-[18px] h-[18px] text-amber-300 hover:text-amber-100" />
+            {reports.filter((r) => r.isDeleted).length > 0 && (
+              <span className="absolute -top-1 -right-0.5 bg-rose-600 text-[8px] text-white font-extrabold w-4 h-4 rounded-full flex items-center justify-center border border-slate-900 leading-none">
+                <span translate="no" className="notranslate">
+                  {reports.filter((r) => r.isDeleted).length}
+                </span>
               </span>
-            </span>
-          </div>
+            )}
+          </button>
 
           {/* Icon màn hình quay lại giao diện máy tính */}
           {currentUser?.role === UserRole.ADMIN && onSwitchToDesktop && (
@@ -1167,6 +1397,19 @@ App Link: ${window.location.origin}`;
           >
             <RotateCw className={`w-[18px] h-[18px] text-white ${isRefreshing ? "animate-spin" : ""}`} />
           </button>
+          
+          {/* Bong bóng số báo tổng số người online */}
+          <div 
+            className="relative hover:scale-115 active:scale-95 transition-all p-1 cursor-pointer"
+            title="Số nhân viên đang online"
+          >
+            <Users className="w-[18px] h-[18px] text-emerald-300" />
+            <span className="absolute -top-1 -right-1 bg-emerald-500 text-[8px] text-white font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border border-slate-900 leading-none shadow-sm animate-pulse">
+              <span translate="no" className="notranslate font-mono select-none">
+                {onlineCount}
+              </span>
+            </span>
+          </div>
         </div>
       </div>
 
@@ -1270,7 +1513,107 @@ App Link: ${window.location.origin}`;
       )}
 
       {/* Main card list scroll area */}
-      {activeBottomTab === "PHAN_TICH" ? (
+      {showTrash ? (
+        <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-slate-50 relative">
+          {/* Trash Header Panel */}
+          <div className="bg-slate-900 text-white rounded-xl p-3 shadow-md border-b-4 border-rose-500">
+            <div className="flex items-center justify-between mb-1.5">
+              <button
+                onClick={() => setShowTrash(false)}
+                className="flex items-center gap-1 text-[10px] font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-2 flex items-center py-1 rounded-lg border-none cursor-pointer transition-colors"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <T><span translate="no" className="notranslate">Quay Lại</span></T>
+              </button>
+              <span className="text-[8px] bg-rose-600 px-2 py-0.5 rounded-full font-black uppercase text-white animate-pulse">
+                <T><span translate="no" className="notranslate">Thùng Rác</span></T>
+              </span>
+            </div>
+            <h2 className="text-[11px] font-black uppercase tracking-tight text-white flex items-center gap-1.5">
+              <span>🗑️</span>
+              <T><span translate="no" className="notranslate">Bản tin lưu trữ tạm thời</span></T>
+            </h2>
+            <p className="text-[9px] text-slate-300 leading-normal mt-1">
+              <T><span translate="no" className="notranslate">Các bản ghi nhận dưới đây biến mất khỏi luồng làm việc nhưng được lưu lại để khôi phục khi cần.</span></T>
+            </p>
+          </div>
+
+          {/* Trash Empty Check */}
+          {reports.filter((r) => r.isDeleted).length === 0 ? (
+            <div className="h-4/5 flex flex-col items-center justify-center text-center p-6 bg-white rounded-2xl border border-slate-200">
+              <span className="text-3xl mb-2">🗑️</span>
+              <T className="text-slate-400 text-xs font-semibold"><span translate="no" className="notranslate">Thùng rác trống rỗng.</span></T>
+            </div>
+          ) : (
+            reports
+              .filter((r) => r.isDeleted)
+              .map((report) => {
+                return (
+                  <div
+                    key={report.id}
+                    className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden"
+                  >
+                    <div className="px-3 py-2 bg-slate-100 border-b border-slate-200 flex justify-between items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        <span translate="no" className="notranslate font-black text-slate-800 text-[11px] block truncate leading-tight">
+                          {getFactoryDisplayName(report.factory)}
+                        </span>
+                        <span className="text-[8px] text-slate-400 font-bold block mt-0.5">
+                          <span translate="no" className="notranslate">{report.timestamp}</span>
+                        </span>
+                      </div>
+                      <div>
+                        {report.reportType === "KPH" || report.isAbnormal ? (
+                          <span className="text-[8px] font-black bg-red-600 text-white px-2 py-0.5 rounded-md leading-none select-none">
+                            <T><span translate="no" className="notranslate">⚠️ ĐIỂM KPH</span></T>
+                          </span>
+                        ) : report.reportType === "DSA" || report.isSpotlight ? (
+                          <span className="text-[8px] font-black bg-emerald-600 text-white px-2 py-0.5 rounded-md leading-none select-none">
+                            <T><span translate="no" className="notranslate">⭐ ĐIỂM SÁNG (DSA)</span></T>
+                          </span>
+                        ) : (
+                          <span className="text-[8px] font-black bg-slate-400 text-white px-2 py-0.5 rounded-md leading-none select-none">
+                            <T><span translate="no" className="notranslate">Chuẩn SOP</span></T>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="p-3 text-[10px] text-slate-700 font-bold leading-relaxed whitespace-pre-wrap select-text bg-white">
+                      {report.content}
+                    </div>
+
+                    {/* Trash Operations panel */}
+                    <div className="bg-slate-50 border-t border-slate-100 px-3 py-2 flex items-center justify-between gap-2 shrink-0">
+                      <button
+                        onClick={() => {
+                          if (onUpdateReport) {
+                            onUpdateReport({ ...report, isDeleted: false });
+                            showToast("Đã hoàn tác và phục hồi báo cáo thành công! ♻️");
+                          }
+                        }}
+                        className="flex-1 flex items-center justify-center gap-1 text-[9px] font-black text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 py-1.5 rounded-lg cursor-pointer transition-colors"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <T><span translate="no" className="notranslate">HOÀN TÁC Phục Hồi</span></T>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          onDeleteReport(report.id, true);
+                        }}
+                        className="flex-1 flex items-center justify-center gap-1 text-[9px] font-black text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 py-1.5 rounded-lg cursor-pointer transition-colors"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <T><span translate="no" className="notranslate">XÓA VĨNH VIỄN</span></T>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+          )}
+        </div>
+      ) : activeBottomTab === "PHAN_TICH" ? (
         <div className="flex-1 overflow-y-auto p-4 bg-slate-50 space-y-4 select-none">
           {/* Header Analysis info with custom icon */}
           <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
@@ -1759,68 +2102,13 @@ App Link: ${window.location.origin}`;
 
                     {/* Input form to submit a new directive */}
                     {(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) && (
-                      <form
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          const form = e.currentTarget;
-                          const input = form.elements.namedItem("directiveInput") as HTMLTextAreaElement;
-                          const text = input.value.trim();
-                          if (!text) return;
-
-                          const dateObj = new Date();
-                          const currentSingaporeTime = new Date(dateObj.getTime() + (dateObj.getTimezoneOffset() + 420) * 60000);
-                          const yy = String(currentSingaporeTime.getFullYear()).slice(-2);
-                          const mm = String(currentSingaporeTime.getMonth() + 1).padStart(2, '0');
-                          const dd = String(currentSingaporeTime.getDate()).padStart(2, '0');
-                          const timeStr = currentSingaporeTime.toTimeString().split(' ')[0];
-                          const stamp = `${timeStr} ${dd}/${mm}/${yy}`;
-
-                          const newDir = {
-                            id: Math.random().toString(36).substr(2, 9),
-                            text,
-                            author: currentUser?.fullName || "Cấp quản lý",
-                            timestamp: stamp
-                          };
-
-                          const updatedReport = {
-                            ...report,
-                            directives: [...(report.directives || []), newDir]
-                          };
-
-                          if (onUpdateReport) {
-                            onUpdateReport(updatedReport);
-                          }
-                          input.value = "";
-                          input.style.height = "32px";
-                          showToast("Ghi nhận chỉ đạo điều hành thành công! 📑");
-                        }}
-                        className="flex gap-2 items-end"
-                      >
-                        <textarea
-                          name="directiveInput"
-                          placeholder="Chỉ đạo"
-                          rows={1}
-                          style={{ height: '32px', minHeight: '32px', maxHeight: '72px', resize: 'none' }}
-                          onInput={(e) => {
-                            const target = e.currentTarget;
-                            target.style.height = 'auto';
-                            target.style.height = `${Math.min(target.scrollHeight, 72)}px`;
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                              e.preventDefault();
-                              e.currentTarget.form?.requestSubmit();
-                            }
-                          }}
-                          className="flex-1 bg-slate-50 border border-slate-200 text-[11px] rounded-lg px-2.5 py-2 text-slate-800 placeholder-slate-400 font-medium focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all select-text overflow-y-auto thin-scrollbar"
-                        />
-                        <button
-                          type="submit"
-                          className="bg-amber-500 hover:bg-amber-600 px-3 py-2 text-[10px] text-white font-extrabold items-center justify-center rounded-lg shadow-sm transition-all active:scale-95 cursor-pointer uppercase shrink-0 h-[32px]"
-                        >
-                          <T>Gửi</T>
-                        </button>
-                      </form>
+                      <MobileDirectiveForm
+                        report={report}
+                        currentUser={currentUser}
+                        users={users}
+                        onUpdateReport={onUpdateReport}
+                        showToast={showToast}
+                      />
                     )}
                     {/* BP/ĐV TIẾP NHẬN list display */}
                     <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-col gap-1.5" id={`receivers-section-${report.id}`}>

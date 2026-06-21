@@ -4,9 +4,11 @@ import { T } from "./TranslateText";
 import { Category4M1E1I, QualityReport, User, Branch, UserRole } from "../types";
 import { initialBranches, STANDARDIZED_QC_DEPT } from "../data";
 import { loadImage, processImage, CompressingResult } from "../utils/imageProcessor";
+import { MentionTextArea } from "./MentionTextArea";
 
 interface ReportFormProps {
   currentUser: User;
+  users?: User[];
   editingReport?: QualityReport | null;
   onCancel: () => void;
   onSubmitReport: (data: Omit<QualityReport, "id" | "googleDrivePath">) => void;
@@ -25,6 +27,7 @@ interface ReportFormProps {
 
 export default function ReportForm({
   currentUser,
+  users = [],
   editingReport,
   onCancel,
   onSubmitReport,
@@ -858,10 +861,11 @@ export default function ReportForm({
             <T>Nội dung chất lượng chi tiết*</T>
             <T className="text-[9px] text-slate-400 lowercase font-normal">(Chi tiết yếu tố biến động)</T>
           </label>
-          <textarea
+          <MentionTextArea
+            users={users}
             placeholder="Mô tả cụ thể vấn đề chất lượng hay sự đổi mới, ví dụ: 'Bảo dưỡng định kỳ đầu cắm phôi phát hiện bám cặn...'"
             value={content}
-            onChange={(e) => setContent(e.target.value)}
+            onChange={setContent}
             rows={3}
             className="w-full border border-slate-200 rounded-lg p-2.5 text-xs focus:ring-1 focus:ring-blue-500 outline-none bg-white font-medium"
           />
@@ -886,10 +890,11 @@ export default function ReportForm({
           <label className="text-xs font-bold text-slate-700 block mb-1 uppercase">
             <T>Ghi chú mở rộng / Biện pháp xử lý</T>
           </label>
-          <textarea
+          <MentionTextArea
+            users={users}
             placeholder="Nhập ghi chú hoặc biên bản khắc phục hiện trường..."
             value={notes}
-            onChange={(e) => setNotes(e.target.value)}
+            onChange={setNotes}
             rows={2}
             className="w-full border border-slate-200 rounded-lg p-2.5 text-xs focus:ring-1 focus:ring-blue-500 outline-none bg-white"
           />

@@ -65,6 +65,8 @@ export interface QualityReport {
   sharedBy?: string[];
   updatedAt?: string;
   updateLogs?: string[];
+  isDeleted?: boolean;
+  deletedAt?: string;
 }
 
 export interface Company {

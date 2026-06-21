@@ -34,7 +34,11 @@ import {
   CheckSquare,
   Info,
   RefreshCw,
-  AlertTriangle
+  AlertTriangle,
+  RotateCcw,
+  ArrowLeft,
+  ZoomIn,
+  ZoomOut
 } from "lucide-react";
 import {
   BarChart,
@@ -80,6 +84,7 @@ import {
 import { STANDARDIZED_QC_DEPT } from "../data";
 import { generateDailyReportPDF } from "../utils/pdfGenerator";
 import OrderPipeline from "./OrderPipeline";
+import { MentionInput, MentionTextArea } from "./MentionTextArea";
 
 interface DashboardDesktopProps {
   currentUser: User;
@@ -124,6 +129,8 @@ interface DashboardDesktopProps {
   onUpdateUser?: (updatedUser: User) => void;
   onForceSyncMetadata?: () => Promise<void>;
   onForceSyncUsers?: () => Promise<void>;
+  onDeleteReport?: (id: string, forcePermanent?: boolean) => void;
+  onShowToast?: (message: string, type?: "success" | "error" | "warning" | "info") => void;
 }
 
 interface DesktopThumbnailSliderProps {
@@ -136,19 +143,113 @@ function DesktopThumbnailSlider({ imageUrls, fallbackUrl }: DesktopThumbnailSlid
   const [index, setIndex] = useState(0);
   const [zoomOpen, setZoomOpen] = useState(false);
 
+  // States for zoom and pan
+  const [scale, setScale] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
+  const resetZoom = () => {
+    setScale(1);
+    setPosition({ x: 0, y: 0 });
+    setIsDragging(false);
+  };
+
+  const handleNext = () => {
+    setIndex((prev) => (prev + 1) % list.length);
+    resetZoom();
+  };
+
+  const handlePrev = () => {
+    setIndex((prev) => (prev - 1 + list.length) % list.length);
+    resetZoom();
+  };
+
+  const selectImage = (i: number) => {
+    setIndex(i);
+    resetZoom();
+  };
+
+  const handleZoomIn = () => {
+    setScale((prev) => Math.min(prev + 0.5, 4));
+  };
+
+  const handleZoomOut = () => {
+    setScale((prev) => {
+      const next = prev - 0.5;
+      if (next <= 1) {
+        setPosition({ x: 0, y: 0 });
+        return 1;
+      }
+      return next;
+    });
+  };
+
+  const handleToggleZoom = () => {
+    if (scale > 1) {
+      resetZoom();
+    } else {
+      setScale(2.5);
+    }
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    if (e.deltaY < 0) {
+      setScale((prev) => Math.min(prev + 0.25, 4));
+    } else {
+      setScale((prev) => {
+        const next = prev - 0.25;
+        if (next <= 1) {
+          setPosition({ x: 0, y: 0 });
+          return 1;
+        }
+        return next;
+      });
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (scale <= 1) return;
+    e.preventDefault();
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || scale <= 1) return;
+    e.preventDefault();
+    const newX = e.clientX - dragStart.x;
+    const newY = e.clientY - dragStart.y;
+    
+    // Bounds limit based on scale
+    const limit = (scale - 1) * 200;
+    setPosition({
+      x: Math.max(-limit, Math.min(limit, newX)),
+      y: Math.max(-limit, Math.min(limit, newY))
+    });
+  };
+
+  const handleMouseUpOrLeave = () => {
+    setIsDragging(false);
+  };
+
   useEffect(() => {
-    if (list.length <= 1) return;
+    if (list.length <= 1 || zoomOpen) return;
     const interval = setInterval(() => {
       setIndex((prev) => (prev + 1) % list.length);
     }, 3000);
     return () => clearInterval(interval);
-  }, [list]);
+  }, [list, zoomOpen]);
 
   return (
     <>
       <button
         type="button"
-        onClick={() => setZoomOpen(true)}
+        onClick={() => {
+          resetZoom();
+          setZoomOpen(true);
+        }}
         className="inline-block border border-slate-200 rounded p-0.5 bg-slate-50 relative group overflow-hidden focus:outline-none hover:border-blue-500"
       >
         <div className="w-10 h-8 relative overflow-hidden">
@@ -174,57 +275,157 @@ function DesktopThumbnailSlider({ imageUrls, fallbackUrl }: DesktopThumbnailSlid
       {/* Elegant lightbox Zoom overlay modal */}
       {zoomOpen && (
         <div
-          className="fixed inset-0 bg-slate-950/80 z-[1000] flex items-center justify-center p-4 backdrop-blur-sm transition-opacity"
+          className="fixed inset-0 bg-slate-950/90 z-[1000] flex flex-col items-center justify-center p-4 backdrop-blur-md transition-opacity select-none"
           onClick={() => setZoomOpen(false)}
         >
           <div
-            className="bg-white rounded-3xl p-4 max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl relative"
+            className="bg-slate-900 rounded-3xl p-5 max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl relative border border-slate-800"
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              onClick={() => setZoomOpen(false)}
-              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-800 flex items-center justify-center text-sm font-bold z-50 shadow"
+            {/* Top Bar with Info and Actions */}
+            <div className="flex items-center justify-between mb-3 text-slate-300">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold bg-slate-800 px-3 py-1.5 rounded-full border border-slate-700 font-mono">
+                  <span translate="no" className="notranslate">{index + 1} / {list.length}</span>
+                </span>
+                <span className="text-xs text-slate-400 hidden sm:inline">
+                  <T><span translate="no" className="notranslate">Kéo chuột để di chuyển • Cuộn chuột để Thu phóng • Click đúp để đặt lại</span></T>
+                </span>
+              </div>
+              
+              <div className="flex items-center gap-1.5">
+                {/* Zoom out */}
+                <button
+                  type="button"
+                  onClick={handleZoomOut}
+                  disabled={scale <= 1}
+                  className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl border border-slate-700 focus:outline-none transition-all disabled:opacity-40 cursor-pointer"
+                  title="Thu nhỏ"
+                >
+                  <ZoomOut className="w-5 h-5" />
+                </button>
+                {/* Current scale display */}
+                <span className="text-xs font-mono bg-slate-800 rounded-xl border border-slate-700 px-2.5 py-1.5 min-w-[50px] text-center font-bold">
+                  <span translate="no" className="notranslate">{scale.toFixed(1)}x</span>
+                </span>
+                {/* Zoom in */}
+                <button
+                  type="button"
+                  onClick={handleZoomIn}
+                  disabled={scale >= 4}
+                  className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl border border-slate-700 focus:outline-none transition-all disabled:opacity-40 cursor-pointer"
+                  title="Phóng to"
+                >
+                  <ZoomIn className="w-5 h-5" />
+                </button>
+                {/* Reset Zoom */}
+                <button
+                  type="button"
+                  onClick={resetZoom}
+                  disabled={scale === 1 && position.x === 0 && position.y === 0}
+                  className="p-2 bg-slate-800 hover:bg-slate-700 text-amber-500 rounded-xl border border-slate-700 focus:outline-none transition-all disabled:opacity-40 cursor-pointer"
+                  title="Đặt lại"
+                >
+                  <RotateCcw className="w-5 h-5" />
+                </button>
+                {/* Close Button */}
+                <button
+                  onClick={() => setZoomOpen(false)}
+                  className="p-2 rounded-xl bg-rose-600/20 hover:bg-rose-600 border border-rose-500/30 hover:border-rose-500 text-rose-400 hover:text-white flex items-center justify-center transition-all shadow-lg font-black ml-2 cursor-pointer"
+                  aria-label="Close"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Main view container where dragging and zooming takes place */}
+            <div 
+              onWheel={handleWheel}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUpOrLeave}
+              onMouseLeave={handleMouseUpOrLeave}
+              onDoubleClick={handleToggleZoom}
+              className={`flex-1 overflow-hidden min-h-[420px] max-h-[68vh] relative rounded-2xl bg-black flex items-center justify-center border border-slate-850 select-none ${
+                scale > 1 ? (isDragging ? "cursor-grabbing" : "cursor-grab") : "cursor-default"
+              }`}
             >
-              ✕
-            </button>
-            <div className="flex-1 overflow-hidden h-96 relative rounded-2xl bg-slate-900 flex items-center justify-center">
               <img
                 src={list[index]}
-                alt="Zoomed"
+                alt="Zoomable detailed view"
                 referrerPolicy="no-referrer"
-                className="max-h-full max-w-full object-contain"
+                style={{
+                  transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+                  transition: isDragging ? "none" : "transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
+                }}
+                className="max-h-[66vh] max-w-full object-contain pointer-events-none"
               />
-              {/* Inner overlay dot indicators */}
-              <div className="absolute bottom-3 left-1/2 transform -translate-x-1/2 flex gap-1 bg-black/55 px-2 py-1 rounded-full z-10">
+
+              {/* Prev image button */}
+              {list.length > 1 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePrev();
+                  }}
+                  className="absolute left-3 w-10 h-10 rounded-full bg-slate-900/70 border border-slate-700 text-white flex items-center justify-center hover:bg-slate-805 transition-all font-bold text-lg select-none z-30 cursor-pointer"
+                >
+                  ◀
+                </button>
+              )}
+
+              {/* Next image button */}
+              {list.length > 1 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleNext();
+                  }}
+                  className="absolute right-3 w-10 h-10 rounded-full bg-slate-900/70 border border-slate-700 text-white flex items-center justify-center hover:bg-slate-805 transition-all font-bold text-lg select-none z-30 cursor-pointer"
+                >
+                  ▶
+                </button>
+              )}
+            </div>
+
+            {/* Bottom dots list */}
+            <div className="mt-4 flex flex-col sm:flex-row gap-3 justify-between items-center bg-slate-900/60 p-2.5 rounded-2xl border border-slate-800">
+              <span className="text-xs text-slate-400 font-semibold flex items-center gap-2">
+                <span translate="no" className="notranslate">📂</span> <T><span translate="no" className="notranslate">Xem ảnh minh chứng thực tế:</span></T>
+              </span>
+              <div className="flex gap-1.5 overflow-x-auto max-w-lg px-2">
                 {list.map((_, i) => (
                   <button
                     key={i}
-                    onClick={() => setIndex(i)}
-                    className={`w-2 h-2 rounded-full transition-all ${
-                      i === index ? "bg-white scale-110" : "bg-white/40 hover:bg-white/70"
+                    onClick={() => selectImage(i)}
+                    className={`h-5 px-2.5 rounded text-[10px] font-black transition-all cursor-pointer ${
+                      i === index 
+                        ? "bg-blue-600 text-white ring-2 ring-blue-400 scale-105" 
+                        : "bg-slate-800 hover:bg-slate-700 text-slate-300"
                     }`}
-                  />
+                  >
+                    <span translate="no" className="notranslate">{i + 1}</span>
+                  </button>
                 ))}
               </div>
-            </div>
-            <div className="mt-3 flex justify-between items-center px-1">
-              <span className="text-xs text-slate-500 font-medium">
-                <T>Hình ảnh</T> {index + 1} / {list.length}
-              </span>
+
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setIndex((prev) => (prev - 1 + list.length) % list.length)}
-                  className="px-2.5 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 text-xs font-bold rounded"
+                  onClick={handlePrev}
+                  className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-black rounded-lg border border-slate-700 transition-all cursor-pointer"
                 >
-                  <T>◀ Trước</T>
+                  <T><span translate="no" className="notranslate">◀ TRƯỚC</span></T>
                 </button>
                 <button
                   type="button"
-                  onClick={() => setIndex((prev) => (prev + 1) % list.length)}
-                  className="px-2.5 py-1 bg-[#1e3a8a] text-white hover:bg-[#152862] text-xs font-bold rounded"
+                  onClick={handleNext}
+                  className="px-3.5 py-1.5 bg-blue-700 hover:bg-blue-800 text-white text-xs font-black rounded-lg transition-all cursor-pointer"
                 >
-                  <T>Tiếp ▶</T>
+                  <T><span translate="no" className="notranslate">TIẾP ▶</span></T>
                 </button>
               </div>
             </div>
@@ -232,6 +433,69 @@ function DesktopThumbnailSlider({ imageUrls, fallbackUrl }: DesktopThumbnailSlid
         </div>
       )}
     </>
+  );
+}
+
+function DesktopDirectiveForm({
+  r,
+  currentUser,
+  users,
+  onUpdateReport
+}: {
+  r: QualityReport;
+  currentUser: User;
+  users: User[];
+  onUpdateReport?: (report: QualityReport) => void;
+}) {
+  const [text, setText] = useState("");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = text.trim();
+    if (!val) return;
+
+    const dateObj = new Date();
+    const currentSingaporeTime = new Date(dateObj.getTime() + (dateObj.getTimezoneOffset() + 420) * 60000);
+    const yy = String(currentSingaporeTime.getFullYear()).slice(-2);
+    const mm = String(currentSingaporeTime.getMonth() + 1).padStart(2, "0");
+    const dd = String(currentSingaporeTime.getDate()).padStart(2, "0");
+    const timeStr = currentSingaporeTime.toTimeString().split(" ")[0];
+    const stamp = `${timeStr} ${dd}/${mm}/${yy}`;
+
+    const newDir = {
+      id: Math.random().toString(36).substr(2, 9),
+      text: val,
+      author: currentUser?.fullName || "Cấp quản lý",
+      timestamp: stamp
+    };
+
+    const updatedReport = {
+      ...r,
+      directives: [...(r.directives || []), newDir]
+    };
+
+    if (onUpdateReport) {
+      onUpdateReport(updatedReport);
+    }
+    setText("");
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-2 flex gap-1 items-center">
+      <MentionInput
+        users={users}
+        value={text}
+        onChange={setText}
+        placeholder="Chỉ đạo (mặc định ghi mờ bên trong ô)..."
+        className="flex-1 bg-slate-50 border border-slate-200 text-[10px] rounded px-2 py-1 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all select-text"
+      />
+      <button
+        type="submit"
+        className="bg-amber-500 hover:bg-amber-600 px-2 py-1 text-[9px] text-white font-extrabold rounded uppercase cursor-pointer shrink-0"
+      >
+        <T>Gửi</T>
+      </button>
+    </form>
   );
 }
 
@@ -276,11 +540,16 @@ export default function DashboardDesktop({
   onUpdateReport,
   onUpdateUser,
   onForceSyncMetadata,
-  onForceSyncUsers
+  onForceSyncUsers,
+  onDeleteReport,
+  onShowToast
 }: DashboardDesktopProps) {
   const [activeTab, setActiveTab] = useState<
     "PHÊ_DUYỆT" | "MÃ_HÓA" | "THỐNG_KÊ" | "DỮ_LIỆU" | "QUY_CHẾ" | "CÁ_NHÂN" | "THÔNG_BÁO" | "TRAO_ĐỔI" | "TRIỂN_KHAI"
   >("PHÊ_DUYỆT");
+
+  const [showTrashLogs, setShowTrashLogs] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const [forceSyncState, setForceSyncState] = useState<"idle" | "syncing" | "success" | "error">("idle");
   const [forceSyncUsersState, setForceSyncUsersState] = useState<"idle" | "syncing" | "success" | "error">("idle");
@@ -351,6 +620,27 @@ export default function DashboardDesktop({
       return `${userBranchText} (${companyId})`;
     }
     return userBranchText;
+  };
+
+  const isDeleteReportAllowed = (report: QualityReport): boolean => {
+    if (!currentUser) return false;
+    const roleStr = currentUser.role as unknown as string;
+    if (
+      roleStr === "QUAN_LY_TRUONG" ||
+      roleStr === "BAN_GIAM_DOC" ||
+      roleStr === "ADMIN" ||
+      currentUser.role === UserRole.ADMIN ||
+      currentUser.role === UserRole.REVIEWER
+    ) {
+      return true;
+    }
+    if (report.uploaderName === currentUser.fullName || report.uploaderPhone === currentUser.phone) {
+      return true;
+    }
+    if (currentUser.canSpeciallyEditDelete && currentUser.branch === report.factory) {
+      return true;
+    }
+    return false;
   };
 
   const getFormattedUserDept = (userDeptText: string, userBranchText: string) => {
@@ -574,8 +864,8 @@ export default function DashboardDesktop({
   const [logsAbnormalOnly, setLogsAbnormalOnly] = useState(false);
 
   // Stats calculation
-  const totalReportsCount = reports.length;
-  const abnormalReportsCount = reports.filter((r) => r.isAbnormal).length;
+  const totalReportsCount = reports.filter((r) => !r.isDeleted).length;
+  const abnormalReportsCount = reports.filter((r) => r.isAbnormal && !r.isDeleted).length;
   const safeReportsCount = totalReportsCount - abnormalReportsCount;
   const activeStaffCount = users.filter((u) => u.status === UserStatus.ACTIVE).length;
   const pendingApprovalsCount = users.filter((u) => u.status === UserStatus.PENDING).length;
@@ -599,7 +889,7 @@ export default function DashboardDesktop({
       "MÔI TRƯỜNG": 0,
       "THÔNG TIN": 0
     };
-    reports.forEach((r) => {
+    reports.filter((r) => !r.isDeleted).forEach((r) => {
       if (counts[r.category] !== undefined) counts[r.category]++;
     });
     return Object.keys(counts).map((key) => ({
@@ -616,7 +906,7 @@ export default function DashboardDesktop({
       }
     });
 
-    reports.forEach((r) => {
+    reports.filter((r) => !r.isDeleted).forEach((r) => {
       if (map[r.factory]) {
         map[r.factory].total++;
         if (r.isAbnormal) map[r.factory].abnormal++;
@@ -634,8 +924,9 @@ export default function DashboardDesktop({
   const [statsBranchFilter, setStatsBranchFilter] = useState("Tất cả");
 
   const getFilteredStatsReports = () => {
-    if (statsBranchFilter === "Tất cả") return reports;
-    return reports.filter((r) => r.factory === statsBranchFilter);
+    const nonDeleted = reports.filter((r) => !r.isDeleted);
+    if (statsBranchFilter === "Tất cả") return nonDeleted;
+    return nonDeleted.filter((r) => r.factory === statsBranchFilter);
   };
 
   // Helper values for current dynamic filter stats
@@ -684,7 +975,7 @@ export default function DashboardDesktop({
       }
     });
 
-    reports.forEach((r) => {
+    reports.filter((r) => !r.isDeleted).forEach((r) => {
       if (map[r.factory]) {
         if (r.reportType === "KPH" || r.isAbnormal) {
           map[r.factory].kph++;
@@ -2499,9 +2790,40 @@ export default function DashboardDesktop({
                 <div>
                   <h2 className="text-lg font-bold text-slate-850 flex items-center gap-2">
                     <Database className="w-5 h-5 text-blue-500" />
-                    <T>Sổ nhật ký Biến động & Trực quan PDF</T>
+                    <T><span translate="no" className="notranslate">Sổ nhật ký Biến động & Trực quan PDF</span></T>
                   </h2>
-                  <T className="text-xs text-slate-500 mt-1 block">Khung rà soát dữ liệu sự cố toàn cục, xuất báo cáo ngày PDF tự động lưu trữ lên thư mục Drive.</T>
+                  <T className="text-xs text-slate-500 mt-1 block"><span translate="no" className="notranslate">Khung rà soát dữ liệu sự cố toàn cục, xuất báo cáo ngày PDF tự động lưu trữ lên thư mục Drive.</span></T>
+
+                  {/* Desktop Active vs Trash logs toggles */}
+                  <div className="flex bg-slate-200/60 p-0.5 rounded-lg items-center mt-3 w-fit border border-slate-300/40 select-none">
+                    <button
+                      onClick={() => setShowTrashLogs(false)}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-black border-none cursor-pointer transition-all ${
+                        !showTrashLogs
+                          ? "bg-white text-blue-700 shadow-sm"
+                          : "text-slate-600 hover:text-slate-800 bg-transparent"
+                      }`}
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      <T><span translate="no" className="notranslate">NHẬT KÝ BIẾN ĐỘNG</span></T>
+                    </button>
+                    <button
+                      onClick={() => setShowTrashLogs(true)}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-black border-none cursor-pointer transition-all relative ${
+                        showTrashLogs
+                          ? "bg-white text-rose-700 shadow-sm"
+                          : "text-slate-600 hover:text-rose-805 bg-transparent"
+                      }`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <T><span translate="no" className="notranslate">THÙNG RÁC TẠM THỜI</span></T>
+                      {reports.filter((r) => r.isDeleted).length > 0 && (
+                        <span className="bg-rose-600 text-[9px] text-white font-black px-1.5 py-0.5 rounded-full select-none ml-1 animate-pulse">
+                          {reports.filter((r) => r.isDeleted).length}
+                        </span>
+                      )}
+                    </button>
+                  </div>
                 </div>
 
                 {/* PDF compilation controls */}
@@ -2511,7 +2833,7 @@ export default function DashboardDesktop({
                     <select
                       value={selectedReportFactory}
                       onChange={(e) => setSelectedReportFactory(e.target.value)}
-                      className="bg-slate-50 border border-slate-200 text-slate-800 text-xs rounded p-1.5 focus:outline-none w-36 select-none shadow-sm"
+                      className="bg-slate-50 border border-slate-200 text-slate-800 text-xs rounded p-1.5 focus:outline-none w-36 select-none shadow-sm cursor-pointer"
                     >
                       <option value="Tất cả nhà máy">Tất cả nhà máy</option>
                       {branches.filter((b) => b.isScoring).map((b) => (
@@ -2560,256 +2882,399 @@ export default function DashboardDesktop({
                 </div>
               )}
 
-              {/* Filter controls panel */}
-              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="relative">
-                  <label className="text-[9px] text-slate-555 font-extrabold uppercase block mb-1">Từ khóa tìm kiếm:</label>
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
-                    <input
-                      type="text"
-                      placeholder="Nội dung, người ghi..."
-                      value={logsSearch}
-                      onChange={(e) => setLogsSearch(e.target.value)}
-                      className="w-full bg-slate-50 text-slate-800 border border-slate-200 rounded px-8 py-1.5 text-xs focus:outline-none"
-                    />
+              {showTrashLogs ? (
+                <div className="space-y-6 animate-fade-in">
+                  {/* Trash Title banner */}
+                  <div className="bg-slate-900 border-l-4 border-rose-600 rounded-xl p-5 shadow-sm text-white">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="text-3xl">🗑️</span>
+                        <div>
+                          <h3 className="text-sm font-black uppercase tracking-wider text-rose-400">
+                            <T><span translate="no" className="notranslate">Thùng Rác Hệ Thống (Lưu Trữ Tạm Thời 4M1E1I)</span></T>
+                          </h3>
+                          <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
+                            <T><span translate="no" className="notranslate">Nơi lưu trữ các bản ghi nhận bất thường/điểm sáng bị xóa. Cho phép Cấp quản lý hoặc Người viết Phục hồi (Hoàn tác) hoặc Xóa vĩnh viễn khỏi Cloud Firestore.</span></T>
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] bg-rose-600/30 text-rose-300 border border-rose-500/30 px-2.5 py-1 rounded-full font-bold uppercase select-none animate-pulse">
+                        <T><span translate="no" className="notranslate">THÙNG RÁC</span></T>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Trash items table */}
+                  <div className="bg-white rounded-xl border border-rose-100 overflow-hidden shadow-sm">
+                    {reports.filter((r) => r.isDeleted).length === 0 ? (
+                      <div className="p-16 text-center flex flex-col items-center justify-center bg-slate-50/50">
+                        <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3 shadow-inner">
+                          <Trash2 className="w-8 h-8" />
+                        </div>
+                        <T className="text-slate-400 text-xs font-black uppercase tracking-wider"><span translate="no" className="notranslate">Thùng rác trống rỗng. Không có bản tin nào bị xóa tạm thời.</span></T>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse text-left">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-rose-100 text-[10px] text-slate-505 font-extrabold uppercase tracking-wider">
+                              <th className="p-4 w-12 text-center"><T><span translate="no" className="notranslate">STT</span></T></th>
+                              <th className="p-4"><T><span translate="no" className="notranslate">Thời gian</span></T></th>
+                              <th className="p-4"><T><span translate="no" className="notranslate">Nhà máy / Xưởng</span></T></th>
+                              <th className="p-4 text-center"><T><span translate="no" className="notranslate">Phân tố</span></T></th>
+                              <th className="p-4 w-[40%]"><T><span translate="no" className="notranslate">Nội dung chi tiết bị xóa</span></T></th>
+                              <th className="p-4"><T><span translate="no" className="notranslate">Người ghi / SĐT</span></T></th>
+                              <th className="p-4 text-center"><T><span translate="no" className="notranslate">Phân loại</span></T></th>
+                              <th className="p-4 text-center"><T><span translate="no" className="notranslate">Hành động Phục hồi / Xóa</span></T></th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
+                            {reports
+                              .filter((r) => r.isDeleted)
+                              .map((r, index) => (
+                                <tr key={r.id} className="hover:bg-rose-50/20 transition-colors">
+                                  <td className="p-4 text-center font-mono text-slate-400">{index + 1}</td>
+                                  <td className="p-4 font-mono font-semibold text-slate-500 whitespace-nowrap">{r.timestamp}</td>
+                                  <td className="p-4 font-bold text-slate-800 whitespace-nowrap">{getFactoryDisplayName(r.factory)}</td>
+                                  <td className="p-4 text-center select-none whitespace-nowrap">
+                                    <span
+                                      className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase text-white block"
+                                      style={{ backgroundColor: colorMap[r.category] }}
+                                    >
+                                      <T><span translate="no" className="notranslate">{r.category}</span></T>
+                                    </span>
+                                  </td>
+                                  <td className="p-4 leading-relaxed text-slate-600 max-w-sm">
+                                    <div className="line-through text-slate-400">
+                                      <T><span translate="no" className="notranslate">{r.content}</span></T>
+                                    </div>
+                                    {r.notes && (
+                                      <div className="mt-1 text-[10px] text-slate-400 italic block border-l-2 border-slate-300 pl-1.5">
+                                        <T><span translate="no" className="notranslate">Ghi chú: {r.notes}</span></T>
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="p-4 whitespace-nowrap">
+                                    <T><span translate="no" className="notranslate font-semibold block text-slate-800">{r.uploaderName}</span></T>
+                                    <T><span translate="no" className="notranslate text-[10px] text-slate-400 block font-mono">{r.uploaderPhone}</span></T>
+                                  </td>
+                                  <td className="p-4 text-center select-none whitespace-nowrap font-mono font-bold text-xs font-black">
+                                    {r.reportType === "KPH" || r.isAbnormal ? (
+                                      <span className="bg-red-50 text-red-700 border border-red-200 font-extrabold text-[9px] px-2 py-0.5 rounded uppercase block">
+                                        <T><span translate="no" className="notranslate">KPH</span></T>
+                                      </span>
+                                    ) : r.reportType === "DSA" || r.isSpotlight ? (
+                                      <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[9px] px-2 py-0.5 rounded uppercase block">
+                                        <T><span translate="no" className="notranslate">DSA</span></T>
+                                      </span>
+                                    ) : (
+                                      <span className="bg-slate-50 text-slate-605 border border-slate-200 font-bold text-[9px] px-2 py-0.5 rounded uppercase block">
+                                        <T><span translate="no" className="notranslate">NORMAL</span></T>
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="p-4 text-center whitespace-nowrap">
+                                    {isDeleteReportAllowed(r) ? (
+                                      <div className="flex justify-center items-center gap-1.5">
+                                        <button
+                                          onClick={() => {
+                                            if (onUpdateReport) {
+                                              onUpdateReport({ ...r, isDeleted: false });
+                                              if (onShowToast) {
+                                                onShowToast("Đã khôi phục báo cáo thành công! ♻️", "success");
+                                              }
+                                            }
+                                          }}
+                                          className="p-1 px-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded text-[10px] font-black cursor-pointer transition-all uppercase flex items-center gap-1 shadow-sm"
+                                          title="Khôi phục"
+                                        >
+                                          <RotateCcw className="w-3.5 h-3.5" />
+                                          <T><span translate="no" className="notranslate font-black">Khôi phục</span></T>
+                                        </button>
+
+                                        {confirmDeleteId === r.id ? (
+                                          <div className="flex items-center gap-1 animate-fade-in">
+                                            <button
+                                              onClick={() => {
+                                                if (onDeleteReport) {
+                                                  onDeleteReport(r.id, true);
+                                                  setConfirmDeleteId(null);
+                                                  if (onShowToast) {
+                                                    onShowToast("Đã xóa báo cáo vĩnh viễn khỏi Cloud Firestore! 🔥", "success");
+                                                  }
+                                                }
+                                              }}
+                                              className="p-1 px-2.5 bg-red-600 hover:bg-red-700 text-white font-extrabold border border-red-700 rounded text-[10px] cursor-pointer transition-all uppercase flex items-center gap-1"
+                                            >
+                                              <T><span translate="no" className="notranslate font-black">Có, Xóa!</span></T>
+                                            </button>
+                                            <button
+                                              onClick={() => setConfirmDeleteId(null)}
+                                              className="p-1 px-1.5 bg-slate-100 hover:bg-slate-200 text-slate-500 font-extrabold border border-slate-300 rounded text-[10px] cursor-pointer transition-all uppercase"
+                                            >
+                                              <T><span translate="no" className="notranslate">Hủy</span></T>
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <button
+                                            onClick={() => setConfirmDeleteId(r.id)}
+                                            className="p-1 px-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-[10px] font-black cursor-pointer transition-all uppercase flex items-center gap-1 shadow-sm"
+                                            title="Xóa hoàn toàn"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                            <T><span translate="no" className="notranslate font-black">Xóa vĩnh viễn</span></T>
+                                          </button>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="text-slate-400 text-[10px] italic">
+                                        <T><span translate="no" className="notranslate">Không có quyền</span></T>
+                                      </span>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Filter controls panel */}
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="relative">
+                      <label className="text-[9px] text-slate-555 font-extrabold uppercase block mb-1">Từ khóa tìm kiếm:</label>
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Nội dung, người ghi..."
+                          value={logsSearch}
+                          onChange={(e) => setLogsSearch(e.target.value)}
+                          className="w-full bg-slate-50 text-slate-800 border border-slate-200 rounded px-8 py-1.5 text-xs focus:outline-none"
+                        />
+                      </div>
+                    </div>
 
-                <div className="select-none">
-                  <label className="text-[9px] text-slate-555 font-extrabold uppercase block mb-1">Xưởng/Nhà máy:</label>
-                  <select
-                    value={logsFactory}
-                    onChange={(e) => setLogsFactory(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 text-xs rounded p-1.5 text-slate-800 focus:outline-none cursor-pointer"
-                  >
-                    <option value="Tất cả">Tất cả</option>
-                    {branches.filter((b) => b.isScoring).map((b) => (
-                      <option key={b.id} value={b.name}>{getFactoryDisplayName(b.name)}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="select-none">
-                  <label className="text-[9px] text-slate-555 font-extrabold uppercase block mb-1">Yếu tố 4M1E1I:</label>
-                  <select
-                    value={logsCategory}
-                    onChange={(e) => setLogsCategory(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 text-xs rounded p-1.5 text-slate-800 focus:outline-none cursor-pointer"
-                  >
-                    <option value="Tất cả">Tất cả</option>
-                    <option value="CON NGƯỜI">CON NGƯỜI</option>
-                    <option value="MÁY MÓC">MÁY MÓC</option>
-                    <option value="NGUYÊN VẬT LIỆU">NGUYÊN VẬT LIỆU</option>
-                    <option value="PHƯƠNG PHÁP">PHƯƠNG PHÁP</option>
-                    <option value="MÔI TRƯỜNG">MÔI TRƯỜNG</option>
-                    <option value="THÔNG TIN">THÔNG TIN</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center h-full pt-4">
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={logsAbnormalOnly}
-                      onChange={(e) => setLogsAbnormalOnly(e.target.checked)}
-                      className="rounded border-slate-300 bg-slate-50 accent-red-650 block"
-                    />
-                    <T className="text-xs font-bold text-red-600">CHỈ XEM BẤT THƯỜNG (RED)</T>
-                  </label>
-                </div>
-              </div>
-
-              {/* Data Table */}
-              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-left">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-[10px] text-slate-500 font-extrabold uppercase tracking-wider">
-                        <th className="p-4 w-12 text-center">STT</th>
-                        <th className="p-4">Thời gian</th>
-                        <th className="p-4">Nhà máy / Xưởng</th>
-                        <th className="p-4 text-center">Phân tố.</th>
-                        <th className="p-4 w-[40%]">Nội dung chi tiết</th>
-                        <th className="p-4">Người ghi / SĐT</th>
-                        <th className="p-4 text-center">Người Thích</th>
-                        <th className="p-4 text-center">BP/ĐV Tiếp Nhận</th>
-                        <th className="p-4 text-center">Hình ảnh</th>
-                        <th className="p-4 text-center"><T>Phân loại</T></th>
-                        <th className="p-4 text-center">Trạng thái</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
-                      {reports
-                        .filter((r) => {
-                          const s = logsSearch.toLowerCase();
-                          const matchesSearch =
-                            r.uploaderName.toLowerCase().includes(s) ||
-                            r.content.toLowerCase().includes(s) ||
-                            r.category.toLowerCase().includes(s);
-
-                          const matchesFactory = logsFactory === "Tất cả" ? true : r.factory === logsFactory;
-                          const matchesCategory = logsCategory === "Tất cả" ? true : r.category === logsCategory;
-                          const matchesAbnormal = logsAbnormalOnly ? r.isAbnormal : true;
-
-                          return matchesSearch && matchesFactory && matchesCategory && matchesAbnormal;
-                        })
-                        .map((r, index) => (
-                          <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
-                            <td className="p-4 text-center font-mono text-slate-400">{index + 1}</td>
-                            <td className="p-4 font-mono font-semibold text-slate-500 whitespace-nowrap">{r.timestamp}</td>
-                            <td className="p-4 font-bold text-slate-800 whitespace-nowrap">{getFactoryDisplayName(r.factory)}</td>
-                            <td className="p-4 text-center select-none whitespace-nowrap">
-                              <span
-                                className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase text-white block"
-                                style={{ backgroundColor: colorMap[r.category] }}
-                              >
-                                <T>{r.category}</T>
-                              </span>
-                            </td>
-                            <td className="p-4 leading-relaxed text-slate-700 max-w-sm">
-                              <T>{r.content}</T>
-                              {r.notes && (
-                                <div className="mt-1 text-[10px] text-slate-500 italic block border-l-2 border-emerald-500 pl-1.5">
-                                  <T>Ghi chú: {r.notes}</T>
-                                </div>
-                              )}
-
-                              {/* Display directives history in Nhật ký table row */}
-                              {r.directives && r.directives.length > 0 && (
-                                <div className="mt-2 space-y-1 block border-l-2 border-amber-500 pl-1.5 bg-amber-50/50 p-1.5 rounded">
-                                  <div className="text-[9px] font-extrabold text-[#78350f] uppercase flex items-center gap-1">
-                                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                                    <T>Chỉ đạo / Điều hành:</T>
-                                  </div>
-                                  {r.directives.map((dir) => (
-                                    <div key={dir.id} className="text-[10px] text-amber-800 leading-tight">
-                                      <T>• {dir.text}</T> <span className="text-[9px] text-slate-400 font-mono">({dir.author} - {dir.timestamp})</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-
-                              {/* Simple mini-form to input direct directive right inside the log table cell for leaders! */}
-                              <form
-                                onSubmit={(e) => {
-                                  e.preventDefault();
-                                  const form = e.currentTarget;
-                                  const input = form.elements.namedItem("desktopDirectiveInput") as HTMLInputElement;
-                                  const text = input.value.trim();
-                                  if (!text) return;
-
-                                  const dateObj = new Date();
-                                  const currentSingaporeTime = new Date(dateObj.getTime() + (dateObj.getTimezoneOffset() + 420) * 60000);
-                                  const yy = String(currentSingaporeTime.getFullYear()).slice(-2);
-                                  const mm = String(currentSingaporeTime.getMonth() + 1).padStart(2, '0');
-                                  const dd = String(currentSingaporeTime.getDate()).padStart(2, '0');
-                                  const timeStr = currentSingaporeTime.toTimeString().split(' ')[0];
-                                  const stamp = `${timeStr} ${dd}/${mm}/${yy}`;
-
-                                  const newDir = {
-                                    id: Math.random().toString(36).substr(2, 9),
-                                    text,
-                                    author: currentUser?.fullName || "Cấp quản lý",
-                                    timestamp: stamp
-                                  };
-
-                                  const updatedReport = {
-                                    ...r,
-                                    directives: [...(r.directives || []), newDir]
-                                  };
-
-                                  if (onUpdateReport) {
-                                    onUpdateReport(updatedReport);
-                                  }
-                                  input.value = "";
-                                }}
-                                className="mt-2 flex gap-1 items-center"
-                              >
-                                <input
-                                  type="text"
-                                  name="desktopDirectiveInput"
-                                  placeholder="Chỉ đạo (mặc định ghi mờ bên trong ô)..."
-                                  className="flex-1 bg-slate-50 border border-slate-200 text-[10px] rounded px-2 py-1 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all select-text"
-                                />
-                                <button
-                                  type="submit"
-                                  className="bg-amber-500 hover:bg-amber-600 px-2 py-1 text-[9px] text-white font-extrabold rounded uppercase cursor-pointer"
-                                >
-                                  <T>Gửi</T>
-                                </button>
-                              </form>
-                            </td>
-                            <td className="p-4 whitespace-nowrap">
-                              <T className="font-semibold block text-slate-800">{r.uploaderName}</T>
-                              <T className="text-[10px] text-slate-400 block font-mono">{r.uploaderPhone}</T>
-                            </td>
-                            {/* Two new columns tracking likes and shares */}
-                            <td className="p-4 min-w-[120px]">
-                              {r.likedBy && r.likedBy.length > 0 ? (
-                                <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto max-w-[140px]">
-                                  {r.likedBy.map((name, i) => (
-                                    <span key={i} className="bg-rose-50 text-rose-700 text-[9px] px-1.5 py-0.5 rounded border border-rose-100 font-bold whitespace-nowrap">
-                                      <T>{name}</T>
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : (
-                                <span className="text-slate-400 text-[10px] italic"><T>Chưa có</T></span>
-                              )}
-                            </td>
-                            <td className="p-4 min-w-[120px]">
-                              {r.sharedBy && r.sharedBy.length > 0 ? (
-                                <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto max-w-[140px]">
-                                  {r.sharedBy.map((name, i) => (
-                                    <span key={i} className="bg-sky-50 text-sky-800 text-[9px] px-1.5 py-0.5 rounded border border-sky-100 font-bold whitespace-nowrap">
-                                      <T>{name}</T>
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : (
-                                <span className="text-slate-400 text-[10px] italic"><T>Chưa tiếp nhận</T></span>
-                              )}
-                            </td>
-                            <td className="p-4 text-center">
-                              {r.imageUrl ? (
-                                <DesktopThumbnailSlider imageUrls={r.imageUrls} fallbackUrl={r.imageUrl} />
-                              ) : (
-                                <T className="text-slate-400 text-[10px]">Trống</T>
-                              )}
-                            </td>
-                            <td className="p-4 text-center select-none whitespace-nowrap font-mono font-bold text-xs font-black">
-                              {r.reportType === "KPH" || r.isAbnormal ? (
-                                <span className="bg-red-100 text-red-800 border border-red-200 font-black text-[10px] px-2.5 py-1 rounded tracking-wider">
-                                  <T>KPH</T>
-                                </span>
-                              ) : r.reportType === "DSA" || r.isSpotlight ? (
-                                <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 font-black text-[10px] px-2.5 py-1 rounded tracking-wider">
-                                  <T>DSA</T>
-                                </span>
-                              ) : (
-                                <span className="bg-slate-100 text-slate-600 border border-slate-205 font-bold text-[10px] px-2.5 py-1 rounded tracking-wide">
-                                  <T>NORMAL</T>
-                                </span>
-                              )}
-                            </td>
-                            <td className="p-4 text-center select-none whitespace-nowrap">
-                              {r.isAbnormal ? (
-                                <T className="bg-red-50 text-red-700 border border-red-200 font-extrabold text-[9px] px-2 py-0.5 rounded uppercase block">
-                                  BẤT THƯỜNG
-                                </T>
-                              ) : (
-                                <T className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[9px] px-2 py-0.5 rounded uppercase block">
-                                  BÌNH THƯỜNG
-                                </T>
-                              )}
-                            </td>
-                          </tr>
+                    <div className="select-none">
+                      <label className="text-[9px] text-slate-555 font-extrabold uppercase block mb-1">Xưởng/Nhà máy:</label>
+                      <select
+                        value={logsFactory}
+                        onChange={(e) => setLogsFactory(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 text-xs rounded p-1.5 text-slate-800 focus:outline-none cursor-pointer"
+                      >
+                        <option value="Tất cả">Tất cả</option>
+                        {branches.filter((b) => b.isScoring).map((b) => (
+                          <option key={b.id} value={b.name}>{getFactoryDisplayName(b.name)}</option>
                         ))}
-                    </tbody>
-                  </table>
+                      </select>
+                    </div>
+
+                    <div className="select-none">
+                      <label className="text-[9px] text-slate-555 font-extrabold uppercase block mb-1">Yếu tố 4M1E1I:</label>
+                      <select
+                        value={logsCategory}
+                        onChange={(e) => setLogsCategory(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 text-xs rounded p-1.5 text-slate-800 focus:outline-none cursor-pointer"
+                      >
+                        <option value="Tất cả">Tất cả</option>
+                        <option value="CON NGƯỜI">CON NGƯỜI</option>
+                        <option value="MÁY MÓC">MÁY MÓC</option>
+                        <option value="NGUYÊN VẬT LIỆU">NGUYÊN VẬT LIỆU</option>
+                        <option value="PHƯƠNG PHÁP">PHƯƠNG PHÁP</option>
+                        <option value="MÔI TRƯỜNG">MÔI TRƯỜNG</option>
+                        <option value="THÔNG TIN">THÔNG TIN</option>
+                      </select>
+                    </div>
+
+                    <div className="flex items-center h-full pt-4">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={logsAbnormalOnly}
+                          onChange={(e) => setLogsAbnormalOnly(e.target.checked)}
+                          className="rounded border-slate-300 bg-slate-50 accent-red-600 block"
+                        />
+                        <T className="text-xs font-bold text-red-600">CHỈ XEM BẤT THƯỜNG (RED)</T>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Data Table */}
+                  <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse text-left">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200 text-[10px] text-slate-505 font-extrabold uppercase tracking-wider">
+                            <th className="p-4 w-12 text-center">STT</th>
+                            <th className="p-4">Thời gian</th>
+                            <th className="p-4">Nhà máy / Xưởng</th>
+                            <th className="p-4 text-center">Phân tố.</th>
+                            <th className="p-4 w-[40%]">Nội dung chi tiết</th>
+                            <th className="p-4">Người ghi / SĐT</th>
+                            <th className="p-4 text-center">Người Thích</th>
+                            <th className="p-4 text-center">BP/ĐV Tiếp Nhận</th>
+                            <th className="p-4 text-center">Hình ảnh</th>
+                            <th className="p-4 text-center"><T>Phân loại</T></th>
+                            <th className="p-4 text-center">Trạng thái</th>
+                            <th className="p-4 text-center">Thao tác</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
+                          {reports
+                            .filter((r) => {
+                              if (r.isDeleted) return false;
+                              const s = logsSearch.toLowerCase();
+                              const matchesSearch =
+                                r.uploaderName.toLowerCase().includes(s) ||
+                                r.content.toLowerCase().includes(s) ||
+                                r.category.toLowerCase().includes(s);
+
+                              const matchesFactory = logsFactory === "Tất cả" ? true : r.factory === logsFactory;
+                              const matchesCategory = logsCategory === "Tất cả" ? true : r.category === logsCategory;
+                              const matchesAbnormal = logsAbnormalOnly ? r.isAbnormal : true;
+
+                              return matchesSearch && matchesFactory && matchesCategory && matchesAbnormal;
+                            })
+                            .map((r, index) => (
+                              <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
+                                <td className="p-4 text-center font-mono text-slate-400">{index + 1}</td>
+                                <td className="p-4 font-mono font-semibold text-slate-500 whitespace-nowrap">{r.timestamp}</td>
+                                <td className="p-4 font-bold text-slate-800 whitespace-nowrap">{getFactoryDisplayName(r.factory)}</td>
+                                <td className="p-4 text-center select-none whitespace-nowrap">
+                                  <span
+                                    className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase text-white block"
+                                    style={{ backgroundColor: colorMap[r.category] }}
+                                  >
+                                    <T>{r.category}</T>
+                                  </span>
+                                </td>
+                                <td className="p-4 leading-relaxed text-slate-700 max-w-sm font-medium">
+                                  <T>{r.content}</T>
+                                  {r.notes && (
+                                    <div className="mt-1 text-[10px] text-slate-500 italic block border-l-2 border-emerald-500 pl-1.5">
+                                      <T>Ghi chú: {r.notes}</T>
+                                    </div>
+                                  )}
+
+                                  {/* Display directives history in Nhật ký table row */}
+                                  {r.directives && r.directives.length > 0 && (
+                                    <div className="mt-2 space-y-1 block border-l-2 border-amber-500 pl-1.5 bg-amber-50/50 p-1.5 rounded">
+                                      <div className="text-[9px] font-extrabold text-[#78350f] uppercase flex items-center gap-1">
+                                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                        <T>Chỉ đạo / Điều hành:</T>
+                                      </div>
+                                      {r.directives.map((dir) => (
+                                        <div key={dir.id} className="text-[10px] text-amber-800 leading-tight">
+                                          <T>• {dir.text}</T> <span className="text-[9px] text-slate-400 font-mono">({dir.author} - {dir.timestamp})</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  {/* Simple mini-form to input direct directive right inside the log table cell for leaders! */}
+                                  <DesktopDirectiveForm
+                                    r={r}
+                                    currentUser={currentUser}
+                                    users={users}
+                                    onUpdateReport={onUpdateReport}
+                                  />
+                                </td>
+                                <td className="p-4 whitespace-nowrap">
+                                  <T className="font-semibold block text-slate-800">{r.uploaderName}</T>
+                                  <T className="text-[10px] text-slate-400 block font-mono">{r.uploaderPhone}</T>
+                                </td>
+                                {/* Two new columns tracking likes and shares */}
+                                <td className="p-4 min-w-[120px]">
+                                  {r.likedBy && r.likedBy.length > 0 ? (
+                                    <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto max-w-[140px]">
+                                      {r.likedBy.map((name, i) => (
+                                        <span key={i} className="bg-rose-50 text-rose-700 text-[9px] px-1.5 py-0.5 rounded border border-rose-100 font-bold whitespace-nowrap">
+                                          <T>{name}</T>
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-400 text-[10px] italic"><T>Chưa có</T></span>
+                                  )}
+                                </td>
+                                <td className="p-4 min-w-[120px]">
+                                  {r.sharedBy && r.sharedBy.length > 0 ? (
+                                    <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto max-w-[140px]">
+                                      {r.sharedBy.map((name, i) => (
+                                        <span key={i} className="bg-sky-50 text-sky-800 text-[9px] px-1.5 py-0.5 rounded border border-sky-100 font-bold whitespace-nowrap">
+                                          <T>{name}</T>
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-400 text-[10px] italic"><T>Chưa tiếp nhận</T></span>
+                                  )}
+                                </td>
+                                <td className="p-4 text-center">
+                                  {r.imageUrl ? (
+                                    <DesktopThumbnailSlider imageUrls={r.imageUrls} fallbackUrl={r.imageUrl} />
+                                  ) : (
+                                    <T className="text-slate-400 text-[10px]">Trống</T>
+                                  )}
+                                </td>
+                                <td className="p-4 text-center select-none whitespace-nowrap font-mono font-bold text-xs font-black">
+                                  {r.reportType === "KPH" || r.isAbnormal ? (
+                                    <span className="bg-red-100 text-red-800 border border-red-200 font-black text-[10px] px-2.5 py-1 rounded tracking-wider">
+                                      <T>KPH</T>
+                                    </span>
+                                  ) : r.reportType === "DSA" || r.isSpotlight ? (
+                                    <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 font-black text-[10px] px-2.5 py-1 rounded tracking-wider">
+                                      <T>DSA</T>
+                                    </span>
+                                  ) : (
+                                    <span className="bg-slate-100 text-slate-600 border border-slate-205 font-bold text-[10px] px-2.5 py-1 rounded tracking-wide">
+                                      <T>NORMAL</T>
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-4 text-center select-none whitespace-nowrap">
+                                  {r.isAbnormal ? (
+                                    <T className="bg-red-50 text-red-770 border border-red-200 font-extrabold text-[9px] px-2 py-0.5 rounded uppercase block">
+                                      BẤT THƯỜNG
+                                    </T>
+                                  ) : (
+                                    <T className="bg-emerald-50 text-emerald-770 border border-emerald-200 font-bold text-[9px] px-2 py-0.5 rounded uppercase block">
+                                      BÌNH THƯỜNG
+                                    </T>
+                                  )}
+                                </td>
+                                <td className="p-4 text-center select-none whitespace-nowrap">
+                                  {isDeleteReportAllowed(r) ? (
+                                    <button
+                                      onClick={() => {
+                                        if (onDeleteReport) {
+                                          onDeleteReport(r.id, false);
+                                          if (onShowToast) {
+                                            onShowToast("Đã chuyển báo cáo vào Thùng rác lưu trữ tạm thời! 🗑️", "warning");
+                                          }
+                                        }
+                                      }}
+                                      className="p-1 px-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-850 border border-rose-200 rounded text-[10px] font-extrabold cursor-pointer transition-all uppercase flex items-center justify-center gap-1 mx-auto"
+                                      title="Chuyển vào Thùng rác"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                      <T><span translate="no" className="notranslate font-black">Xóa</span></T>
+                                    </button>
+                                  ) : (
+                                    <span className="text-slate-400 text-[10px] italic">-</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -2959,10 +3424,11 @@ export default function DashboardDesktop({
 
                   <div>
                     <label className="text-[10px] text-slate-500 block font-bold uppercase mb-1">Nội dung thông cáo:</label>
-                    <textarea
+                    <MentionTextArea
+                      users={users}
                       rows={3}
                       value={newNoticeContent}
-                      onChange={(e) => setNewNoticeContent(e.target.value)}
+                      onChange={setNewNoticeContent}
                       placeholder="Nhập dòng chữ chạy phát sóng hoặc tin nhắn hiển thị tại bảng tin nóng..."
                       className="w-full bg-slate-50 border border-slate-200 rounded p-2.5 text-xs text-slate-800 placeholder-slate-450 focus:outline-none shadow-sm"
                     />
