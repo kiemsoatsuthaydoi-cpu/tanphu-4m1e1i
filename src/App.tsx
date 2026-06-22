@@ -1105,11 +1105,29 @@ export default function App() {
 
   // Admin controls
   const handleUpdateStatus = (id: string, status: UserStatus) => {
-    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, status } : u)));
+    setUsers((prev) => {
+      const updated = prev.map((u) => (u.id === id ? { ...u, status } : u));
+      if (dbConnected) {
+        const found = updated.find((u) => u.id === id);
+        if (found) {
+          saveDocument(COLLECTIONS.USERS, id, found).catch(console.error);
+        }
+      }
+      return updated;
+    });
   };
 
   const handleUpdateRole = (id: string, role: UserRole) => {
-    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, role } : u)));
+    setUsers((prev) => {
+      const updated = prev.map((u) => (u.id === id ? { ...u, role } : u));
+      if (dbConnected) {
+        const found = updated.find((u) => u.id === id);
+        if (found) {
+          saveDocument(COLLECTIONS.USERS, id, found).catch(console.error);
+        }
+      }
+      return updated;
+    });
   };
 
   const handleDeleteUser = (id: string) => {

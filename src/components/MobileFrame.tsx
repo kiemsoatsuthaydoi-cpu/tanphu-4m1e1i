@@ -1,8 +1,45 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Search, RotateCw, RotateCcw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive } from "lucide-react";
+import { Search, RotateCw, RotateCcw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home } from "lucide-react";
 import { QualityReport, Category4M1E1I, User, UserRole, Branch, Company, ChatMessage } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
+import { QRCodeSVG } from "qrcode.react";
+
+export const isSameBranchOrFactory = (branchA?: string, branchB?: string): boolean => {
+  if (!branchA || !branchB) return false;
+  
+  const cleanA = branchA.trim().toLowerCase();
+  const cleanB = branchB.trim().toLowerCase();
+  
+  if (cleanA === cleanB) return true;
+
+  const codes = ["TPP-CTY", "TPP-BNI", "TPP-LAN", "TPP-314", "BBM"];
+  for (const code of codes) {
+    const codeLower = code.toLowerCase();
+    const hasA = cleanA.includes(codeLower);
+    const hasB = cleanB.includes(codeLower);
+    if (hasA && hasB) {
+      return true;
+    }
+  }
+
+  const getParenthesisCode = (str: string): string | null => {
+    const match = str.match(/\(([^)]+)\)/);
+    return match ? match[1].trim().toUpperCase() : null;
+  };
+  
+  const codeA = getParenthesisCode(branchA);
+  const codeB = getParenthesisCode(branchB);
+  
+  if (codeA && codeB && codeA === codeB) {
+    return true;
+  }
+  
+  if (codeA && cleanB.includes(codeA.toLowerCase())) return true;
+  if (codeB && cleanA.includes(codeB.toLowerCase())) return true;
+  
+  return cleanA.includes(cleanB) || cleanB.includes(cleanA);
+};
 
 interface AutoImageSliderProps {
   imageUrls?: string[];
@@ -651,6 +688,8 @@ export default function MobileFrame({
   const onlineCount = getOnlineCount();
 
   const [searchTerm, setSearchTerm] = useState("");
+  const [showQrCodeView, setShowQrCodeView] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState(false);
   const [openChatReportId, setOpenChatReportId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -1049,11 +1088,11 @@ App Link: ${window.location.origin}`;
 
     // 2. Duyệt viên (Reviewer) chỉ có quyền xóa đối với các bản tin thuộc đúng chi nhánh của mình
     if (currentUser.role === UserRole.REVIEWER) {
-      return currentUser.branch === report.factory;
+      return isSameBranchOrFactory(currentUser.branch, report.factory);
     }
 
     // 3. Đặc cách cho Nhân viên / Duyệt viên (canSpeciallyEditDelete) của chi nhánh hiện tại
-    if (currentUser.canSpeciallyEditDelete && currentUser.branch === report.factory) {
+    if (currentUser.canSpeciallyEditDelete && isSameBranchOrFactory(currentUser.branch, report.factory)) {
       return true;
     }
     
@@ -1218,11 +1257,11 @@ App Link: ${window.location.origin}`;
 
     // 2. Duyệt viên (Reviewer) chỉ có quyền chỉnh sửa đối với các bản tin thuộc đúng chi nhánh của mình
     if (currentUser.role === UserRole.REVIEWER) {
-      return currentUser.branch === report.factory;
+      return isSameBranchOrFactory(currentUser.branch, report.factory);
     }
 
     // 3. Đặc cách cho Nhân viên / Duyệt viên (canSpeciallyEditDelete) của chi nhánh hiện tại
-    if (currentUser.canSpeciallyEditDelete && currentUser.branch === report.factory) {
+    if (currentUser.canSpeciallyEditDelete && isSameBranchOrFactory(currentUser.branch, report.factory)) {
       return true;
     }
 
@@ -1343,6 +1382,182 @@ App Link: ${window.location.origin}`;
     }
   };
 
+  if (showQrCodeView) {
+    const currentAppUrl = "https://tanphu-4m1e1i.vercel.app/";
+    
+    const downloadQRCode = () => {
+      const svgElement = document.getElementById("app-qr-code-svg");
+      if (!svgElement) return;
+      
+      const svgString = new XMLSerializer().serializeToString(svgElement);
+      const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+      const globalUrl = window.URL || (window as any).webkitURL;
+      const blobURL = globalUrl.createObjectURL(svgBlob);
+      
+      const image = new Image();
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 1200;
+        canvas.height = 1200;
+        const context = canvas.getContext("2d");
+        if (context) {
+          context.fillStyle = "#FFFFFF";
+          context.fillRect(0, 0, canvas.width, canvas.height);
+          context.drawImage(image, 50, 50, 1100, 1100);
+          
+          try {
+            const pngData = canvas.toDataURL("image/png");
+            const downloadLink = document.createElement("a");
+            downloadLink.href = pngData;
+            downloadLink.download = "Ma_QR_4M1E1I_TanPhu.png";
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+          } catch (e) {
+            const downloadLink = document.createElement("a");
+            downloadLink.href = blobURL;
+            downloadLink.download = "Ma_QR_4M1E1I_TanPhu.svg";
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+            showToast("Đã tải xuống mã QR định dạng vector SVG! 🔗");
+          }
+        }
+      };
+      image.src = blobURL;
+    };
+
+    return (
+      <div id="mobile-viewport" className="w-full h-[100dvh] max-w-[440px] lg:w-[375px] lg:h-[780px] bg-slate-50 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl overflow-hidden flex flex-col relative">
+        {/* Main Title Bar / Header */}
+        <div className={`text-white px-4 py-3 flex items-center justify-between shadow-md shrink-0 select-none ${theme.bg}`}>
+          <button
+            onClick={() => setShowQrCodeView(false)}
+            className="flex items-center gap-1.5 text-xs text-white/90 hover:text-white font-black bg-transparent border-none cursor-pointer transition-all active:scale-95"
+          >
+            <ArrowLeft className="w-4 h-4 stroke-[2.5px]" />
+            <T>Sảnh chính</T>
+          </button>
+          
+          <T className="font-extrabold text-[12.5px] uppercase tracking-wider">MÃ QR TRUY CẬP</T>
+          
+          {/* Dummy element on the right for symmetry as shown in the screenshot */}
+          <div className="w-[85px] flex justify-end">
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(currentAppUrl);
+                setCopiedUrl(true);
+                setTimeout(() => setCopiedUrl(false), 2000);
+                showToast("Đã sao chép liên kết vào bộ nhớ tạm! 📋");
+              }}
+              className="p-1 text-white/90 hover:text-white bg-transparent border-none cursor-pointer"
+              title="Sao chép liên kết"
+            >
+              <Copy className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* QR Code Scroll Body */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 thin-scrollbar">
+          {/* Main Card */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm space-y-4">
+            <div className="text-center space-y-1">
+              <T className="text-sm font-black text-slate-850 uppercase block">Mã QR "Chiến" Ngay</T>
+              <T className="text-[10px] text-slate-500 leading-normal block">
+                Quét nhanh bằng camera điện thoại để thực hiện bài trắc nghiệm nhanh, khai báo hoặc xem báo cáo 4M1E1I Tân Phú.
+              </T>
+            </div>
+
+            {/* Warning Box exactly styled like the screenshot */}
+            <div className="bg-amber-50/75 border border-amber-200 rounded-xl p-3.5 space-y-1.5 text-amber-900 text-xs">
+              <div className="flex items-center justify-between font-black uppercase text-amber-800 text-[10px]">
+                <div className="flex items-center gap-1.5">
+                  <span>⚠️</span>
+                  <T>Lưu ý khi Quét Thử Nghiệm:</T>
+                </div>
+                {/* Pointer arrow down */}
+                <span className="text-[9px] text-amber-500">▼</span>
+              </div>
+              <p className="text-[9.5px] text-amber-700 leading-relaxed font-semibold">
+                <T>Đóng vai trò như chìa khóa truy cập nhanh, hệ thống hỗ trợ quét bằng Camera Zalo, Camera thiết bị IOS/Android hoặc ứng dụng quét mã để truy cập an toàn.</T>
+              </p>
+            </div>
+
+            {/* QR Connection details input display */}
+            <div className="space-y-4">
+              <div className="space-y-1 w-full text-left">
+                <T className="text-[9px] font-black tracking-wider uppercase text-slate-450 block">LIÊN KẾT NHÚNG QR:</T>
+                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 w-full">
+                  <input
+                    type="text"
+                    readOnly
+                    value={currentAppUrl}
+                    className="flex-1 bg-transparent border-none text-[10.5px] font-mono text-slate-500 select-all outline-none truncate"
+                  />
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(currentAppUrl);
+                      setCopiedUrl(true);
+                      setTimeout(() => setCopiedUrl(false), 2000);
+                      showToast("Đã sao chép liên kết nhúng QR! 📋");
+                    }}
+                    className="text-slate-400 hover:text-slate-600 transition-all cursor-pointer border-none bg-transparent"
+                  >
+                    {copiedUrl ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Centered QR code container rounded and bordered */}
+              <div className="flex flex-col items-center justify-center py-2">
+                <div className="p-4 bg-white border border-slate-200 rounded-3xl shadow-sm flex items-center justify-center w-[210px] h-[210px]">
+                  <QRCodeSVG
+                    id="app-qr-code-svg"
+                    value={currentAppUrl}
+                    size={178}
+                    level="H"
+                    includeMargin={false}
+                  />
+                </div>
+              </div>
+
+              {/* Bottom duplicate display link input from screenshot query */}
+              <div className="bg-slate-50 border border-slate-150 rounded-xl px-3 py-2 text-center text-slate-400 text-[10.5px] font-mono">
+                <T>{currentAppUrl}</T>
+              </div>
+
+              {/* Download high res blue button */}
+              <button
+                onClick={downloadQRCode}
+                className="w-full bg-[#1e3a8a] hover:bg-[#1a306c] active:scale-98 text-white font-extrabold text-xs uppercase tracking-wider py-3 px-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer border-none"
+              >
+                <Download className="w-4 h-4 text-white stroke-[2.5px]" />
+                <T>Tải Mã QR nét cao</T>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Floating HOME Button exactly styled as the screenshot (green circle with white home icon) */}
+        <button
+          id="float-home-qr"
+          type="button"
+          onClick={() => {
+            setShowQrCodeView(false);
+            setActiveBottomTab("BAO_CAO");
+            setShowTrash(false);
+            setShowNotifDrawer(false);
+          }}
+          className="absolute bottom-20 right-5 w-[42px] h-[42px] bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-all z-50 cursor-pointer border-none"
+          title="Trở về Trang Báo Cáo"
+        >
+          <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div id="mobile-viewport" className="w-full h-[100dvh] max-w-[440px] lg:w-[375px] lg:h-[780px] bg-slate-100 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl overflow-hidden flex flex-col relative">
       {/* Main Appsheet Blue Title Bar */}
@@ -1441,15 +1656,24 @@ App Link: ${window.location.origin}`;
           showFilters ? "max-h-[160px] opacity-100" : "max-h-0 opacity-0 pointer-events-none"
         }`}>
         <div className="bg-white px-3 py-2 border-b border-slate-200 shadow-sm flex flex-col gap-1.5">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Tìm kiếm nhà máy, người đăng..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 bg-slate-100 rounded-full text-xs focus:ring-1 focus:ring-blue-500 outline-none placeholder:text-slate-400 text-slate-700 font-medium"
-            />
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Tìm kiếm nhà máy, người đăng..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 bg-slate-100 rounded-full text-xs focus:ring-1 focus:ring-blue-500 outline-none placeholder:text-slate-400 text-slate-700 font-medium"
+              />
+            </div>
+            <button
+              onClick={() => setShowQrCodeView(true)}
+              className="p-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 active:scale-95 transition-all cursor-pointer shrink-0 border-none flex items-center justify-center"
+              title="Mã QR ứng dụng"
+            >
+              <QrCode className="w-[18px] h-[18px] text-slate-600" />
+            </button>
           </div>
           {/* Factory/Branch quick filter chips */}
           <div className="flex py-0.5 gap-1.5 overflow-x-auto no-scrollbar scroll-smooth border-b border-slate-100 pb-1.5" id="factory-filter-chips">
@@ -2160,8 +2384,8 @@ App Link: ${window.location.origin}`;
                   <div className="flex items-center gap-2 shrink-0">
                     {(() => {
                       const isUploader = currentUser?.id === report.uploaderId;
-                      const isSpeciallyAuthorized = currentUser?.canSpeciallyEditDelete && currentUser?.branch === report.factory;
-                      const isReviewerAtMyBranch = currentUser?.role === UserRole.REVIEWER && currentUser?.branch === report.factory;
+                      const isSpeciallyAuthorized = currentUser?.canSpeciallyEditDelete && isSameBranchOrFactory(currentUser?.branch, report.factory);
+                      const isReviewerAtMyBranch = currentUser?.role === UserRole.REVIEWER && isSameBranchOrFactory(currentUser?.branch, report.factory);
                       const isAdmin = currentUser?.role === UserRole.ADMIN;
                       const shouldShow = isUploader || isSpeciallyAuthorized || isReviewerAtMyBranch || isAdmin;
 
@@ -2199,8 +2423,8 @@ App Link: ${window.location.origin}`;
 
                     {(() => {
                       const isUploader = currentUser?.id === report.uploaderId;
-                      const isSpeciallyAuthorized = currentUser?.canSpeciallyEditDelete && currentUser?.branch === report.factory;
-                      const isReviewerAtMyBranch = currentUser?.role === UserRole.REVIEWER && currentUser?.branch === report.factory;
+                      const isSpeciallyAuthorized = currentUser?.canSpeciallyEditDelete && isSameBranchOrFactory(currentUser?.branch, report.factory);
+                      const isReviewerAtMyBranch = currentUser?.role === UserRole.REVIEWER && isSameBranchOrFactory(currentUser?.branch, report.factory);
                       const isAdmin = currentUser?.role === UserRole.ADMIN;
                       const shouldShow = isUploader || isSpeciallyAuthorized || isReviewerAtMyBranch || isAdmin;
 
@@ -2432,7 +2656,7 @@ App Link: ${window.location.origin}`;
       )}
 
       {/* Scroll to Top floating button */}
-      {showScrollTop && activeBottomTab === "BAO_CAO" && (
+      {showScrollTop && activeBottomTab === "BAO_CAO" && !showTrash && (
         <button
           type="button"
           onClick={scrollToTop}
@@ -2444,12 +2668,30 @@ App Link: ${window.location.origin}`;
       )}
 
       {/* Blue Circular float creation trigger */}
-      {activeBottomTab === "BAO_CAO" && (
+      {activeBottomTab === "BAO_CAO" && !showTrash && (
         <button
           onClick={onOpenReportForm}
           className={`absolute bottom-20 right-5 w-10 h-10 text-white rounded-xl flex items-center justify-center shadow-xl hover:scale-110 active:scale-90 transition-transform z-20 ${theme.hoverBg}`}
         >
           <Plus className="w-5 h-5 text-white stroke-[2.5px]" />
+        </button>
+      )}
+
+      {/* Green HOME Floating Action Button on Trash page exactly styled as the screenshot (green circle with white home icon) */}
+      {showTrash && (
+        <button
+          id="float-home-trash"
+          type="button"
+          onClick={() => {
+            setShowTrash(false);
+            setActiveBottomTab("BAO_CAO");
+            setShowNotifDrawer(false);
+            setShowQrCodeView(false);
+          }}
+          className="absolute bottom-20 right-5 w-[42px] h-[42px] bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-all z-50 cursor-pointer border-none"
+          title="Trở về Trang Báo Cáo"
+        >
+          <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
         </button>
       )}
 
@@ -2495,10 +2737,10 @@ App Link: ${window.location.origin}`;
         <button
           type="button"
           onClick={() => setShowLogoutConfirm(true)}
-          className="flex flex-col items-center justify-center py-0.5 text-slate-500 hover:text-rose-600 transition-colors cursor-pointer select-none border-none bg-transparent"
+          className="flex flex-col items-center justify-center py-0.5 text-slate-500 hover:text-rose-600 transition-colors cursor-pointer select-none border-none bg-transparent w-full"
         >
           <LogOut className="w-4 h-4 mx-auto mb-0.5 text-slate-550 hover:text-rose-600 hover:scale-110 transition-transform" />
-          <T><span translate="no" className="notranslate">Đăng Xuất</span></T>
+          <T><span translate="no" className="notranslate line-clamp-1 text-center w-full block">{currentUser?.fullName || "Đăng Xuất"}</span></T>
         </button>
       </div>
 
@@ -2835,6 +3077,21 @@ App Link: ${window.location.origin}`}
               )}
             </div>
           </div>
+          {/* Floating HOME Button exactly styled as the screenshot (green circle with white home icon) */}
+          <button
+            id="float-home-notif"
+            type="button"
+            onClick={() => {
+              setShowNotifDrawer(false);
+              setActiveBottomTab("BAO_CAO");
+              setShowTrash(false);
+              setShowQrCodeView(false);
+            }}
+            className="absolute bottom-20 right-5 w-[42px] h-[42px] bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-all z-50 cursor-pointer border-none"
+            title="Trở về Trang Báo Cáo"
+          >
+            <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
+          </button>
         </div>
       )}
 
