@@ -331,7 +331,7 @@ export default function App() {
   const [regFullName, setRegFullName] = useState("");
   const [regId, setRegId] = useState(""); // YYYY.XXXXX
   const [regPhone, setRegPhone] = useState("");
-  const [regCompany, setRegCompany] = useState("TPP-Group");
+  const [regCompany, setRegCompany] = useState("");
   const [regDepartment, setRegDepartment] = useState("");
   const [regBranch, setRegBranch] = useState("");
   const [regRole, setRegRole] = useState<UserRole>(UserRole.STAFF);
@@ -362,41 +362,37 @@ export default function App() {
 
   // Synchronize and Cascade registration selections with master data lists
   useEffect(() => {
+    if (!regCompany) return; // Do not force initial company selection on load
     if (companies && companies.length > 0) {
       const exists = companies.some((c) => c.id === regCompany);
       if (!exists) {
-        const defaultCompObj = companies.find((c) => 
-          c.name.trim().toUpperCase() === "TÂN PHÚ VIỆT NAM" || 
-          c.id === "TPP-Group" || 
-          c.id.toLowerCase().includes("tpp")
-        ) || companies[0];
-
-        setRegCompany(defaultCompObj.id);
-        const filteredB = branches.filter((b) => b.companyId === defaultCompObj.id);
-        const fb = filteredB.find(b => b.isScoring) || filteredB[0];
-        const nameWithSuffix = fb ? (fb.name.includes("(") ? fb.name : `${fb.name.replace(/\s*\([^)]+\)$/, "").trim()} (${fb.companyId})`) : "";
-        setRegBranch(nameWithSuffix);
+        setRegCompany("");
+        setRegBranch("");
         setRegDepartment("");
       }
     }
   }, [companies, regCompany, branches]);
 
   useEffect(() => {
+    if (!regCompany) {
+      setRegBranch("");
+      setRegDepartment("");
+      return;
+    }
     const companyBranches = branches.filter((b) => b.companyId === regCompany);
     if (companyBranches.length > 0) {
-      const hasCurrentBranch = companyBranches.some((b) => {
-        const nameWithSuffix = b.name.includes("(") 
-          ? b.name 
-          : `${b.name.replace(/\s*\([^)]+\)$/, "").trim()} (${b.companyId})`;
-        return b.name === regBranch || nameWithSuffix === regBranch;
-      });
-      if (!hasCurrentBranch) {
-        const firstBranch = companyBranches.find(b => b.isScoring) || companyBranches[0];
-        const nameWithSuffix = firstBranch.name.includes("(") 
-          ? firstBranch.name 
-          : `${firstBranch.name.replace(/\s*\([^)]+\)$/, "").trim()} (${firstBranch.companyId})`;
-        setRegBranch(nameWithSuffix);
-        setRegDepartment("");
+      if (regBranch) {
+        const hasCurrentBranch = companyBranches.some((b) => {
+          const nameWithSuffix = b.name.includes("(") 
+            ? b.name 
+            : `${b.name.replace(/\s*\([^)]+\)$/, "").trim()} (${b.companyId})`;
+          return b.name === regBranch || nameWithSuffix === regBranch;
+        });
+        if (!hasCurrentBranch) {
+          // Clear branch and department if they don't match the selected company
+          setRegBranch("");
+          setRegDepartment("");
+        }
       }
     } else {
       setRegBranch("");
@@ -405,6 +401,10 @@ export default function App() {
   }, [regCompany, branches, regBranch]);
 
   useEffect(() => {
+    if (!regBranch) {
+      setRegDepartment("");
+      return;
+    }
     const selectedB = branches.find((b) => {
       const nameWithSuffix = b.name.includes("(") 
         ? b.name 
@@ -414,18 +414,17 @@ export default function App() {
     if (selectedB) {
       const branchDepts = departments.filter((d) => d.branchId === selectedB.id);
       if (branchDepts.length > 0) {
-        const hasCurrentDept = branchDepts.some((d) => {
-          const nameWithSuffix = d.name.includes(`(${selectedB.id})`)
-            ? d.name
-            : `${d.name.replace(/\s*\([^)]+\)$/, "").trim()} (${selectedB.id})`;
-          return d.name === regDepartment || nameWithSuffix === regDepartment;
-        });
-        if (!hasCurrentDept) {
-          const firstDept = branchDepts[0];
-          const nameWithSuffix = firstDept.name.includes(`(${selectedB.id})`)
-            ? firstDept.name
-            : `${firstDept.name.replace(/\s*\([^)]+\)$/, "").trim()} (${selectedB.id})`;
-          setRegDepartment(nameWithSuffix);
+        if (regDepartment) {
+          const hasCurrentDept = branchDepts.some((d) => {
+            const nameWithSuffix = d.name.includes(`(${selectedB.id})`)
+              ? d.name
+              : `${d.name.replace(/\s*\([^)]+\)$/, "").trim()} (${selectedB.id})`;
+            return d.name === regDepartment || nameWithSuffix === regDepartment;
+          });
+          if (!hasCurrentDept) {
+            // Clear department if it doesn't match the selected branch
+            setRegDepartment("");
+          }
         }
       } else {
         setRegDepartment("");
@@ -1760,26 +1759,9 @@ export default function App() {
                 setAuthScreen("REGISTER");
                 setAuthError("");
                 setRegisterSuccessMsg("");
-                // Default CÔNG TY THÀNH VIÊN to TÂN PHÚ VIỆT NAM on click
-                const fitComp = companies.find((c) => 
-                  c.name.trim().toUpperCase() === "TÂN PHÚ VIỆT NAM" || 
-                  c.id === "TPP-Group" || 
-                  c.id.toLowerCase().includes("tpp")
-                ) || companies[0];
-                if (fitComp) {
-                  setRegCompany(fitComp.id);
-                  const companyBranches = branches.filter((b) => b.companyId === fitComp.id);
-                  const firstBranch = companyBranches.find(b => b.isScoring) || companyBranches[0];
-                  if (firstBranch) {
-                    const nameWithSuffix = firstBranch.name.includes("(") 
-                      ? firstBranch.name 
-                      : `${firstBranch.name.replace(/\s*\([^)]+\)$/, "").trim()} (${firstBranch.companyId})`;
-                    setRegBranch(nameWithSuffix);
-                  } else {
-                    setRegBranch("");
-                  }
-                  setRegDepartment("");
-                }
+                setRegCompany("");
+                setRegBranch("");
+                setRegDepartment("");
               }}
               className={`flex-1 py-1.5 py-2 text-xs font-bold rounded-lg uppercase tracking-wider transition-all duration-305 cursor-pointer ${
                 authScreen === "REGISTER"
@@ -2042,7 +2024,9 @@ export default function App() {
                     }}
                     className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-8 py-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm text-left flex items-center justify-between cursor-pointer"
                   >
-                    <span>{companies.find((c) => c.id === regCompany)?.name || regCompany}</span>
+                    <span translate="no" className={`notranslate truncate block max-w-full ${regCompany ? "text-slate-850 font-semibold text-xs" : "text-slate-400 font-semibold text-[11px]"}`}>
+                      {companies.find((c) => c.id === regCompany)?.name || "--- Chọn Công ty thành viên ---"}
+                    </span>
                     <ChevronDown className="w-4 h-4 text-slate-400" />
                   </button>
 
@@ -2050,6 +2034,18 @@ export default function App() {
                     <>
                       <div className="fixed inset-0 z-45" onClick={() => setIsOpenRegCompany(false)} />
                       <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 max-h-[180px] overflow-y-auto">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRegCompany("");
+                            setRegBranch("");
+                            setRegDepartment("");
+                            setIsOpenRegCompany(false);
+                          }}
+                          className="w-full text-left px-4 py-2.5 text-xs font-semibold text-slate-400 hover:bg-slate-50 cursor-pointer"
+                        >
+                          --- Chọn Công ty thành viên ---
+                        </button>
                         {companies.map((c) => (
                           <button
                             key={c.id}
@@ -2380,6 +2376,105 @@ export default function App() {
   };
 
   // Active user view workspace (Integrates Admin Panel and Client Phone Simulator side-by-side)
+  if (currentUser && currentUser.role !== UserRole.ADMIN) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-0 sm:p-4 relative font-sans overflow-hidden select-none">
+        {/* Ambient decorative glowing spots */}
+        <div className="absolute top-1/4 left-1/4 w-80 h-80 bg-blue-500 bg-opacity-10 rounded-full blur-[160px] pointer-events-none" />
+        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-violet-500 bg-opacity-10 rounded-full blur-[160px] pointer-events-none" />
+
+        {/* Device Shell for Computer screens */}
+        <div className="w-full h-full sm:h-[880px] sm:max-h-[92vh] sm:w-[410px] sm:rounded-[48px] sm:border-[10px] sm:border-slate-800 sm:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.7),0_0_0_2px_#334155] bg-[#F0F2F5] relative flex flex-col overflow-hidden">
+          {/* Subtle speaker/camera notch for computer screenshot/design fidelity */}
+          <div className="hidden sm:block absolute top-0 left-1/2 -translate-x-1/2 w-40 h-6 bg-slate-800 rounded-b-2xl z-50 flex items-center justify-center">
+            <div className="w-12 h-1 bg-slate-900 rounded-full mb-1" />
+            <div className="w-2 h-2 bg-slate-950 rounded-full mb-1 ml-2" />
+          </div>
+
+          <div className="flex-1 h-full flex flex-col relative overflow-hidden sm:pt-4">
+            {isFormOpen ? (
+              <ReportForm
+                currentUser={currentUser}
+                users={users}
+                editingReport={editingReport}
+                onCancel={() => {
+                  setIsFormOpen(false);
+                  setEditingReport(null);
+                }}
+                onSubmitReport={handleSubmitReport}
+                offlineMode={offlineMode}
+                branches={branches}
+                mobileUIConfig={mobileUIConfig}
+                onShowToast={showToast}
+              />
+            ) : (
+              <MobileFrame
+                reports={reports}
+                currentUserId={currentUser.id}
+                onOpenReportForm={() => setIsFormOpen(true)}
+                onDeleteReport={handleDeleteReportTrigger}
+                onEditReport={handleEditReportTrigger}
+                offlineMode={offlineMode}
+                currentUser={currentUser}
+                onUpdateReport={handleUpdateReport}
+                mobileUIConfig={mobileUIConfig}
+                onUpdateMobileUIConfig={setMobileUIConfig}
+                onLogout={() => setCurrentUser(null)}
+                branches={branches}
+                onManualRefresh={syncFromDb}
+                users={users}
+                companies={companies}
+                onSwitchToDesktop={() => {}}
+                chats={chats}
+                onAddChatMessage={handleAddChatMessage}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* High-fidelity elegant Custom Toast system for CBNV */}
+        {toast && (
+          <div 
+            style={{ zIndex: 100000 }} 
+            className="fixed top-6 left-1/2 -translate-x-1/2 max-w-[90vw] w-fit min-w-[300px] bg-slate-900/95 backdrop-blur-md text-white rounded-2xl p-4 shadow-2xl flex items-center gap-3 border border-slate-700/50 select-none animate-fadeIn transition-all"
+          >
+            {toast.type === "success" && (
+              <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                <Check className="w-4 h-4" />
+              </div>
+            )}
+            {toast.type === "error" && (
+              <div className="w-7 h-7 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
+                <AlertCircle className="w-4 h-4" />
+              </div>
+            )}
+            {toast.type === "warning" && (
+              <div className="w-7 h-7 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-4 h-4" />
+              </div>
+            )}
+            {toast.type === "info" && (
+              <div className="w-7 h-7 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
+                <Info className="w-4 h-4" />
+              </div>
+            )}
+            
+            <div className="flex-1 text-left text-[11px] font-bold leading-normal text-slate-100 pr-2">
+              <T>{toast.message}</T>
+            </div>
+            
+            <button
+              onClick={() => setToast(null)}
+              className="text-slate-400 hover:text-white transition-colors cursor-pointer text-xs font-semibold px-1 rounded-sm active:scale-95"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F0F2F5] flex flex-col relative overflow-hidden font-sans">
       {/* Upper header line with simulated offline trigger */}
