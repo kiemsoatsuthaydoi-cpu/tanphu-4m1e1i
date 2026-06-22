@@ -2378,48 +2378,59 @@ export default function App() {
   // Active user view workspace (Integrates Admin Panel and Client Phone Simulator side-by-side)
   if (currentUser && currentUser.role !== UserRole.ADMIN) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-0 sm:p-4 relative font-sans overflow-hidden select-none">
+      <div className="min-h-screen bg-gradient-to-br from-[#1e293b] via-[#2a3a52] to-[#141d2b] flex items-center justify-center p-0 sm:p-4 relative font-sans overflow-hidden select-none">
         {/* Ambient decorative glowing spots */}
-        <div className="absolute top-1/4 left-1/4 w-80 h-80 bg-blue-500 bg-opacity-10 rounded-full blur-[160px] pointer-events-none" />
-        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-violet-500 bg-opacity-10 rounded-full blur-[160px] pointer-events-none" />
+        <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-cyan-400 bg-opacity-15 rounded-full blur-[140px] pointer-events-none" />
+        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-indigo-500 bg-opacity-15 rounded-full blur-[140px] pointer-events-none" />
 
-        {isFormOpen ? (
-          <ReportForm
-            currentUser={currentUser}
-            users={users}
-            editingReport={editingReport}
-            onCancel={() => {
-              setIsFormOpen(false);
-              setEditingReport(null);
-            }}
-            onSubmitReport={handleSubmitReport}
-            offlineMode={offlineMode}
-            branches={branches}
-            mobileUIConfig={mobileUIConfig}
-            onShowToast={showToast}
-          />
-        ) : (
-          <MobileFrame
-            reports={reports}
-            currentUserId={currentUser.id}
-            onOpenReportForm={() => setIsFormOpen(true)}
-            onDeleteReport={handleDeleteReportTrigger}
-            onEditReport={handleEditReportTrigger}
-            offlineMode={offlineMode}
-            currentUser={currentUser}
-            onUpdateReport={handleUpdateReport}
-            mobileUIConfig={mobileUIConfig}
-            onUpdateMobileUIConfig={setMobileUIConfig}
-            onLogout={() => setCurrentUser(null)}
-            branches={branches}
-            onManualRefresh={syncFromDb}
-            users={users}
-            companies={companies}
-            onSwitchToDesktop={() => {}}
-            chats={chats}
-            onAddChatMessage={handleAddChatMessage}
-          />
-        )}
+        {/* Device Shell for Computer screens */}
+        <div className="w-full h-full sm:h-[880px] sm:max-h-[92vh] sm:w-[410px] sm:rounded-[48px] sm:border-[10px] sm:border-slate-800 sm:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85),0_0_0_2px_#475569] bg-[#F0F2F5] relative flex flex-col overflow-hidden">
+          {/* Subtle speaker/camera notch for computer screenshot/design fidelity */}
+          <div className="hidden sm:block absolute top-0 left-1/2 -translate-x-1/2 w-40 h-6 bg-slate-800 rounded-b-2xl z-50 flex items-center justify-center">
+            <div className="w-12 h-1 bg-slate-900 rounded-full mb-1" />
+            <div className="w-2 h-2 bg-slate-950 rounded-full mb-1 ml-2" />
+          </div>
+
+          <div className="flex-1 h-full flex flex-col relative overflow-hidden sm:pt-4">
+            {isFormOpen ? (
+              <ReportForm
+                currentUser={currentUser}
+                users={users}
+                editingReport={editingReport}
+                onCancel={() => {
+                  setIsFormOpen(false);
+                  setEditingReport(null);
+                }}
+                onSubmitReport={handleSubmitReport}
+                offlineMode={offlineMode}
+                branches={branches}
+                mobileUIConfig={mobileUIConfig}
+                onShowToast={showToast}
+              />
+            ) : (
+              <MobileFrame
+                reports={reports}
+                currentUserId={currentUser.id}
+                onOpenReportForm={() => setIsFormOpen(true)}
+                onDeleteReport={handleDeleteReportTrigger}
+                onEditReport={handleEditReportTrigger}
+                offlineMode={offlineMode}
+                currentUser={currentUser}
+                onUpdateReport={handleUpdateReport}
+                mobileUIConfig={mobileUIConfig}
+                onUpdateMobileUIConfig={setMobileUIConfig}
+                onLogout={() => setCurrentUser(null)}
+                branches={branches}
+                onManualRefresh={syncFromDb}
+                users={users}
+                companies={companies}
+                onSwitchToDesktop={() => {}}
+                chats={chats}
+                onAddChatMessage={handleAddChatMessage}
+              />
+            )}
+          </div>
+        </div>
 
         {/* High-fidelity elegant Custom Toast system for CBNV */}
         {toast && (
