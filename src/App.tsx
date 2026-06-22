@@ -1732,7 +1732,7 @@ export default function App() {
               </span>
             </div>
             <p className="text-[10px] text-slate-500 font-bold tracking-normal mt-0.5 uppercase">
-              <T>HỆ THỐNG KIỂM SOÁT NGUỒN LỰC SX-KD</T>
+              <T>KIỂM SOÁT BIẾN ĐỘNG - NGĂN CHẶN RỦI RO</T>
             </p>
           </div>
           
@@ -2256,7 +2256,7 @@ export default function App() {
             </span>
           </div>
           <p className="text-[10px] text-slate-500 font-bold tracking-normal mt-1 uppercase">
-            <T>HỆ THỐNG KIỂM SOÁT NGUỒN LỰC SX-KD</T>
+            <T>KIỂM SOÁT BIẾN ĐỘNG - NGĂN CHẶN RỦI RO</T>
           </p>
         </div>
 
@@ -2378,48 +2378,59 @@ export default function App() {
   // Active user view workspace (Integrates Admin Panel and Client Phone Simulator side-by-side)
   if (currentUser && currentUser.role !== UserRole.ADMIN) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1d4ed8] to-[#1e3a8a] flex items-center justify-center p-0 sm:p-4 relative font-sans overflow-hidden select-none">
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#2563eb] to-[#1d4ed8] flex items-center justify-center p-0 sm:p-4 relative font-sans overflow-hidden select-none">
         {/* Ambient decorative glowing spots */}
-        <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-cyan-400 bg-opacity-25 rounded-full blur-[140px] pointer-events-none" />
-        <div className="absolute bottom-1/4 right-1/4 w-[600px] h-[600px] bg-[#4f46e5] bg-opacity-25 rounded-full blur-[140px] pointer-events-none" />
+        <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-cyan-400 bg-opacity-30 rounded-full blur-[140px] pointer-events-none" />
+        <div className="absolute bottom-1/4 right-1/4 w-[600px] h-[600px] bg-[#6366f1] bg-opacity-35 rounded-full blur-[140px] pointer-events-none" />
 
-        {isFormOpen ? (
-          <ReportForm
-            currentUser={currentUser}
-            users={users}
-            editingReport={editingReport}
-            onCancel={() => {
-              setIsFormOpen(false);
-              setEditingReport(null);
-            }}
-            onSubmitReport={handleSubmitReport}
-            offlineMode={offlineMode}
-            branches={branches}
-            mobileUIConfig={mobileUIConfig}
-            onShowToast={showToast}
-          />
-        ) : (
-          <MobileFrame
-            reports={reports}
-            currentUserId={currentUser.id}
-            onOpenReportForm={() => setIsFormOpen(true)}
-            onDeleteReport={handleDeleteReportTrigger}
-            onEditReport={handleEditReportTrigger}
-            offlineMode={offlineMode}
-            currentUser={currentUser}
-            onUpdateReport={handleUpdateReport}
-            mobileUIConfig={mobileUIConfig}
-            onUpdateMobileUIConfig={setMobileUIConfig}
-            onLogout={() => setCurrentUser(null)}
-            branches={branches}
-            onManualRefresh={syncFromDb}
-            users={users}
-            companies={companies}
-            onSwitchToDesktop={() => {}}
-            chats={chats}
-            onAddChatMessage={handleAddChatMessage}
-          />
-        )}
+        {/* Device Shell for Computer screens */}
+        <div className="w-full h-full sm:h-[880px] sm:max-h-[92vh] sm:w-[410px] sm:rounded-[48px] sm:border-[10px] sm:border-slate-800 sm:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85),0_0_0_2px_#475569] bg-[#F0F2F5] relative flex flex-col overflow-hidden">
+          {/* Subtle speaker/camera notch for computer screenshot/design fidelity */}
+          <div className="hidden sm:block absolute top-0 left-1/2 -translate-x-1/2 w-40 h-6 bg-slate-800 rounded-b-2xl z-50 flex items-center justify-center">
+            <div className="w-12 h-1 bg-slate-900 rounded-full mb-1" />
+            <div className="w-2 h-2 bg-slate-950 rounded-full mb-1 ml-2" />
+          </div>
+
+          <div className="flex-1 h-full flex flex-col relative overflow-hidden sm:pt-4">
+            {isFormOpen ? (
+              <ReportForm
+                currentUser={currentUser}
+                users={users}
+                editingReport={editingReport}
+                onCancel={() => {
+                  setIsFormOpen(false);
+                  setEditingReport(null);
+                }}
+                onSubmitReport={handleSubmitReport}
+                offlineMode={offlineMode}
+                branches={branches}
+                mobileUIConfig={mobileUIConfig}
+                onShowToast={showToast}
+              />
+            ) : (
+              <MobileFrame
+                reports={reports}
+                currentUserId={currentUser.id}
+                onOpenReportForm={() => setIsFormOpen(true)}
+                onDeleteReport={handleDeleteReportTrigger}
+                onEditReport={handleEditReportTrigger}
+                offlineMode={offlineMode}
+                currentUser={currentUser}
+                onUpdateReport={handleUpdateReport}
+                mobileUIConfig={mobileUIConfig}
+                onUpdateMobileUIConfig={setMobileUIConfig}
+                onLogout={() => setCurrentUser(null)}
+                branches={branches}
+                onManualRefresh={syncFromDb}
+                users={users}
+                companies={companies}
+                onSwitchToDesktop={() => {}}
+                chats={chats}
+                onAddChatMessage={handleAddChatMessage}
+              />
+            )}
+          </div>
+        </div>
 
         {/* High-fidelity elegant Custom Toast system for CBNV */}
         {toast && (
