@@ -2398,7 +2398,7 @@ export default function App() {
   };
 
   // Active user view workspace (Integrates Admin Panel and Client Phone Simulator side-by-side)
-  if (currentUser && currentUser.role !== UserRole.ADMIN) {
+  if (currentUser && currentUser.role === UserRole.STAFF) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#2563eb] to-[#1d4ed8] flex items-center justify-center p-0 sm:p-4 relative font-sans overflow-hidden select-none">
         {/* Ambient decorative glowing spots */}

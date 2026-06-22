@@ -545,10 +545,21 @@ function MobileApprovalView({
   const [roleFilter, setRoleFilter] = useState<string>("TẤT CẢ");
   const [statusFilter, setStatusFilter] = useState<string>("TẤT CẢ");
 
-  const pendingUsers = users.filter((u) => u.status === UserStatus.PENDING);
+  const isReviewer = currentUser?.role === UserRole.REVIEWER;
+  const matchBranch = (uBranch: string) => {
+    if (!currentUser) return true;
+    return isSameBranchOrFactory(currentUser.branch, uBranch);
+  };
+
+  const pendingUsers = users.filter((u) => {
+    if (isReviewer && !matchBranch(u.branch)) return false;
+    return u.status === UserStatus.PENDING;
+  });
   
   const displayedUsers = users
     .filter((u) => {
+      if (isReviewer && !matchBranch(u.branch)) return false;
+      
       const s = innerSearch.toLowerCase();
       const matchesSearch =
         u.fullName.toLowerCase().includes(s) ||
@@ -1185,48 +1196,6 @@ export default function MobileFrame({
 
   const [notifIdConfirmDlt, setNotifIdConfirmDlt] = useState<string | null>(null);
 
-  // App home screen badge count state and automatic updating
-  const [appIconBadgeCount, setAppIconBadgeCount] = useState<number>(0);
-
-  useEffect(() => {
-    const calculateBadgeCount = () => {
-      const now = new Date().getTime();
-      const count = reports.filter((r) => {
-        if (r.isDeleted) return false;
-
-        const rCreated = parseReportTimestamp(r.timestamp).getTime();
-        const ageCreatedMin = (now - rCreated) / (1000 * 60);
-        const isNew = ageCreatedMin >= 0 && ageCreatedMin <= 5;
-
-        const rUpdated = r.updatedAt ? parseReportTimestamp(r.updatedAt).getTime() : 0;
-        const ageUpdatedMin = r.updatedAt ? (now - rUpdated) / (1000 * 60) : Infinity;
-        const isRecentlyUpdated = ageUpdatedMin >= 0 && ageUpdatedMin <= 5;
-
-        return isNew || isRecentlyUpdated;
-      }).length;
-
-      setAppIconBadgeCount(count);
-
-      // Web Badging API - Set real notification badge on home screen PWA icon
-      if (typeof navigator !== "undefined" && "setAppBadge" in navigator) {
-        if (count > 0) {
-          navigator.setAppBadge(count).catch((err) => {
-            console.warn("Lỗi đặt App Badge:", err);
-          });
-        } else {
-          navigator.clearAppBadge().catch((err) => {
-            console.warn("Lỗi xóa App Badge:", err);
-          });
-        }
-      }
-    };
-
-    calculateBadgeCount();
-    const intervalId = setInterval(calculateBadgeCount, 10000); // re-compute every 10 seconds
-
-    return () => clearInterval(intervalId);
-  }, [reports]);
-
   const [likedReports, setLikedReports] = useState<Record<string, boolean>>(() => {
     try {
       const saved = localStorage.getItem("4m1e1i_liked_reports");
@@ -1706,7 +1675,89 @@ App Link: ${window.location.origin}`;
       });
 
       // 2. Report edited / updated notification
-      if (report.updatedAt) {
+      if (report.updateLogs && report.updateLogs.length > 0) {
+        const guessGenderPrefix = (fullName: string): string => {
+          const name = fullName.toLowerCase();
+          if (
+            name.includes(" thị ") || 
+            name.includes(" thị") || 
+            name.includes("hông") || 
+            name.includes("hồng") || 
+            name.includes("phượng") || 
+            name.includes("tuyền") || 
+            name.includes("vy") || 
+            name.includes("hiền") || 
+            name.includes("lan") || 
+            name.includes("nga") || 
+            name.includes("trang") || 
+            name.includes("yến") || 
+            name.includes("thảo") || 
+            name.includes("oanh") || 
+            name.includes("dung") || 
+            name.includes("hằng") || 
+            name.includes("mai") || 
+            name.includes("thoại") ||
+            name.includes("thanh thiện")
+          ) {
+            return "Chị";
+          }
+          return "Anh";
+        };
+
+        const getCleanName = (name: string): string => {
+          return name.replace(/\s+/g, " ").trim();
+        };
+
+        report.updateLogs.forEach((log, idx) => {
+          const timeMatch = log.match(/\((\d{2}:\d{2}:\d{2} \d{2}\/\d{2}\/\d{2})\)/);
+          const logTimestamp = timeMatch ? timeMatch[1] : report.updatedAt || report.timestamp;
+
+          let description = `Bản tin của ${report.uploaderName} tại ${report.factory} vừa thay đổi thông tin.`;
+          
+          const likeMatch = log.match(/Lượt thích mới \((.*?)\)/);
+          if (likeMatch) {
+            const actor = getCleanName(likeMatch[1]);
+            const gender = guessGenderPrefix(actor);
+            description = `Bản tin của ${report.uploaderName} vừa được ${gender} @${actor} thả 1 lượt like.`;
+          } else {
+            const shareMatch = log.match(/Chia sẻ mới \((.*?)\)/);
+            if (shareMatch) {
+              const actor = getCleanName(shareMatch[1]);
+              const gender = guessGenderPrefix(actor);
+              description = `Bản tin của ${report.uploaderName} vừa được ${gender} @${actor} chia sẻ.`;
+            } else {
+              const chatMatch = log.match(/Tương tác bình luận mới từ (.*?) \(/) || log.match(/Tương tác bình luận mới từ (.*?)$/);
+              if (chatMatch) {
+                const actor = getCleanName(chatMatch[1]);
+                const gender = guessGenderPrefix(actor);
+                description = `Bản tin của ${report.uploaderName} vừa nhận bình luận tương tác từ ${gender} @${actor}.`;
+              } else {
+                const dirMatch = log.match(/Chỉ đạo mới \((.*?): "(.*?)"\)/);
+                if (dirMatch) {
+                  const actor = getCleanName(dirMatch[1]);
+                  const content = dirMatch[2];
+                  const gender = guessGenderPrefix(actor);
+                  description = `${gender} @${actor} vừa ban hành chỉ đạo mới trên bản tin của ${report.uploaderName}: "${content}"`;
+                } else if (log.includes("Sửa chi tiết") || log.includes("Sửa chi nhánh") || log.includes("Sửa hạng mục 4M1E1I") || log.includes("Sửa ghi chú") || log.includes("Thay đổi mức cảnh báo") || log.includes("Sửa ảnh")) {
+                  const cleanPart = log.replace(/\s*\(\d{2}:\d{2}:\d{2}.*?\)\s*$/, "").trim();
+                  description = `Bản tin của ${report.uploaderName} tại ${report.factory} vừa thay đổi: ${cleanPart}.`;
+                }
+              }
+            }
+          }
+
+          list.push({
+            id: `update-${report.id}-${idx}`,
+            title: "Bản tin cập nhật",
+            description,
+            timestamp: logTimestamp,
+            type: "update_report",
+            targetReportId: report.id,
+            authorName: report.uploaderName,
+            factoryName: report.factory
+          });
+        });
+      } else if (report.updatedAt) {
         list.push({
           id: `update-${report.id}`,
           title: "Bản tin cập nhật",
@@ -1750,6 +1801,31 @@ App Link: ${window.location.origin}`;
   const notifications = generateNotifications();
   const unreadNotifications = notifications.filter((n) => !readNotifIds.includes(n.id));
   const unreadCount = unreadNotifications.length;
+
+  // Web Badging API - Sync home screen badge on real device / PWA with unreadCount
+  useEffect(() => {
+    if (typeof navigator !== "undefined") {
+      if ("setAppBadge" in navigator) {
+        if (unreadCount > 0) {
+          navigator.setAppBadge(unreadCount).catch((err) => {
+            console.warn("Lỗi đặt App Badge:", err);
+          });
+        } else {
+          navigator.clearAppBadge().catch((err) => {
+            console.warn("Lỗi xóa App Badge:", err);
+          });
+        }
+      }
+      
+      // Fallback message passing to service worker scope if active
+      if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: unreadCount > 0 ? "SET_BADGE" : "CLEAR_BADGE",
+          count: unreadCount
+        });
+      }
+    }
+  }, [unreadCount]);
 
   const handleNotificationClick = (notif: AppNotification) => {
     if (!readNotifIds.includes(notif.id)) {
@@ -1980,11 +2056,6 @@ App Link: ${window.location.origin}`;
             <div className="bg-white text-[9px] font-black px-1.5 py-0.5 rounded flex items-center justify-center font-sans tracking-tighter" style={{ color: "var(--color-primary, #1e3a8a)" }}>
               <T>TANPHU</T>
             </div>
-            {appIconBadgeCount > 0 && (
-              <span className="absolute -top-2.5 -right-2 bg-rose-600 text-white text-[9px] font-black min-w-4.5 h-4.5 px-1 rounded-full flex items-center justify-center border border-slate-900 animate-pulse shadow-sm z-30 leading-none font-mono">
-                <span translate="no" className="notranslate">{appIconBadgeCount}</span>
-              </span>
-            )}
           </div>
           <T className="font-bold text-[13.6px] tracking-wide whitespace-nowrap">META 4M1E1I</T>
         </div>
@@ -2055,22 +2126,24 @@ App Link: ${window.location.origin}`;
           )}
           
           {/* Bong bóng số báo tổng số người online */}
-          <button 
-            onClick={() => {
-              setOnlineSearchTerm("");
-              setOnlineTabFilter("ONLINE");
-              setShowOnlineUsersDrawer(true);
-            }}
-            className="relative hover:scale-115 active:scale-95 transition-all p-1 cursor-pointer bg-transparent border-none outline-none"
-            title="Số nhân viên đang online"
-          >
-            <Users className="w-[18px] h-[18px] text-emerald-300 pointer-events-none" />
-            <span className="absolute -top-1 -right-1 bg-emerald-500 text-[8px] text-white font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border border-slate-900 leading-none shadow-sm animate-pulse pointer-events-none">
-              <span translate="no" className="notranslate font-mono select-none">
-                {onlineCount}
+          {currentUser?.role !== UserRole.STAFF && currentUser?.role !== UserRole.REVIEWER && (
+            <button 
+              onClick={() => {
+                setOnlineSearchTerm("");
+                setOnlineTabFilter("ONLINE");
+                setShowOnlineUsersDrawer(true);
+              }}
+              className="relative hover:scale-115 active:scale-95 transition-all p-1 cursor-pointer bg-transparent border-none outline-none"
+              title="Số nhân viên đang online"
+            >
+              <Users className="w-[18px] h-[18px] text-emerald-300 pointer-events-none" />
+              <span className="absolute -top-1 -right-1 bg-emerald-500 text-[8px] text-white font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border border-slate-900 leading-none shadow-sm animate-pulse pointer-events-none">
+                <span translate="no" className="notranslate font-mono select-none">
+                  {onlineCount}
+                </span>
               </span>
-            </span>
-          </button>
+            </button>
+          )}
         </div>
       </div>
 
@@ -3167,7 +3240,7 @@ App Link: ${window.location.origin}`;
           <T><span translate="no" className="notranslate">Báo Cáo</span></T>
         </button>
 
-        {currentUser?.role === UserRole.ADMIN && (
+        {(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) && (
           <button
             type="button"
             onClick={() => setActiveBottomTab("PHE_DUYET")}
@@ -3177,11 +3250,20 @@ App Link: ${window.location.origin}`;
           >
             <div className="relative">
               <ClipboardCheck className="w-4 h-4 mx-auto mb-0.5 transition-transform hover:scale-110" />
-              {users && users.filter((u) => u.status === UserStatus.PENDING).length > 0 && (
-                <span className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[7.5px] font-black rounded-full h-3.5 min-w-3.5 px-1 flex items-center justify-center animate-bounce">
-                  {users.filter((u) => u.status === UserStatus.PENDING).length}
-                </span>
-              )}
+              {(() => {
+                const isRev = currentUser?.role === UserRole.REVIEWER;
+                const relevantPending = (users || []).filter((u) => {
+                  if (u.status !== UserStatus.PENDING) return false;
+                  if (isRev && !isSameBranchOrFactory(currentUser?.branch, u.branch)) return false;
+                  return true;
+                });
+                if (relevantPending.length === 0) return null;
+                return (
+                  <span className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[7.5px] font-black rounded-full h-3.5 min-w-3.5 px-1 flex items-center justify-center animate-bounce">
+                    {relevantPending.length}
+                  </span>
+                );
+              })()}
             </div>
             <T><span translate="no" className="notranslate">Phê Duyệt</span></T>
           </button>
