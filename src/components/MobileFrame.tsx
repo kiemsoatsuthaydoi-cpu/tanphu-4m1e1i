@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Search, RotateCw, RotateCcw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home } from "lucide-react";
-import { QualityReport, Category4M1E1I, User, UserRole, Branch, Company, ChatMessage } from "../types";
+import { Search, RotateCw, RotateCcw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield } from "lucide-react";
+import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Company, ChatMessage } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
 import { QRCodeSVG } from "qrcode.react";
@@ -412,6 +412,8 @@ interface MobileFrameProps {
   onSwitchToDesktop?: () => void;
   chats?: ChatMessage[];
   onAddChatMessage?: (msg: string, reportRefId?: string) => void;
+  onUpdateUserStatus?: (id: string, status: UserStatus) => void;
+  onUpdateUserRole?: (id: string, role: UserRole) => void;
 }
 
 function formatTimestampToDMY(tsStr: string): string {
@@ -480,8 +482,8 @@ function MobileDirectiveForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex gap-2 items-end">
-      <div className="flex-1">
+    <form onSubmit={handleSubmit} className="flex gap-2 items-center">
+      <div className="flex-1 flex items-center">
         <MentionTextArea
           users={users}
           value={text}
@@ -500,16 +502,360 @@ function MobileDirectiveForm({
               e.currentTarget.form?.requestSubmit();
             }
           }}
-          className="w-full bg-slate-50 border border-slate-200 text-[11px] rounded-lg px-2.5 py-2 text-slate-800 placeholder-slate-400 font-medium focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all select-text overflow-y-auto thin-scrollbar"
+          className="block w-full bg-slate-50 border border-slate-200 text-[11px] rounded-lg px-2.5 py-1.5 text-slate-800 placeholder-slate-400 font-medium focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all select-text overflow-y-auto thin-scrollbar leading-normal"
         />
       </div>
       <button
         type="submit"
-        className="bg-amber-500 hover:bg-amber-600 px-3 py-2 text-[10px] text-white font-extrabold items-center justify-center rounded-lg shadow-sm transition-all active:scale-95 cursor-pointer uppercase shrink-0 h-[32px]"
+        className="bg-amber-500 hover:bg-amber-600 px-4 text-[10px] text-white font-black flex items-center justify-center rounded-lg shadow-sm transition-all active:scale-95 cursor-pointer uppercase shrink-0 h-[32px]"
       >
-        <T>Gửi</T>
+        <T>GỬI</T>
       </button>
     </form>
+  );
+}
+
+interface MobileApprovalViewProps {
+  users?: User[];
+  currentUser?: User | null;
+  theme: {
+    bg: string;
+    text: string;
+    border: string;
+    ring: string;
+    hoverBg: string;
+    lightBg: string;
+    lightText: string;
+  };
+  onUpdateUserStatus?: (id: string, status: UserStatus) => void;
+  onUpdateUserRole?: (id: string, role: UserRole) => void;
+  showToast: (msg: string) => void;
+}
+
+function MobileApprovalView({
+  users = [],
+  currentUser,
+  theme,
+  onUpdateUserStatus,
+  onUpdateUserRole,
+  showToast
+}: MobileApprovalViewProps) {
+  const [innerSearch, setInnerSearch] = useState("");
+  const [subTab, setSubTab] = useState<"CHO_DUYET" | "TAT_CA">("CHO_DUYET");
+  const [roleFilter, setRoleFilter] = useState<string>("TẤT CẢ");
+  const [statusFilter, setStatusFilter] = useState<string>("TẤT CẢ");
+
+  const pendingUsers = users.filter((u) => u.status === UserStatus.PENDING);
+  
+  const displayedUsers = users
+    .filter((u) => {
+      const s = innerSearch.toLowerCase();
+      const matchesSearch =
+        u.fullName.toLowerCase().includes(s) ||
+        u.phone.includes(s) ||
+        u.department.toLowerCase().includes(s) ||
+        u.branch.toLowerCase().includes(s);
+
+      if (!matchesSearch) return false;
+
+      if (subTab === "CHO_DUYET") {
+        return u.status === UserStatus.PENDING;
+      }
+
+      if (roleFilter !== "TẤT CẢ" && u.role !== roleFilter) return false;
+      if (statusFilter !== "TẤT CẢ" && u.status !== statusFilter) return false;
+
+      return true;
+    })
+    .sort((a, b) => {
+      const now = Date.now();
+      const getUserSortRank = (u: any) => {
+        if (u.role === UserRole.ADMIN) return 1;
+        if (u.status === UserStatus.PENDING) return 2;
+        
+        const isOnline = u.isOnline || 
+          (currentUser && u.id === currentUser.id) || 
+          (u.status === UserStatus.ACTIVE && u.lastActive && Math.abs(now - u.lastActive) <= 240000);
+        if (isOnline) return 3;
+        
+        if (u.role === UserRole.REVIEWER) return 4;
+        return 5;
+      };
+      
+      const rA = getUserSortRank(a);
+      const rB = getUserSortRank(b);
+      if (rA !== rB) return rA - rB;
+      return a.fullName.localeCompare(b.fullName, "vi");
+    });
+
+  return (
+    <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-slate-50 relative select-none">
+      <div className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-sm space-y-1">
+        <div className="flex items-center gap-2">
+          <div className={`p-1.5 rounded-xl text-white ${theme.bg} flex items-center justify-center`}>
+            <ClipboardCheck className="w-4 h-4 text-white" />
+          </div>
+          <h2 className={`text-xs font-black tracking-tight uppercase ${theme.text}`}>
+            <span translate="no" className="notranslate"><T>PHÊ DUYỆT TÀI KHOẢN</T></span>
+          </h2>
+        </div>
+        <p className="text-[10px] text-slate-500 leading-normal">
+          <span translate="no" className="notranslate"><T>Xem xét phê duyệt các tài khoản đăng ký mới, quản lý trạng thái kích hoạt, phân quyền thành viên trong toàn bộ hệ thống vận hành.</T></span>
+        </p>
+      </div>
+
+      {/* Sub-tabs switch */}
+      <div className="grid grid-cols-2 gap-1 bg-slate-200/60 p-1 rounded-xl shadow-inner">
+        <button
+          type="button"
+          onClick={() => setSubTab("CHO_DUYET")}
+          className={`py-1.5 text-[10.5px] font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer border-none ${
+            subTab === "CHO_DUYET"
+              ? "bg-white text-slate-800 shadow"
+              : "text-slate-550 hover:bg-slate-300/45 bg-transparent"
+          }`}
+        >
+          <span translate="no" className="notranslate"><T>Yêu Cầu Chờ Duyệt</T></span>
+          {pendingUsers.length > 0 && (
+            <span className="bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full min-w-[14px]">
+              {pendingUsers.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSubTab("TAT_CA")}
+          className={`py-1.5 text-[10.5px] font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer border-none bg-transparent ${
+            subTab === "TAT_CA"
+              ? "bg-white text-slate-800 shadow"
+              : "text-slate-550 hover:bg-slate-300/45"
+          }`}
+        >
+          <span translate="no" className="notranslate"><T>Tất Cả Thành Viên</T></span>
+          <span className="bg-slate-400 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full min-w-[14px]">
+            {users.length}
+          </span>
+        </button>
+      </div>
+
+      {/* Search and Filters */}
+      <div className="bg-white rounded-xl border border-slate-200 p-2.5 shadow-3xs space-y-2">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
+          <input
+            type="text"
+            value={innerSearch}
+            onChange={(e) => setInnerSearch(e.target.value)}
+            placeholder="Tìm theo tên, sđt, phòng ban..."
+            className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-100 rounded-lg text-[10px] focus:ring-1 focus:ring-blue-500 outline-none font-medium text-slate-800 placeholder-slate-400"
+          />
+        </div>
+
+        {subTab === "TAT_CA" && (
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-0.5">
+              <span className="text-[8px] font-extrabold text-slate-400 uppercase tracking-wide">
+                <span translate="no" className="notranslate"><T>Trạng Thái:</T></span>
+              </span>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-bold focus:outline-none"
+              >
+                <option value="TẤT CẢ" translate="no" className="notranslate">Tất cả Trạng thái</option>
+                <option value={UserStatus.ACTIVE} translate="no" className="notranslate">{UserStatus.ACTIVE}</option>
+                <option value={UserStatus.PENDING} translate="no" className="notranslate">{UserStatus.PENDING}</option>
+                <option value={UserStatus.LOCKED} translate="no" className="notranslate">{UserStatus.LOCKED}</option>
+                <option value={UserStatus.REJECTED} translate="no" className="notranslate">{UserStatus.REJECTED}</option>
+              </select>
+            </div>
+
+            <div className="space-y-0.5">
+              <span className="text-[8px] font-extrabold text-slate-400 uppercase tracking-wide">
+                <span translate="no" className="notranslate"><T>Vai Trò:</T></span>
+              </span>
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-bold focus:outline-none"
+              >
+                <option value="TẤT CẢ" translate="no" className="notranslate">Tất cả Vai trò</option>
+                <option value={UserRole.ADMIN} translate="no" className="notranslate">{UserRole.ADMIN}</option>
+                <option value={UserRole.REVIEWER} translate="no" className="notranslate">{UserRole.REVIEWER}</option>
+                <option value={UserRole.STAFF} translate="no" className="notranslate">{UserRole.STAFF}</option>
+              </select>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Member Cards list */}
+      <div className="space-y-2">
+        {displayedUsers.length === 0 ? (
+          <div className="bg-white rounded-xl border border-slate-200 py-10 px-5 text-center flex flex-col items-center justify-center">
+            <span className="text-2xl mb-1">👥</span>
+            <p className="text-[10px] text-slate-400 font-bold select-none">
+              <span translate="no" className="notranslate"><T>Không tìm thấy thành viên nào khớp bộ lọc.</T></span>
+            </p>
+          </div>
+        ) : (
+          displayedUsers.map((u) => {
+            const isMe = currentUser?.id === u.id;
+            
+            let avatarBg = "bg-slate-200 text-slate-600";
+            if (u.status === UserStatus.ACTIVE) {
+              if (u.role === UserRole.ADMIN) avatarBg = "bg-amber-100 text-amber-700 border border-amber-300";
+              else if (u.role === UserRole.REVIEWER) avatarBg = "bg-emerald-100 text-emerald-700 border border-emerald-300";
+              else avatarBg = "bg-indigo-100 text-indigo-700 border border-indigo-200";
+            } else if (u.status === UserStatus.PENDING) {
+              avatarBg = "bg-rose-100 text-rose-700 border border-rose-350 animate-pulse";
+            } else if (u.status === UserStatus.LOCKED) {
+              avatarBg = "bg-gray-205 text-gray-500 border border-gray-300";
+            }
+
+            return (
+              <div
+                key={u.id}
+                className={`bg-white rounded-xl border p-3 shadow-6xs flex flex-col gap-2 transition-all ${
+                  u.status === UserStatus.PENDING ? "border-l-4 border-l-rose-500" : "border-slate-200"
+                }`}
+              >
+                <div className="flex items-start gap-2.5">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-extrabold text-xs shrink-0 uppercase select-none ${avatarBg}`}>
+                    {u.fullName.substring(0, 1) || "U"}
+                  </div>
+                  <div className="flex-1 min-w-0 font-sans text-left">
+                    <div className="flex items-center gap-1.5">
+                      <span translate="no" className="notranslate font-black text-slate-800 text-[11px] block truncate leading-tight">
+                        {u.fullName}
+                      </span>
+                      {isMe && (
+                        <span className="text-[7px] bg-slate-100 text-slate-500 px-1 py-0.5 rounded-md font-bold uppercase select-none">
+                          <span translate="no" className="notranslate"><T>Tôi</T></span>
+                        </span>
+                      )}
+                    </div>
+                    <span translate="no" className="notranslate text-[8.5px] text-slate-400 font-bold block mt-0.5">
+                      {u.phone} • {u.department} ({u.branch})
+                    </span>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <span className={`text-[7.5px] font-black rounded-md px-1.5 py-0.5 leading-none shrink-0 border border-transparent ${
+                      u.role === UserRole.ADMIN
+                        ? "bg-amber-600 text-white"
+                        : u.role === UserRole.REVIEWER
+                        ? "bg-emerald-600 text-white"
+                        : "bg-indigo-600 text-white"
+                    }`}>
+                      <span translate="no" className="notranslate">{u.role}</span>
+                    </span>
+
+                    <span className={`text-[7.5px] font-black rounded-md px-1.5 py-0.5 leading-none shrink-0 ${
+                      u.status === UserStatus.ACTIVE
+                        ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
+                        : u.status === UserStatus.PENDING
+                        ? "bg-rose-50 text-rose-600 border border-rose-250 animate-pulse"
+                        : u.status === UserStatus.LOCKED
+                        ? "bg-orange-50 text-orange-600 border border-orange-200"
+                        : "bg-rose-100 text-rose-700"
+                    }`}>
+                      <span translate="no" className="notranslate">{u.status}</span>
+                    </span>
+                  </div>
+                </div>
+
+                {!isMe && (
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-100 mt-0.5">
+                    {u.status === UserStatus.PENDING ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onUpdateUserStatus) {
+                              onUpdateUserStatus(u.id, UserStatus.ACTIVE);
+                              showToast(`Đã phê duyệt hoạt động cho ${u.fullName}! 🎉`);
+                            }
+                          }}
+                          className="flex-1 flex items-center justify-center gap-1.5 text-[9px] font-extrabold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 py-1.5 rounded-lg cursor-pointer transition-colors"
+                        >
+                          <Check className="w-3.5 h-3.5 pointer-events-none" />
+                          <span translate="no" className="notranslate"><T>PHÊ DUYỆT</T></span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onUpdateUserStatus) {
+                              onUpdateUserStatus(u.id, UserStatus.REJECTED);
+                              showToast(`Đã từ chối tài khoản ${u.fullName}! ❌`);
+                            }
+                          }}
+                          className="flex-1 flex items-center justify-center gap-1.5 text-[9px] font-extrabold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-250 py-1.5 rounded-lg cursor-pointer transition-colors"
+                        >
+                          <X className="w-3.5 h-3.5 pointer-events-none" />
+                          <span translate="no" className="notranslate"><T>TỪ CHỐI</T></span>
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        {u.status === UserStatus.ACTIVE ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (onUpdateUserStatus) {
+                                onUpdateUserStatus(u.id, UserStatus.LOCKED);
+                                showToast(`Đã khóa tài khoản ${u.fullName}! 🔒`);
+                              }
+                            }}
+                            className="flex-1 flex items-center justify-center gap-1 text-[8.5px] font-bold text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 py-1.5 rounded-lg cursor-pointer transition-all"
+                          >
+                            <Lock className="w-3 h-3 pointer-events-none" />
+                            <span translate="no" className="notranslate"><T>Khóa Tài Khoản</T></span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (onUpdateUserStatus) {
+                                onUpdateUserStatus(u.id, UserStatus.ACTIVE);
+                                showToast(`Đã kích hoạt lại tài khoản ${u.fullName}! ✅`);
+                              }
+                            }}
+                            className="flex-1 flex items-center justify-center gap-1 text-[8.5px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-250 py-1.5 rounded-lg cursor-pointer transition-all"
+                          >
+                            <Check className="w-3 h-3 pointer-events-none" />
+                            <span translate="no" className="notranslate"><T>Kích Hoạt Lại</T></span>
+                          </button>
+                        )}
+
+                        <div className="flex-1 flex items-center gap-1 pl-1 bg-slate-50 border border-slate-200 rounded-lg px-2 cursor-pointer relative justify-between">
+                          <Shield className="w-3.5 h-3.5 text-slate-400 shrink-0 select-none pointer-events-none" />
+                          <select
+                            value={u.role}
+                            onChange={(e) => {
+                              if (onUpdateUserRole) {
+                                onUpdateUserRole(u.id, e.target.value as UserRole);
+                                showToast(`Đã cập nhật vai trò ${e.target.value} cho ${u.fullName}! 🛡️`);
+                              }
+                            }}
+                            className="w-full bg-transparent border-none py-1.5 focus:outline-none text-[8.5px] font-extrabold text-slate-700 cursor-pointer text-center outline-none shrink-0"
+                          >
+                            <option value={UserRole.ADMIN} translate="no" className="notranslate">{UserRole.ADMIN}</option>
+                            <option value={UserRole.REVIEWER} translate="no" className="notranslate">{UserRole.REVIEWER}</option>
+                            <option value={UserRole.STAFF} translate="no" className="notranslate">{UserRole.STAFF}</option>
+                          </select>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -531,7 +877,9 @@ export default function MobileFrame({
   companies,
   onSwitchToDesktop,
   chats,
-  onAddChatMessage
+  onAddChatMessage,
+  onUpdateUserStatus,
+  onUpdateUserRole
 }: MobileFrameProps) {
   const config = mobileUIConfig || {};
   const displayRule = config.displayRule || "clean";
@@ -671,18 +1019,36 @@ export default function MobileFrame({
     return factoryName;
   };
 
-  // Tính số lượng người online thực tế theo Presence Heartbeat
-  const getOnlineCount = () => {
+  // Tính số lượng người online thực tế kết hợp giả lập thành viên hoạt động
+  const getOnlineUsers = () => {
     if (!users || users.length === 0) {
-      return 1; // Mặc định có ít nhất chính mình
+      return [];
     }
     const now = Date.now();
-    const onlineUsers = users.filter((u) => {
-      if (!u.lastActive) return false;
-      // Sai lệch thời gian nhỏ hơn hoặc bằng 4 phút (240.000 ms)
-      return Math.abs(now - u.lastActive) <= 240000;
+    return users.map((u, idx) => {
+      // Chỉ những tài khoản hoạt động mới được hiển thị trực tuyến
+      if (u.status !== UserStatus.ACTIVE) {
+        return { ...u, isOnlineSimulated: false, lastActiveTime: u.lastActive };
+      }
+
+      // Current logged in user is always online
+      if (currentUser && u.id === currentUser.id) {
+        return { ...u, isOnlineSimulated: true, lastActiveTime: now };
+      }
+      
+      // Determine if they are active from actual Firebase Heartbeat
+      const isHeartbeatOnline = u.lastActive && Math.abs(now - u.lastActive) <= 240000;
+      if (isHeartbeatOnline) {
+        // Last active is between 1 and 3 minutes ago
+        return { ...u, isOnlineSimulated: true, lastActiveTime: u.lastActive };
+      }
+
+      return { ...u, isOnlineSimulated: false, lastActiveTime: u.lastActive };
     });
-    return Math.max(1, onlineUsers.length);
+  };
+
+  const getOnlineCount = () => {
+    return getOnlineUsers().filter(u => u.isOnlineSimulated).length;
   };
 
   const onlineCount = getOnlineCount();
@@ -708,7 +1074,7 @@ export default function MobileFrame({
   }, [openChatReportId]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedFactoryFilter, setSelectedFactoryFilter] = useState<string | null>(null);
-  const [activeBottomTab, setActiveBottomTab] = useState<"BAO_CAO" | "PHAN_TICH">("BAO_CAO");
+  const [activeBottomTab, setActiveBottomTab] = useState<"BAO_CAO" | "PHAN_TICH" | "PHE_DUYET">("BAO_CAO");
   const [showTrash, setShowTrash] = useState(false);
   const [mobileBranchFilter, setMobileBranchFilter] = useState<string>("Tất cả");
   const [mobileTimeFilter, setMobileTimeFilter] = useState<"NGAY" | "TUAN" | "THANG">("THANG");
@@ -788,6 +1154,9 @@ export default function MobileFrame({
 
   // Notification states
   const [showNotifDrawer, setShowNotifDrawer] = useState(false);
+  const [showOnlineUsersDrawer, setShowOnlineUsersDrawer] = useState(false);
+  const [onlineSearchTerm, setOnlineSearchTerm] = useState("");
+  const [onlineTabFilter, setOnlineTabFilter] = useState<"ONLINE" | "ALL">("ONLINE");
   const [readNotifIds, setReadNotifIds] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem("4m1e1i_read_notifications");
@@ -815,6 +1184,48 @@ export default function MobileFrame({
   }, [deletedNotifIds]);
 
   const [notifIdConfirmDlt, setNotifIdConfirmDlt] = useState<string | null>(null);
+
+  // App home screen badge count state and automatic updating
+  const [appIconBadgeCount, setAppIconBadgeCount] = useState<number>(0);
+
+  useEffect(() => {
+    const calculateBadgeCount = () => {
+      const now = new Date().getTime();
+      const count = reports.filter((r) => {
+        if (r.isDeleted) return false;
+
+        const rCreated = parseReportTimestamp(r.timestamp).getTime();
+        const ageCreatedMin = (now - rCreated) / (1000 * 60);
+        const isNew = ageCreatedMin >= 0 && ageCreatedMin <= 5;
+
+        const rUpdated = r.updatedAt ? parseReportTimestamp(r.updatedAt).getTime() : 0;
+        const ageUpdatedMin = r.updatedAt ? (now - rUpdated) / (1000 * 60) : Infinity;
+        const isRecentlyUpdated = ageUpdatedMin >= 0 && ageUpdatedMin <= 5;
+
+        return isNew || isRecentlyUpdated;
+      }).length;
+
+      setAppIconBadgeCount(count);
+
+      // Web Badging API - Set real notification badge on home screen PWA icon
+      if (typeof navigator !== "undefined" && "setAppBadge" in navigator) {
+        if (count > 0) {
+          navigator.setAppBadge(count).catch((err) => {
+            console.warn("Lỗi đặt App Badge:", err);
+          });
+        } else {
+          navigator.clearAppBadge().catch((err) => {
+            console.warn("Lỗi xóa App Badge:", err);
+          });
+        }
+      }
+    };
+
+    calculateBadgeCount();
+    const intervalId = setInterval(calculateBadgeCount, 10000); // re-compute every 10 seconds
+
+    return () => clearInterval(intervalId);
+  }, [reports]);
 
   const [likedReports, setLikedReports] = useState<Record<string, boolean>>(() => {
     try {
@@ -1208,7 +1619,7 @@ App Link: ${window.location.origin}`;
 
   // Sort reports according to the prioritized layout:
   // 1. New reports (posted <= 5 minutes ago) are at the absolute top.
-  // 2. Previously posted reports with updates (age > 5 mins, and has updates) automatically jump up next.
+  // 2. Reports with new changes/updates (updated <= 5 minutes ago) also automatically jump to the top.
   // 3. Normal reports are ordered by original time descending at the bottom.
   const sortedReports = [...filteredReports].sort((a, b) => {
     const now = new Date().getTime();
@@ -1217,33 +1628,34 @@ App Link: ${window.location.origin}`;
     const aUpdated = a.updatedAt ? parseReportTimestamp(a.updatedAt).getTime() : 0;
     const bUpdated = b.updatedAt ? parseReportTimestamp(b.updatedAt).getTime() : 0;
 
-    const ageA_Min = (now - aCreated) / (1000 * 60);
-    const ageB_Min = (now - bCreated) / (1000 * 60);
+    const ageA_CreatedMin = (now - aCreated) / (1000 * 60);
+    const ageB_CreatedMin = (now - bCreated) / (1000 * 60);
 
-    const isA_New = ageA_Min >= 0 && ageA_Min <= 5;
-    const isB_New = ageB_Min >= 0 && ageB_Min <= 5;
+    const ageA_UpdatedMin = a.updatedAt ? (now - aUpdated) / (1000 * 60) : Infinity;
+    const ageB_UpdatedMin = b.updatedAt ? (now - bUpdated) / (1000 * 60) : Infinity;
 
-    // "Tin đã đăng có cập nhật" means it's older than 5 mins (or not considered "new" anymore) but has updates
-    const isA_Updated = !isA_New && !!a.updatedAt;
-    const isB_Updated = !isB_New && !!b.updatedAt;
+    // A report is "New" if original post is <= 5 mins ago
+    const isA_New = ageA_CreatedMin >= 0 && ageA_CreatedMin <= 5;
+    const isB_New = ageB_CreatedMin >= 0 && ageB_CreatedMin <= 5;
 
-    // Rule 1: New posts (isNew) on top
-    if (isA_New && !isB_New) return -1;
-    if (!isA_New && isB_New) return 1;
-    if (isA_New && isB_New) {
-      // Both are new -> sort by creation time descending (newest first)
-      return bCreated - aCreated;
+    // A report is "Recently Changed" if updatedAt of the post is <= 5 mins ago
+    const isA_RecentlyUpdated = ageA_UpdatedMin >= 0 && ageA_UpdatedMin <= 5;
+    const isB_RecentlyUpdated = ageB_UpdatedMin >= 0 && ageB_UpdatedMin <= 5;
+
+    // High priority group includes either New posts or recently updated/changed posts (within 5 minutes)
+    const isA_HighPriority = isA_New || isA_RecentlyUpdated;
+    const isB_HighPriority = isB_New || isB_RecentlyUpdated;
+
+    if (isA_HighPriority && !isB_HighPriority) return -1;
+    if (!isA_HighPriority && isB_HighPriority) return 1;
+    if (isA_HighPriority && isB_HighPriority) {
+      // Both are high priority -> sort by the absolute latest action of the report (creation or update) descending
+      const aLatest = Math.max(aCreated, aUpdated);
+      const bLatest = Math.max(bCreated, bUpdated);
+      return bLatest - aLatest;
     }
 
-    // Rule 2: Updated older posts go next
-    if (isA_Updated && !isB_Updated) return -1;
-    if (!isA_Updated && isB_Updated) return 1;
-    if (isA_Updated && isB_Updated) {
-      // Both are updated -> sort by the latest update time descending
-      return bUpdated - aUpdated;
-    }
-
-    // Rule 3: Ordinary older posts sorted by creation time descending
+    // Otherwise, sort remaining older posts by their original creation time descending
     return bCreated - aCreated;
   });
 
@@ -1564,8 +1976,15 @@ App Link: ${window.location.origin}`;
       <div className={`text-white px-4 py-3 flex items-center justify-between shadow-md shrink-0 select-none ${theme.bg}`}>
         <div className="flex items-center gap-2">
           {/* TANPHU simulated logo block */}
-          <div className="bg-white text-[9px] font-black px-1.5 py-0.5 rounded flex items-center justify-center font-sans tracking-tighter" style={{ color: "var(--color-primary, #1e3a8a)" }}>
-            <T>TANPHU</T>
+          <div className="relative">
+            <div className="bg-white text-[9px] font-black px-1.5 py-0.5 rounded flex items-center justify-center font-sans tracking-tighter" style={{ color: "var(--color-primary, #1e3a8a)" }}>
+              <T>TANPHU</T>
+            </div>
+            {appIconBadgeCount > 0 && (
+              <span className="absolute -top-2.5 -right-2 bg-rose-600 text-white text-[9px] font-black min-w-4.5 h-4.5 px-1 rounded-full flex items-center justify-center border border-slate-900 animate-pulse shadow-sm z-30 leading-none font-mono">
+                <span translate="no" className="notranslate">{appIconBadgeCount}</span>
+              </span>
+            )}
           </div>
           <T className="font-bold text-[13.6px] tracking-wide whitespace-nowrap">META 4M1E1I</T>
         </div>
@@ -1636,17 +2055,22 @@ App Link: ${window.location.origin}`;
           )}
           
           {/* Bong bóng số báo tổng số người online */}
-          <div 
-            className="relative hover:scale-115 active:scale-95 transition-all p-1 cursor-pointer"
+          <button 
+            onClick={() => {
+              setOnlineSearchTerm("");
+              setOnlineTabFilter("ONLINE");
+              setShowOnlineUsersDrawer(true);
+            }}
+            className="relative hover:scale-115 active:scale-95 transition-all p-1 cursor-pointer bg-transparent border-none outline-none"
             title="Số nhân viên đang online"
           >
-            <Users className="w-[18px] h-[18px] text-emerald-300" />
-            <span className="absolute -top-1 -right-1 bg-emerald-500 text-[8px] text-white font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border border-slate-900 leading-none shadow-sm animate-pulse">
+            <Users className="w-[18px] h-[18px] text-emerald-300 pointer-events-none" />
+            <span className="absolute -top-1 -right-1 bg-emerald-500 text-[8px] text-white font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border border-slate-900 leading-none shadow-sm animate-pulse pointer-events-none">
               <span translate="no" className="notranslate font-mono select-none">
                 {onlineCount}
               </span>
             </span>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -2128,6 +2552,15 @@ App Link: ${window.location.origin}`;
             );
           })()}
         </div>
+      ) : activeBottomTab === "PHE_DUYET" ? (
+        <MobileApprovalView
+          users={users}
+          currentUser={currentUser}
+          theme={theme}
+          onUpdateUserStatus={onUpdateUserStatus}
+          onUpdateUserRole={onUpdateUserRole}
+          showToast={showToast}
+        />
       ) : (
         <div
           ref={scrollContainerRef}
@@ -2696,7 +3129,7 @@ App Link: ${window.location.origin}`;
       )}
 
       {/* Modern bottom navigation tab bar containing Phân Tích & Báo Cáo */}
-      <div className="bg-slate-50 border-t border-slate-200 grid grid-cols-3 py-2 text-center text-slate-400 text-[10px] font-bold select-none shrink-0 font-sans shadow-inner shrink-0">
+      <div className={`bg-slate-50 border-t border-slate-200 grid ${currentUser?.role === UserRole.ADMIN ? "grid-cols-4" : "grid-cols-3"} py-2 text-center text-slate-400 text-[10px] font-bold select-none shrink-0 font-sans shadow-inner shrink-0`}>
         <button
           type="button"
           onClick={() => {
@@ -2733,6 +3166,26 @@ App Link: ${window.location.origin}`;
           <FileText className="w-4 h-4 mx-auto mb-0.5 transition-transform hover:scale-110" />
           <T><span translate="no" className="notranslate">Báo Cáo</span></T>
         </button>
+
+        {currentUser?.role === UserRole.ADMIN && (
+          <button
+            type="button"
+            onClick={() => setActiveBottomTab("PHE_DUYET")}
+            className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors ${
+              activeBottomTab === "PHE_DUYET" ? theme.text : "text-slate-400 hover:text-slate-600"
+            }`}
+          >
+            <div className="relative">
+              <ClipboardCheck className="w-4 h-4 mx-auto mb-0.5 transition-transform hover:scale-110" />
+              {users && users.filter((u) => u.status === UserStatus.PENDING).length > 0 && (
+                <span className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[7.5px] font-black rounded-full h-3.5 min-w-3.5 px-1 flex items-center justify-center animate-bounce">
+                  {users.filter((u) => u.status === UserStatus.PENDING).length}
+                </span>
+              )}
+            </div>
+            <T><span translate="no" className="notranslate">Phê Duyệt</span></T>
+          </button>
+        )}
 
         <button
           type="button"
@@ -3087,6 +3540,210 @@ App Link: ${window.location.origin}`}
               setShowTrash(false);
               setShowQrCodeView(false);
             }}
+            className="absolute bottom-20 right-5 w-[42px] h-[42px] bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-all z-50 cursor-pointer border-none"
+            title="Trở về Trang Báo Cáo"
+          >
+            <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
+          </button>
+        </div>
+      )}
+
+      {/* Online Users Statistics Drawer */}
+      {showOnlineUsersDrawer && (
+        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-end justify-center z-50 select-none animate-fadeIn">
+          <div className="bg-white rounded-t-3xl w-full max-h-[85%] overflow-hidden flex flex-col shadow-2xl border-t border-slate-100 animate-slideUp">
+            {/* Header */}
+            <div className="flex justify-between items-center px-4 py-4 border-b border-slate-100 shrink-0 bg-slate-50">
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-emerald-600 animate-pulse" />
+                <span className="font-extrabold text-[13px] text-[#1e3a8a] tracking-tight uppercase">
+                  <T>THỐNG KÊ TRỰC TUYẾN</T>
+                </span>
+                <span className="bg-emerald-100 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded-full ml-1">
+                  <T>ONLINE</T> <span translate="no" className="font-mono">{onlineCount}</span>
+                </span>
+              </div>
+              <button
+                onClick={() => setShowOnlineUsersDrawer(false)}
+                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-xs"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Tabs & Search */}
+            <div className="p-3 bg-white border-b border-slate-100 space-y-2.5 shrink-0">
+              {/* Search Bar */}
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Tìm nhân viên, Mã nhân sự..."
+                  value={onlineSearchTerm}
+                  onChange={(e) => setOnlineSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2 bg-slate-50 text-[11px] font-semibold border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white text-slate-700 font-sans"
+                />
+                {onlineSearchTerm && (
+                  <button
+                    onClick={() => setOnlineSearchTerm("")}
+                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 text-xs"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Tab Filters */}
+              <div className="flex bg-slate-100 p-0.5 rounded-xl text-[10px] font-extrabold">
+                <button
+                  type="button"
+                  onClick={() => setOnlineTabFilter("ONLINE")}
+                  className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer ${
+                    onlineTabFilter === "ONLINE"
+                      ? "bg-white text-emerald-750 shadow-sm"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  <T>ĐANG ONLINE ({onlineCount})</T>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOnlineTabFilter("ALL")}
+                  className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer ${
+                    onlineTabFilter === "ALL"
+                      ? "bg-white text-slate-800 shadow-sm"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  <T>TẤT CẢ ({users.length})</T>
+                </button>
+              </div>
+            </div>
+
+            {/* List */}
+            <div className="flex-1 overflow-y-auto p-3 bg-slate-50/50 space-y-2 pb-16">
+              {(() => {
+                const searchClean = onlineSearchTerm.toLowerCase().trim();
+                const processedUsers = getOnlineUsers().filter((u) => {
+                  const matchesSearch = 
+                    u.fullName.toLowerCase().includes(searchClean) ||
+                    u.id.includes(searchClean) ||
+                    (u.phone && u.phone.includes(searchClean)) ||
+                    (u.department && u.department.toLowerCase().includes(searchClean));
+                  
+                  if (onlineTabFilter === "ONLINE") {
+                    return matchesSearch && u.isOnlineSimulated;
+                  }
+                  return matchesSearch;
+                });
+
+                if (processedUsers.length === 0) {
+                  return (
+                    <div className="py-12 text-center flex flex-col items-center justify-center gap-2">
+                      <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-350">
+                        <Users className="w-6 h-6 text-slate-400" />
+                      </div>
+                      <div className="text-slate-400 text-xs font-bold leading-normal">
+                        <T>Không tìm thấy nhân sự phù hợp!</T>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return processedUsers.map((u) => {
+                  // Style configurations based on Role
+                  let roleColorClasses = "bg-slate-100 text-slate-700";
+                  let roleLabel = "Nhân viên";
+                  if (u.role === UserRole.ADMIN) {
+                    roleColorClasses = "bg-rose-50 text-rose-700 border border-rose-100";
+                    roleLabel = "Quản Trị Tối Cao";
+                  } else if (u.role === UserRole.REVIEWER) {
+                    roleColorClasses = "bg-blue-50 text-blue-700 border border-blue-100";
+                    roleLabel = "Ban Kiểm Duyệt";
+                  }
+
+                  // Split initials for avatar preview
+                  const nameParts = u.fullName.split(" ");
+                  const initials = nameParts.length >= 2 
+                    ? (nameParts[nameParts.length - 2][0] + nameParts[nameParts.length - 1][0]).toUpperCase()
+                    : u.fullName.slice(0, 2).toUpperCase();
+
+                  // Random cute theme background for user avatar
+                  const colorSeed = u.fullName.charCodeAt(0) + u.fullName.charCodeAt(u.fullName.length - 1);
+                  const bgColors = ["bg-blue-600", "bg-indigo-600", "bg-emerald-600", "bg-violet-600", "bg-[#eab308]", "bg-teal-600"];
+                  const avatarBg = bgColors[colorSeed % bgColors.length];
+
+                  return (
+                    <div 
+                      key={u.id}
+                      className="bg-white p-3 rounded-2xl border border-slate-100 flex items-center justify-between gap-3 shadow-xs hover:border-slate-200 transition-all text-left"
+                    >
+                      <div className="flex items-center gap-3">
+                        {/* Avatar */}
+                        <div className="relative">
+                          <div className={`w-10 h-10 rounded-full ${avatarBg} text-white flex items-center justify-center font-black text-xs font-sans tracking-tighter`}>
+                            <span translate="no" className="notranslate">{initials}</span>
+                          </div>
+                          
+                          {/* Live Pulse status bubble */}
+                          {u.isOnlineSimulated ? (
+                            <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border border-white flex items-center justify-center shadow-md animate-pulse">
+                              <span className="w-1.5 h-1.5 bg-green-200 rounded-full animate-ping" />
+                            </span>
+                          ) : (
+                            <span className="absolute bottom-0 right-0 w-3 h-3 bg-slate-350 rounded-full border border-white shadow-xs" />
+                          )}
+                        </div>
+
+                        {/* Info details */}
+                        <div className="text-left font-sans flex-1">
+                          {/* Name heading */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[12px] font-black text-slate-800 tracking-tight leading-tight">
+                              <T>{u.fullName}</T>
+                            </span>
+                            <span className={`text-[8px] font-extrabold px-1.5 py-0.5 rounded-full uppercase scale-90 ${roleColorClasses}`}>
+                              <T>{roleLabel}</T>
+                            </span>
+                          </div>
+
+                          {/* ID and branch code info */}
+                          <p className="text-[9.5px] text-slate-400 font-bold mt-0.5">
+                            <T>Mã NS:</T> <span translate="no" className="font-mono text-slate-500 mr-2">{u.id}</span>
+                            <T>SĐT:</T> <span translate="no" className="font-mono text-slate-500">{u.phone || "---"}</span>
+                          </p>
+
+                          {/* Department details */}
+                          <p className="text-[9px] text-slate-500 font-bold mt-0.5 line-clamp-1 max-w-[190px]">
+                            <T>{u.department || u.branch || "---"}</T>
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Right-side alignment display (Last Active time marker or live badge) */}
+                      <div className="text-right flex flex-col items-end shrink-0 select-none">
+                        {u.isOnlineSimulated ? (
+                          <span className="bg-emerald-50 text-emerald-700 text-[8.5px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 animate-pulse border border-emerald-100">
+                            <span className="w-1 h-1 bg-emerald-500 rounded-full" />
+                            <T>ĐANG HOẠT ĐỘNG</T>
+                          </span>
+                        ) : (
+                          <span className="bg-slate-100 text-slate-500 text-[8px] font-extrabold px-1.5 py-0.5 rounded">
+                            <T>OFFLINE</T>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+          
+          {/* Drawer Close Floating Control */}
+          <button
+            type="button"
+            onClick={() => setShowOnlineUsersDrawer(false)}
             className="absolute bottom-20 right-5 w-[42px] h-[42px] bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-all z-50 cursor-pointer border-none"
             title="Trở về Trang Báo Cáo"
           >

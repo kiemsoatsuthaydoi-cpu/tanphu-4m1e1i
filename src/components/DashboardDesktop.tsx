@@ -491,9 +491,9 @@ function DesktopDirectiveForm({
       />
       <button
         type="submit"
-        className="bg-amber-500 hover:bg-amber-600 px-2 py-1 text-[9px] text-white font-extrabold rounded uppercase cursor-pointer shrink-0"
+        className="bg-amber-500 hover:bg-amber-600 px-3.5 py-1 text-[9px] text-white font-black rounded uppercase cursor-pointer shrink-0 flex items-center justify-center"
       >
-        <T>Gửi</T>
+        <T>GỬI</T>
       </button>
     </form>
   );
@@ -550,6 +550,8 @@ export default function DashboardDesktop({
 
   const [showTrashLogs, setShowTrashLogs] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [showDesktopOnlinePopover, setShowDesktopOnlinePopover] = useState(false);
+  const [desktopOnlineSearch, setDesktopOnlineSearch] = useState("");
 
   const [forceSyncState, setForceSyncState] = useState<"idle" | "syncing" | "success" | "error">("idle");
   const [forceSyncUsersState, setForceSyncUsersState] = useState<"idle" | "syncing" | "success" | "error">("idle");
@@ -1178,6 +1180,39 @@ export default function DashboardDesktop({
     }
   };
 
+  // Tính số lượng người online thực tế kết hợp giả lập thành viên hoạt động
+  const getOnlineUsers = () => {
+    if (!users || users.length === 0) {
+      return [];
+    }
+    const now = Date.now();
+    return users.map((u, idx) => {
+      // Chỉ những tài khoản hoạt động mới được hiển thị trực tuyến
+      if (u.status !== UserStatus.ACTIVE) {
+        return { ...u, isOnlineSimulated: false, lastActiveTime: u.lastActive };
+      }
+
+      // Current logged in user is always online
+      if (currentUser && u.id === currentUser.id) {
+        return { ...u, isOnlineSimulated: true, lastActiveTime: now };
+      }
+      
+      // Determine if they are active from actual Firebase Heartbeat
+      const isHeartbeatOnline = u.lastActive && Math.abs(now - u.lastActive) <= 240000;
+      if (isHeartbeatOnline) {
+        return { ...u, isOnlineSimulated: true, lastActiveTime: u.lastActive };
+      }
+
+      return { ...u, isOnlineSimulated: false, lastActiveTime: u.lastActive };
+    });
+  };
+
+  const getOnlineCount = () => {
+    return getOnlineUsers().filter(u => u.isOnlineSimulated).length;
+  };
+
+  const onlineCount = getOnlineCount();
+
   return (
     <div className="flex-1 bg-[#F7F9FC] text-slate-800 flex flex-col min-h-0 font-sans">
       {/* Upper Main Broadcast Marquee Bar with specific ticker text */}
@@ -1234,6 +1269,110 @@ export default function DashboardDesktop({
               Bộ phận: {STANDARDIZED_QC_DEPT}
             </T>
           </div>
+          <div className="border-l border-slate-300 h-8 self-center" />
+          
+          {/* Nút hiển thị số người online cực đẹp */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                setDesktopOnlineSearch("");
+                setShowDesktopOnlinePopover(!showDesktopOnlinePopover);
+              }}
+              className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 text-[10px] font-extrabold rounded-lg flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs"
+              title="Nhấp để hiển thị danh sách người đang hoạt động trực tuyến"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse pointer-events-none" />
+              <T>ONLINE:</T>
+              <span className="font-mono text-[11px] font-black pointer-events-none">{onlineCount}</span>
+            </button>
+
+            {/* Popover danh sách người online (bản Desktop) */}
+            {showDesktopOnlinePopover && (
+              <div className="absolute right-0 top-11 bg-white border border-slate-200 w-72 rounded-xl shadow-2xl p-4 z-50 animate-fadeIn text-left">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">
+                  <span className="text-[10.5px] font-extrabold text-[#1e3a8a] flex items-center gap-1.5">
+                    <Users className="w-4 h-4 text-emerald-600 animate-pulse" />
+                    <T>TRỰC TUYẾN THỜI GIAN THỰC</T>
+                  </span>
+                  <button
+                    onClick={() => setShowDesktopOnlinePopover(false)}
+                    className="text-slate-400 hover:text-slate-600 font-extrabold text-xs"
+                    title="Đóng bản tin"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Ô tìm kiếm nhỏ */}
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm nhân sự..."
+                  value={desktopOnlineSearch}
+                  onChange={(e) => setDesktopOnlineSearch(e.target.value)}
+                  className="w-full px-2.5 py-1 bg-slate-50 text-[10px] font-sans font-bold border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-700 mb-2"
+                />
+
+                <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
+                  {(() => {
+                    const searchClean = desktopOnlineSearch.toLowerCase().trim();
+                    const processed = getOnlineUsers().filter(
+                      (u) =>
+                        u.isOnlineSimulated &&
+                        (u.fullName.toLowerCase().includes(searchClean) ||
+                          u.id.includes(searchClean) ||
+                          (u.department && u.department.toLowerCase().includes(searchClean)))
+                    );
+
+                    if (processed.length === 0) {
+                      return (
+                        <div className="text-center py-4 text-[9.5px] text-slate-400 font-bold">
+                          <T>Không có nhân sự trùng khớp</T>
+                        </div>
+                      );
+                    }
+
+                    return processed.map((u) => {
+                      const nameParts = u.fullName.split(" ");
+                      const initials =
+                        nameParts.length >= 2
+                          ? (nameParts[nameParts.length - 2][0] + nameParts[nameParts.length - 1][0]).toUpperCase()
+                          : u.fullName.slice(0, 2).toUpperCase();
+
+                      return (
+                        <div
+                          key={u.id}
+                          className="flex items-center gap-2.5 p-1.5 rounded-lg border border-slate-50 hover:bg-slate-50 transition-colors"
+                        >
+                          <div className="relative shrink-0">
+                            <div className="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-[9px] font-black font-sans">
+                              {initials}
+                            </div>
+                            <span className="absolute bottom-0 right-0 w-2 h-2 bg-emerald-500 rounded-full border border-white" />
+                          </div>
+                          
+                          <div className="flex-1 min-w-0 font-sans text-left">
+                            <div className="text-[10px] font-extrabold text-slate-800 truncate leading-tight">
+                              <T>{u.fullName}</T>
+                            </div>
+                            <div className="text-[8.5px] text-slate-400 font-semibold truncate mt-0.5">
+                              <span className="font-mono">{u.id}</span>
+                              <span className="mx-1">|</span>
+                              <T>{u.department || u.branch}</T>
+                            </div>
+                          </div>
+
+                          <div className="bg-emerald-500/10 text-emerald-600 text-[7px] font-black px-1 py-0.5 rounded animate-pulse shrink-0">
+                            <T>LIVE</T>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="border-l border-slate-300 h-8 self-center" />
           <button
             onClick={onToggleMobilePreview}
@@ -1393,6 +1532,33 @@ export default function DashboardDesktop({
                         if (currentUser.role === UserRole.REVIEWER) {
                           filteredUsers = filteredUsers.filter((u) => u.branch === currentUser.branch);
                         }
+                        
+                        // Sort users by priorities: 
+                        // 1. Admin (role === UserRole.ADMIN)
+                        // 2. Pending approval (status === UserStatus.PENDING)
+                        // 3. Online (isOnline || current user || heartbeat active within 4 minutes/240000ms)
+                        // 4. Reviewer (role === UserRole.REVIEWER)
+                        // 5. Staff (role === UserRole.STAFF or others)
+                        const now = Date.now();
+                        const getUserSortRank = (u: any) => {
+                          if (u.role === UserRole.ADMIN) return 1;
+                          if (u.status === UserStatus.PENDING) return 2;
+                          
+                          const isOnline = u.isOnline || 
+                            (currentUser && u.id === currentUser.id) || 
+                            (u.status === UserStatus.ACTIVE && u.lastActive && Math.abs(now - u.lastActive) <= 240000);
+                          if (isOnline) return 3;
+                          
+                          if (u.role === UserRole.REVIEWER) return 4;
+                          return 5;
+                        };
+
+                        filteredUsers.sort((a, b) => {
+                          const rA = getUserSortRank(a);
+                          const rB = getUserSortRank(b);
+                          if (rA !== rB) return rA - rB;
+                          return a.fullName.localeCompare(b.fullName, "vi");
+                        });
                         
                         if (filteredUsers.length === 0) {
                           return (

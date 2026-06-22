@@ -835,9 +835,8 @@ export default function App() {
         );
 
         if (dbConnected && !dbLoading) {
-          // Lưu trạng thái lastActive lên Firestore
+          // Lưu TRÚC TIẾP định dạng chỉ cập nhật lastActive lên Firestore để tránh ghi đè làm thay đổi trạng thái phê duyệt (Active/Pending) thực tế của người dùng từ admin
           await saveDocument(COLLECTIONS.USERS, currentUser.id, {
-            ...currentUser,
             lastActive: now
           });
         }
@@ -1104,29 +1103,27 @@ export default function App() {
 
   // Admin controls
   const handleUpdateStatus = (id: string, status: UserStatus) => {
-    setUsers((prev) => {
-      const updated = prev.map((u) => (u.id === id ? { ...u, status } : u));
-      if (dbConnected) {
-        const found = updated.find((u) => u.id === id);
-        if (found) {
-          saveDocument(COLLECTIONS.USERS, id, found).catch(console.error);
-        }
+    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, status } : u)));
+    if (dbConnected) {
+      // Find the user from the current state and apply the status update for saving
+      const found = users.find((u) => u.id === id);
+      if (found) {
+        const updatedUser = { ...found, status };
+        saveDocument(COLLECTIONS.USERS, id, updatedUser).catch(console.error);
       }
-      return updated;
-    });
+    }
   };
 
   const handleUpdateRole = (id: string, role: UserRole) => {
-    setUsers((prev) => {
-      const updated = prev.map((u) => (u.id === id ? { ...u, role } : u));
-      if (dbConnected) {
-        const found = updated.find((u) => u.id === id);
-        if (found) {
-          saveDocument(COLLECTIONS.USERS, id, found).catch(console.error);
-        }
+    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, role } : u)));
+    if (dbConnected) {
+      // Find the user from the current state and apply the role update for saving
+      const found = users.find((u) => u.id === id);
+      if (found) {
+        const updatedUser = { ...found, role };
+        saveDocument(COLLECTIONS.USERS, id, updatedUser).catch(console.error);
       }
-      return updated;
-    });
+    }
   };
 
   const handleDeleteUser = (id: string) => {
@@ -1534,6 +1531,31 @@ export default function App() {
       ...(reportRefId ? { reportRefId } : {})
     };
     setChats((prev) => [...prev, newChat]);
+
+    // If chat is related to a report, update that report's updatedAt to trigger priority jump
+    if (reportRefId) {
+      setReports((prevReports) => prevReports.map((r) => {
+        if (r.id !== reportRefId) return r;
+        
+        const now = new Date();
+        const hrs = String(now.getHours()).padStart(2, '0');
+        const mns = String(now.getMinutes()).padStart(2, '0');
+        const scs = String(now.getSeconds()).padStart(2, '0');
+        const date = String(now.getDate()).padStart(2, '0');
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const year = String(now.getFullYear()).slice(-2);
+        const updateTimeStr = `${hrs}:${mns}:${scs} ${date}/${month}/${year}`;
+
+        const logs = r.updateLogs ? [...r.updateLogs] : [];
+        logs.push(`Tương tác bình luận mới từ ${currentUser.fullName} (${updateTimeStr})`);
+
+        return {
+          ...r,
+          updatedAt: updateTimeStr,
+          updateLogs: logs
+        };
+      }));
+    }
   };
 
   // Report Submission Handler
@@ -2418,6 +2440,8 @@ export default function App() {
             onSwitchToDesktop={() => {}}
             chats={chats}
             onAddChatMessage={handleAddChatMessage}
+            onUpdateUserStatus={handleUpdateStatus}
+            onUpdateUserRole={handleUpdateRole}
           />
         )}
 
@@ -2604,6 +2628,8 @@ export default function App() {
                 onSwitchToDesktop={() => setShowMobilePreview(false)}
                 chats={chats}
                 onAddChatMessage={handleAddChatMessage}
+                onUpdateUserStatus={handleUpdateStatus}
+                onUpdateUserRole={handleUpdateRole}
               />
             )}
           </div>
@@ -2649,6 +2675,8 @@ export default function App() {
                 onSwitchToDesktop={() => setShowMobilePreview(false)}
                 chats={chats}
                 onAddChatMessage={handleAddChatMessage}
+                onUpdateUserStatus={handleUpdateStatus}
+                onUpdateUserRole={handleUpdateRole}
               />
             )}
           </div>

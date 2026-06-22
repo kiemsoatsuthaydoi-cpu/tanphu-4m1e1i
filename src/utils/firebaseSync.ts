@@ -225,7 +225,7 @@ export async function saveDocument(collectionName: string, id: string, data: any
       if (Array.isArray(obj)) {
         return obj.map(item => cleanObject(item));
       }
-      if (typeof obj === "object" && obj.constructor === Object) {
+      if (typeof obj === "object" && !(obj instanceof Date)) {
         const cleaned: any = {};
         for (const key of Object.keys(obj)) {
           if (obj[key] !== undefined) {
@@ -243,24 +243,34 @@ export async function saveDocument(collectionName: string, id: string, data: any
       // Map App internal fields back to Database schema fields
       const dbUser: any = {
         ...rawData,
-        id: id || rawData.id,
-        phoneNumber: rawData.phone || rawData.phoneNumber || "",
-        name: rawData.fullName || rawData.name || "",
-        createdAt: rawData.createdAt || new Date().toISOString()
       };
+      if (id) dbUser.id = id;
+      if (rawData.phone !== undefined || rawData.phoneNumber !== undefined) {
+        dbUser.phoneNumber = rawData.phone || rawData.phoneNumber || "";
+      }
+      if (rawData.fullName !== undefined || rawData.name !== undefined) {
+        dbUser.name = rawData.fullName || rawData.name || "";
+      }
+      if (rawData.createdAt !== undefined) {
+        dbUser.createdAt = rawData.createdAt;
+      }
       
       // Map App's UserRole enum to database role string value
-      if (rawData.role === "CHỦ ADMIN" || rawData.role === "admin") dbUser.role = "admin";
-      else if (rawData.role === "DUYỆT VIÊN" || rawData.role === "approver") dbUser.role = "approver";
-      else if (rawData.role === "NHÂN VIÊN" || rawData.role === "employee") dbUser.role = "employee";
-      else dbUser.role = "employee"; // Fallback
+      if (rawData.role !== undefined) {
+        if (rawData.role === "CHỦ ADMIN" || rawData.role === "admin") dbUser.role = "admin";
+        else if (rawData.role === "DUYỆT VIÊN" || rawData.role === "approver") dbUser.role = "approver";
+        else if (rawData.role === "NHÂN VIÊN" || rawData.role === "employee") dbUser.role = "employee";
+        else dbUser.role = "employee"; // Fallback
+      }
       
       // Map App's UserStatus enum to database status string value
-      if (rawData.status === "Chờ phê duyệt" || rawData.status === "pending") dbUser.status = "pending";
-      else if (rawData.status === "Đã hoạt động" || rawData.status === "approved" || rawData.status === "Đã duyệt") dbUser.status = "approved";
-      else if (rawData.status === "Bị từ chối" || rawData.status === "rejected") dbUser.status = "rejected";
-      else if (rawData.status === "Đã khóa" || rawData.status === "locked") dbUser.status = "locked";
-      else dbUser.status = "pending"; // Fallback
+      if (rawData.status !== undefined) {
+        if (rawData.status === "Chờ phê duyệt" || rawData.status === "pending") dbUser.status = "pending";
+        else if (rawData.status === "Đã hoạt động" || rawData.status === "approved" || rawData.status === "Đã duyệt") dbUser.status = "approved";
+        else if (rawData.status === "Bị từ chối" || rawData.status === "rejected") dbUser.status = "rejected";
+        else if (rawData.status === "Đã khóa" || rawData.status === "locked") dbUser.status = "locked";
+        else dbUser.status = "pending"; // Fallback
+      }
       
       rawData = dbUser;
     }
