@@ -613,7 +613,7 @@ export default function App() {
               }
             }
           } else {
-            if (!d.branchId.startsWith("BRANCH-") && !d.branchId.startsWith("DEPT-") && d.branchId.length <= 10) {
+            if (d.branchId && !d.branchId.startsWith("BRANCH-") && !d.branchId.startsWith("DEPT-") && d.branchId.length <= 10) {
               suffix = ` (${d.branchId})`;
             }
           }
@@ -1432,7 +1432,7 @@ export default function App() {
 
     const activeBranch = branches.find((b) => b.id === d.branchId);
     let suffix = activeBranch ? getBranchCodeSuffix(activeBranch.name) : "";
-    if (d.branchId.startsWith("BRANCH-") || d.branchId.startsWith("DEPT-")) {
+    if (d.branchId && (d.branchId.startsWith("BRANCH-") || d.branchId.startsWith("DEPT-"))) {
       suffix = "";
     }
 
@@ -1469,7 +1469,7 @@ export default function App() {
 
     const activeBranch = branches.find((b) => b.id === updated.branchId);
     let suffix = activeBranch ? getBranchCodeSuffix(activeBranch.name) : "";
-    if (updated.branchId.startsWith("BRANCH-") || updated.branchId.startsWith("DEPT-")) {
+    if (updated.branchId && (updated.branchId.startsWith("BRANCH-") || updated.branchId.startsWith("DEPT-"))) {
       suffix = "";
     }
 
