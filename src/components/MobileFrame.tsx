@@ -1492,13 +1492,6 @@ App Link: ${window.location.origin}`;
     if (scrollContainerRef.current) {
       const scrollTop = scrollContainerRef.current.scrollTop;
       setShowScrollTop(scrollTop > 100);
-
-      // Hide filters when scrolling down, show filters when scrolling up or near the top
-      if (scrollTop > lastScrollTopRef.current && scrollTop > 60) {
-        setShowFilters(false);
-      } else if (scrollTop < lastScrollTopRef.current || scrollTop <= 15) {
-        setShowFilters(true);
-      }
       lastScrollTopRef.current = scrollTop;
     }
   };
@@ -3202,7 +3195,7 @@ App Link: ${window.location.origin}`;
       )}
 
       {/* Modern bottom navigation tab bar containing Phân Tích & Báo Cáo */}
-      <div className={`bg-slate-50 border-t border-slate-200 grid ${currentUser?.role === UserRole.ADMIN ? "grid-cols-4" : "grid-cols-3"} py-2 text-center text-slate-400 text-[10px] font-bold select-none shrink-0 font-sans shadow-inner shrink-0`}>
+      <div className={`bg-slate-50 border-t border-slate-200 grid ${(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) ? "grid-cols-4" : "grid-cols-3"} py-2 text-center text-[10px] font-bold select-none shrink-0 font-sans shadow-inner shrink-0`}>
         <button
           type="button"
           onClick={() => {
@@ -3212,44 +3205,50 @@ App Link: ${window.location.origin}`;
               showToast("Tính năng Phân Tích đang tạm khóa, chỉ dành cho Admin! 🔒");
             }
           }}
-          className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors ${
+          className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors min-w-0 overflow-hidden ${
             currentUser?.role !== UserRole.ADMIN
               ? "opacity-50 text-slate-400 cursor-not-allowed"
               : activeBottomTab === "PHAN_TICH"
-              ? theme.text
-              : "text-slate-400 hover:text-slate-600"
+              ? "text-violet-600 font-extrabold"
+              : "text-slate-400 hover:text-violet-600"
           }`}
         >
           <div className="relative">
-            <BarChart2 className="w-4 h-4 mx-auto mb-0.5 transition-transform hover:scale-110" />
+            <BarChart2 className={`w-4 h-4 mx-auto mb-0.5 transition-transform hover:scale-110 ${
+              activeBottomTab === "PHAN_TICH" ? "text-violet-600 font-extrabold" : "text-violet-400"
+            }`} />
             {currentUser?.role !== UserRole.ADMIN && (
               <Lock className="w-2.5 h-2.5 text-rose-500 absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 border border-slate-200" />
             )}
           </div>
-          <T><span translate="no" className="notranslate">Phân Tích</span></T>
+          <T><span translate="no" className="notranslate truncate w-full block text-center">Phân Tích</span></T>
         </button>
         
         <button
           type="button"
           onClick={() => setActiveBottomTab("BAO_CAO")}
-          className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors ${
-            activeBottomTab === "BAO_CAO" ? theme.text : "text-slate-400 hover:text-slate-600"
+          className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors min-w-0 overflow-hidden ${
+            activeBottomTab === "BAO_CAO" ? "text-sky-600 font-extrabold" : "text-slate-400 hover:text-sky-600"
           }`}
         >
-          <FileText className="w-4 h-4 mx-auto mb-0.5 transition-transform hover:scale-110" />
-          <T><span translate="no" className="notranslate">Báo Cáo</span></T>
+          <FileText className={`w-4 h-4 mx-auto mb-0.5 transition-transform hover:scale-110 ${
+            activeBottomTab === "BAO_CAO" ? "text-sky-600 font-extrabold" : "text-sky-400"
+          }`} />
+          <T><span translate="no" className="notranslate truncate w-full block text-center">Báo Cáo</span></T>
         </button>
 
         {(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) && (
           <button
             type="button"
             onClick={() => setActiveBottomTab("PHE_DUYET")}
-            className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors ${
-              activeBottomTab === "PHE_DUYET" ? theme.text : "text-slate-400 hover:text-slate-600"
+            className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors min-w-0 overflow-hidden ${
+              activeBottomTab === "PHE_DUYET" ? "text-amber-600 font-extrabold" : "text-slate-400 hover:text-amber-600"
             }`}
           >
             <div className="relative">
-              <ClipboardCheck className="w-4 h-4 mx-auto mb-0.5 transition-transform hover:scale-110" />
+              <ClipboardCheck className={`w-4 h-4 mx-auto mb-0.5 transition-transform hover:scale-110 ${
+                activeBottomTab === "PHE_DUYET" ? "text-amber-600 font-extrabold" : "text-amber-500"
+              }`} />
               {(() => {
                 const isRev = currentUser?.role === UserRole.REVIEWER;
                 const relevantPending = (users || []).filter((u) => {
@@ -3265,17 +3264,17 @@ App Link: ${window.location.origin}`;
                 );
               })()}
             </div>
-            <T><span translate="no" className="notranslate">Phê Duyệt</span></T>
+            <T><span translate="no" className="notranslate truncate w-full block text-center">Phê Duyệt</span></T>
           </button>
         )}
 
         <button
           type="button"
           onClick={() => setShowLogoutConfirm(true)}
-          className="flex flex-col items-center justify-center py-0.5 text-slate-500 hover:text-rose-600 transition-colors cursor-pointer select-none border-none bg-transparent w-full"
+          className="flex flex-col items-center justify-center py-0.5 text-slate-400 hover:text-rose-500 transition-colors cursor-pointer select-none border-none bg-transparent w-full min-w-0 overflow-hidden"
         >
-          <LogOut className="w-4 h-4 mx-auto mb-0.5 text-slate-550 hover:text-rose-600 hover:scale-110 transition-transform" />
-          <T><span translate="no" className="notranslate line-clamp-1 text-center w-full block">{currentUser?.fullName || "Đăng Xuất"}</span></T>
+          <LogOut className="w-4 h-4 mx-auto mb-0.5 text-rose-500 hover:text-rose-600 hover:scale-110 transition-transform" />
+          <T><span translate="no" className="notranslate truncate w-full block text-center text-[9px] font-semibold">{currentUser?.fullName || "Đăng Xuất"}</span></T>
         </button>
       </div>
 
