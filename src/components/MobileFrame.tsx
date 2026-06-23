@@ -986,7 +986,8 @@ export default function MobileFrame({
   const fontSizeClass = getFontSizeClass(config.fontSize);
   const contentFontSizeClass = getContentFontSizeClass(config.fontSize);
 
-  const getFactoryDisplayName = (factoryName: string) => {
+  const getFactoryDisplayName = (factoryName: string | undefined | null) => {
+    if (!factoryName || typeof factoryName !== "string") return "";
     const match = factoryName.match(/\(((?:TPP|BBM|DNP)-[^)]+)\)/i);
     const branchId = match ? match[1].toUpperCase() : null;
 
@@ -995,9 +996,14 @@ export default function MobileFrame({
     }
 
     // Find the company suffix
-    const foundBranch = branches?.find(
-      (b) => b.name === factoryName || b.id === factoryName || factoryName.includes(b.id) || b.name.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase() === factoryName.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase()
-    );
+    const foundBranch = branches?.find((b) => {
+      const bName = b.name || "";
+      const bId = b.id || "";
+      const fNameLower = factoryName.toLowerCase();
+      const bNameClean = bName.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
+      const fNameClean = factoryName.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
+      return bName === factoryName || bId === factoryName || factoryName.includes(bId) || bNameClean === fNameClean;
+    });
     
     const getAbbreviation = (cid: string) => {
       if (!cid) return "";
@@ -1063,6 +1069,36 @@ export default function MobileFrame({
   };
 
   const onlineCount = getOnlineCount();
+
+  const [notificationPermission, setNotificationPermission] = useState<string>(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      return Notification.permission;
+    }
+    return "unsupported";
+  });
+
+  const handleRequestNotificationPermission = async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      showToast("Trình duyệt không hỗ trợ thông báo đẩy!");
+      return;
+    }
+
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+      if (permission === 'granted') {
+        showToast("Đã kích hoạt quyền thông báo thành công! 🎉");
+        if ("setAppBadge" in navigator) {
+          navigator.setAppBadge(1).catch(() => {});
+        }
+      } else if (permission === 'denied') {
+        showToast("Quyền thông báo bị từ chối. Hãy bật lại trong cài đặt thiết bị!");
+      }
+    } catch (err) {
+      console.error("Error requesting notification permission:", err);
+      showToast("Không thể yêu cầu quyền thông báo!");
+    }
+  };
 
   const [searchTerm, setSearchTerm] = useState("");
   const [showQrCodeView, setShowQrCodeView] = useState(false);
@@ -1492,13 +1528,6 @@ App Link: ${window.location.origin}`;
     if (scrollContainerRef.current) {
       const scrollTop = scrollContainerRef.current.scrollTop;
       setShowScrollTop(scrollTop > 100);
-
-      // Hide filters when scrolling down, show filters when scrolling up or near the top
-      if (scrollTop > lastScrollTopRef.current && scrollTop > 60) {
-        setShowFilters(false);
-      } else if (scrollTop < lastScrollTopRef.current || scrollTop <= 15) {
-        setShowFilters(true);
-      }
       lastScrollTopRef.current = scrollTop;
     }
   };
@@ -1704,7 +1733,8 @@ App Link: ${window.location.origin}`;
           return "Anh";
         };
 
-        const getCleanName = (name: string): string => {
+        const getCleanName = (name: string | undefined | null): string => {
+          if (!name || typeof name !== "string") return "";
           return name.replace(/\s+/g, " ").trim();
         };
 
@@ -2060,7 +2090,7 @@ App Link: ${window.location.origin}`;
           <T className="font-bold text-[13.6px] tracking-wide whitespace-nowrap">META 4M1E1I</T>
         </div>
         <div className="flex items-center gap-[9.5px]">
-          {currentUser?.role !== UserRole.STAFF && (
+          {currentUser?.role !== UserRole.STAFF && currentUser?.role !== UserRole.REVIEWER && (
             <button
               onClick={() => setShowTrash(true)}
               className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
@@ -3202,7 +3232,7 @@ App Link: ${window.location.origin}`;
       )}
 
       {/* Modern bottom navigation tab bar containing Phân Tích & Báo Cáo */}
-      <div className={`bg-slate-50 border-t border-slate-200 grid ${currentUser?.role === UserRole.ADMIN ? "grid-cols-4" : "grid-cols-3"} py-2 text-center text-slate-400 text-[10px] font-bold select-none shrink-0 font-sans shadow-inner shrink-0`}>
+      <div className={`bg-slate-50 border-t border-slate-200 grid ${(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) ? "grid-cols-4" : "grid-cols-3"} py-2 text-center text-[10px] font-bold select-none shrink-0 font-sans shadow-inner shrink-0`}>
         <button
           type="button"
           onClick={() => {
@@ -3212,44 +3242,50 @@ App Link: ${window.location.origin}`;
               showToast("Tính năng Phân Tích đang tạm khóa, chỉ dành cho Admin! 🔒");
             }
           }}
-          className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors ${
+          className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors min-w-0 overflow-hidden ${
             currentUser?.role !== UserRole.ADMIN
               ? "opacity-50 text-slate-400 cursor-not-allowed"
               : activeBottomTab === "PHAN_TICH"
-              ? theme.text
-              : "text-slate-400 hover:text-slate-600"
+              ? "text-violet-600 font-extrabold"
+              : "text-slate-400 hover:text-violet-600"
           }`}
         >
           <div className="relative">
-            <BarChart2 className="w-4 h-4 mx-auto mb-0.5 transition-transform hover:scale-110" />
+            <BarChart2 className={`w-4 h-4 mx-auto mb-0.5 transition-transform hover:scale-110 ${
+              activeBottomTab === "PHAN_TICH" ? "text-violet-600 font-extrabold" : "text-violet-400"
+            }`} />
             {currentUser?.role !== UserRole.ADMIN && (
               <Lock className="w-2.5 h-2.5 text-rose-500 absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 border border-slate-200" />
             )}
           </div>
-          <T><span translate="no" className="notranslate">Phân Tích</span></T>
+          <T><span translate="no" className="notranslate truncate w-full block text-center">Phân Tích</span></T>
         </button>
         
         <button
           type="button"
           onClick={() => setActiveBottomTab("BAO_CAO")}
-          className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors ${
-            activeBottomTab === "BAO_CAO" ? theme.text : "text-slate-400 hover:text-slate-600"
+          className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors min-w-0 overflow-hidden ${
+            activeBottomTab === "BAO_CAO" ? "text-sky-600 font-extrabold" : "text-slate-400 hover:text-sky-600"
           }`}
         >
-          <FileText className="w-4 h-4 mx-auto mb-0.5 transition-transform hover:scale-110" />
-          <T><span translate="no" className="notranslate">Báo Cáo</span></T>
+          <FileText className={`w-4 h-4 mx-auto mb-0.5 transition-transform hover:scale-110 ${
+            activeBottomTab === "BAO_CAO" ? "text-sky-600 font-extrabold" : "text-sky-400"
+          }`} />
+          <T><span translate="no" className="notranslate truncate w-full block text-center">Báo Cáo</span></T>
         </button>
 
         {(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) && (
           <button
             type="button"
             onClick={() => setActiveBottomTab("PHE_DUYET")}
-            className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors ${
-              activeBottomTab === "PHE_DUYET" ? theme.text : "text-slate-400 hover:text-slate-600"
+            className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors min-w-0 overflow-hidden ${
+              activeBottomTab === "PHE_DUYET" ? "text-amber-600 font-extrabold" : "text-slate-400 hover:text-amber-600"
             }`}
           >
             <div className="relative">
-              <ClipboardCheck className="w-4 h-4 mx-auto mb-0.5 transition-transform hover:scale-110" />
+              <ClipboardCheck className={`w-4 h-4 mx-auto mb-0.5 transition-transform hover:scale-110 ${
+                activeBottomTab === "PHE_DUYET" ? "text-amber-600 font-extrabold" : "text-amber-500"
+              }`} />
               {(() => {
                 const isRev = currentUser?.role === UserRole.REVIEWER;
                 const relevantPending = (users || []).filter((u) => {
@@ -3265,17 +3301,17 @@ App Link: ${window.location.origin}`;
                 );
               })()}
             </div>
-            <T><span translate="no" className="notranslate">Phê Duyệt</span></T>
+            <T><span translate="no" className="notranslate truncate w-full block text-center">Phê Duyệt</span></T>
           </button>
         )}
 
         <button
           type="button"
           onClick={() => setShowLogoutConfirm(true)}
-          className="flex flex-col items-center justify-center py-0.5 text-slate-500 hover:text-rose-600 transition-colors cursor-pointer select-none border-none bg-transparent w-full"
+          className="flex flex-col items-center justify-center py-0.5 text-slate-400 hover:text-rose-500 transition-colors cursor-pointer select-none border-none bg-transparent w-full min-w-0 overflow-hidden"
         >
-          <LogOut className="w-4 h-4 mx-auto mb-0.5 text-slate-550 hover:text-rose-600 hover:scale-110 transition-transform" />
-          <T><span translate="no" className="notranslate line-clamp-1 text-center w-full block">{currentUser?.fullName || "Đăng Xuất"}</span></T>
+          <LogOut className="w-4 h-4 mx-auto mb-0.5 text-rose-500 hover:text-rose-600 hover:scale-110 transition-transform" />
+          <T><span translate="no" className="notranslate truncate w-full block text-center text-[9px] font-semibold">{currentUser?.fullName || "Đăng Xuất"}</span></T>
         </button>
       </div>
 
@@ -3502,6 +3538,65 @@ App Link: ${window.location.origin}`}
 
             {/* Notifications scroll list */}
             <div className="flex-1 overflow-y-auto p-3.5 bg-slate-50/50 space-y-2 pb-8">
+              {/* Setup Badging card */}
+              <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-2xl space-y-2 mb-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold text-[#1e3a8a] flex items-center gap-1 uppercase">
+                    ⭐ <T><span translate="no" className="notranslate text-[#1e3a8a] font-extrabold">KÍCH HOẠT BONG BÓNG SỐ</span></T>
+                  </span>
+                  <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-white flex items-center gap-1 select-none border border-blue-100">
+                    <span translate="no" className="notranslate">Huy hiệu:</span>
+                    {notificationPermission === "granted" ? (
+                      <span translate="no" className="text-emerald-700 font-black notranslate">ĐÃ BẬT</span>
+                    ) : notificationPermission === "denied" ? (
+                      <span translate="no" className="text-rose-600 font-black notranslate">BỊ KHÓA</span>
+                    ) : (
+                      <span translate="no" className="text-amber-600 font-black notranslate">CHƯA BẬT</span>
+                    )}
+                  </span>
+                </div>
+                
+                <p className="text-[9px] text-slate-550 leading-normal">
+                  <T><span translate="no" className="notranslate">Để hiển thị bong bóng số thông báo màu đỏ trực tiếp trên biểu tượng ngoài màn hình chính giống như TikTok hoặc Zalo, quý khách cần cài đặt PWA:</span></T>
+                </p>
+
+                <div className="space-y-1.5 text-[9px] text-slate-650">
+                  <div className="flex gap-1.5 items-start bg-white p-2 rounded-xl border border-blue-50 shadow-3xs">
+                    <span className="text-blue-600 font-extrabold shrink-0">1.</span>
+                    <div className="leading-relaxed">
+                      <span translate="no" className="font-bold text-slate-700 notranslate">Cài đặt Màn hình chính:</span>
+                      <span translate="no" className="text-slate-500 notranslate"> Nhấn biểu tượng </span>
+                      <span translate="no" className="font-extrabold text-[#1e3a8a] notranslate">Chia sẻ (Safari)</span>
+                      <span translate="no" className="text-slate-500 notranslate"> hoặc nút </span>
+                      <span translate="no" className="font-extrabold text-[#1e3a8a] notranslate">Menu (Chrome)</span>
+                      <span translate="no" className="text-slate-500 notranslate"> rồi chọn </span>
+                      <span translate="no" className="font-black text-blue-700 underline notranslate">"Thêm vào Màn hình chính" (Add to Home Screen)</span>
+                      <span translate="no" className="text-slate-500 notranslate"> để sử dụng ứng dụng độc lập.</span>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-1.5 items-start bg-white p-2 rounded-xl border border-blue-50 shadow-3xs">
+                    <span className="text-blue-600 font-extrabold shrink-0">2.</span>
+                    <div className="flex-1 leading-relaxed">
+                      <span translate="no" className="font-bold text-slate-700 notranslate">Cho phép hiển thị số thông báo:</span>
+                      <span translate="no" className="text-slate-550 notranslate"> Cấp quyền thông báo cho ứng dụng trên điện thoại của bạn.</span>
+                      {notificationPermission !== "granted" ? (
+                        <button
+                          onClick={handleRequestNotificationPermission}
+                          className="mt-1.5 w-full bg-[#1e3a8a] text-white text-[8.5px] font-black py-1.5 px-3 rounded-lg cursor-pointer transition-colors block uppercase shadow-xs border-none"
+                        >
+                          <T><span translate="no" className="notranslate font-black">YÊU CẦU QUYỀN HIỂN THỊ</span></T>
+                        </button>
+                      ) : (
+                        <div className="mt-1 flex items-center gap-1 text-emerald-700 font-extrabold text-[8.5px]">
+                          ✅ <span translate="no" className="notranslate">Đã ủy quyền thành công! Số thông báo sẽ tự động đồng bộ.</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {notifications.length === 0 ? (
                 <div className="py-20 text-center flex flex-col items-center justify-center gap-3">
                   <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-slate-300">
