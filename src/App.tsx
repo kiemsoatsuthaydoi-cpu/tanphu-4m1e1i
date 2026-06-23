@@ -192,7 +192,10 @@ export default function App() {
       let loadedBranches: Branch[] = initialBranches;
       try {
         if (savedBranchesStr) {
-          loadedBranches = JSON.parse(savedBranchesStr);
+          const parsedB = JSON.parse(savedBranchesStr);
+          if (Array.isArray(parsedB)) {
+            loadedBranches = parsedB;
+          }
         }
       } catch (e) {}
 
@@ -1270,7 +1273,10 @@ export default function App() {
     }
   };
 
-  const getBranchCodeSuffix = (brName: string) => {
+  const getBranchCodeSuffix = (brName: string | undefined | null) => {
+    if (!brName || typeof brName !== "string") {
+      return "";
+    }
     if (brName.startsWith("BRANCH-") || brName.startsWith("DEPT-") || brName.length > 20) {
       return "";
     }

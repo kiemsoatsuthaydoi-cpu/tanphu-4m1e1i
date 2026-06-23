@@ -609,22 +609,25 @@ export default function DashboardDesktop({
   const [editPassword, setEditPassword] = useState("");
   const [editCompany, setEditCompany] = useState("");
 
-  const getFormattedUserBranch = (userBranchText: string, companyId?: string) => {
+  const getFormattedUserBranch = (userBranchText: string | undefined | null, companyId?: string) => {
     if (!userBranchText) return "";
-    if (/\([^)]+\)$/.test(userBranchText)) {
-      return userBranchText;
+    const cleanUserBranchText = String(userBranchText);
+    if (/\([^)]+\)$/.test(cleanUserBranchText)) {
+      return cleanUserBranchText;
     }
-    const foundBranch = branches.find((b) => {
+    const foundBranch = branches?.find((b) => {
       const bName = b.name || "";
-      return bName === userBranchText || bName.replace(/\s*\([^)]+\)$/, "").trim() === userBranchText.replace(/\s*\([^)]+\)$/, "").trim();
+      const bNameClean = bName.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
+      const fNameClean = cleanUserBranchText.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
+      return bName === userBranchText || bNameClean === fNameClean;
     });
     if (foundBranch) {
-      return `${userBranchText} (${foundBranch.companyId})`;
+      return `${cleanUserBranchText} (${foundBranch.companyId})`;
     }
     if (companyId) {
-      return `${userBranchText} (${companyId})`;
+      return `${cleanUserBranchText} (${companyId})`;
     }
-    return userBranchText;
+    return cleanUserBranchText;
   };
 
   const isDeleteReportAllowed = (report: QualityReport): boolean => {
@@ -648,19 +651,23 @@ export default function DashboardDesktop({
     return false;
   };
 
-  const getFormattedUserDept = (userDeptText: string, userBranchText: string) => {
+  const getFormattedUserDept = (userDeptText: string | undefined | null, userBranchText: string | undefined | null) => {
     if (!userDeptText) return "";
-    if (/\([^)]+\)$/.test(userDeptText)) {
-      return userDeptText;
+    const cleanUserDeptText = String(userDeptText);
+    if (/\([^)]+\)$/.test(cleanUserDeptText)) {
+      return cleanUserDeptText;
     }
-    const foundBranch = branches.find((b) => {
+    const cleanUserBranchText = userBranchText ? String(userBranchText).replace(/\s*\([^)]+\)$/, "").trim() : "";
+    const foundBranch = branches?.find((b) => {
       const bName = b.name || "";
-      return bName === userBranchText || bName.replace(/\s*\([^)]+\)$/, "").trim() === userBranchText.replace(/\s*\([^)]+\)$/, "").trim();
+      const bNameClean = bName.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
+      const fNameClean = cleanUserBranchText.toLowerCase();
+      return bName === userBranchText || bNameClean === fNameClean;
     });
     if (foundBranch) {
-      return `${userDeptText} (${foundBranch.id})`;
+      return `${cleanUserDeptText} (${foundBranch.id})`;
     }
-    return userDeptText;
+    return cleanUserDeptText;
   };
 
   const getFactoryDisplayName = (factoryName: string) => {
