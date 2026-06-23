@@ -37,7 +37,6 @@ import MobileFrame from "./components/MobileFrame";
 import ReportForm from "./components/ReportForm";
 import DashboardDesktop from "./components/DashboardDesktop";
 import { db } from "./utils/firebase";
-import { collection, onSnapshot } from "firebase/firestore";
 import { 
   COLLECTIONS, 
   seedFirestoreIfNeeded, 
@@ -153,100 +152,78 @@ export default function App() {
   });
 
   const [companies, setCompanies] = useState<Company[]>(() => {
-    try {
-      const saved = localStorage.getItem("4m1e1i_companies");
-      if (saved) {
-        return JSON.parse(saved);
-      }
-    } catch (e) {
-      console.error("Lỗi parse local storage companies:", e);
+    const saved = localStorage.getItem("4m1e1i_companies");
+    if (saved) {
+      return JSON.parse(saved);
     }
     return initialCompanies;
   });
 
   const [branches, setBranches] = useState<Branch[]>(() => {
-    try {
-      const saved = localStorage.getItem("4m1e1i_branches");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed.map((b: any) => ({
-            ...b,
-            name: (b.name || "")
-              .replace(" (CNBN)", "")
-              .replace(" (CNLA)", "")
-              .replace(" (NM314)", ""),
-            isScoring: b.id === "TPP-CTY" ? true : b.isScoring
-          }));
-        }
-      }
-    } catch (e) {
-      console.error("Lỗi parse local storage branches:", e);
+    const saved = localStorage.getItem("4m1e1i_branches");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return parsed.map((b: any) => ({
+        ...b,
+        name: b.name
+          .replace(" (CNBN)", "")
+          .replace(" (CNLA)", "")
+          .replace(" (NM314)", ""),
+        isScoring: b.id === "TPP-CTY" ? true : b.isScoring
+      }));
     }
     return initialBranches;
   });
 
   const [departments, setDepartments] = useState<Department[]>(() => {
-    try {
-      const savedBranchesStr = localStorage.getItem("4m1e1i_branches");
-      let loadedBranches: Branch[] = initialBranches;
-      try {
-        if (savedBranchesStr) {
-          loadedBranches = JSON.parse(savedBranchesStr);
-        }
-      } catch (e) {}
+    const savedBranchesStr = localStorage.getItem("4m1e1i_branches");
+    const loadedBranches: Branch[] = savedBranchesStr ? JSON.parse(savedBranchesStr) : initialBranches;
 
-      const saved = localStorage.getItem("4m1e1i_departments");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed.map((d: any) => {
-            let cleanName = d.name || "";
-            cleanName = cleanName.replace(/Quản\s+lí/gi, "Quản Lý");
-            cleanName = cleanName.replace(/quản\s+lí/gi, "Quản Lý");
-            cleanName = cleanName.replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng");
-            cleanName = cleanName.replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
+    const saved = localStorage.getItem("4m1e1i_departments");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return parsed.map((d: any) => {
+        let cleanName = d.name || "";
+        cleanName = cleanName.replace(/Quản\s+lí/gi, "Quản Lý");
+        cleanName = cleanName.replace(/quản\s+lí/gi, "Quản Lý");
+        cleanName = cleanName.replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng");
+        cleanName = cleanName.replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
 
-            // Strip any existing suffix like (TPP-CTY) or (BRANCH-...)
-            cleanName = cleanName.replace(/\s\([^)]+\)$/, "").trim();
+        // Strip any existing suffix like (TPP-CTY) or (BRANCH-...)
+        cleanName = cleanName.replace(/\s\([^)]+\)$/, "").trim();
 
-            // Dynamically find branch to determine what suffix to use
-            let suffix = "";
-            const br = loadedBranches.find((b) => b.id === d.branchId);
-            if (br) {
-              const brName = br.name || "";
-              const match = brName.match(/\(([^)]+)\)/);
-              if (match) {
-                suffix = ` (${match[1]})`;
-              } else {
-                // Fallback for custom branch - extract uppercase initials/code
-                const words = brName.trim().split(/\s+/);
-                const lastWord = words[words.length - 1];
-                if (lastWord && lastWord === lastWord.toUpperCase() && lastWord.length >= 2) {
-                  suffix = ` (${lastWord})`;
-                } else {
-                  suffix = "";
-                }
-              }
+        // Dynamically find branch to determine what suffix to use
+        let suffix = "";
+        const br = loadedBranches.find((b) => b.id === d.branchId);
+        if (br) {
+          const match = br.name.match(/\(([^)]+)\)/);
+          if (match) {
+            suffix = ` (${match[1]})`;
+          } else {
+            // Fallback for custom branch - extract uppercase initials/code
+            const words = br.name.trim().split(/\s+/);
+            const lastWord = words[words.length - 1];
+            if (lastWord && lastWord === lastWord.toUpperCase() && lastWord.length >= 2) {
+              suffix = ` (${lastWord})`;
             } else {
-              if (d.branchId && !d.branchId.startsWith("BRANCH-") && !d.branchId.startsWith("DEPT-") && d.branchId.length <= 10) {
-                suffix = ` (${d.branchId})`;
-              }
-            }
-
-            if (suffix.includes("BRANCH-") || suffix.includes("DEPT-") || suffix.length > 15) {
               suffix = "";
             }
-
-            return {
-              ...d,
-              name: suffix ? `${cleanName}${suffix}` : cleanName
-            };
-          });
+          }
+        } else {
+          if (!d.branchId.startsWith("BRANCH-") && !d.branchId.startsWith("DEPT-") && d.branchId.length <= 10) {
+            suffix = ` (${d.branchId})`;
+          }
         }
-      }
-    } catch (e) {
-      console.error("Lỗi parse local storage departments:", e);
+
+        if (suffix.includes("BRANCH-") || suffix.includes("DEPT-") || suffix.length > 15) {
+          suffix = "";
+        }
+
+        return {
+          ...d,
+          name: suffix ? `${cleanName}${suffix}` : cleanName
+        };
+      });
     }
     return initialDepartments;
   });
@@ -578,7 +555,9 @@ export default function App() {
       }
 
       const fReports = await fetchCollection<QualityReport>(COLLECTIONS.REPORTS);
-      setReports(fReports);
+      if (fReports.length > 0) {
+        setReports(fReports);
+      }
 
       const fCompanies = await fetchCollection<Company>(COLLECTIONS.COMPANIES);
       if (fCompanies.length > 0) {
@@ -601,19 +580,18 @@ export default function App() {
           let suffix = "";
           const br = latestBranches.find((b) => b.id === d.branchId);
           if (br) {
-            const brName = br.name || "";
-            const match = brName.match(/\(([^)]+)\)/);
+            const match = br.name.match(/\(([^)]+)\)/);
             if (match) {
               suffix = ` (${match[1]})`;
             } else {
-              const words = brName.trim().split(/\s+/);
+              const words = br.name.trim().split(/\s+/);
               const lastWord = words[words.length - 1];
-              if (lastWord && lastWord === lastWord.toUpperCase() && lastWord.length >= 2) {
+              if (lastWord === lastWord.toUpperCase() && lastWord.length >= 2) {
                 suffix = ` (${lastWord})`;
               }
             }
           } else {
-            if (d.branchId && !d.branchId.startsWith("BRANCH-") && !d.branchId.startsWith("DEPT-") && d.branchId.length <= 10) {
+            if (!d.branchId.startsWith("BRANCH-") && !d.branchId.startsWith("DEPT-") && d.branchId.length <= 10) {
               suffix = ` (${d.branchId})`;
             }
           }
@@ -631,13 +609,19 @@ export default function App() {
       }
 
       const fBroadcasts = await fetchCollection<BroadcastNotice>(COLLECTIONS.BROADCASTS);
-      setBroadcasts(fBroadcasts);
+      if (fBroadcasts.length > 0) {
+        setBroadcasts(fBroadcasts);
+      }
 
       const fChats = await fetchCollection<ChatMessage>(COLLECTIONS.CHATS);
-      setChats(fChats);
+      if (fChats.length > 0) {
+        setChats(fChats);
+      }
 
       const fProdRequests = await fetchCollection<ProductionRequest>(COLLECTIONS.PRODUCTION_REQUESTS);
-      setProductionRequests(fProdRequests);
+      if (fProdRequests.length > 0) {
+        setProductionRequests(fProdRequests);
+      }
 
       const fRequestItems = await fetchCollection<{ prId: string; items: any[] }>(COLLECTIONS.PRODUCTION_REQUEST_ITEMS);
       if (fRequestItems.length > 0) {
@@ -699,59 +683,6 @@ export default function App() {
     syncFromDb();
   }, []);
 
-  // Real-time synchronization for dynamic collections: reports, chats, broadcasts
-  useEffect(() => {
-    if (!db || !dbConnected || dbLoading) return;
-
-    const unsubscribeReports = onSnapshot(
-      collection(db, COLLECTIONS.REPORTS),
-      (snapshot) => {
-        const list: QualityReport[] = [];
-        snapshot.forEach((doc) => {
-          list.push(doc.data() as QualityReport);
-        });
-        setReports(list);
-      },
-      (error) => {
-        console.error("Lỗi đồng bộ báo cáo thời gian thực:", error);
-      }
-    );
-
-    const unsubscribeChats = onSnapshot(
-      collection(db, COLLECTIONS.CHATS),
-      (snapshot) => {
-        const list: ChatMessage[] = [];
-        snapshot.forEach((doc) => {
-          list.push(doc.data() as ChatMessage);
-        });
-        setChats(list);
-      },
-      (error) => {
-        console.error("Lỗi đồng bộ chat thời gian thực:", error);
-      }
-    );
-
-    const unsubscribeBroadcasts = onSnapshot(
-      collection(db, COLLECTIONS.BROADCASTS),
-      (snapshot) => {
-        const list: BroadcastNotice[] = [];
-        snapshot.forEach((doc) => {
-          list.push(doc.data() as BroadcastNotice);
-        });
-        setBroadcasts(list);
-      },
-      (error) => {
-        console.error("Lỗi đồng bộ thông báo thời gian thực:", error);
-      }
-    );
-
-    return () => {
-      unsubscribeReports();
-      unsubscribeChats();
-      unsubscribeBroadcasts();
-    };
-  }, [dbConnected, dbLoading]);
-
   // Save changes to localStorage on any state modification
   useEffect(() => {
     localStorage.setItem("4m1e1i_users", JSON.stringify(users));
@@ -759,7 +690,10 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_reports", JSON.stringify(reports));
-  }, [reports]);
+    if (syncCompleted && dbConnected && !dbLoading) {
+      reports.forEach((r) => saveDocument(COLLECTIONS.REPORTS, r.id, r));
+    }
+  }, [reports, dbConnected, dbLoading, syncCompleted]);
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_companies", JSON.stringify(companies));
@@ -775,7 +709,10 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_broadcasts", JSON.stringify(broadcasts));
-  }, [broadcasts]);
+    if (syncCompleted && dbConnected && !dbLoading) {
+      broadcasts.forEach((b) => saveDocument(COLLECTIONS.BROADCASTS, b.id, b));
+    }
+  }, [broadcasts, dbConnected, dbLoading, syncCompleted]);
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_prod_requests", JSON.stringify(productionRequests));
@@ -816,7 +753,10 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_chats", JSON.stringify(chats));
-  }, [chats]);
+    if (syncCompleted && dbConnected && !dbLoading) {
+      chats.forEach((c) => saveDocument(COLLECTIONS.CHATS, c.id, c));
+    }
+  }, [chats, dbConnected, dbLoading, syncCompleted]);
 
   useEffect(() => {
     localStorage.setItem("4m1e1i_offline_queue", JSON.stringify(offlineQueue));
@@ -1432,7 +1372,7 @@ export default function App() {
 
     const activeBranch = branches.find((b) => b.id === d.branchId);
     let suffix = activeBranch ? getBranchCodeSuffix(activeBranch.name) : "";
-    if (d.branchId && (d.branchId.startsWith("BRANCH-") || d.branchId.startsWith("DEPT-"))) {
+    if (d.branchId.startsWith("BRANCH-") || d.branchId.startsWith("DEPT-")) {
       suffix = "";
     }
 
@@ -1469,7 +1409,7 @@ export default function App() {
 
     const activeBranch = branches.find((b) => b.id === updated.branchId);
     let suffix = activeBranch ? getBranchCodeSuffix(activeBranch.name) : "";
-    if (updated.branchId && (updated.branchId.startsWith("BRANCH-") || updated.branchId.startsWith("DEPT-"))) {
+    if (updated.branchId.startsWith("BRANCH-") || updated.branchId.startsWith("DEPT-")) {
       suffix = "";
     }
 
@@ -1576,11 +1516,6 @@ export default function App() {
       timestamp: new Date().toLocaleDateString("vi-VN").replace(/\/\d{2}(\d{2})$/, "/$1")
     };
     setBroadcasts((prev) => [newNotice, ...prev]);
-    if (dbConnected) {
-      saveDocument(COLLECTIONS.BROADCASTS, newNotice.id, newNotice).catch((err) => {
-        console.error("Lỗi khi gửi thông báo lên Firestore:", err);
-      });
-    }
   };
 
   // Forum message
@@ -1596,15 +1531,9 @@ export default function App() {
       ...(reportRefId ? { reportRefId } : {})
     };
     setChats((prev) => [...prev, newChat]);
-    if (dbConnected) {
-      saveDocument(COLLECTIONS.CHATS, newChat.id, newChat).catch((err) => {
-        console.error("Lỗi khi gửi bình luận lên Firestore:", err);
-      });
-    }
 
     // If chat is related to a report, update that report's updatedAt to trigger priority jump
     if (reportRefId) {
-      let updatedRep: QualityReport | null = null;
       setReports((prevReports) => prevReports.map((r) => {
         if (r.id !== reportRefId) return r;
         
@@ -1620,22 +1549,12 @@ export default function App() {
         const logs = r.updateLogs ? [...r.updateLogs] : [];
         logs.push(`Tương tác bình luận mới từ ${currentUser.fullName} (${updateTimeStr})`);
 
-        updatedRep = {
+        return {
           ...r,
           updatedAt: updateTimeStr,
           updateLogs: logs
         };
-        return updatedRep;
       }));
-
-      // Since we updated the report, save it directly to Firestore too
-      setTimeout(() => {
-        if (updatedRep && dbConnected) {
-          saveDocument(COLLECTIONS.REPORTS, reportRefId, updatedRep).catch((err) => {
-            console.error("Lỗi khi lưu báo cáo được bình luận lên Firestore:", err);
-          });
-        }
-      }, 50);
     }
   };
 
@@ -1739,20 +1658,14 @@ export default function App() {
       }
     } else {
       if (confirm("Kiểm soát chất lượng: Bạn có chắc chắn muốn chuyển bản báo cáo này vào Thùng rác?")) {
-        const deletedReport = reports.find((r) => r.id === id);
-        if (deletedReport) {
-          const updated: QualityReport = {
-            ...deletedReport,
+        setReports((prev) => prev.map((r) => {
+          if (r.id !== id) return r;
+          return {
+            ...r,
             isDeleted: true,
             deletedAt: new Date().toISOString()
           };
-          setReports((prev) => prev.map((r) => r.id === id ? updated : r));
-          if (dbConnected) {
-            saveDocument(COLLECTIONS.REPORTS, id, updated).catch((err) => {
-              console.error("Lỗi khi chuyển báo cáo vào thùng rác Firestore:", err);
-            });
-          }
-        }
+        }));
       }
     }
   };
