@@ -1528,6 +1528,20 @@ App Link: ${window.location.origin}`;
     if (scrollContainerRef.current) {
       const scrollTop = scrollContainerRef.current.scrollTop;
       setShowScrollTop(scrollTop > 100);
+      
+      const diff = scrollTop - lastScrollTopRef.current;
+      if (scrollTop > 55 && diff > 12) {
+        setShowFilters((prev) => {
+          if (prev) return false;
+          return prev;
+        });
+      } else if (diff < -12 || scrollTop <= 12) {
+        setShowFilters((prev) => {
+          if (!prev) return true;
+          return prev;
+        });
+      }
+      
       lastScrollTopRef.current = scrollTop;
     }
   };
@@ -1573,6 +1587,12 @@ App Link: ${window.location.origin}`;
       } else if (doc.msExitFullscreen) {
         doc.msExitFullscreen();
       }
+    }
+  };
+
+  const handleViewportDoubleClick = () => {
+    if (isFullscreen) {
+      toggleFullscreen();
     }
   };
 
@@ -1946,7 +1966,7 @@ App Link: ${window.location.origin}`;
     };
 
     return (
-      <div id="mobile-viewport" className="w-full h-[100dvh] max-w-[440px] lg:w-[375px] lg:h-[780px] bg-slate-50 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl overflow-hidden flex flex-col relative">
+      <div id="mobile-viewport" onDoubleClick={handleViewportDoubleClick} className="w-full h-[100dvh] max-w-[440px] lg:w-[375px] lg:h-[780px] bg-slate-50 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl overflow-hidden flex flex-col relative">
         {/* Main Title Bar / Header */}
         <div className={`text-white px-4 py-3 flex items-center justify-between shadow-md shrink-0 select-none ${theme.bg}`}>
           <button
@@ -2077,7 +2097,7 @@ App Link: ${window.location.origin}`;
   }
 
   return (
-    <div id="mobile-viewport" className="w-full h-[100dvh] max-w-[440px] lg:w-[375px] lg:h-[780px] bg-slate-100 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl overflow-hidden flex flex-col relative">
+    <div id="mobile-viewport" onDoubleClick={handleViewportDoubleClick} className="w-full h-[100dvh] max-w-[440px] lg:w-[375px] lg:h-[780px] bg-slate-100 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl overflow-hidden flex flex-col relative">
       {/* Main Appsheet Blue Title Bar */}
       <div className={`text-white px-4 py-3 flex items-center justify-between shadow-md shrink-0 select-none ${theme.bg}`}>
         <div className="flex items-center gap-2">
