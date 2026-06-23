@@ -1178,6 +1178,7 @@ export default function MobileFrame({
   const [showLikesListReport, setShowLikesListReport] = useState<QualityReport | null>(null);
   const lastScrollTopRef = useRef(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const lastTouchTimeRef = useRef(0);
 
   const handleRefreshClick = async () => {
     if (isRefreshing) return;
@@ -1596,6 +1597,17 @@ App Link: ${window.location.origin}`;
     }
   };
 
+  const handleViewportTouchStart = () => {
+    const now = Date.now();
+    const gap = now - lastTouchTimeRef.current;
+    if (gap > 0 && gap < 300) {
+      if (isFullscreen) {
+        toggleFullscreen();
+      }
+    }
+    lastTouchTimeRef.current = now;
+  };
+
   // Helper to match selected factory abbreviation to actual database names
   const matchSelectedFactory = (factoryName: string, filterKey: string): boolean => {
     const norm = factoryName.toLowerCase();
@@ -1966,7 +1978,7 @@ App Link: ${window.location.origin}`;
     };
 
     return (
-      <div id="mobile-viewport" onDoubleClick={handleViewportDoubleClick} className="w-full h-[100dvh] max-w-[440px] lg:w-[375px] lg:h-[780px] bg-slate-50 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl overflow-hidden flex flex-col relative">
+      <div id="mobile-viewport" onDoubleClick={handleViewportDoubleClick} onTouchStart={handleViewportTouchStart} className="w-full h-[100dvh] max-w-[440px] lg:w-[375px] lg:h-[780px] bg-slate-50 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl overflow-hidden flex flex-col relative">
         {/* Main Title Bar / Header */}
         <div className={`text-white px-4 py-3 flex items-center justify-between shadow-md shrink-0 select-none ${theme.bg}`}>
           <button
@@ -2097,7 +2109,7 @@ App Link: ${window.location.origin}`;
   }
 
   return (
-    <div id="mobile-viewport" onDoubleClick={handleViewportDoubleClick} className="w-full h-[100dvh] max-w-[440px] lg:w-[375px] lg:h-[780px] bg-slate-100 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl overflow-hidden flex flex-col relative">
+    <div id="mobile-viewport" onDoubleClick={handleViewportDoubleClick} onTouchStart={handleViewportTouchStart} className="w-full h-[100dvh] max-w-[440px] lg:w-[375px] lg:h-[780px] bg-slate-100 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl overflow-hidden flex flex-col relative">
       {/* Main Appsheet Blue Title Bar */}
       <div className={`text-white px-4 py-3 flex items-center justify-between shadow-md shrink-0 select-none ${theme.bg}`}>
         <div className="flex items-center gap-2">

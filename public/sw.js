@@ -31,18 +31,27 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Intercept fetch requests (PWA standard prerequisite)
+// Intercept fetch requests (Network First strategy to avoid stale whitescreens on code updates)
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  // Cache-first or network-first strategies can be customized, but standard pass-through is safest for dynamic apps
+  
   if (url.origin === self.location.origin) {
     event.respondWith(
-      caches.match(event.request).then((cachedResponse) => {
-        if (cachedResponse) {
-          return cachedResponse;
-        }
-        return fetch(event.request);
-      })
+      fetch(event.request)
+        .then((networkResponse) => {
+          // If we got a valid response, cache it for offline use and return
+          if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          // If network is offline/fails, look up in cache
+          return caches.match(event.request);
+        })
     );
   } else {
     event.respondWith(fetch(event.request));
