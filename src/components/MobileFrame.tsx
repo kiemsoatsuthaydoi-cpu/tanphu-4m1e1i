@@ -1064,6 +1064,36 @@ export default function MobileFrame({
 
   const onlineCount = getOnlineCount();
 
+  const [notificationPermission, setNotificationPermission] = useState<string>(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      return Notification.permission;
+    }
+    return "unsupported";
+  });
+
+  const handleRequestNotificationPermission = async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      showToast("Trình duyệt không hỗ trợ thông báo đẩy!");
+      return;
+    }
+
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+      if (permission === 'granted') {
+        showToast("Đã kích hoạt quyền thông báo thành công! 🎉");
+        if ("setAppBadge" in navigator) {
+          navigator.setAppBadge(1).catch(() => {});
+        }
+      } else if (permission === 'denied') {
+        showToast("Quyền thông báo bị từ chối. Hãy bật lại trong cài đặt thiết bị!");
+      }
+    } catch (err) {
+      console.error("Error requesting notification permission:", err);
+      showToast("Không thể yêu cầu quyền thông báo!");
+    }
+  };
+
   const [searchTerm, setSearchTerm] = useState("");
   const [showQrCodeView, setShowQrCodeView] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
@@ -2053,7 +2083,7 @@ App Link: ${window.location.origin}`;
           <T className="font-bold text-[13.6px] tracking-wide whitespace-nowrap">META 4M1E1I</T>
         </div>
         <div className="flex items-center gap-[9.5px]">
-          {currentUser?.role !== UserRole.STAFF && (
+          {currentUser?.role !== UserRole.STAFF && currentUser?.role !== UserRole.REVIEWER && (
             <button
               onClick={() => setShowTrash(true)}
               className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
@@ -3501,6 +3531,65 @@ App Link: ${window.location.origin}`}
 
             {/* Notifications scroll list */}
             <div className="flex-1 overflow-y-auto p-3.5 bg-slate-50/50 space-y-2 pb-8">
+              {/* Setup Badging card */}
+              <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-2xl space-y-2 mb-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold text-[#1e3a8a] flex items-center gap-1 uppercase">
+                    ⭐ <T><span translate="no" className="notranslate text-[#1e3a8a] font-extrabold">KÍCH HOẠT BONG BÓNG SỐ</span></T>
+                  </span>
+                  <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-white flex items-center gap-1 select-none border border-blue-100">
+                    <span translate="no" className="notranslate">Huy hiệu:</span>
+                    {notificationPermission === "granted" ? (
+                      <span translate="no" className="text-emerald-700 font-black notranslate">ĐÃ BẬT</span>
+                    ) : notificationPermission === "denied" ? (
+                      <span translate="no" className="text-rose-600 font-black notranslate">BỊ KHÓA</span>
+                    ) : (
+                      <span translate="no" className="text-amber-600 font-black notranslate">CHƯA BẬT</span>
+                    )}
+                  </span>
+                </div>
+                
+                <p className="text-[9px] text-slate-550 leading-normal">
+                  <T><span translate="no" className="notranslate">Để hiển thị bong bóng số thông báo màu đỏ trực tiếp trên biểu tượng ngoài màn hình chính giống như TikTok hoặc Zalo, quý khách cần cài đặt PWA:</span></T>
+                </p>
+
+                <div className="space-y-1.5 text-[9px] text-slate-650">
+                  <div className="flex gap-1.5 items-start bg-white p-2 rounded-xl border border-blue-50 shadow-3xs">
+                    <span className="text-blue-600 font-extrabold shrink-0">1.</span>
+                    <div className="leading-relaxed">
+                      <span translate="no" className="font-bold text-slate-700 notranslate">Cài đặt Màn hình chính:</span>
+                      <span translate="no" className="text-slate-500 notranslate"> Nhấn biểu tượng </span>
+                      <span translate="no" className="font-extrabold text-[#1e3a8a] notranslate">Chia sẻ (Safari)</span>
+                      <span translate="no" className="text-slate-500 notranslate"> hoặc nút </span>
+                      <span translate="no" className="font-extrabold text-[#1e3a8a] notranslate">Menu (Chrome)</span>
+                      <span translate="no" className="text-slate-500 notranslate"> rồi chọn </span>
+                      <span translate="no" className="font-black text-blue-700 underline notranslate">"Thêm vào Màn hình chính" (Add to Home Screen)</span>
+                      <span translate="no" className="text-slate-500 notranslate"> để sử dụng ứng dụng độc lập.</span>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-1.5 items-start bg-white p-2 rounded-xl border border-blue-50 shadow-3xs">
+                    <span className="text-blue-600 font-extrabold shrink-0">2.</span>
+                    <div className="flex-1 leading-relaxed">
+                      <span translate="no" className="font-bold text-slate-700 notranslate">Cho phép hiển thị số thông báo:</span>
+                      <span translate="no" className="text-slate-550 notranslate"> Cấp quyền thông báo cho ứng dụng trên điện thoại của bạn.</span>
+                      {notificationPermission !== "granted" ? (
+                        <button
+                          onClick={handleRequestNotificationPermission}
+                          className="mt-1.5 w-full bg-[#1e3a8a] text-white text-[8.5px] font-black py-1.5 px-3 rounded-lg cursor-pointer transition-colors block uppercase shadow-xs border-none"
+                        >
+                          <T><span translate="no" className="notranslate font-black">YÊU CẦU QUYỀN HIỂN THỊ</span></T>
+                        </button>
+                      ) : (
+                        <div className="mt-1 flex items-center gap-1 text-emerald-700 font-extrabold text-[8.5px]">
+                          ✅ <span translate="no" className="notranslate">Đã ủy quyền thành công! Số thông báo sẽ tự động đồng bộ.</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {notifications.length === 0 ? (
                 <div className="py-20 text-center flex flex-col items-center justify-center gap-3">
                   <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-slate-300">

@@ -614,9 +614,10 @@ export default function DashboardDesktop({
     if (/\([^)]+\)$/.test(userBranchText)) {
       return userBranchText;
     }
-    const foundBranch = branches.find(
-      (b) => b.name === userBranchText || b.name.replace(/\s*\([^)]+\)$/, "").trim() === userBranchText.replace(/\s*\([^)]+\)$/, "").trim()
-    );
+    const foundBranch = branches.find((b) => {
+      const bName = b.name || "";
+      return bName === userBranchText || bName.replace(/\s*\([^)]+\)$/, "").trim() === userBranchText.replace(/\s*\([^)]+\)$/, "").trim();
+    });
     if (foundBranch) {
       return `${userBranchText} (${foundBranch.companyId})`;
     }
@@ -652,9 +653,10 @@ export default function DashboardDesktop({
     if (/\([^)]+\)$/.test(userDeptText)) {
       return userDeptText;
     }
-    const foundBranch = branches.find(
-      (b) => b.name === userBranchText || b.name.replace(/\s*\([^)]+\)$/, "").trim() === userBranchText.replace(/\s*\([^)]+\)$/, "").trim()
-    );
+    const foundBranch = branches.find((b) => {
+      const bName = b.name || "";
+      return bName === userBranchText || bName.replace(/\s*\([^)]+\)$/, "").trim() === userBranchText.replace(/\s*\([^)]+\)$/, "").trim();
+    });
     if (foundBranch) {
       return `${userDeptText} (${foundBranch.id})`;
     }
@@ -665,9 +667,10 @@ export default function DashboardDesktop({
     if (!factoryName) return "";
     
     // Find the company suffix
-    const foundBranch = branches?.find(
-      (b) => b.name === factoryName || b.id === factoryName || b.name.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase() === factoryName.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase()
-    );
+    const foundBranch = branches?.find((b) => {
+      const bName = b.name || "";
+      return bName === factoryName || b.id === factoryName || bName.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase() === factoryName.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
+    });
     
     const getAbbreviation = (cid: string) => {
       if (!cid) return "";
@@ -729,20 +732,22 @@ export default function DashboardDesktop({
         const companyBranches = branches.filter((b) => b.companyId === selectedC.id);
         if (companyBranches.length > 0) {
           const hasCurrentBranch = companyBranches.some((b) => {
-            const nameWithSuffix = b.name.includes(`(${b.id})`) 
-              ? b.name 
-              : b.name.includes(`(${b.companyId})`)
-              ? b.name
-              : `${b.name.replace(/\s*\([^)]+\)$/, "").trim()} (${b.companyId})`;
-            return b.name === editBranch || nameWithSuffix === editBranch;
+            const bName = b.name || "";
+            const nameWithSuffix = bName.includes(`(${b.id})`) 
+              ? bName 
+              : bName.includes(`(${b.companyId})`)
+              ? bName
+              : `${bName.replace(/\s*\([^)]+\)$/, "").trim()} (${b.companyId})`;
+            return bName === editBranch || nameWithSuffix === editBranch;
           });
           if (!hasCurrentBranch) {
             const firstBranch = companyBranches[0];
-            const nameWithSuffix = firstBranch.name.includes(`(${firstBranch.id})`) 
-              ? firstBranch.name 
-              : firstBranch.name.includes(`(${firstBranch.companyId})`)
-              ? firstBranch.name
-              : `${firstBranch.name.replace(/\s*\([^)]+\)$/, "").trim()} (${firstBranch.companyId})`;
+            const fbName = firstBranch.name || "";
+            const nameWithSuffix = fbName.includes(`(${firstBranch.id})`) 
+              ? fbName 
+              : fbName.includes(`(${firstBranch.companyId})`)
+              ? fbName
+              : `${fbName.replace(/\s*\([^)]+\)$/, "").trim()} (${firstBranch.companyId})`;
             setEditBranch(nameWithSuffix);
           }
         } else {
@@ -755,27 +760,30 @@ export default function DashboardDesktop({
   useEffect(() => {
     if (editingUser && editBranch) {
       const selectedB = branches.find((b) => {
-        const nameWithSuffix = b.name.includes(`(${b.id})`) 
-          ? b.name 
-          : b.name.includes(`(${b.companyId})`)
-          ? b.name
-          : `${b.name.replace(/\s*\([^)]+\)$/, "").trim()} (${b.companyId})`;
-        return b.name === editBranch || nameWithSuffix === editBranch;
+        const bName = b.name || "";
+        const nameWithSuffix = bName.includes(`(${b.id})`) 
+          ? bName 
+          : bName.includes(`(${b.companyId})`)
+          ? bName
+          : `${bName.replace(/\s*\([^)]+\)$/, "").trim()} (${b.companyId})`;
+        return bName === editBranch || nameWithSuffix === editBranch;
       });
       if (selectedB) {
         const branchDepts = departments.filter((d) => d.branchId === selectedB.id);
         if (branchDepts.length > 0) {
           const hasCurrentDept = branchDepts.some((d) => {
-            const nameWithSuffix = d.name.includes(`(${selectedB.id})`)
-              ? d.name
-              : `${d.name.replace(/\s*\([^)]+\)$/, "").trim()} (${selectedB.id})`;
-            return d.name === editDepartment || nameWithSuffix === editDepartment;
+            const dName = d.name || "";
+            const nameWithSuffix = dName.includes(`(${selectedB.id})`)
+              ? dName
+              : `${dName.replace(/\s*\([^)]+\)$/, "").trim()} (${selectedB.id})`;
+            return dName === editDepartment || nameWithSuffix === editDepartment;
           });
           if (!hasCurrentDept) {
             const firstDept = branchDepts[0];
-            const nameWithSuffix = firstDept.name.includes(`(${selectedB.id})`)
-              ? firstDept.name
-              : `${firstDept.name.replace(/\s*\([^)]+\)$/, "").trim()} (${selectedB.id})`;
+            const fdName = firstDept.name || "";
+            const nameWithSuffix = fdName.includes(`(${selectedB.id})`)
+              ? fdName
+              : `${fdName.replace(/\s*\([^)]+\)$/, "").trim()} (${selectedB.id})`;
             setEditDepartment(nameWithSuffix);
           }
         } else {
