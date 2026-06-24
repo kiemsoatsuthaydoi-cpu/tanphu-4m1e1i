@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { getBranchCodeSuffix } from "./utils/branchHelpers";
 import { AlertCircle, LogIn, Heart, ShieldCheck, Wifi, WifiOff, RefreshCw, Smartphone, Monitor, Lock, Building, ChevronDown, Briefcase, User as UserIcon, Check, CheckCircle, XCircle, AlertTriangle, Info } from "lucide-react";
 import { T } from "./components/TranslateText";
 import {
@@ -584,25 +585,73 @@ export default function App() {
       setReports(fReports);
 
       const fCompanies = await fetchCollection<Company>(COLLECTIONS.COMPANIES);
-      if (fCompanies.length > 0) {
-        setCompanies(fCompanies);
-      }
-
       const fBranches = await fetchCollection<Branch>(COLLECTIONS.BRANCHES);
-      if (fBranches.length > 0) {
-         setBranches(fBranches);
+
+      let latestCompanies = fCompanies.length > 0 ? fCompanies : [...companies];
+      let latestBranches = fBranches.length > 0 ? fBranches : [...branches];
+
+      // TỰ ĐỘNG DI TRÚ DỮ LIỆU CŨ: "TPP-Group" -> "TPP"
+      const hasTppGroup = latestCompanies.some(c => c.id === "TPP-Group");
+      if (hasTppGroup) {
+        console.log("Phát hiện dữ liệu TPP-Group cũ, đang tự động đồng bộ sang TPP...");
+        const tppGroupCompany = latestCompanies.find(c => c.id === "TPP-Group");
+        const restCompanies = latestCompanies.filter(c => c.id !== "TPP-Group");
+        
+        if (!restCompanies.some(c => c.id === "TPP")) {
+          restCompanies.push({
+            id: "TPP",
+            name: tppGroupCompany?.name || "TÂN PHÚ VIỆT NAM"
+          });
+        }
+        latestCompanies = restCompanies;
+
+        latestBranches = latestBranches.map(b => {
+          if (b.companyId === "TPP-Group") {
+            return { ...b, companyId: "TPP" };
+          }
+          return b;
+        });
+
+        setCompanies(latestCompanies);
+        setBranches(latestBranches);
+        localStorage.setItem("4m1e1i_companies", JSON.stringify(latestCompanies));
+        localStorage.setItem("4m1e1i_branches", JSON.stringify(latestBranches));
+
+        if (dbConnected) {
+          try {
+            await deleteDocument(COLLECTIONS.COMPANIES, "TPP-Group");
+            const tppCompany = latestCompanies.find(c => c.id === "TPP");
+            if (tppCompany) {
+              await saveDocument(COLLECTIONS.COMPANIES, "TPP", tppCompany);
+            }
+            for (const b of latestBranches) {
+              if (b.companyId === "TPP") {
+                await saveDocument(COLLECTIONS.BRANCHES, b.id, b);
+              }
+            }
+          } catch (err) {
+            console.error("Lỗi khi xóa TPP-Group hoặc lưu TPP lên Firestore:", err);
+          }
+        }
+      } else {
+        if (fCompanies.length > 0) {
+          setCompanies(fCompanies);
+        }
+        if (fBranches.length > 0) {
+          setBranches(fBranches);
+        }
       }
 
       const fDepts = await fetchCollection<Department>(COLLECTIONS.DEPARTMENTS);
       if (fDepts.length > 0) {
-        const latestBranches = fBranches.length > 0 ? fBranches : initialBranches;
+        const deptsBranches = latestBranches;
         const cleanedFetched = fDepts.map((d) => {
           let cleanName = d.name || "";
           cleanName = cleanName.replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
           cleanName = cleanName.replace(/\s\([^)]+\)$/, "").trim();
 
           let suffix = "";
-          const br = latestBranches.find((b) => b.id === d.branchId);
+          const br = deptsBranches.find((b) => b.id === d.branchId);
           if (br) {
             const brName = br.name || "";
             const match = brName.match(/\(([^)]+)\)/);
@@ -960,10 +1009,12 @@ export default function App() {
     const isMobileDevice = window.innerWidth < 1024 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     let lastTap = 0;
 
-    const requestFullscreenOnInteraction = () => {
+    const toggleFullscreenOnInteraction = () => {
       const doc = document as any;
       const docEl = document.documentElement as any;
-      if (!doc.fullscreenElement && !doc.webkitFullscreenElement && !doc.mozFullScreenElement && !doc.msFullscreenElement) {
+      const isCurrentlyFs = !!(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement);
+      
+      if (!isCurrentlyFs) {
         if (docEl.requestFullscreen) {
           docEl.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
         } else if (docEl.webkitRequestFullscreen) {
@@ -973,28 +1024,76 @@ export default function App() {
         } else if (docEl.msRequestFullscreen) {
           docEl.msRequestFullscreen();
         }
+      } else {
+        if (doc.exitFullscreen) {
+          doc.exitFullscreen().catch(() => {});
+        } else if (doc.webkitExitFullscreen) {
+          doc.webkitExitFullscreen();
+        } else if (doc.mozCancelFullScreen) {
+          doc.mozCancelFullScreen();
+        } else if (doc.msExitFullscreen) {
+          doc.msExitFullscreen();
+        }
       }
     };
 
-    const handleDblClick = () => {
-      requestFullscreenOnInteraction();
+    const handleDblClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target) {
+        if (
+          target.tagName === "INPUT" || 
+          target.tagName === "TEXTAREA" || 
+          target.tagName === "BUTTON" || 
+          target.tagName === "A" ||
+          target.closest(".cursor-zoom-in") || 
+          target.closest(".cursor-move") ||
+          target.closest("button")
+        ) {
+          return;
+        }
+      }
+      toggleFullscreenOnInteraction();
     };
 
     const handleTouchStart = (e: TouchEvent) => {
+      const target = e.target as HTMLElement;
+      if (target) {
+        if (
+          target.tagName === "INPUT" || 
+          target.tagName === "TEXTAREA" || 
+          target.tagName === "BUTTON" || 
+          target.tagName === "A" ||
+          target.closest(".cursor-zoom-in") || 
+          target.closest(".cursor-move") ||
+          target.closest("button")
+        ) {
+          return;
+        }
+      }
+
       const now = Date.now();
       const DOUBLE_TAP_DELAY = 300;
       if (now - lastTap < DOUBLE_TAP_DELAY) {
         if (e.cancelable) {
           e.preventDefault();
         }
-        requestFullscreenOnInteraction();
+        toggleFullscreenOnInteraction();
       }
       lastTap = now;
     };
 
     // Auto trigger on first touch or click
     const handleFirstInteraction = () => {
-      requestFullscreenOnInteraction();
+      // Just enter fullscreen on first load
+      const doc = document as any;
+      const docEl = document.documentElement as any;
+      if (!doc.fullscreenElement && !doc.webkitFullscreenElement && !doc.mozFullScreenElement && !doc.msFullscreenElement) {
+        if (docEl.requestFullscreen) {
+          docEl.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
+        } else if (docEl.webkitRequestFullscreen) {
+          docEl.webkitRequestFullscreen({ navigationUI: "hide" });
+        }
+      }
       window.removeEventListener("touchstart", handleFirstInteraction);
       window.removeEventListener("click", handleFirstInteraction);
     };
@@ -1271,34 +1370,6 @@ export default function App() {
       }
       saveDocument(COLLECTIONS.COMPANIES, updated.id, updated).catch(console.error);
     }
-  };
-
-  const getBranchCodeSuffix = (brName: string | undefined | null) => {
-    if (!brName || typeof brName !== "string") {
-      return "";
-    }
-    if (brName.startsWith("BRANCH-") || brName.startsWith("DEPT-") || brName.length > 20) {
-      return "";
-    }
-    const match = brName.match(/\(([^)]+)\)/);
-    let code = match ? match[1] : "";
-    if (!code) {
-      const nameWithoutAccents = brName
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-zA-Z40-9\s]/g, "");
-      const words = nameWithoutAccents.split(/\s+/).filter(Boolean);
-      const lastWord = words[words.length - 1];
-      if (lastWord && lastWord === lastWord.toUpperCase() && lastWord.length >= 2) {
-        code = lastWord;
-      } else {
-        code = words.map(w => w[0]?.toUpperCase()).join("");
-      }
-    }
-    if (!code || code.startsWith("BRANCH-") || code.startsWith("DEPT-") || code.length > 10) {
-      return "";
-    }
-    return ` (${code})`;
   };
 
   const handleAddBranch = (b: Branch) => {
@@ -2491,7 +2562,7 @@ export default function App() {
   };
 
   // Active user view workspace (Integrates Admin Panel and Client Phone Simulator side-by-side)
-  if (currentUser && currentUser.role === UserRole.STAFF) {
+  if (currentUser && (currentUser.role === UserRole.STAFF || currentUser.role === UserRole.REVIEWER)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#2563eb] to-[#1d4ed8] flex items-center justify-center p-0 sm:p-4 relative font-sans overflow-hidden select-none">
         {/* Ambient decorative glowing spots */}

@@ -579,7 +579,7 @@ export default function DashboardDesktop({
   const [newDeptId, setNewDeptId] = useState("");
 
   // States for hierarchical company-branch-department mapping
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string>("TPP-Group");
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>("TPP");
   const [selectedBranchId, setSelectedBranchId] = useState<string>("TPP-CTY");
 
   // Editing states for company, branch, and department

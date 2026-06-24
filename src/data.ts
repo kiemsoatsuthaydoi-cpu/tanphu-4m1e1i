@@ -17,14 +17,14 @@ const svgEnvIcon = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/s
 const svgInfoIcon = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='250' viewBox='0 0 400 250'><rect width='100%' height='100%' fill='%23f8fafc'/><text x='50%' y='40%' font-family='sans-serif' font-size='22' font-weight='bold' fill='%23475569' text-anchor='middle'>THÔNG TIN (INFO)</text><text x='50%' y='60%' font-family='sans-serif' font-size='14' fill='%2364748b' text-anchor='middle'>Đón đoàn đánh giá tiêu chuẩn BRC xưởng sạch</text></svg>";
 
 export const initialCompanies: Company[] = [
-  { id: "TPP-Group", name: "TÂN PHÚ VIỆT NAM" }
+  { id: "TPP", name: "TÂN PHÚ VIỆT NAM" }
 ];
 
 export const initialBranches: Branch[] = [
-  { id: "TPP-CTY", name: "Văn Phòng Công Ty (TPP-CTY)", companyId: "TPP-Group", isScoring: true },
-  { id: "TPP-BNI", name: "Chi Nhánh Bắc Ninh (TPP-BNI)", companyId: "TPP-Group", isScoring: true },
-  { id: "TPP-LAN", name: "Chi Nhánh Long An (TPP-LAN)", companyId: "TPP-Group", isScoring: true },
-  { id: "TPP-314", name: "Nhà máy 314 (TPP-314)", companyId: "TPP-Group", isScoring: true }
+  { id: "TPP-CTY", name: "Văn Phòng Công Ty (TPP-CTY)", companyId: "TPP", isScoring: true },
+  { id: "TPP-BNI", name: "Chi Nhánh Bắc Ninh (TPP-BNI)", companyId: "TPP", isScoring: true },
+  { id: "TPP-LAN", name: "Chi Nhánh Long An (TPP-LAN)", companyId: "TPP", isScoring: true },
+  { id: "TPP-314", name: "Nhà máy 314 (TPP-314)", companyId: "TPP", isScoring: true }
 ];
 
 export const initialDepartments: Department[] = [
