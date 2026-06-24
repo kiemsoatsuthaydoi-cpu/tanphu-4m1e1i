@@ -68,29 +68,7 @@ export default function ReportForm({
   const activeStyles = activeColorMap[colorTheme] || activeColorMap.blue;
 
   const getBranchDisplayName = (b: Branch) => {
-    let baseName = b.name;
-    if (displayRule === "custom" && customAliases[b.id]) {
-      baseName = customAliases[b.id];
-    } else if (displayRule === "clean") {
-      baseName = b.name.split("(")[0].trim().replace(/\s*\(((?:TPP|BBM|DNP)-[^)]+)\)/i, "").replace(/\s*\(TPP-[^)]+\)/, "");
-    }
-    
-    let compAbbr = b.companyId;
-    if (b.companyId === "TPP-Group" || b.companyId.toLowerCase().includes("tanphu") || b.companyId.toLowerCase().includes("tân phú")) {
-      compAbbr = "TPP";
-    } else if (b.companyId === "DNP" || b.companyId.toLowerCase().includes("dnp")) {
-      compAbbr = "DNP";
-    } else {
-      compAbbr = b.companyId.replace("-Group", "").replace("-CTY", "").trim();
-      if (compAbbr.length > 5) {
-        compAbbr = compAbbr.slice(0, 4).toUpperCase();
-      }
-    }
-
-    if (baseName.toLowerCase().includes(`(${compAbbr.toLowerCase()})`)) {
-      return baseName;
-    }
-    return `${baseName} (${compAbbr})`;
+    return b.name;
   };
 
   const handleCancelWithConfirm = () => {
@@ -486,10 +464,10 @@ export default function ReportForm({
       imageUrls: images.map(img => img.base64),
       compressedSizeKb: totalCompressedSizeKb,
       originalSizeKb: totalOriginalSizeKb,
-      uploaderName: currentUser.fullName,
-      uploaderPhone: currentUser.phone,
-      uploaderId: currentUser.id,
-      uploaderDepartment: currentUser.department || STANDARDIZED_QC_DEPT,
+      uploaderName: editingReport ? editingReport.uploaderName : currentUser.fullName,
+      uploaderPhone: editingReport ? editingReport.uploaderPhone : currentUser.phone,
+      uploaderId: editingReport ? editingReport.uploaderId : currentUser.id,
+      uploaderDepartment: editingReport ? editingReport.uploaderDepartment : (currentUser.department || STANDARDIZED_QC_DEPT),
       notes: notes.trim() ? notes : undefined,
       isAbnormal,
       isSpotlight,
@@ -553,7 +531,7 @@ export default function ReportForm({
                 <>
                   <div className="fixed inset-0 z-30" onClick={() => setIsOpenBranchDropdown(false)} />
                   <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-40 py-1.5 max-h-[220px] overflow-y-auto animate-fade-in divide-y divide-slate-100">
-                    {branches.filter((b) => currentUser?.role === UserRole.ADMIN ? true : b.isScoring).map((b) => {
+                    {branches.filter((b) => b.isScoring).map((b) => {
                       const br = b.name;
                       const displayName = getBranchDisplayName(b);
                       const isSelected = selectedBranch === br;
@@ -876,15 +854,21 @@ export default function ReportForm({
 
         {/* 7. Updater view-only metadata */}
         <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-          <T className="text-[9px] text-slate-400 block font-bold uppercase tracking-wide">Nhân viên ghi nhận (Tự điền)*</T>
+          <T className="text-[9px] text-slate-400 block font-bold uppercase tracking-wide">
+            {editingReport ? "Nhân viên ghi nhận gốc*" : "Nhân viên ghi nhận (Tự điền)*"}
+          </T>
           <div className="flex justify-between items-center mt-1">
-            <T className="text-xs font-bold text-slate-700 block">{currentUser.fullName}</T>
+            <T className="text-xs font-bold text-slate-700 block">
+              {editingReport ? editingReport.uploaderName : currentUser.fullName}
+            </T>
             <T className="text-[9px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-bold">
-              {currentUser.role}
+              {editingReport 
+                ? ((users || []).find(u => u.id === editingReport.uploaderId)?.role || "NHÂN VIÊN")
+                : currentUser.role}
             </T>
           </div>
-          <T className="text-[10px] text-slate-500 block font-sans mt-0.5 mt-1">
-            Bộ phận: {currentUser.department || STANDARDIZED_QC_DEPT}
+          <T className="text-[10px] text-slate-500 block font-sans mt-1">
+            Bộ phận: {editingReport ? editingReport.uploaderDepartment : (currentUser.department || STANDARDIZED_QC_DEPT)}
           </T>
         </div>
 

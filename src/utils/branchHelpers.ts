@@ -6,7 +6,7 @@ export const isSameBranchOrFactory = (branchA?: string, branchB?: string): boole
   
   if (cleanA === cleanB) return true;
 
-  const codes = ["TPP-CTY", "TPP-BNI", "TPP-LAN", "TPP-314", "BBM"];
+  const codes = ["TPP-CTY", "TPP-BNI", "TPP-LAN", "TPP-314", "DNP-BBM", "DNP-BBC"];
   for (const code of codes) {
     const codeLower = code.toLowerCase();
     const hasA = cleanA.includes(codeLower);

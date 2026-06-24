@@ -68,6 +68,136 @@ const parseReportDate = (dateStr: string | undefined): number => {
   return new Date(year, parseInt(m, 10) - 1, parseInt(d, 10), parseInt(hrs, 10), parseInt(mns, 10), parseInt(scs, 10)).getTime();
 };
 
+const sanitizeAndMigrateBranches = (rawBranches: Branch[]): Branch[] => {
+  if (!Array.isArray(rawBranches)) return [];
+  
+  // 1. Map ID BBM to DNP-BBM to eradicate the old ID
+  let list = rawBranches.map(b => {
+    if (b.id === "BBM" || b.id.toLowerCase() === "bbm") {
+      return { ...b, id: "DNP-BBM", companyId: "DNP" };
+    }
+    return b;
+  });
+
+  // 2. De-duplicate by ID
+  const uniqueMap = new Map<string, Branch>();
+  list.forEach(b => {
+    uniqueMap.set(b.id, b);
+  });
+  list = Array.from(uniqueMap.values());
+
+  // 3. Force name correctness for DNP-BBM and DNP-BBC
+  list = list.map(b => {
+    if (b.id === "DNP-BBM") {
+      return { ...b, name: "Nhà máy BBM (DNP-BBM)", companyId: "DNP", isScoring: true };
+    }
+    if (b.id === "DNP-BBC") {
+      return { ...b, name: "Nhà máy BBC (DNP-BBC)", companyId: "DNP", isScoring: true };
+    }
+    return b;
+  });
+
+  // 4. Ensure DNP-BBM and DNP-BBC exist
+  if (!list.some(b => b.id === "DNP-BBM")) {
+    list.push({ id: "DNP-BBM", name: "Nhà máy BBM (DNP-BBM)", companyId: "DNP", isScoring: true });
+  }
+  if (!list.some(b => b.id === "DNP-BBC")) {
+    list.push({ id: "DNP-BBC", name: "Nhà máy BBC (DNP-BBC)", companyId: "DNP", isScoring: true });
+  }
+
+  // Remove any remaining old BBM ID branch just in case
+  list = list.filter(b => b.id !== "BBM");
+
+  return list;
+};
+
+const sanitizeAndMigrateDepartments = (rawDepts: Department[]): Department[] => {
+  if (!Array.isArray(rawDepts)) return [];
+  let list = rawDepts.map(d => {
+    let bId = d.branchId;
+    if (bId === "BBM") {
+      bId = "DNP-BBM";
+    }
+    let name = d.name || "";
+    if (name.includes("(BBM)")) {
+      name = name.replace("(BBM)", "(DNP-BBM)");
+    }
+    if (name.includes("(BBC)")) {
+      name = name.replace("(BBC)", "(DNP-BBC)");
+    }
+    return { ...d, branchId: bId, name };
+  });
+
+  // Ensure default departments for DNP-BBM and DNP-BBC exist
+  const bbmQCExist = list.some(d => d.branchId === "DNP-BBM" && d.name.includes("Quản Lý Chất Lượng"));
+  if (!bbmQCExist) {
+    list.push({ id: "bbm-1", name: "Phòng Quản Lý Chất Lượng (DNP-BBM)", branchId: "DNP-BBM" });
+  }
+  const bbmKTExist = list.some(d => d.branchId === "DNP-BBM" && d.name.includes("Tài chính Kế toán"));
+  if (!bbmKTExist) {
+    list.push({ id: "bbm-2", name: "Phòng Tài chính Kế toán (DNP-BBM)", branchId: "DNP-BBM" });
+  }
+
+  const bbcQCExist = list.some(d => d.branchId === "DNP-BBC" && d.name.includes("Quản Lý Chất Lượng"));
+  if (!bbcQCExist) {
+    list.push({ id: "bbc-1", name: "Phòng Quản Lý Chất Lượng (DNP-BBC)", branchId: "DNP-BBC" });
+  }
+  const bbcKTExist = list.some(d => d.branchId === "DNP-BBC" && d.name.includes("Tài chính Kế toán"));
+  if (!bbcKTExist) {
+    list.push({ id: "bbc-2", name: "Phòng Tài chính Kế toán (DNP-BBC)", branchId: "DNP-BBC" });
+  }
+
+  return list;
+};
+
+const sanitizeUsers = (rawUsers: User[]): User[] => {
+  if (!Array.isArray(rawUsers)) return [];
+  return rawUsers.map(u => {
+    let br = u.branch || "";
+    let dept = u.department || "";
+    
+    if (br === "Nhà máy BBM (DNP)" || br === "Nhà máy BBM" || br.includes("BBM")) {
+      br = "Nhà máy BBM (DNP-BBM)";
+    }
+    if (br === "Nhà máy BBC (DNP)" || br === "Nhà máy BBC" || br.includes("BBC")) {
+      br = "Nhà máy BBC (DNP-BBC)";
+    }
+    
+    if (dept.includes("(BBM)")) {
+      dept = dept.replace("(BBM)", "(DNP-BBM)");
+    }
+    if (dept.includes("(BBC)")) {
+      dept = dept.replace("(BBC)", "(DNP-BBC)");
+    }
+    
+    return { ...u, branch: br, department: dept };
+  });
+};
+
+const sanitizeReports = (rawReports: QualityReport[]): QualityReport[] => {
+  if (!Array.isArray(rawReports)) return [];
+  return rawReports.map(r => {
+    let fac = r.factory || "";
+    let dept = r.uploaderDepartment || "";
+    
+    if (fac === "Nhà máy Đất Đỏ (BBM)" || fac === "Nhà máy BBM (DNP)" || fac === "Nhà máy BBM" || (fac.includes("BBM") && !fac.includes("DNP-BBM"))) {
+      fac = "Nhà máy BBM (DNP-BBM)";
+    }
+    if (fac === "Nhà máy BBC" || (fac.includes("BBC") && !fac.includes("DNP-BBC"))) {
+      fac = "Nhà máy BBC (DNP-BBC)";
+    }
+    
+    if (dept.includes("(BBM)")) {
+      dept = dept.replace("(BBM)", "(DNP-BBM)");
+    }
+    if (dept.includes("(BBC)")) {
+      dept = dept.replace("(BBC)", "(DNP-BBC)");
+    }
+    
+    return { ...r, factory: fac, uploaderDepartment: dept };
+  });
+};
+
 export default function App() {
   // Firebase configurations & connection indicators
   const [dbLoading, setDbLoading] = useState(true);
@@ -79,26 +209,28 @@ export default function App() {
   const [users, setUsers] = useState<User[]>(() => {
     const saved = localStorage.getItem("4m1e1i_users");
     let loadedUsers = saved ? JSON.parse(saved) : initialUsers;
-    // Restore original admin password for Lê Nhật Trường and promote Kim Thị Bích Tuyền
+    // Restore original admin password for Lê Nhật Trường, promote Kim Thị Bích Tuyền and override branch/dept to BBM (DNP-BBM)
     loadedUsers = loadedUsers.map((u: User) => {
       if (u.id === "2024.00912") {
-        return { ...u, role: UserRole.REVIEWER };
+        return {
+          ...u,
+          role: UserRole.REVIEWER,
+          branch: "Nhà máy BBM (DNP-BBM)",
+          department: "Phòng Quản Lý Chất Lượng (DNP-BBM)"
+        };
       }
       if (u.id === "2018.00281" && u.password === "123456") {
         return { ...u, password: "111222" };
       }
       return u;
     });
-    return loadedUsers.map((u: User) => {
+    const mapped = loadedUsers.map((u: User) => {
       let deptName = u.department || "";
       let branchName = u.branch || "";
       
       // Auto-correct spelling issues:
-      deptName = deptName.replace(/Quản\s+lí/gi, "Quản Lý");
-      deptName = deptName.replace(/quản\s+lí/gi, "Quản Lý");
-      deptName = deptName.replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng");
-      deptName = deptName.replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
-
+      deptName = deptName.replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
+ 
       let suffix = "";
       if (branchName.includes("TPP-CTY") || branchName.includes("Văn Phòng")) {
         suffix = " (TPP-CTY)";
@@ -108,6 +240,10 @@ export default function App() {
         suffix = " (TPP-LAN)";
       } else if (branchName.includes("TPP-314") || branchName.includes("314")) {
         suffix = " (TPP-314)";
+      } else if (branchName.includes("BBM")) {
+        suffix = " (DNP-BBM)";
+      } else if (branchName.includes("BBC")) {
+        suffix = " (DNP-BBC)";
       }
 
       // Sanitize default passwords to 123456 as requested by user (only for non-ADMIN users)
@@ -138,12 +274,13 @@ export default function App() {
         department: deptName.replace(/\s\([^)]+\)$/, "").trim().replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng")
       };
     });
+    return sanitizeUsers(mapped);
   });
 
   const [reports, setReports] = useState<QualityReport[]>(() => {
     const saved = localStorage.getItem("4m1e1i_reports");
     const loadedReports = saved ? JSON.parse(saved) : initialReports;
-    return loadedReports.map((r: QualityReport) => {
+    const mapped = loadedReports.map((r: QualityReport) => {
       let dept = r.uploaderDepartment || "";
       dept = dept.replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
       return {
@@ -151,6 +288,7 @@ export default function App() {
         uploaderDepartment: dept
       };
     });
+    return sanitizeReports(mapped);
   });
 
   const [companies, setCompanies] = useState<Company[]>(() => {
@@ -166,28 +304,31 @@ export default function App() {
   });
 
   const [branches, setBranches] = useState<Branch[]>(() => {
+    let raw: Branch[] = [];
     try {
       const saved = localStorage.getItem("4m1e1i_branches");
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          return parsed.map((b: any) => ({
+          raw = parsed.map((b: any) => ({
             ...b,
-            name: (b.name || "")
-              .replace(" (CNBN)", "")
-              .replace(" (CNLA)", "")
-              .replace(" (NM314)", ""),
             isScoring: b.id === "TPP-CTY" ? true : b.isScoring
           }));
+        } else {
+          raw = initialBranches;
         }
+      } else {
+        raw = initialBranches;
       }
     } catch (e) {
       console.error("Lỗi parse local storage branches:", e);
+      raw = initialBranches;
     }
-    return initialBranches;
+    return sanitizeAndMigrateBranches(raw);
   });
 
   const [departments, setDepartments] = useState<Department[]>(() => {
+    let finalDepts: Department[] = [];
     try {
       const savedBranchesStr = localStorage.getItem("4m1e1i_branches");
       let loadedBranches: Branch[] = initialBranches;
@@ -204,7 +345,7 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          return parsed.map((d: any) => {
+          finalDepts = parsed.map((d: any) => {
             let cleanName = d.name || "";
             cleanName = cleanName.replace(/Quản\s+lí/gi, "Quản Lý");
             cleanName = cleanName.replace(/quản\s+lí/gi, "Quản Lý");
@@ -247,12 +388,17 @@ export default function App() {
               name: suffix ? `${cleanName}${suffix}` : cleanName
             };
           });
+        } else {
+          finalDepts = initialDepartments;
         }
+      } else {
+        finalDepts = initialDepartments;
       }
     } catch (e) {
       console.error("Lỗi parse local storage departments:", e);
+      finalDepts = initialDepartments;
     }
-    return initialDepartments;
+    return sanitizeAndMigrateDepartments(finalDepts);
   });
 
   const [broadcasts, setBroadcasts] = useState<BroadcastNotice[]>(() => {
@@ -530,59 +676,51 @@ export default function App() {
   const syncFromDb = async (isManual = false) => {
     if (!db) {
       setDbLoading(false);
-      setDbStatus("Chế độ Offline/Local (VITE_FIREBASE_CONF chưa được khai báo)");
-      if (isManual) {
-        showToast("Chế độ Offline/Local (Không dùng Firestore)", "info");
-      }
+      setDbStatus("Chế độ Offline/Local (VITE_FIREBASE_CONF chưa được cấu hình)");
       return;
     }
     try {
-      setDbStatus(isManual ? "Đang tải dữ liệu mới từ Firestore..." : "Đang đồng bộ dữ liệu với Firestore...");
-      // 1. Seed default data if users collection is empty
-      await seedFirestoreIfNeeded();
-
-      // 2. Load Firestore collections directly to ensure full synchronization and prevent deleted records from resurrecting
       const fUsers = await fetchCollection<User>(COLLECTIONS.USERS);
-      if (fUsers.length > 0) {
-        const cleanedFetched = fUsers.map((u) => {
-          let userPwd = u.password;
-          if (u.id === "2018.00281" && (!userPwd || userPwd === "123456")) {
-            userPwd = "111222";
-          } else {
-            const isAdmin = u.role === UserRole.ADMIN;
-            if (!isAdmin) {
-              if (!userPwd || userPwd === "password123" || userPwd === "111222" || userPwd.startsWith("password") || userPwd === "password" || userPwd.toLowerCase().includes("password")) {
-                userPwd = "123456";
-              }
+      let finalUsers = fUsers.length > 0 ? fUsers : [...users];
+      finalUsers = sanitizeUsers(finalUsers.map((u) => {
+        let userPwd = u.password;
+        if (u.id === "2018.00281" && (!userPwd || userPwd === "123456")) {
+          userPwd = "111222";
+        } else {
+          const isAdmin = u.role === UserRole.ADMIN;
+          if (!isAdmin) {
+            if (!userPwd || userPwd === "password123" || userPwd === "111222" || userPwd.startsWith("password") || userPwd === "password" || userPwd.toLowerCase().includes("password")) {
+              userPwd = "123456";
             }
           }
-          let deptName = u.department || "";
-          deptName = deptName.replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
-          deptName = deptName.replace(/\s\([^)]+\)$/, "").trim();
-          
-          let suffix = "";
-          let branchName = u.branch || "";
-          if (branchName.includes("TPP-CTY") || branchName.includes("Văn Phòng")) {
-            suffix = " (TPP-CTY)";
-          } else if (branchName.includes("TPP-BNI") || branchName.includes("Bắc Ninh")) {
-            suffix = " (TPP-BNI)";
-          } else if (branchName.includes("TPP-LAN") || branchName.includes("Long An")) {
-            suffix = " (TPP-LAN)";
-          } else if (branchName.includes("TPP-314") || branchName.includes("314")) {
-            suffix = " (TPP-314)";
-          }
-          
-          return {
-            ...u,
-            password: userPwd,
-            department: suffix ? `${deptName}${suffix}` : deptName
-          };
-        });
-        setUsers(cleanedFetched);
-      }
+        }
+        let deptName = u.department || "";
+        deptName = deptName.replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
+        deptName = deptName.replace(/\s\([^)]+\)$/, "").trim();
+        
+        let suffix = "";
+        let branchName = u.branch || "";
+        if (branchName.includes("TPP-CTY") || branchName.includes("Văn Phòng")) {
+          suffix = " (TPP-CTY)";
+        } else if (branchName.includes("TPP-BNI") || branchName.includes("Bắc Ninh")) {
+          suffix = " (TPP-BNI)";
+        } else if (branchName.includes("TPP-LAN") || branchName.includes("Long An")) {
+          suffix = " (TPP-LAN)";
+        } else if (branchName.includes("TPP-314") || branchName.includes("314")) {
+          suffix = " (TPP-314)";
+        }
+        
+        return {
+          ...u,
+          password: userPwd,
+          department: suffix ? `${deptName}${suffix}` : deptName
+        };
+      }));
+      setUsers(finalUsers);
 
       const fReports = await fetchCollection<QualityReport>(COLLECTIONS.REPORTS);
-      setReports(fReports);
+      const finalReports = sanitizeReports(fReports.length > 0 ? fReports : [...reports]);
+      setReports(finalReports);
 
       const fCompanies = await fetchCollection<Company>(COLLECTIONS.COMPANIES);
       const fBranches = await fetchCollection<Branch>(COLLECTIONS.BRANCHES);
@@ -600,7 +738,7 @@ export default function App() {
         if (!restCompanies.some(c => c.id === "TPP")) {
           restCompanies.push({
             id: "TPP",
-            name: tppGroupCompany?.name || "TÂN PHÚ VIỆT NAM"
+            name: tppGroupCompany?.name || "TÂN PHỦ VIỆT NAM"
           });
         }
         latestCompanies = restCompanies;
@@ -613,9 +751,9 @@ export default function App() {
         });
 
         setCompanies(latestCompanies);
-        setBranches(latestBranches);
+        setBranches(sanitizeAndMigrateBranches(latestBranches));
         localStorage.setItem("4m1e1i_companies", JSON.stringify(latestCompanies));
-        localStorage.setItem("4m1e1i_branches", JSON.stringify(latestBranches));
+        localStorage.setItem("4m1e1i_branches", JSON.stringify(sanitizeAndMigrateBranches(latestBranches)));
 
         if (dbConnected) {
           try {
@@ -624,62 +762,55 @@ export default function App() {
             if (tppCompany) {
               await saveDocument(COLLECTIONS.COMPANIES, "TPP", tppCompany);
             }
-            for (const b of latestBranches) {
-              if (b.companyId === "TPP") {
-                await saveDocument(COLLECTIONS.BRANCHES, b.id, b);
-              }
+            const sanitizedB = sanitizeAndMigrateBranches(latestBranches);
+            for (const b of sanitizedB) {
+              await saveDocument(COLLECTIONS.BRANCHES, b.id, b);
             }
           } catch (err) {
             console.error("Lỗi khi xóa TPP-Group hoặc lưu TPP lên Firestore:", err);
           }
         }
       } else {
+        const sanitizedB = sanitizeAndMigrateBranches(latestBranches);
+        setBranches(sanitizedB);
+        localStorage.setItem("4m1e1i_branches", JSON.stringify(sanitizedB));
+        
+        if (dbConnected) {
+          try {
+            // Force-write correct branches with ID and suffix to database to avoid ghost values on other devices
+            const bbmBr = sanitizedB.find(b => b.id === "DNP-BBM");
+            if (bbmBr) await saveDocument(COLLECTIONS.BRANCHES, "DNP-BBM", bbmBr);
+            const bbcBr = sanitizedB.find(b => b.id === "DNP-BBC");
+            if (bbcBr) await saveDocument(COLLECTIONS.BRANCHES, "DNP-BBC", bbcBr);
+            
+            // Delete old BBM branch ID
+            await deleteDocument(COLLECTIONS.BRANCHES, "BBM");
+          } catch (err) {
+            console.error("Lỗi khi cập nhật branches lên Firestore:", err);
+          }
+        }
+
         if (fCompanies.length > 0) {
           setCompanies(fCompanies);
-        }
-        if (fBranches.length > 0) {
-          setBranches(fBranches);
         }
       }
 
       const fDepts = await fetchCollection<Department>(COLLECTIONS.DEPARTMENTS);
-      if (fDepts.length > 0) {
-        const deptsBranches = latestBranches;
-        const cleanedFetched = fDepts.map((d) => {
-          let cleanName = d.name || "";
-          cleanName = cleanName.replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
-          cleanName = cleanName.replace(/\s\([^)]+\)$/, "").trim();
+      let latestDepts = fDepts.length > 0 ? fDepts : [...departments];
+      latestDepts = sanitizeAndMigrateDepartments(latestDepts);
+      setDepartments(latestDepts);
+      localStorage.setItem("4m1e1i_departments", JSON.stringify(latestDepts));
 
-          let suffix = "";
-          const br = deptsBranches.find((b) => b.id === d.branchId);
-          if (br) {
-            const brName = br.name || "";
-            const match = brName.match(/\(([^)]+)\)/);
-            if (match) {
-              suffix = ` (${match[1]})`;
-            } else {
-              const words = brName.trim().split(/\s+/);
-              const lastWord = words[words.length - 1];
-              if (lastWord && lastWord === lastWord.toUpperCase() && lastWord.length >= 2) {
-                suffix = ` (${lastWord})`;
-              }
-            }
-          } else {
-            if (d.branchId && !d.branchId.startsWith("BRANCH-") && !d.branchId.startsWith("DEPT-") && d.branchId.length <= 10) {
-              suffix = ` (${d.branchId})`;
-            }
+      if (dbConnected) {
+        try {
+          // Force-write correct departments of DNP-BBM and DNP-BBC to database to avoid ghost values
+          const dnpDepts = latestDepts.filter(d => d.branchId === "DNP-BBM" || d.branchId === "DNP-BBC");
+          for (const d of dnpDepts) {
+            await saveDocument(COLLECTIONS.DEPARTMENTS, d.id, d);
           }
-
-          if (suffix.includes("BRANCH-") || suffix.includes("DEPT-") || suffix.length > 15) {
-            suffix = "";
-          }
-
-          return {
-            ...d,
-            name: suffix ? `${cleanName}${suffix}` : cleanName
-          };
-        });
-        setDepartments(cleanedFetched);
+        } catch (err) {
+          console.error("Lỗi khi lưu departments lên Firestore:", err);
+        }
       }
 
       const fBroadcasts = await fetchCollection<BroadcastNotice>(COLLECTIONS.BROADCASTS);

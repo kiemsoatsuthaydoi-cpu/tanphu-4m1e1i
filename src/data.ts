@@ -17,14 +17,17 @@ const svgEnvIcon = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/s
 const svgInfoIcon = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='250' viewBox='0 0 400 250'><rect width='100%' height='100%' fill='%23f8fafc'/><text x='50%' y='40%' font-family='sans-serif' font-size='22' font-weight='bold' fill='%23475569' text-anchor='middle'>THÔNG TIN (INFO)</text><text x='50%' y='60%' font-family='sans-serif' font-size='14' fill='%2364748b' text-anchor='middle'>Đón đoàn đánh giá tiêu chuẩn BRC xưởng sạch</text></svg>";
 
 export const initialCompanies: Company[] = [
-  { id: "TPP", name: "TÂN PHÚ VIỆT NAM" }
+  { id: "TPP", name: "TÂN PHÚ VIỆT NAM" },
+  { id: "DNP", name: "DNP" }
 ];
 
 export const initialBranches: Branch[] = [
   { id: "TPP-CTY", name: "Văn Phòng Công Ty (TPP-CTY)", companyId: "TPP", isScoring: true },
   { id: "TPP-BNI", name: "Chi Nhánh Bắc Ninh (TPP-BNI)", companyId: "TPP", isScoring: true },
   { id: "TPP-LAN", name: "Chi Nhánh Long An (TPP-LAN)", companyId: "TPP", isScoring: true },
-  { id: "TPP-314", name: "Nhà máy 314 (TPP-314)", companyId: "TPP", isScoring: true }
+  { id: "TPP-314", name: "Nhà máy 314 (TPP-314)", companyId: "TPP", isScoring: true },
+  { id: "DNP-BBM", name: "Nhà máy BBM (DNP-BBM)", companyId: "DNP", isScoring: true },
+  { id: "DNP-BBC", name: "Nhà máy BBC (DNP-BBC)", companyId: "DNP", isScoring: true }
 ];
 
 export const initialDepartments: Department[] = [
@@ -84,7 +87,15 @@ export const initialDepartments: Department[] = [
 
   // Nhà máy 314 (TPP-314)
   { id: "nm-1", name: "Phân xưởng sản xuất (TPP-314)", branchId: "TPP-314" },
-  { id: "nm-2", name: "Phòng Tài chính Kế toán (TPP-314)", branchId: "TPP-314" }
+  { id: "nm-2", name: "Phòng Tài chính Kế toán (TPP-314)", branchId: "TPP-314" },
+
+  // Nhà máy BBM (DNP-BBM)
+  { id: "bbm-1", name: "Phòng Quản Lý Chất Lượng (DNP-BBM)", branchId: "DNP-BBM" },
+  { id: "bbm-2", name: "Phòng Tài chính Kế toán (DNP-BBM)", branchId: "DNP-BBM" },
+
+  // Nhà máy BBC (DNP-BBC)
+  { id: "bbc-1", name: "Phòng Quản Lý Chất Lượng (DNP-BBC)", branchId: "DNP-BBC" },
+  { id: "bbc-2", name: "Phòng Tài chính Kế toán (DNP-BBC)", branchId: "DNP-BBC" }
 ];
 
 export const defaultAdmin: User = {
@@ -195,8 +206,8 @@ export const initialUsers: User[] = [
     id: "2024.00912",
     fullName: "Kim Thị Bích Tuyền",
     phone: "0919922883",
-    department: "Phòng Tài chính Kế toán (TPP-314)",
-    branch: "Nhà máy 314 (TPP-314)",
+    department: "Phòng Quản Lý Chất Lượng (DNP-BBM)",
+    branch: "Nhà máy BBM (DNP-BBM)",
     role: UserRole.REVIEWER,
     status: UserStatus.ACTIVE,
     password: "123456"
@@ -224,7 +235,7 @@ export const initialReports: QualityReport[] = [
   },
   {
     id: "R-2",
-    factory: "Nhà máy Đất Đỏ (BBM)",
+    factory: "Nhà máy BBM (DNP-BBM)",
     timestamp: "20:38:53 27/05/2026",
     category: "CON NGƯỜI",
     content: "CÔNG NHÂN TỰ Ý TĂNG TÚI (Vượt định mức quy định 21/20 túi). Không tuân thủ hướng dẫn kỹ thuật trên máy.",
@@ -242,7 +253,7 @@ export const initialReports: QualityReport[] = [
   },
   {
     id: "R-3",
-    factory: "Nhà máy Đất Đỏ (BBM)",
+    factory: "Nhà máy BBM (DNP-BBM)",
     timestamp: "11:11:19 29/05/2026",
     category: "PHƯƠNG PHÁP",
     content: "Chuẩn hóa quy trình dán nhãn Barcode cho 3 size S-M-L trên cuộn bao gói ngoài.",

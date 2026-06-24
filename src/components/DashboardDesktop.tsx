@@ -676,31 +676,20 @@ export default function DashboardDesktop({
     // Find the company suffix
     const foundBranch = branches?.find((b) => {
       const bName = b.name || "";
-      return bName === factoryName || b.id === factoryName || bName.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase() === factoryName.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
+      const bId = b.id || "";
+      const fNameLower = factoryName.toLowerCase();
+      const bNameClean = bName.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
+      const fNameClean = factoryName.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
+      return (
+        bName.toLowerCase() === fNameLower ||
+        bId.toLowerCase() === fNameLower ||
+        fNameLower.includes(bId.toLowerCase()) ||
+        bNameClean === fNameClean
+      );
     });
-    
-    const getAbbreviation = (cid: string) => {
-      if (!cid) return "";
-      if (cid === "TPP-Group" || cid.toLowerCase().includes("tanphu") || cid.toLowerCase().includes("tân phú")) return "TPP";
-      if (cid === "DNP" || cid.toLowerCase().includes("dnp")) return "DNP";
-      const cleanId = cid.replace("-Group", "").replace("-CTY", "").trim();
-      return cleanId.length <= 5 ? cleanId.toUpperCase() : cleanId.slice(0, 4).toUpperCase();
-    };
 
-    let compAbbr = "";
     if (foundBranch) {
-      compAbbr = getAbbreviation(foundBranch.companyId);
-    } else {
-      // Fallback: search for uploader's company or parse from string
-      const matchComp = factoryName.match(/\(([^)]+)\)/);
-      if (matchComp) {
-        const innerCode = matchComp[1];
-        compAbbr = getAbbreviation(innerCode.includes("-") ? innerCode.split("-")[0] : innerCode);
-      }
-    }
-
-    if (compAbbr && !factoryName.includes(`(${compAbbr})`)) {
-      return `${factoryName} (${compAbbr})`;
+      return foundBranch.name;
     }
     return factoryName;
   };
@@ -3550,7 +3539,7 @@ export default function DashboardDesktop({
                     <T>Mục Tiêu Chỉ Đạo Vận Hành</T>
                   </h3>
                   <T className="block text-justify text-xs text-slate-655 leading-relaxed">
-                    Để đáp ứng nghiêm ngặt các chứng chỉ chất lượng quốc tế lớn gồm BRC, ISO 9001, và ISO 22000, ban giám đốc phê chuẩn quy chế bắt buộc thu thập, kiểm duyệt, và đối sánh dữ liệu biến động hàng ngày tại 4 nhà máy (Bắc Ninh, Long An, Đất Đỏ BBM, Đất Đỏ BBC) bao gồm:
+                    Để đáp ứng nghiêm ngặt các chứng chỉ chất lượng quốc tế lớn gồm BRC, ISO 9001, và ISO 22000, ban giám đốc phê chuẩn quy chế bắt buộc thu thập, kiểm duyệt, và đối sánh dữ liệu biến động hàng ngày tại 4 nhà máy (Bắc Ninh, Long An, BBM, BBC) bao gồm:
                   </T>
 
                   {/* 4M1E1I definitions list */}

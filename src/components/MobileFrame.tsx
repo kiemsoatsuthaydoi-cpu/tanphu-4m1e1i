@@ -620,50 +620,24 @@ export default function MobileFrame({
 
   const getFactoryDisplayName = (factoryName: string | undefined | null) => {
     if (!factoryName || typeof factoryName !== "string") return "";
-    const match = factoryName.match(/\(((?:TPP|BBM|DNP)-[^)]+)\)/i);
-    const branchId = match ? match[1].toUpperCase() : null;
 
-    if (displayRule === "custom" && branchId && customAliases[branchId]) {
-      return customAliases[branchId];
-    }
-
-    // Find the company suffix
+    // Find the matching branch
     const foundBranch = branches?.find((b) => {
       const bName = b.name || "";
       const bId = b.id || "";
       const fNameLower = factoryName.toLowerCase();
       const bNameClean = bName.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
       const fNameClean = factoryName.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
-      return bName === factoryName || bId === factoryName || factoryName.includes(bId) || bNameClean === fNameClean;
+      return (
+        bName.toLowerCase() === fNameLower ||
+        bId.toLowerCase() === fNameLower ||
+        fNameLower.includes(bId.toLowerCase()) ||
+        bNameClean === fNameClean
+      );
     });
-    
-    const getAbbreviation = (cid: string) => {
-      if (!cid) return "";
-      if (cid === "TPP-Group" || cid.toLowerCase().includes("tanphu") || cid.toLowerCase().includes("tân phú")) return "TPP";
-      if (cid === "DNP" || cid.toLowerCase().includes("dnp")) return "DNP";
-      const cleanId = cid.replace("-Group", "").replace("-CTY", "").trim();
-      return cleanId.length <= 5 ? cleanId.toUpperCase() : cleanId.slice(0, 4).toUpperCase();
-    };
 
-    let compAbbr = "";
     if (foundBranch) {
-      compAbbr = getAbbreviation(foundBranch.companyId);
-    } else {
-      // Fallback: search for uploader's company or parse from string
-      const matchComp = factoryName.match(/\(([^)]+)\)/);
-      if (matchComp) {
-        const innerCode = matchComp[1];
-        compAbbr = getAbbreviation(innerCode.includes("-") ? innerCode.split("-")[0] : innerCode);
-      }
-    }
-
-    if (displayRule === "clean") {
-      const baseName = factoryName.split("(")[0].trim().replace(/\s*\(((?:TPP|BBM|DNP)-[^)]+)\)/i, "").replace(/\s*\(TPP-[^)]+\)/i, "");
-      return compAbbr ? `${baseName} (${compAbbr})` : baseName;
-    }
-
-    if (compAbbr && !factoryName.includes(`(${compAbbr})`)) {
-      return `${factoryName} (${compAbbr})`;
+      return foundBranch.name;
     }
     return factoryName;
   };
@@ -1885,12 +1859,7 @@ App Link: ${window.location.origin}`;
                 ? branches
                     .filter((b) => b.isScoring)
                     .map((b) => {
-                      let label = b.id;
-                      if (displayRule === "custom" && customAliases[b.id]) {
-                        label = customAliases[b.id];
-                      } else {
-                        label = getFactoryDisplayName(b.name);
-                      }
+                      const label = getFactoryDisplayName(b.name);
                       return { key: b.id, label };
                     })
                 : [
