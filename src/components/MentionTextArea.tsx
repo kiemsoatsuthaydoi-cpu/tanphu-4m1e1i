@@ -24,6 +24,44 @@ export function removeVietnameseTones(str: string): string {
   return res;
 }
 
+// Vietnam text standard formatting helper
+export function formatVietnameseInputText(text: string): string {
+  if (!text) return "";
+  let result = text;
+
+  // 1. Trim spaces before punctuation: "lỗi  , sản" -> "lỗi, sản"
+  result = result.replace(/\s+([.,;:!?])/g, "$1");
+
+  // 2. Ensure space after punctuation if followed by any char except a space
+  // Avoid formatting numbers like "3.5" or "10,000" or "12.34"
+  result = result.replace(/([.,;:!?])([^\s])/g, (match, punc, nextChar, offset) => {
+    // Check character before the punctuation
+    const prevChar = offset > 0 ? result[offset - 1] : "";
+    const isPrevDigit = /\d/.test(prevChar);
+    const isNextDigit = /\d/.test(nextChar);
+    
+    // If both are digits, do not insert a space (e.g. 3.5 or 10,000)
+    if ((punc === "." || punc === ",") && isPrevDigit && isNextDigit) {
+      return match;
+    }
+    return punc + " " + nextChar;
+  });
+
+  // 3. Capitalize the very first letter of the text (Đầu dòng viết hoa)
+  // We find the first letter or word character and uppercase it.
+  result = result.replace(/^(\s*)([a-zà-ỹđ])/i, (match, p1, p2) => {
+    return p1 + p2.toUpperCase();
+  });
+
+  // 4. Capitalize after periods, question marks, and exclamation marks (Sau dấu chấm viết hoa)
+  // Look for any period, exclamation, or question mark followed by whitespace and a letter.
+  result = result.replace(/([.!?])(\s+)([a-zà-ỹđ])/g, (match, p1, p2, p3) => {
+    return p1 + p2 + p3.toUpperCase();
+  });
+
+  return result;
+}
+
 interface MentionControlsProps {
   users?: User[];
   value: string;
@@ -129,9 +167,21 @@ export function MentionTextArea({
         setShowDropdown(false);
         return;
       }
+    } else if (e.key === "Enter" && !e.shiftKey) {
+      const formatted = formatVietnameseInputText(value);
+      if (formatted !== value) {
+        onChange(formatted);
+      }
     }
     if (onKeyDown) {
       onKeyDown(e);
+    }
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+    const formatted = formatVietnameseInputText(e.target.value);
+    if (formatted !== e.target.value) {
+      onChange(formatted);
     }
   };
 
@@ -160,6 +210,7 @@ export function MentionTextArea({
         value={value}
         onChange={handleTextareaChange}
         onKeyDown={handleKeyDown}
+        onBlur={handleBlur}
         onInput={onInput}
         rows={rows}
         className={className}
@@ -309,6 +360,18 @@ export function MentionInput({
         setShowDropdown(false);
         return;
       }
+    } else if (e.key === "Enter") {
+      const formatted = formatVietnameseInputText(value);
+      if (formatted !== value) {
+        onChange(formatted);
+      }
+    }
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const formatted = formatVietnameseInputText(e.target.value);
+    if (formatted !== e.target.value) {
+      onChange(formatted);
     }
   };
 
@@ -337,6 +400,7 @@ export function MentionInput({
         value={value}
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
+        onBlur={handleBlur}
         className={className}
         style={style}
       />

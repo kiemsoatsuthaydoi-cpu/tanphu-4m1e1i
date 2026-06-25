@@ -1967,54 +1967,62 @@ export default function App() {
 
   // Update report handler for likes, shares, or directives
   const handleUpdateReport = (updatedReport: QualityReport) => {
-    setReports((prev) => prev.map((r) => {
-      if (r.id !== updatedReport.id) return r;
+    const existing = reports.find(r => r.id === updatedReport.id);
+    if (!existing) return;
 
-      const now = new Date();
-      const hrs = String(now.getHours()).padStart(2, '0');
-      const mns = String(now.getMinutes()).padStart(2, '0');
-      const scs = String(now.getSeconds()).padStart(2, '0');
-      const date = String(now.getDate()).padStart(2, '0');
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const year = String(now.getFullYear()).slice(-2);
-      const updateTimeStr = `${hrs}:${mns}:${scs} ${date}/${month}/${year}`;
+    const now = new Date();
+    const hrs = String(now.getHours()).padStart(2, '0');
+    const mns = String(now.getMinutes()).padStart(2, '0');
+    const scs = String(now.getSeconds()).padStart(2, '0');
+    const date = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const year = String(now.getFullYear()).slice(-2);
+    const updateTimeStr = `${hrs}:${mns}:${scs} ${date}/${month}/${year}`;
 
-      const logs = r.updateLogs ? [...r.updateLogs] : [];
-      const changes: string[] = [];
+    const logs = existing.updateLogs ? [...existing.updateLogs] : [];
+    const changes: string[] = [];
 
-      const oldLikes = r.likedBy || [];
-      const newLikes = updatedReport.likedBy || [];
-      if (newLikes.length > oldLikes.length) {
-        const addedLike = newLikes.find(l => !oldLikes.includes(l)) || "Kiểm soát viên";
-        changes.push(`Lượt thích mới (${addedLike})`);
-      }
+    const oldLikes = existing.likedBy || [];
+    const newLikes = updatedReport.likedBy || [];
+    if (newLikes.length > oldLikes.length) {
+      const addedLike = newLikes.find(l => !oldLikes.includes(l)) || "Kiểm soát viên";
+      changes.push(`Lượt thích mới (${addedLike})`);
+    } else if (newLikes.length < oldLikes.length) {
+      const removedLike = oldLikes.find(l => !newLikes.includes(l)) || "Kiểm soát viên";
+      changes.push(`Bỏ thích (${removedLike})`);
+    }
 
-      const oldShares = r.sharedBy || [];
-      const newShares = updatedReport.sharedBy || [];
-      if (newShares.length > oldShares.length) {
-        const addedShare = newShares.find(s => !oldShares.includes(s)) || "Kiểm soát viên";
-        changes.push(`Chia sẻ mới (${addedShare})`);
-      }
+    const oldShares = existing.sharedBy || [];
+    const newShares = updatedReport.sharedBy || [];
+    if (newShares.length > oldShares.length) {
+      const addedShare = newShares.find(s => !oldShares.includes(s)) || "Kiểm soát viên";
+      changes.push(`Chia sẻ mới (${addedShare})`);
+    }
 
-      const oldDirs = r.directives || [];
-      const newDirs = updatedReport.directives || [];
-      if (newDirs.length > oldDirs.length) {
-        const addedDir = newDirs[newDirs.length - 1];
-        changes.push(`Chỉ đạo mới (${addedDir.author}: "${addedDir.text.substring(0, 15)}...")`);
-      }
+    const oldDirs = existing.directives || [];
+    const newDirs = updatedReport.directives || [];
+    if (newDirs.length > oldDirs.length) {
+      const addedDir = newDirs[newDirs.length - 1];
+      changes.push(`Chỉ đạo mới (${addedDir.author}: "${addedDir.text.substring(0, 15)}...")`);
+    }
 
-      if (changes.length > 0) {
-        const logMsg = `${changes.join(", ")} (${updateTimeStr})`;
-        logs.push(logMsg);
-        return {
-          ...updatedReport,
-          updatedAt: updateTimeStr,
-          updateLogs: logs
-        };
-      }
+    let finalReport = updatedReport;
+    if (changes.length > 0) {
+      const logMsg = `${changes.join(", ")} (${updateTimeStr})`;
+      logs.push(logMsg);
+      finalReport = {
+        ...updatedReport,
+        updatedAt: updateTimeStr,
+        updateLogs: logs
+      };
+    }
 
-      return updatedReport;
-    }));
+    setReports((prev) => prev.map((r) => r.id === updatedReport.id ? finalReport : r));
+
+    // Save to Firestore so it is persistent across devices
+    saveDocument(COLLECTIONS.REPORTS, finalReport.id, finalReport).catch((err) => {
+      console.error("Lỗi khi lưu cập nhật báo cáo lên Firestore:", err);
+    });
   };
 
   // Render Authentication Section (Login / registration cards)

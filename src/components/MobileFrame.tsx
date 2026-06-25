@@ -2669,15 +2669,24 @@ App Link: ${window.location.origin}`;
                       );
                     })()}
                     {(() => {
-                      const isReportLiked = report.likedBy?.includes(currentUser?.fullName || "Kiểm soát viên") || likedReports[report.id];
-                      const likesCount = report.likedBy?.length || 0;
+                      const userLikedLocally = likedReports[report.id];
+                      const userInLikedBy = report.likedBy?.includes(currentUser?.fullName || "Kiểm soát viên");
+                      const isReportLiked = userInLikedBy || userLikedLocally;
+                      
+                      let likesCount = report.likedBy?.length || 0;
+                      if (userLikedLocally && !userInLikedBy) {
+                        likesCount += 1;
+                      } else if (!userLikedLocally && userInLikedBy) {
+                        likesCount = Math.max(0, likesCount - 1);
+                      }
+
                       return (
                         <div className="flex items-center gap-1 bg-slate-50 border border-slate-100 rounded-lg py-0.5 px-1.5 shrink-0">
                           <button
                             type="button"
                             onClick={() => toggleLike(report.id)}
                             className={`flex items-center justify-center p-1 transition-all hover:scale-115 active:scale-90 cursor-pointer border-none bg-transparent ${
-                              isReportLiked ? "text-rose-655" : "text-slate-400 hover:text-rose-505"
+                              isReportLiked ? "text-rose-500" : "text-slate-400 hover:text-rose-500"
                             }`}
                             title={isReportLiked ? "Bỏ thích" : "Thích"}
                           >
@@ -2695,7 +2704,7 @@ App Link: ${window.location.origin}`;
                             className={`text-[10px] font-black font-sans px-1.5 py-0.5 rounded cursor-pointer transition-all border-none ${
                               likesCount > 0 
                                 ? "text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 hover:scale-105" 
-                                : "text-slate-300 bg-transparent cursor-default"
+                                : "text-slate-400 bg-transparent cursor-default"
                             }`}
                             title={likesCount > 0 ? "Xem ai đã thích" : "Chưa có lượt thích"}
                           >
@@ -3079,62 +3088,66 @@ App Link: ${window.location.origin}`}
         </div>
       )}
 
-      {showLikesListReport && (
-        <div 
-          onClick={() => setShowLikesListReport(null)}
-          className="absolute inset-0 bg-slate-900/65 backdrop-blur-xs flex items-end justify-center z-50 select-none animate-fadeIn cursor-pointer"
-        >
+      {showLikesListReport && (() => {
+        const activeReport = reports.find(r => r.id === showLikesListReport.id) || showLikesListReport;
+        const displayLikes = activeReport.likedBy || [];
+        return (
           <div 
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-t-3xl w-full max-h-[70%] overflow-hidden flex flex-col shadow-2xl border-t border-slate-100 animate-slideUp cursor-default"
+            onClick={() => setShowLikesListReport(null)}
+            className="absolute inset-0 bg-slate-900/65 backdrop-blur-xs flex items-end justify-center z-50 select-none animate-fadeIn cursor-pointer"
           >
-            {/* Header */}
-            <div className="flex justify-between items-center px-4 py-3.5 border-b border-rose-100 shrink-0 bg-rose-50/50">
-              <div className="flex items-center gap-1.5 text-rose-600">
-                <Heart className="w-4 h-4 fill-rose-500 text-rose-600 animate-pulse" />
-                <span className="font-extrabold text-[12px] uppercase tracking-tight font-sans">
-                  <T>DANH SÁCH LƯỢT THÍCH ({showLikesListReport.likedBy?.length || 0})</T>
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowLikesListReport(null)}
-                className="w-7 h-7 rounded-full bg-slate-150 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-xs border-none"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* List of Who Liked */}
-            <div className="flex-1 overflow-y-auto p-4 bg-slate-50/30 space-y-2 pb-8">
-              {!showLikesListReport.likedBy || showLikesListReport.likedBy.length === 0 ? (
-                <div className="py-10 text-center text-slate-400 text-xs font-medium">
-                  <T>Chưa có ai yêu thích nội dung này.</T>
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-t-3xl w-full max-h-[70%] overflow-hidden flex flex-col shadow-2xl border-t border-slate-100 animate-slideUp cursor-default"
+            >
+              {/* Header */}
+              <div className="flex justify-between items-center px-4 py-3.5 border-b border-rose-100 shrink-0 bg-rose-50/50">
+                <div className="flex items-center gap-1.5 text-rose-600">
+                  <Heart className="w-4 h-4 fill-rose-500 text-rose-600 animate-pulse" />
+                  <span className="font-extrabold text-[12px] uppercase tracking-tight font-sans">
+                    <T>DANH SÁCH LƯỢT THÍCH ({displayLikes.length})</T>
+                  </span>
                 </div>
-              ) : (
-                showLikesListReport.likedBy.map((name, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between p-2.5 rounded-xl border border-slate-150 bg-white shadow-3xs"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-7.5 h-7.5 rounded-full bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 text-xs font-extrabold select-none">
-                        {name.charAt(0).toUpperCase()}
+                <button
+                  type="button"
+                  onClick={() => setShowLikesListReport(null)}
+                  className="w-7 h-7 rounded-full bg-slate-150 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-xs border-none"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* List of Who Liked */}
+              <div className="flex-1 overflow-y-auto p-4 bg-slate-50/30 space-y-2 pb-8">
+                {displayLikes.length === 0 ? (
+                  <div className="py-10 text-center text-slate-400 text-xs font-medium">
+                    <T>Chưa có ai yêu thích nội dung này.</T>
+                  </div>
+                ) : (
+                  displayLikes.map((name, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between p-2.5 rounded-xl border border-slate-150 bg-white shadow-3xs"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-7.5 h-7.5 rounded-full bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 text-xs font-extrabold select-none">
+                          {name.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="text-xs font-extrabold text-slate-800">
+                          <T>{name}</T>
+                        </span>
                       </div>
-                      <span className="text-xs font-extrabold text-slate-800">
-                        <T>{name}</T>
+                      <span className="text-[9px] bg-rose-50 text-rose-700 font-extrabold px-2.5 py-0.5 rounded-full border border-rose-100 tracking-tight flex items-center gap-0.5">
+                        ❤️ <T>Thích</T>
                       </span>
                     </div>
-                    <span className="text-[9px] bg-rose-50 text-rose-700 font-extrabold px-2.5 py-0.5 rounded-full border border-rose-100 tracking-tight flex items-center gap-0.5">
-                      ❤️ <T>Thích</T>
-                    </span>
-                  </div>
-                ))
-              )}
+                  ))
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Dynamic Notifications System Drawer Overlay */}
       {showNotifDrawer && (
