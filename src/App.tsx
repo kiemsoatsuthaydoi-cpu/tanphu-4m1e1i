@@ -35,7 +35,6 @@ import {
   initialOrderImplementations
 } from "./data";
 import MobileFrame from "./components/MobileFrame";
-import { MobileListOnly } from "./components/MobileListOnly";
 import ReportForm from "./components/ReportForm";
 import DashboardDesktop from "./components/DashboardDesktop";
 import { db } from "./utils/firebase";
@@ -461,21 +460,6 @@ export default function App() {
   const [showMobilePreview, setShowMobilePreview] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingReport, setEditingReport] = useState<QualityReport | null>(null);
-  const [isNativeScrollActive, setIsNativeScrollActive] = useState(false);
-
-  const [isMobile, setIsMobile] = useState(() => {
-    return window.innerWidth < 1024 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-  });
-
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(
-        window.innerWidth < 1024 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-      );
-    };
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
 
   const [mobileUIConfig, setMobileUIConfig] = useState(() => {
     const saved = localStorage.getItem("4m1e1i_mobile_ui_config");
@@ -2716,109 +2700,7 @@ export default function App() {
     }
   };
 
-  // Nếu đang kích hoạt chụp cuộn xả khung, cưỡng bức kết xuất duy nhất danh sách báo cáo, không giữ bất kỳ lớp giao diện máy tính nào trong DOM
-  if (isNativeScrollActive) {
-    return (
-      <MobileListOnly
-        reports={reports}
-        currentUser={currentUser}
-        branches={branches}
-        mobileUIConfig={mobileUIConfig}
-        onClose={() => setIsNativeScrollActive(false)}
-      />
-    );
-  }
-
-  // Active user view workspace: 1. Real mobile device logic (Strictly separate DOM from Desktop layout)
-  if (currentUser && isMobile) {
-    return (
-      <div className="min-h-screen bg-white flex flex-col font-sans relative overflow-x-hidden">
-        {isFormOpen ? (
-          <ReportForm
-            currentUser={currentUser}
-            users={users}
-            editingReport={editingReport}
-            onCancel={() => {
-              setIsFormOpen(false);
-              setEditingReport(null);
-            }}
-            onSubmitReport={handleSubmitReport}
-            offlineMode={offlineMode}
-            branches={branches}
-            mobileUIConfig={mobileUIConfig}
-            onShowToast={showToast}
-          />
-        ) : (
-          <MobileFrame
-            reports={reports}
-            currentUserId={currentUser.id}
-            onOpenReportForm={() => setIsFormOpen(true)}
-            onDeleteReport={handleDeleteReportTrigger}
-            onEditReport={handleEditReportTrigger}
-            offlineMode={offlineMode}
-            currentUser={currentUser}
-            onUpdateReport={handleUpdateReport}
-            mobileUIConfig={mobileUIConfig}
-            onUpdateMobileUIConfig={setMobileUIConfig}
-            onLogout={() => setCurrentUser(null)}
-            branches={branches}
-            onManualRefresh={syncFromDb}
-            users={users}
-            companies={companies}
-            onSwitchToDesktop={() => {}}
-            chats={chats}
-            onAddChatMessage={handleAddChatMessage}
-            onUpdateUserStatus={handleUpdateStatus}
-            onUpdateUserRole={handleUpdateRole}
-            isNativeScrollActive={isNativeScrollActive}
-            setIsNativeScrollActive={setIsNativeScrollActive}
-          />
-        )}
-
-        {/* High-fidelity elegant Custom Toast system for CBNV */}
-        {toast && (
-          <div 
-            style={{ zIndex: 100000 }} 
-            className="fixed top-6 left-1/2 -translate-x-1/2 max-w-[90vw] w-fit min-w-[300px] bg-slate-900/95 backdrop-blur-md text-white rounded-2xl p-4 shadow-2xl flex items-center gap-3 border border-slate-700/50 select-none animate-fadeIn transition-all"
-          >
-            {toast.type === "success" && (
-              <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-                <Check className="w-4 h-4" />
-              </div>
-            )}
-            {toast.type === "error" && (
-              <div className="w-7 h-7 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
-                <AlertCircle className="w-4 h-4" />
-              </div>
-            )}
-            {toast.type === "warning" && (
-              <div className="w-7 h-7 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-4 h-4" />
-              </div>
-            )}
-            {toast.type === "info" && (
-              <div className="w-7 h-7 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
-                <Info className="w-4 h-4" />
-              </div>
-            )}
-            
-            <div className="flex-1 text-left text-[11px] font-bold leading-normal text-slate-100 pr-2">
-              <T>{toast.message}</T>
-            </div>
-            
-            <button
-              onClick={() => setToast(null)}
-              className="text-slate-400 hover:text-white transition-colors cursor-pointer text-xs font-semibold px-1 rounded-sm active:scale-95"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // Active user view workspace: 2. Simulated smartphone workspace on desktop screens for STAFF or REVIEWER
+  // Active user view workspace (Integrates Admin Panel and Client Phone Simulator side-by-side)
   if (currentUser && (currentUser.role === UserRole.STAFF || currentUser.role === UserRole.REVIEWER)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#2563eb] to-[#1d4ed8] flex items-center justify-center p-0 sm:p-4 relative font-sans overflow-hidden select-none">
@@ -2863,8 +2745,6 @@ export default function App() {
             onAddChatMessage={handleAddChatMessage}
             onUpdateUserStatus={handleUpdateStatus}
             onUpdateUserRole={handleUpdateRole}
-            isNativeScrollActive={isNativeScrollActive}
-            setIsNativeScrollActive={setIsNativeScrollActive}
           />
         )}
 
@@ -2914,7 +2794,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#F0F2F5] flex flex-col relative overflow-hidden font-sans">
       {/* Upper header line with simulated offline trigger */}
-      <div className="hidden lg:flex bg-[#1E293B] px-6 py-2 border-b border-slate-700 justify-between items-center select-none text-[10px] text-slate-300 shrink-0 main-app-header">
+      <div className="bg-[#1E293B] px-6 py-2 border-b border-slate-700 flex justify-between items-center select-none text-[10px] text-slate-300 shrink-0 select-none">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
           <T>BỘ PHẬN CHỈ ĐẠO:</T>
@@ -2960,7 +2840,7 @@ export default function App() {
 
       {/* Side-by-side layout (Desktop view takes full remaining space, accompanied by a luxury Floating/Stuck iPhone preview) */}
       <div className="flex-1 flex min-h-0">
-        <div className="hidden lg:flex flex-1 min-w-0 flex-col dashboard-desktop-wrapper">
+        <div className="flex-1 min-w-0 flex flex-col">
           <DashboardDesktop
             currentUser={currentUser}
             users={users}
@@ -3009,7 +2889,7 @@ export default function App() {
 
         {/* Floating/Docked elegant iPhone mockup frame on the right side if active */}
         {showMobilePreview && (
-          <div className="hidden lg:flex w-[420px] bg-[#F7F9FC] border-l border-slate-200 p-6 flex-col items-center shrink-0 overflow-y-auto select-none shadow-inner mobile-preview-dock">
+          <div className="hidden lg:flex w-[420px] bg-[#F7F9FC] border-l border-slate-200 p-6 flex-col items-center shrink-0 overflow-y-auto select-none shadow-inner">
             <div className="w-full flex items-center justify-between mb-4 header-mobile-controls">
               <T className="text-[10px] text-slate-500 font-extrabold uppercase tracking-widest block font-sans">
                 📱 Xem trước giao diện di động (Mobile Preview)
@@ -3053,8 +2933,6 @@ export default function App() {
                 onAddChatMessage={handleAddChatMessage}
                 onUpdateUserStatus={handleUpdateStatus}
                 onUpdateUserRole={handleUpdateRole}
-                isNativeScrollActive={isNativeScrollActive}
-                setIsNativeScrollActive={setIsNativeScrollActive}
               />
             )}
           </div>
@@ -3102,8 +2980,6 @@ export default function App() {
                 onAddChatMessage={handleAddChatMessage}
                 onUpdateUserStatus={handleUpdateStatus}
                 onUpdateUserRole={handleUpdateRole}
-                isNativeScrollActive={isNativeScrollActive}
-                setIsNativeScrollActive={setIsNativeScrollActive}
               />
             )}
           </div>
