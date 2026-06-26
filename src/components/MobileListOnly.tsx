@@ -22,28 +22,28 @@ export function MobileListOnly({
   onClose,
 }: MobileListOnlyProps) {
   
-  // Format timestamps to dd/mm/yy
-  const formatToDMY = (tsStr: string): string => {
-    if (!tsStr) return "";
-    try {
-      // Split date and time: e.g. "25/06/2026 23:14:15"
-      const parts = tsStr.split(" ");
-      if (parts.length === 2) {
-        const datePart = parts[0]; // "25/06/2026"
-        const timePart = parts[1]; // "23:14:15"
-        const formattedDate = datePart.replace(/\/20(\d{2})/, "/$1"); // "25/06/26"
-        return `${formattedDate} ${timePart.substring(0, 5)}`;
-      }
-      return tsStr.replace(/\/20(\d{2})/, "/$1");
-    } catch (e) {
-      return tsStr;
-    }
-  };
-
   const getFactoryDisplayName = (factoryName: string | undefined | null) => {
-    if (!factoryName) return "";
-    const foundBranch = branches?.find((b) => b.id === factoryName || b.name === factoryName);
-    return foundBranch ? foundBranch.name : factoryName;
+    if (!factoryName || typeof factoryName !== "string") return "";
+
+    // Find the matching branch with robust lowercase and regex-cleaned comparison
+    const foundBranch = branches?.find((b) => {
+      const bName = b.name || "";
+      const bId = b.id || "";
+      const fNameLower = factoryName.toLowerCase();
+      const bNameClean = bName.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
+      const fNameClean = factoryName.replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
+      return (
+        bName.toLowerCase() === fNameLower ||
+        bId.toLowerCase() === fNameLower ||
+        fNameLower.includes(bId.toLowerCase()) ||
+        bNameClean === fNameClean
+      );
+    });
+
+    if (foundBranch) {
+      return foundBranch.name;
+    }
+    return factoryName;
   };
 
   const getCategoryIcon = (cat: string) => {
@@ -165,7 +165,7 @@ export function MobileListOnly({
                       <span translate="no" className="notranslate">{getFactoryDisplayName(report.factory)}</span>
                     </h3>
                     <p className="text-[9px] text-slate-400 font-semibold mt-0.5">
-                      <span translate="no" className="notranslate">{formatToDMY(report.timestamp)}</span>
+                      <span translate="no" className="notranslate">{report.timestamp}</span>
                     </p>
                   </div>
                   <div>
@@ -244,7 +244,7 @@ export function MobileListOnly({
                             <span className="text-amber-800 font-extrabold">
                               <span translate="no" className="notranslate">{dir.author}</span>
                             </span>
-                            <span translate="no" className="notranslate">{formatToDMY(dir.timestamp)}</span>
+                            <span translate="no" className="notranslate">{dir.timestamp}</span>
                           </div>
                           <p className="text-[10px] text-amber-950 font-medium">
                             <span translate="no" className="notranslate">{dir.text}</span>

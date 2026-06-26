@@ -478,9 +478,9 @@ export default function ReportForm({
   };
 
   return (
-    <div className="w-full h-[100dvh] max-w-[440px] lg:w-[375px] lg:h-[780px] bg-[#f8fafc] text-slate-800 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl flex flex-col relative overflow-hidden select-none">
+    <div className="w-full h-[100dvh] max-w-[440px] lg:w-[375px] lg:h-[780px] bg-slate-950 text-slate-800 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl flex flex-col relative overflow-hidden select-none">
       {/* Header view standard and title */}
-      <div className="bg-[#1e3a8a] text-white px-4 py-3.5 flex items-center shrink-0 border-b border-blue-900 shadow-md">
+      <div className="bg-[#1e3a8a] text-white px-4 py-3.5 flex items-center shrink-0 border-b border-blue-900 shadow-md rounded-t-[15px] lg:rounded-t-[28px]">
         <button onClick={handleCancelWithConfirm} className="mr-3 hover:scale-110 active:scale-90 transition-transform">
           <ArrowLeft className="w-5 h-5" />
         </button>
