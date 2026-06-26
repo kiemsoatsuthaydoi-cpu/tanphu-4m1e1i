@@ -1,11 +1,135 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Search, RotateCw, RotateCcw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield } from "lucide-react";
+import html2canvas from "html2canvas";
+import { Search, RotateCw, RotateCcw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone } from "lucide-react";
 import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Company, ChatMessage } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
 import { QRCodeSVG } from "qrcode.react";
 import { isSameBranchOrFactory } from "../utils/branchHelpers";
 import { AutoImageSlider } from "./AutoImageSlider";
+
+function convertModernColorsToRgb(cssValue: string): string {
+  if (!cssValue || typeof cssValue !== "string") return cssValue;
+  if (!cssValue.includes("oklch") && !cssValue.includes("oklab")) return cssValue;
+
+  let result = cssValue;
+
+  // Convert oklch colors
+  if (result.includes("oklch")) {
+    result = result.replace(/oklch\(([^)]+)\)/g, (match, content) => {
+      try {
+        const parts = content.trim().split(/[\s/]+/).filter(Boolean);
+        if (parts.length < 3) return "rgba(0,0,0,0)";
+
+        const L = parseFloat(parts[0]);
+        const C = parseFloat(parts[1]);
+        const H = parseFloat(parts[2]);
+        let alpha = 1;
+        if (parts.length >= 4) {
+          const aPart = parts[3];
+          if (aPart.endsWith("%")) {
+            alpha = parseFloat(aPart) / 100;
+          } else {
+            alpha = parseFloat(aPart);
+          }
+        }
+
+        if (isNaN(L) || isNaN(C) || isNaN(H)) return "rgba(0,0,0,0)";
+
+        const rad = (H * Math.PI) / 180;
+        const a = C * Math.cos(rad);
+        const b = C * Math.sin(rad);
+
+        const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+        const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+        const s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+
+        const L_linear = Math.pow(Math.max(0, l_), 3);
+        const M_linear = Math.pow(Math.max(0, m_), 3);
+        const S_linear = Math.pow(Math.max(0, s_), 3);
+
+        const r = +4.0767416621 * L_linear - 3.3077115913 * M_linear + 0.2309699292 * S_linear;
+        const g = -1.2684380046 * L_linear + 2.6097574011 * M_linear - 0.3413193965 * S_linear;
+        const b_color = -0.0041960863 * L_linear - 0.7034186147 * M_linear + 1.7076147010 * S_linear;
+
+        const gamma = (c: number) => {
+          return c <= 0.0031308
+            ? 12.92 * c
+            : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+        };
+
+        const R = Math.round(Math.min(255, Math.max(0, gamma(r) * 255)));
+        const G = Math.round(Math.min(255, Math.max(0, gamma(g) * 255)));
+        const B = Math.round(Math.min(255, Math.max(0, gamma(b_color) * 255)));
+
+        if (alpha === 1) {
+          return `rgb(${R}, ${G}, ${B})`;
+        } else {
+          return `rgba(${R}, ${G}, ${B}, ${alpha})`;
+        }
+      } catch (e) {
+        return "rgba(0,0,0,0)";
+      }
+    });
+  }
+
+  // Convert oklab colors
+  if (result.includes("oklab")) {
+    result = result.replace(/oklab\(([^)]+)\)/g, (match, content) => {
+      try {
+        const parts = content.trim().split(/[\s/]+/).filter(Boolean);
+        if (parts.length < 3) return "rgba(0,0,0,0)";
+
+        const L = parseFloat(parts[0]);
+        const a = parseFloat(parts[1]);
+        const b = parseFloat(parts[2]);
+        let alpha = 1;
+        if (parts.length >= 4) {
+          const aPart = parts[3];
+          if (aPart.endsWith("%")) {
+            alpha = parseFloat(aPart) / 100;
+          } else {
+            alpha = parseFloat(aPart);
+          }
+        }
+
+        if (isNaN(L) || isNaN(a) || isNaN(b)) return "rgba(0,0,0,0)";
+
+        const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+        const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+        const s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+
+        const L_linear = Math.pow(Math.max(0, l_), 3);
+        const M_linear = Math.pow(Math.max(0, m_), 3);
+        const S_linear = Math.pow(Math.max(0, s_), 3);
+
+        const r = +4.0767416621 * L_linear - 3.3077115913 * M_linear + 0.2309699292 * S_linear;
+        const g = -1.2684380046 * L_linear + 2.6097574011 * M_linear - 0.3413193965 * S_linear;
+        const b_color = -0.0041960863 * L_linear - 0.7034186147 * M_linear + 1.7076147010 * S_linear;
+
+        const gamma = (c: number) => {
+          return c <= 0.0031308
+            ? 12.92 * c
+            : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+        };
+
+        const R = Math.round(Math.min(255, Math.max(0, gamma(r) * 255)));
+        const G = Math.round(Math.min(255, Math.max(0, gamma(g) * 255)));
+        const B = Math.round(Math.min(255, Math.max(0, gamma(b_color) * 255)));
+
+        if (alpha === 1) {
+          return `rgb(${R}, ${G}, ${B})`;
+        } else {
+          return `rgba(${R}, ${G}, ${B}, ${alpha})`;
+        }
+      } catch (e) {
+        return "rgba(0,0,0,0)";
+      }
+    });
+  }
+
+  return result;
+}
 
 interface AppNotification {
   id: string;
@@ -46,6 +170,8 @@ interface MobileFrameProps {
   onAddChatMessage?: (msg: string, reportRefId?: string) => void;
   onUpdateUserStatus?: (id: string, status: UserStatus) => void;
   onUpdateUserRole?: (id: string, role: UserRole) => void;
+  isNativeScrollActive?: boolean;
+  setIsNativeScrollActive?: (active: boolean) => void;
 }
 
 function formatTimestampToDMY(tsStr: string): string {
@@ -522,7 +648,9 @@ export default function MobileFrame({
   chats,
   onAddChatMessage,
   onUpdateUserStatus,
-  onUpdateUserRole
+  onUpdateUserRole,
+  isNativeScrollActive,
+  setIsNativeScrollActive
 }: MobileFrameProps) {
   const config = mobileUIConfig || {};
   const displayRule = config.displayRule || "clean";
@@ -690,19 +818,39 @@ export default function MobileFrame({
     }
 
     try {
-      const permission = await Notification.requestPermission();
+      let permission: NotificationPermission;
+      // Some mobile browsers (older iOS/Chrome) do not return a Promise from requestPermission
+      // but only accept a callback, or throw an exception in iframe environments.
+      const requestResult = Notification.requestPermission();
+      if (requestResult && typeof requestResult.then === "function") {
+        permission = await requestResult;
+      } else {
+        permission = await new Promise<NotificationPermission>((resolve) => {
+          Notification.requestPermission((res) => {
+            resolve(res);
+          });
+        });
+      }
+
       setNotificationPermission(permission);
       if (permission === 'granted') {
         showToast("Đã kích hoạt quyền thông báo thành công! 🎉");
-        if ("setAppBadge" in navigator) {
-          navigator.setAppBadge(1).catch(() => {});
+        try {
+          if ("setAppBadge" in navigator) {
+            const p = navigator.setAppBadge(1);
+            if (p && typeof p.catch === "function") {
+              p.catch(() => {});
+            }
+          }
+        } catch (badgeErr) {
+          console.warn("Lỗi đặt App Badge khi kích hoạt:", badgeErr);
         }
       } else if (permission === 'denied') {
         showToast("Quyền thông báo bị từ chối. Hãy bật lại trong cài đặt thiết bị!");
       }
     } catch (err) {
       console.error("Error requesting notification permission:", err);
-      showToast("Không thể yêu cầu quyền thông báo!");
+      showToast("Không thể yêu cầu quyền thông báo do giới hạn bảo mật!");
     }
   };
 
@@ -779,6 +927,49 @@ export default function MobileFrame({
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isCapturingScreenshot, setIsCapturingScreenshot] = useState(false);
+  const [isNativeScrollMode, setIsNativeScrollMode] = useState(false);
+  const [showScreenshotMenu, setShowScreenshotMenu] = useState(false);
+
+  useEffect(() => {
+    if (isNativeScrollMode) {
+      document.body.classList.add("native-scroll-active");
+      document.documentElement.classList.add("native-scroll-active");
+      
+      const originalBodyOverflow = document.body.style.overflow;
+      const originalBodyHeight = document.body.style.height;
+      const originalHtmlOverflow = document.documentElement.style.overflow;
+      const originalHtmlHeight = document.documentElement.style.height;
+
+      document.body.style.setProperty("overflow", "visible", "important");
+      document.body.style.setProperty("height", "auto", "important");
+      document.documentElement.style.setProperty("overflow", "visible", "important");
+      document.documentElement.style.setProperty("height", "auto", "important");
+
+      const parent = document.getElementById("mobile-viewport")?.parentElement;
+      if (parent) {
+        parent.style.setProperty("overflow", "visible", "important");
+        parent.style.setProperty("height", "auto", "important");
+        parent.style.setProperty("display", "block", "important");
+      }
+
+      showToast("Đã bật chế độ Cuộn Hệ Thống! Bạn có thể Chụp cuộn bằng điện thoại của mình ngay bây giờ. 📱📸");
+
+      return () => {
+        document.body.classList.remove("native-scroll-active");
+        document.documentElement.classList.remove("native-scroll-active");
+        document.body.style.overflow = originalBodyOverflow;
+        document.body.style.height = originalBodyHeight;
+        document.documentElement.style.overflow = originalHtmlOverflow;
+        document.documentElement.style.height = originalHtmlHeight;
+        if (parent) {
+          parent.style.overflow = "";
+          parent.style.height = "";
+          parent.style.display = "";
+        }
+      };
+    }
+  }, [isNativeScrollMode]);
   const [editingDirectiveId, setEditingDirectiveId] = useState<string | null>(null);
   const [editingDirectiveText, setEditingDirectiveText] = useState("");
   const [showLikesListReport, setShowLikesListReport] = useState<QualityReport | null>(null);
@@ -1196,6 +1387,161 @@ App Link: ${window.location.origin}`;
       }
     }
   };
+  
+  const handleCaptureScrollingScreenshot = async () => {
+    if (isCapturingScreenshot) return;
+    setIsCapturingScreenshot(true);
+    showToast("Đang chuẩn bị chụp cuộn màn hình ở mức tối đa... 📸");
+
+    // Đợi 200ms để đảm bảo toast đã hiển thị và các hiệu ứng ổn định
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    const viewport = document.getElementById("mobile-viewport");
+    if (!viewport) {
+      showToast("Không tìm thấy giao diện điện thoại để chụp! ❌");
+      setIsCapturingScreenshot(false);
+      return;
+    }
+
+    // Tìm tất cả các phần tử con có overflow cuộn dọc
+    const scrollElements = Array.from(viewport.querySelectorAll(".overflow-y-auto, .overflow-y-scroll, [class*='overflow-y-']")) as HTMLElement[];
+    if (scrollContainerRef.current && !scrollElements.includes(scrollContainerRef.current)) {
+      scrollElements.push(scrollContainerRef.current);
+    }
+
+    // Lưu lại style cũ của viewport và các phần tử cuộn để khôi phục sau khi chụp
+    const originalViewportStyle = {
+      height: viewport.style.height,
+      maxHeight: viewport.style.maxHeight,
+      overflow: viewport.style.overflow,
+      position: viewport.style.position,
+    };
+
+    const originalScrollStyles = scrollElements.map(el => ({
+      element: el,
+      height: el.style.height,
+      maxHeight: el.style.maxHeight,
+      overflow: el.style.overflow,
+      overflowY: el.style.overflowY,
+    }));
+
+    const originalGetComputedStyle = window.getComputedStyle;
+
+    try {
+      // Tạm thời hook getComputedStyle để chuyển đổi oklch/oklab colors sang rgb/rgba chuẩn tránh lỗi html2canvas
+      (window as any).getComputedStyle = function (el: HTMLElement, pseudoElt?: string) {
+        const style = originalGetComputedStyle(el, pseudoElt);
+        return new Proxy(style, {
+          get(target, prop) {
+            if (typeof prop === "string") {
+              if (prop === "getPropertyValue") {
+                return function (propertyName: string) {
+                  const val = target.getPropertyValue(propertyName);
+                  if (typeof val === "string" && (val.includes("oklch") || val.includes("oklab"))) {
+                    return convertModernColorsToRgb(val);
+                  }
+                  return val;
+                };
+              }
+              const val = (target as any)[prop];
+              if (typeof val === "string" && (val.includes("oklch") || val.includes("oklab"))) {
+                return convertModernColorsToRgb(val);
+              }
+              if (typeof val === "function") {
+                return val.bind(target);
+              }
+              return val;
+            }
+            const val = (target as any)[prop];
+            if (typeof val === "function") {
+              return val.bind(target);
+            }
+            return val;
+          }
+        });
+      };
+
+      // Thiết lập style tạm thời bung hết cỡ cho viewport để chụp cuộn tối đa
+      viewport.style.setProperty("height", "auto", "important");
+      viewport.style.setProperty("max-height", "none", "important");
+      viewport.style.setProperty("overflow", "visible", "important");
+
+      // Thiết lập style tạm thời bung hết cỡ cho toàn bộ các danh sách cuộn bên trong
+      scrollElements.forEach(el => {
+        el.style.setProperty("height", "auto", "important");
+        el.style.setProperty("max-height", "none", "important");
+        el.style.setProperty("overflow", "visible", "important");
+        el.style.setProperty("overflow-y", "visible", "important");
+      });
+
+      // Đợi 250ms để layout vẽ lại hoàn chỉnh với chiều cao tự nhiên mới
+      await new Promise((resolve) => setTimeout(resolve, 250));
+
+      const unrolledHeight = viewport.offsetHeight || 1000;
+      let optimalScale = 1.8;
+      if (unrolledHeight > 6000) {
+        optimalScale = 0.85;
+      } else if (unrolledHeight > 4000) {
+        optimalScale = 1.1;
+      } else if (unrolledHeight > 2000) {
+        optimalScale = 1.4;
+      }
+
+      const canvas = await html2canvas(viewport, {
+        useCORS: true,
+        allowTaint: false,
+        scale: optimalScale,
+        backgroundColor: "#f8fafc",
+        logging: false,
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: viewport.offsetWidth,
+        windowHeight: unrolledHeight,
+      });
+
+      // Tạo đường dẫn tải xuống
+      const imageUri = canvas.toDataURL("image/png");
+      if (!imageUri || imageUri === "data:," || imageUri.length < 100) {
+        throw new Error("Không thể trích xuất dữ liệu ảnh do bộ nhớ thiết bị giới hạn. Vui lòng chuyển sang Chế độ Chụp Cuộn Hệ Thống!");
+      }
+
+      const now = new Date();
+      const d = String(now.getDate()).padStart(2, '0');
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const y = String(now.getFullYear()).slice(-2);
+      const formattedDate = `${d}-${m}-${y}`; // format dd/mm/yy using safe filename hyphens
+
+      const link = document.createElement("a");
+      link.href = imageUri;
+      link.download = `4M1E1I_ChupCuon_${formattedDate}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      showToast("Đã chụp cuộn màn hình thành công! 🎉");
+    } catch (err: any) {
+      console.error("Lỗi khi chụp cuộn màn hình:", err);
+      showToast("Có lỗi xảy ra khi chụp cuộn màn hình: " + err.message);
+    } finally {
+      // Khôi phục getComputedStyle gốc
+      window.getComputedStyle = originalGetComputedStyle;
+
+      // Luôn luôn khôi phục lại styles ban đầu
+      viewport.style.height = originalViewportStyle.height;
+      viewport.style.maxHeight = originalViewportStyle.maxHeight;
+      viewport.style.overflow = originalViewportStyle.overflow;
+      viewport.style.position = originalViewportStyle.position;
+
+      originalScrollStyles.forEach(item => {
+        item.element.style.height = item.height;
+        item.element.style.maxHeight = item.maxHeight;
+        item.element.style.overflow = item.overflow;
+        item.element.style.overflowY = item.overflowY;
+      });
+
+      setIsCapturingScreenshot(false);
+    }
+  };
 
   const handleViewportDoubleClick = (e?: React.MouseEvent) => {
     if (isFullscreen) {
@@ -1475,24 +1821,38 @@ App Link: ${window.location.origin}`;
   // Web Badging API - Sync home screen badge on real device / PWA with unreadCount
   useEffect(() => {
     if (typeof navigator !== "undefined") {
-      if ("setAppBadge" in navigator) {
-        if (unreadCount > 0) {
-          navigator.setAppBadge(unreadCount).catch((err) => {
-            console.warn("Lỗi đặt App Badge:", err);
-          });
-        } else {
-          navigator.clearAppBadge().catch((err) => {
-            console.warn("Lỗi xóa App Badge:", err);
-          });
+      try {
+        if ("setAppBadge" in navigator) {
+          if (unreadCount > 0) {
+            const p = navigator.setAppBadge(unreadCount);
+            if (p && typeof p.catch === "function") {
+              p.catch((err) => {
+                console.warn("Lỗi đặt App Badge (async):", err);
+              });
+            }
+          } else {
+            const p = navigator.clearAppBadge();
+            if (p && typeof p.catch === "function") {
+              p.catch((err) => {
+                console.warn("Lỗi xóa App Badge (async):", err);
+              });
+            }
+          }
         }
+      } catch (err) {
+        console.warn("Lỗi gọi Badging API (sync):", err);
       }
       
-      // Fallback message passing to service worker scope if active
-      if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-          type: unreadCount > 0 ? "SET_BADGE" : "CLEAR_BADGE",
-          count: unreadCount
-        });
+      try {
+        // Fallback message passing to service worker scope if active
+        if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({
+            type: unreadCount > 0 ? "SET_BADGE" : "CLEAR_BADGE",
+            count: unreadCount
+          });
+        }
+      } catch (err) {
+        console.warn("Lỗi gửi tin nhắn cho Service Worker:", err);
       }
     }
   }, [unreadCount]);
@@ -1717,9 +2077,134 @@ App Link: ${window.location.origin}`;
   }
 
   return (
-    <div id="mobile-viewport" onDoubleClick={handleViewportDoubleClick} onTouchStart={handleViewportTouchStart} className="w-full h-[100dvh] max-w-[440px] lg:w-[375px] lg:h-[780px] bg-slate-100 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl overflow-hidden flex flex-col relative">
+    <div 
+      id="mobile-viewport" 
+      onDoubleClick={handleViewportDoubleClick} 
+      onTouchStart={handleViewportTouchStart} 
+      className={`w-full max-w-[440px] lg:w-[375px] bg-slate-100 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl flex flex-col relative transition-all duration-300 ${
+        isNativeScrollMode 
+          ? "h-auto overflow-visible" 
+          : "h-[100dvh] lg:h-[780px] overflow-hidden"
+      }`}
+    >
+      {isNativeScrollMode && (
+        <style>{`
+          /* ONLY target mobile-viewport's own children for natural expansion */
+          .native-scroll-active #mobile-viewport {
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            border: none !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            margin: 0 auto !important;
+            padding-top: 50px !important; /* Space for the yellow fixed banner */
+            background: #ffffff !important;
+          }
+          .native-scroll-active #mobile-viewport .overflow-y-auto,
+          .native-scroll-active #mobile-viewport .overflow-y-scroll,
+          .native-scroll-active #mobile-viewport [class*='overflow-y-'] {
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            overflow-y: visible !important;
+          }
+          .native-scroll-active #mobile-viewport .flex-1 {
+            flex: none !important;
+          }
+
+          /* Hide other irrelevant desktop structures and UI chromes entirely when capturing */
+          .native-scroll-active .main-app-header,
+          .native-scroll-active .dashboard-desktop-wrapper,
+          .native-scroll-active .header-mobile-controls,
+          .native-scroll-active #mobile-header,
+          .native-scroll-active #mobile-bottom-nav,
+          .native-scroll-active #float-home-qr,
+          .native-scroll-active #float-home-trash,
+          .native-scroll-active button[title='Công cụ Chụp ảnh'],
+          .native-scroll-active button[title='Tải lại dữ liệu'],
+          .native-scroll-active .absolute.bottom-20,
+          .native-scroll-active .bg-slate-800\\/90,
+          .native-scroll-active #floating-menu-control-bar {
+            display: none !important;
+          }
+
+          /* Make the containing dock responsive and scroll-transparent */
+          .native-scroll-active .mobile-preview-dock {
+            width: 100% !important;
+            max-width: none !important;
+            border: none !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            height: auto !important;
+            overflow: visible !important;
+          }
+
+          /* Ensure body and html can grow naturally with zero constraints */
+          html.native-scroll-active,
+          body.native-scroll-active,
+          #root.native-scroll-active,
+          .native-scroll-active {
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            overflow-x: hidden !important;
+            background: #ffffff !important;
+            position: relative !important;
+          }
+          
+          /* Remove fixed and overflow-hidden classes of wrapping elements */
+          .native-scroll-active .min-h-screen {
+            display: block !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            background: #ffffff !important;
+            padding: 0 !important;
+          }
+          
+          /* Hide other irrelevant background spots and decorative circles */
+          .native-scroll-active .min-h-screen > .pointer-events-none,
+          .native-scroll-active [class*='bg-cyan-400'],
+          .native-scroll-active [class*='bg-[#6366f1]'] {
+            display: none !important;
+          }
+          
+          /* Target Admin Mobile Simulator Wrapper overlays in App.tsx */
+          .native-scroll-active .fixed.inset-0,
+          .native-scroll-active .fixed.inset-0.z-50 {
+            position: absolute !important;
+            display: block !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            background: transparent !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: auto !important;
+          }
+          .native-scroll-active .fixed.inset-0 > div,
+          .native-scroll-active .fixed.inset-0.z-50 > div {
+            display: block !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+          }
+        `}</style>
+      )}
+
+      {isNativeScrollMode && (
+        <div 
+          onClick={() => setIsNativeScrollMode(false)}
+          className="fixed top-0 left-0 right-0 z-[100000] bg-amber-500 hover:bg-amber-400 text-slate-950 px-4 py-3 text-xs font-black text-center flex items-center justify-center gap-1.5 cursor-pointer shadow-lg select-none border-b border-amber-600 font-sans"
+        >
+          <span translate="no" className="notranslate">📸 ĐANG TRONG CHẾ ĐỘ CHỤP CUỘN. Hãy dùng phím cứng điện thoại để chụp ngay! [X ĐÓNG]</span>
+        </div>
+      )}
+
       {/* Main Appsheet Blue Title Bar */}
-      <div className={`text-white px-4 py-3 flex items-center justify-between shadow-md shrink-0 select-none ${theme.bg}`}>
+      <div id="mobile-header" className={`text-white px-4 py-3 flex items-center justify-between shadow-md shrink-0 select-none ${theme.bg}`}>
         <div className="flex items-center gap-2">
           {/* TANPHU simulated logo block */}
           <div className="relative">
@@ -1747,19 +2232,7 @@ App Link: ${window.location.origin}`;
             </button>
           )}
 
-          {/* Icon màn hình quay lại giao diện máy tính */}
-          {currentUser?.role === UserRole.ADMIN && onSwitchToDesktop && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onSwitchToDesktop();
-              }}
-              className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer shrink-0"
-              title="Quay lại giao diện máy tính"
-            >
-              <Monitor className="w-[18px] h-[18px] text-white" />
-            </button>
-          )}
+
 
           <button
             onClick={() => setShowNotifDrawer(true)}
@@ -1784,6 +2257,8 @@ App Link: ${window.location.origin}`;
               <Maximize className="w-[18px] h-[18px] text-white" />
             )}
           </button>
+          
+
           {currentUser?.role !== UserRole.ADMIN && (
             <button 
               onClick={handleRefreshClick} 
@@ -2022,7 +2497,7 @@ App Link: ${window.location.origin}`;
           )}
         </div>
       ) : activeBottomTab === "PHAN_TICH" ? (
-        <div className="flex-1 overflow-y-auto p-4 bg-slate-50 space-y-4 select-none">
+        <div className={`flex-1 p-4 bg-slate-50 space-y-4 select-none ${isNativeScrollMode ? "overflow-visible h-auto" : "overflow-y-auto"}`}>
           {/* Header Analysis info with custom icon */}
           <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-1.5 flex-wrap">
@@ -2303,7 +2778,7 @@ App Link: ${window.location.origin}`;
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          className="flex-1 overflow-y-auto p-3 space-y-3.5 bg-slate-50 relative"
+          className={`flex-1 p-3 space-y-3.5 bg-slate-50 relative ${isNativeScrollMode ? "overflow-visible h-auto" : "overflow-y-auto"}`}
         >
         {sortedReports.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-6 bg-white rounded-2xl border border-slate-200 bg-opacity-70">
@@ -2847,6 +3322,18 @@ App Link: ${window.location.origin}`;
         </button>
       )}
 
+      {/* Floating Utilities / Screenshot menu on the bottom-left */}
+      {activeBottomTab === "BAO_CAO" && !showTrash && !isNativeScrollMode && (
+        <button
+          type="button"
+          onClick={() => setShowScreenshotMenu(true)}
+          className="absolute bottom-20 left-5 w-10 h-10 bg-slate-800/90 hover:bg-slate-900 active:scale-90 text-white rounded-xl flex items-center justify-center shadow-lg transition-all z-20 cursor-pointer border-none backdrop-blur-xs"
+          title="Công cụ Chụp ảnh"
+        >
+          <Camera className="w-5 h-5 text-amber-400 stroke-[2.2px]" />
+        </button>
+      )}
+
       {/* Blue Circular float creation trigger */}
       {activeBottomTab === "BAO_CAO" && !showTrash && (
         <button
@@ -2876,7 +3363,7 @@ App Link: ${window.location.origin}`;
       )}
 
       {/* Modern bottom navigation tab bar containing Phân Tích & Báo Cáo */}
-      <div className={`bg-slate-50 border-t border-slate-200 grid ${(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) ? "grid-cols-4" : "grid-cols-3"} py-2 text-center text-[10px] font-bold select-none shrink-0 font-sans shadow-inner shrink-0`}>
+      <div id="mobile-bottom-nav" className={`bg-slate-50 border-t border-slate-200 grid ${(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) ? "grid-cols-4" : "grid-cols-3"} py-2 text-center text-[10px] font-bold select-none shrink-0 font-sans shadow-inner shrink-0`}>
         <button
           type="button"
           onClick={() => {
@@ -2966,7 +3453,7 @@ App Link: ${window.location.origin}`;
       )}
 
       {shareModalReport && (
-        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-end justify-center z-50 select-none">
+        <div className="fixed lg:absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-end justify-center z-50 select-none">
           <div className="bg-white rounded-t-3xl w-full max-h-[85%] overflow-y-auto p-5 pb-8 flex flex-col shadow-2xl border-t border-slate-100">
             {/* Header */}
             <div className="flex justify-between items-center pb-3.5 border-b border-slate-100 mb-4 shrink-0">
@@ -3094,7 +3581,7 @@ App Link: ${window.location.origin}`}
         return (
           <div 
             onClick={() => setShowLikesListReport(null)}
-            className="absolute inset-0 bg-slate-900/65 backdrop-blur-xs flex items-end justify-center z-50 select-none animate-fadeIn cursor-pointer"
+            className="fixed lg:absolute inset-0 bg-slate-900/65 backdrop-blur-xs flex items-end justify-center z-50 select-none animate-fadeIn cursor-pointer"
           >
             <div 
               onClick={(e) => e.stopPropagation()}
@@ -3151,7 +3638,7 @@ App Link: ${window.location.origin}`}
 
       {/* Dynamic Notifications System Drawer Overlay */}
       {showNotifDrawer && (
-        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-end justify-center z-50 select-none animate-fadeIn">
+        <div className="fixed lg:absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-end justify-center z-50 select-none animate-fadeIn">
           <div className="bg-white rounded-t-3xl w-full max-h-[85%] overflow-hidden flex flex-col shadow-2xl border-t border-slate-100 animate-slideUp">
             {/* Header */}
             <div className="flex justify-between items-center px-4 py-4 border-b border-slate-100 shrink-0 bg-slate-50">
@@ -3375,7 +3862,7 @@ App Link: ${window.location.origin}`}
 
       {/* Online Users Statistics Drawer */}
       {showOnlineUsersDrawer && (
-        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-end justify-center z-50 select-none animate-fadeIn">
+        <div className="fixed lg:absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-end justify-center z-50 select-none animate-fadeIn">
           <div className="bg-white rounded-t-3xl w-full max-h-[85%] overflow-hidden flex flex-col shadow-2xl border-t border-slate-100 animate-slideUp">
             {/* Header */}
             <div className="flex justify-between items-center px-4 py-4 border-b border-slate-100 shrink-0 bg-slate-50">
@@ -3578,7 +4065,7 @@ App Link: ${window.location.origin}`}
       )}
 
       {showLogoutConfirm && (
-        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-[60] select-none animate-fadeIn">
+        <div className="fixed lg:absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-[60] select-none animate-fadeIn">
           <div className="bg-white rounded-2xl w-full max-w-[280px] p-5 shadow-2xl border border-slate-100 flex flex-col items-center text-center">
             <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mb-3">
               <LogOut className="w-5 h-5 text-rose-600" />
@@ -3608,6 +4095,86 @@ App Link: ${window.location.origin}`}
                 className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-black text-[10px] py-2 rounded-xl shadow-md cursor-pointer transition-all uppercase border-none"
               >
                 <T>Đăng Xuất</T>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showScreenshotMenu && (
+        <div className="fixed lg:absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-end justify-center z-[70] select-none animate-fadeIn">
+          <div className="bg-white rounded-t-3xl w-full max-h-[85%] overflow-hidden flex flex-col shadow-2xl border-t border-slate-100 animate-slideUp">
+            {/* Header */}
+            <div className="flex justify-between items-center px-4 py-4 border-b border-slate-100 shrink-0 bg-slate-50">
+              <div className="flex items-center gap-2">
+                <Camera className="w-5 h-5 text-blue-600 animate-pulse" />
+                <span className="font-extrabold text-[13px] text-[#1e3a8a] tracking-tight uppercase">
+                  <T>CHỤP CUỘN MÀN HÌNH 📸</T>
+                </span>
+              </div>
+              <button
+                onClick={() => setShowScreenshotMenu(false)}
+                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-xs"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Menu options content */}
+            <div className="p-4 bg-slate-50/50 space-y-3 pb-8 overflow-y-auto">
+              <p className="text-[11px] text-slate-500 font-medium leading-relaxed text-center mb-1">
+                <T>Chọn phương thức phù hợp nhất với thiết bị của bạn để chụp lại toàn bộ báo cáo chất lượng 4M1E1I.</T>
+              </p>
+
+              {/* Option 1: Auto capture using html2canvas */}
+              <button
+                onClick={() => {
+                  setShowScreenshotMenu(false);
+                  handleCaptureScrollingScreenshot();
+                }}
+                disabled={isCapturingScreenshot}
+                className="w-full bg-white hover:bg-slate-50 border border-slate-200 p-3.5 rounded-2xl flex items-start gap-3.5 text-left transition-all active:scale-98 shadow-xs cursor-pointer"
+              >
+                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                  <Camera className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-[11.5px] font-extrabold text-slate-800 flex items-center gap-1.5 leading-tight">
+                    <T>PHƯƠNG ÁN 1: CHỤP TỰ ĐỘNG (FILE PNG)</T>
+                    {isCapturingScreenshot && <span className="text-[8px] bg-amber-100 text-amber-700 font-black px-1.5 py-0.5 rounded animate-pulse">RUNNING</span>}
+                  </h4>
+                  <p className="text-[10px] text-slate-500 font-medium mt-1 leading-relaxed">
+                    <T>Hệ thống tự động cuộn hết danh sách báo cáo, chụp lại ảnh nét cao và tự động tải file ảnh PNG về máy bạn.</T>
+                  </p>
+                </div>
+              </button>
+
+              {/* Option 2: Native Scroll Capture */}
+              <button
+                onClick={() => {
+                  setShowScreenshotMenu(false);
+                  if (setIsNativeScrollActive) {
+                    setIsNativeScrollActive(true);
+                  } else {
+                    setIsNativeScrollMode(true);
+                  }
+                }}
+                className={`w-full hover:bg-slate-50 border p-3.5 rounded-2xl flex items-start gap-3.5 text-left transition-all active:scale-98 shadow-xs cursor-pointer ${
+                  isNativeScrollActive || isNativeScrollMode ? "bg-amber-50/50 border-amber-300" : "bg-white border-slate-200"
+                }`}
+              >
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isNativeScrollActive || isNativeScrollMode ? "bg-amber-100 text-amber-700" : "bg-emerald-50 text-emerald-600"}`}>
+                  <Smartphone className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-[11.5px] font-extrabold text-slate-800 flex items-center gap-1.5 leading-tight">
+                    <T>PHƯƠNG ÁN 2: CHỤP HỆ THỐNG ĐIỆN THOẠI</T>
+                    <span className="text-[8px] bg-emerald-100 text-emerald-700 font-black px-1.5 py-0.5 rounded">KHUYÊN DÙNG</span>
+                  </h4>
+                  <p className="text-[10px] text-slate-500 font-medium mt-1 leading-relaxed">
+                    <T>Bung dài màn hình tạm thời để bạn sử dụng chức năng "Chụp cuộn" mặc định có sẵn trên điện thoại của mình (bấm phím cứng). Cực kỳ ổn định và sắc nét không giới hạn chiều dài.</T>
+                  </p>
+                </div>
               </button>
             </div>
           </div>
