@@ -171,7 +171,7 @@ interface MobileFrameProps {
   onUpdateUserStatus?: (id: string, status: UserStatus) => void;
   onUpdateUserRole?: (id: string, role: UserRole) => void;
   isNativeScrollActive?: boolean;
-  setIsNativeScrollActive?: (active: boolean) => void;
+  setIsNativeScrollActive?: (active: boolean, filteredReports?: any[]) => void;
 }
 
 function formatTimestampToDMY(tsStr: string): string {
@@ -4154,7 +4154,7 @@ App Link: ${window.location.origin}`}
                 onClick={() => {
                   setShowScreenshotMenu(false);
                   if (setIsNativeScrollActive) {
-                    setIsNativeScrollActive(true);
+                    setIsNativeScrollActive(true, sortedReports);
                   } else {
                     setIsNativeScrollMode(true);
                   }

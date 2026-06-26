@@ -462,6 +462,16 @@ export default function App() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingReport, setEditingReport] = useState<QualityReport | null>(null);
   const [isNativeScrollActive, setIsNativeScrollActive] = useState(false);
+  const [reportsForPrint, setReportsForPrint] = useState<any[] | null>(null);
+
+  const handleSetNativeScrollActive = (active: boolean, filteredReports?: any[]) => {
+    setIsNativeScrollActive(active);
+    if (active && filteredReports) {
+      setReportsForPrint(filteredReports);
+    } else if (!active) {
+      setReportsForPrint(null);
+    }
+  };
 
   const [isMobile, setIsMobile] = useState(() => {
     return window.innerWidth < 1024 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -2720,11 +2730,11 @@ export default function App() {
   if (isNativeScrollActive) {
     return (
       <MobileListOnly
-        reports={reports}
+        reports={reportsForPrint || reports}
         currentUser={currentUser}
         branches={branches}
         mobileUIConfig={mobileUIConfig}
-        onClose={() => setIsNativeScrollActive(false)}
+        onClose={() => handleSetNativeScrollActive(false)}
       />
     );
   }
@@ -2771,7 +2781,7 @@ export default function App() {
             onUpdateUserStatus={handleUpdateStatus}
             onUpdateUserRole={handleUpdateRole}
             isNativeScrollActive={isNativeScrollActive}
-            setIsNativeScrollActive={setIsNativeScrollActive}
+            setIsNativeScrollActive={handleSetNativeScrollActive}
           />
         )}
 
@@ -2864,7 +2874,7 @@ export default function App() {
             onUpdateUserStatus={handleUpdateStatus}
             onUpdateUserRole={handleUpdateRole}
             isNativeScrollActive={isNativeScrollActive}
-            setIsNativeScrollActive={setIsNativeScrollActive}
+            setIsNativeScrollActive={handleSetNativeScrollActive}
           />
         )}
 
@@ -3054,7 +3064,7 @@ export default function App() {
                 onUpdateUserStatus={handleUpdateStatus}
                 onUpdateUserRole={handleUpdateRole}
                 isNativeScrollActive={isNativeScrollActive}
-                setIsNativeScrollActive={setIsNativeScrollActive}
+                setIsNativeScrollActive={handleSetNativeScrollActive}
               />
             )}
           </div>
@@ -3103,7 +3113,7 @@ export default function App() {
                 onUpdateUserStatus={handleUpdateStatus}
                 onUpdateUserRole={handleUpdateRole}
                 isNativeScrollActive={isNativeScrollActive}
-                setIsNativeScrollActive={setIsNativeScrollActive}
+                setIsNativeScrollActive={handleSetNativeScrollActive}
               />
             )}
           </div>
