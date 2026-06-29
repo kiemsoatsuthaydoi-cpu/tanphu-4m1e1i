@@ -49,6 +49,41 @@ import {
 } from "./utils/firebaseSync";
 
 // Helper to parse date/time string format e.g., "18:15:18 18/06/2026" or "18/06/2026"
+const safeSetItem = (key: string, value: string): void => {
+  try {
+    localStorage.setItem(key, value);
+  } catch (error) {
+    console.warn(`[localStorage] Failed to save key "${key}". Quota exceeded or storage is disabled:`, error);
+  }
+};
+
+const safeGetItem = (key: string): string | null => {
+  try {
+    return localStorage.getItem(key);
+  } catch (error) {
+    console.warn(`[localStorage] Failed to read key "${key}":`, error);
+    return null;
+  }
+};
+
+const safeRemoveItem = (key: string): void => {
+  try {
+    localStorage.removeItem(key);
+  } catch (error) {
+    console.warn(`[localStorage] Failed to remove key "${key}":`, error);
+  }
+};
+
+const safeParseJSON = (jsonStr: string | null, defaultValue: any): any => {
+  if (!jsonStr) return defaultValue;
+  try {
+    return JSON.parse(jsonStr);
+  } catch (error) {
+    console.warn(`[localStorage] Failed to parse JSON:`, error);
+    return defaultValue;
+  }
+};
+
 const parseReportDate = (dateStr: string | undefined): number => {
   if (!dateStr) return 0;
   const cleanedStr = dateStr.trim();
@@ -208,8 +243,8 @@ export default function App() {
 
   // Persistence state
   const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem("4m1e1i_users");
-    let loadedUsers = saved ? JSON.parse(saved) : initialUsers;
+    const saved = safeGetItem("4m1e1i_users");
+    let loadedUsers = safeParseJSON(saved, initialUsers);
     // Restore original admin password for Lê Nhật Trường, promote Kim Thị Bích Tuyền and override branch/dept to BBM (DNP-BBM)
     loadedUsers = loadedUsers.map((u: User) => {
       if (u.id === "2024.00912") {
@@ -279,8 +314,8 @@ export default function App() {
   });
 
   const [reports, setReports] = useState<QualityReport[]>(() => {
-    const saved = localStorage.getItem("4m1e1i_reports");
-    const loadedReports = saved ? JSON.parse(saved) : initialReports;
+    const saved = safeGetItem("4m1e1i_reports");
+    const loadedReports = safeParseJSON(saved, initialReports);
     const mapped = loadedReports.map((r: QualityReport) => {
       let dept = r.uploaderDepartment || "";
       dept = dept.replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
@@ -293,21 +328,14 @@ export default function App() {
   });
 
   const [companies, setCompanies] = useState<Company[]>(() => {
-    try {
-      const saved = localStorage.getItem("4m1e1i_companies");
-      if (saved) {
-        return JSON.parse(saved);
-      }
-    } catch (e) {
-      console.error("Lỗi parse local storage companies:", e);
-    }
-    return initialCompanies;
+    const saved = safeGetItem("4m1e1i_companies");
+    return safeParseJSON(saved, initialCompanies);
   });
 
   const [branches, setBranches] = useState<Branch[]>(() => {
     let raw: Branch[] = [];
     try {
-      const saved = localStorage.getItem("4m1e1i_branches");
+      const saved = safeGetItem("4m1e1i_branches");
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
@@ -331,7 +359,7 @@ export default function App() {
   const [departments, setDepartments] = useState<Department[]>(() => {
     let finalDepts: Department[] = [];
     try {
-      const savedBranchesStr = localStorage.getItem("4m1e1i_branches");
+      const savedBranchesStr = safeGetItem("4m1e1i_branches");
       let loadedBranches: Branch[] = initialBranches;
       try {
         if (savedBranchesStr) {
@@ -342,7 +370,7 @@ export default function App() {
         }
       } catch (e) {}
 
-      const saved = localStorage.getItem("4m1e1i_departments");
+      const saved = safeGetItem("4m1e1i_departments");
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
@@ -403,58 +431,55 @@ export default function App() {
   });
 
   const [broadcasts, setBroadcasts] = useState<BroadcastNotice[]>(() => {
-    const saved = localStorage.getItem("4m1e1i_broadcasts");
-    return saved ? JSON.parse(saved) : initialBroadcastNotice;
+    const saved = safeGetItem("4m1e1i_broadcasts");
+    return safeParseJSON(saved, initialBroadcastNotice);
   });
 
   const [chats, setChats] = useState<ChatMessage[]>(() => {
-    const saved = localStorage.getItem("4m1e1i_chats");
-    return saved ? JSON.parse(saved) : initialChatMessages;
+    const saved = safeGetItem("4m1e1i_chats");
+    return safeParseJSON(saved, initialChatMessages);
   });
 
   // Offline queue
   const [offlineQueue, setOfflineQueue] = useState<QualityReport[]>(() => {
-    const saved = localStorage.getItem("4m1e1i_offline_queue");
-    return saved ? JSON.parse(saved) : [];
+    const saved = safeGetItem("4m1e1i_offline_queue");
+    return safeParseJSON(saved, []);
   });
 
   // Order pipeline & SCM states
   const [productionRequests, setProductionRequests] = useState<ProductionRequest[]>(() => {
-    const saved = localStorage.getItem("4m1e1i_prod_requests");
-    return saved ? JSON.parse(saved) : initialProductionRequests;
+    const saved = safeGetItem("4m1e1i_prod_requests");
+    return safeParseJSON(saved, initialProductionRequests);
   });
 
   const [productionRequestItemsMap, setProductionRequestItemsMap] = useState<Record<string, ProductionRequestItem[]>>(() => {
-    const saved = localStorage.getItem("4m1e1i_prod_request_items");
-    return saved ? JSON.parse(saved) : initialProductionRequestItemsMap;
+    const saved = safeGetItem("4m1e1i_prod_request_items");
+    return safeParseJSON(saved, initialProductionRequestItemsMap);
   });
 
   const [orderImplementations, setOrderImplementations] = useState<OrderImplementation[]>(() => {
-    const saved = localStorage.getItem("4m1e1i_order_implementations");
-    return saved ? JSON.parse(saved) : initialOrderImplementations;
+    const saved = safeGetItem("4m1e1i_order_implementations");
+    return safeParseJSON(saved, initialOrderImplementations);
   });
 
   const [productsCatalog, setProductsCatalog] = useState<CatalogProduct[]>(() => {
-    const saved = localStorage.getItem("4m1e1i_products_catalog");
-    return saved ? JSON.parse(saved) : initialProductsCatalog;
+    const saved = safeGetItem("4m1e1i_products_catalog");
+    return safeParseJSON(saved, initialProductsCatalog);
   });
 
   const [moldsCatalog, setMoldsCatalog] = useState<CatalogMold[]>(() => {
-    const saved = localStorage.getItem("4m1e1i_molds_catalog");
-    return saved ? JSON.parse(saved) : initialMoldsCatalog;
+    const saved = safeGetItem("4m1e1i_molds_catalog");
+    return safeParseJSON(saved, initialMoldsCatalog);
   });
 
   // Global settings
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem("4m1e1i_current_user");
-    if (saved) {
-      const u = JSON.parse(saved);
-      if (u && u.department) {
-        u.department = u.department.replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
-      }
-      return u;
+    const saved = safeGetItem("4m1e1i_current_user");
+    const u = safeParseJSON(saved, null);
+    if (u && u.department) {
+      u.department = u.department.replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
     }
-    return null;
+    return u;
   });
 
   const [offlineMode, setOfflineMode] = useState(false);
@@ -463,6 +488,13 @@ export default function App() {
   const [editingReport, setEditingReport] = useState<QualityReport | null>(null);
   const [isNativeScrollActive, setIsNativeScrollActive] = useState(false);
   const [reportsForPrint, setReportsForPrint] = useState<any[] | null>(null);
+
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
 
   const handleSetNativeScrollActive = (active: boolean, filteredReports?: any[]) => {
     setIsNativeScrollActive(active);
@@ -488,7 +520,7 @@ export default function App() {
   }, []);
 
   const [mobileUIConfig, setMobileUIConfig] = useState(() => {
-    const saved = localStorage.getItem("4m1e1i_mobile_ui_config");
+    const saved = safeGetItem("4m1e1i_mobile_ui_config");
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -512,7 +544,7 @@ export default function App() {
   });
 
   useEffect(() => {
-    localStorage.setItem("4m1e1i_mobile_ui_config", JSON.stringify(mobileUIConfig));
+    safeSetItem("4m1e1i_mobile_ui_config", JSON.stringify(mobileUIConfig));
     if (syncCompleted && dbConnected && !dbLoading) {
       saveDocument("config", "mobile_ui", mobileUIConfig).catch(console.error);
     }
@@ -778,8 +810,8 @@ export default function App() {
 
         setCompanies(latestCompanies);
         setBranches(sanitizeAndMigrateBranches(latestBranches));
-        localStorage.setItem("4m1e1i_companies", JSON.stringify(latestCompanies));
-        localStorage.setItem("4m1e1i_branches", JSON.stringify(sanitizeAndMigrateBranches(latestBranches)));
+        safeSetItem("4m1e1i_companies", JSON.stringify(latestCompanies));
+        safeSetItem("4m1e1i_branches", JSON.stringify(sanitizeAndMigrateBranches(latestBranches)));
 
         if (dbConnected) {
           try {
@@ -799,7 +831,7 @@ export default function App() {
       } else {
         const sanitizedB = sanitizeAndMigrateBranches(latestBranches);
         setBranches(sanitizedB);
-        localStorage.setItem("4m1e1i_branches", JSON.stringify(sanitizedB));
+        safeSetItem("4m1e1i_branches", JSON.stringify(sanitizedB));
         
         if (dbConnected) {
           try {
@@ -825,7 +857,7 @@ export default function App() {
       let latestDepts = fDepts.length > 0 ? fDepts : [...departments];
       latestDepts = sanitizeAndMigrateDepartments(latestDepts);
       setDepartments(latestDepts);
-      localStorage.setItem("4m1e1i_departments", JSON.stringify(latestDepts));
+      safeSetItem("4m1e1i_departments", JSON.stringify(latestDepts));
 
       if (dbConnected) {
         try {
@@ -963,38 +995,38 @@ export default function App() {
 
   // Save changes to localStorage on any state modification
   useEffect(() => {
-    localStorage.setItem("4m1e1i_users", JSON.stringify(users));
+    safeSetItem("4m1e1i_users", JSON.stringify(users));
   }, [users]);
 
   useEffect(() => {
-    localStorage.setItem("4m1e1i_reports", JSON.stringify(reports));
+    safeSetItem("4m1e1i_reports", JSON.stringify(reports));
   }, [reports]);
 
   useEffect(() => {
-    localStorage.setItem("4m1e1i_companies", JSON.stringify(companies));
+    safeSetItem("4m1e1i_companies", JSON.stringify(companies));
   }, [companies]);
 
   useEffect(() => {
-    localStorage.setItem("4m1e1i_branches", JSON.stringify(branches));
+    safeSetItem("4m1e1i_branches", JSON.stringify(branches));
   }, [branches]);
 
   useEffect(() => {
-    localStorage.setItem("4m1e1i_departments", JSON.stringify(departments));
+    safeSetItem("4m1e1i_departments", JSON.stringify(departments));
   }, [departments]);
 
   useEffect(() => {
-    localStorage.setItem("4m1e1i_broadcasts", JSON.stringify(broadcasts));
+    safeSetItem("4m1e1i_broadcasts", JSON.stringify(broadcasts));
   }, [broadcasts]);
 
   useEffect(() => {
-    localStorage.setItem("4m1e1i_prod_requests", JSON.stringify(productionRequests));
+    safeSetItem("4m1e1i_prod_requests", JSON.stringify(productionRequests));
     if (syncCompleted && dbConnected && !dbLoading) {
       productionRequests.forEach((pr) => saveDocument(COLLECTIONS.PRODUCTION_REQUESTS, pr.id, pr));
     }
   }, [productionRequests, dbConnected, dbLoading, syncCompleted]);
 
   useEffect(() => {
-    localStorage.setItem("4m1e1i_prod_request_items", JSON.stringify(productionRequestItemsMap));
+    safeSetItem("4m1e1i_prod_request_items", JSON.stringify(productionRequestItemsMap));
     if (syncCompleted && dbConnected && !dbLoading) {
       Object.entries(productionRequestItemsMap).forEach(([prId, items]) => {
         saveDocument(COLLECTIONS.PRODUCTION_REQUEST_ITEMS, prId, { prId, items });
@@ -1003,36 +1035,36 @@ export default function App() {
   }, [productionRequestItemsMap, dbConnected, dbLoading, syncCompleted]);
 
   useEffect(() => {
-    localStorage.setItem("4m1e1i_order_implementations", JSON.stringify(orderImplementations));
+    safeSetItem("4m1e1i_order_implementations", JSON.stringify(orderImplementations));
     if (syncCompleted && dbConnected && !dbLoading) {
       orderImplementations.forEach((oi) => saveDocument(COLLECTIONS.ORDER_IMPLEMENTATIONS, oi.id, oi));
     }
   }, [orderImplementations, dbConnected, dbLoading, syncCompleted]);
 
   useEffect(() => {
-    localStorage.setItem("4m1e1i_products_catalog", JSON.stringify(productsCatalog));
+    safeSetItem("4m1e1i_products_catalog", JSON.stringify(productsCatalog));
     if (syncCompleted && dbConnected && !dbLoading) {
       productsCatalog.forEach((p) => saveDocument(COLLECTIONS.PRODUCTS_CATALOG, p.code, p));
     }
   }, [productsCatalog, dbConnected, dbLoading, syncCompleted]);
 
   useEffect(() => {
-    localStorage.setItem("4m1e1i_molds_catalog", JSON.stringify(moldsCatalog));
+    safeSetItem("4m1e1i_molds_catalog", JSON.stringify(moldsCatalog));
     if (syncCompleted && dbConnected && !dbLoading) {
       moldsCatalog.forEach((m) => saveDocument(COLLECTIONS.MOLDS_CATALOG, m.code, m));
     }
   }, [moldsCatalog, dbConnected, dbLoading, syncCompleted]);
 
   useEffect(() => {
-    localStorage.setItem("4m1e1i_chats", JSON.stringify(chats));
+    safeSetItem("4m1e1i_chats", JSON.stringify(chats));
   }, [chats]);
 
   useEffect(() => {
-    localStorage.setItem("4m1e1i_offline_queue", JSON.stringify(offlineQueue));
+    safeSetItem("4m1e1i_offline_queue", JSON.stringify(offlineQueue));
   }, [offlineQueue]);
 
   useEffect(() => {
-    localStorage.setItem("4m1e1i_current_user", JSON.stringify(currentUser));
+    safeSetItem("4m1e1i_current_user", JSON.stringify(currentUser));
   }, [currentUser]);
 
   // Synchronize currentUser fields if they are updated in the general user list
@@ -1074,7 +1106,7 @@ export default function App() {
             if (match.status === UserStatus.ACTIVE) {
               // Automatically transition to MAIN dashboard!
               setCurrentUser(match);
-              localStorage.setItem("4m1e1i_current_user", JSON.stringify(match));
+              safeSetItem("4m1e1i_current_user", JSON.stringify(match));
             } else if (match.status === UserStatus.REJECTED || match.status === UserStatus.LOCKED) {
               // Sync transition
               setCurrentUser(match);
@@ -1965,29 +1997,44 @@ export default function App() {
   // Delete report trigger
   const handleDeleteReportTrigger = (id: string, forcePermanent?: boolean) => {
     if (forcePermanent) {
-      if (confirm("Kiểm soát chất lượng: Bạn có thật sự muốn XÓA VĨNH VIỄN bản báo cáo này? Thao tác này KHÔNG THỂ KHÔI PHỤC!")) {
-        setReports((prev) => prev.filter((r) => r.id !== id));
-        if (dbConnected) {
-          deleteDocument(COLLECTIONS.REPORTS, id);
-        }
-      }
-    } else {
-      if (confirm("Kiểm soát chất lượng: Bạn có chắc chắn muốn chuyển bản báo cáo này vào Thùng rác?")) {
-        const deletedReport = reports.find((r) => r.id === id);
-        if (deletedReport) {
-          const updated: QualityReport = {
-            ...deletedReport,
-            isDeleted: true,
-            deletedAt: new Date().toISOString()
-          };
-          setReports((prev) => prev.map((r) => r.id === id ? updated : r));
+      setConfirmDialog({
+        isOpen: true,
+        title: "Xóa vĩnh viễn báo cáo?",
+        message: "Kiểm soát chất lượng: Bạn có thật sự muốn XÓA VĨNH VIỄN bản báo cáo này? Thao tác này KHÔNG THỂ KHÔI PHỤC!",
+        onConfirm: () => {
+          setReports((prev) => prev.filter((r) => r.id !== id));
           if (dbConnected) {
-            saveDocument(COLLECTIONS.REPORTS, id, updated).catch((err) => {
-              console.error("Lỗi khi chuyển báo cáo vào thùng rác Firestore:", err);
-            });
+            deleteDocument(COLLECTIONS.REPORTS, id);
           }
+          setConfirmDialog(null);
         }
-      }
+      });
+    } else {
+      setConfirmDialog({
+        isOpen: true,
+        title: "Chuyển vào Thùng rác?",
+        message: "Kiểm soát chất lượng: Bạn có chắc chắn muốn chuyển bản báo cáo này vào Thùng rác?",
+        onConfirm: () => {
+          setReports((prev) => {
+            const deletedReport = prev.find((r) => r.id === id);
+            if (deletedReport) {
+              const updated: QualityReport = {
+                ...deletedReport,
+                isDeleted: true,
+                deletedAt: new Date().toISOString()
+              };
+              if (dbConnected) {
+                saveDocument(COLLECTIONS.REPORTS, id, updated).catch((err) => {
+                  console.error("Lỗi khi chuyển báo cáo vào thùng rác Firestore:", err);
+                });
+              }
+              return prev.map((r) => r.id === id ? updated : r);
+            }
+            return prev;
+          });
+          setConfirmDialog(null);
+        }
+      });
     }
   };
 
@@ -2659,7 +2706,7 @@ export default function App() {
           <button
             onClick={() => {
               setCurrentUser(null);
-              localStorage.removeItem("4m1e1i_current_user");
+              safeRemoveItem("4m1e1i_current_user");
             }}
             className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 rounded-xl text-xs font-bold uppercase transition-all cursor-pointer"
           >
@@ -3116,6 +3163,41 @@ export default function App() {
                 setIsNativeScrollActive={handleSetNativeScrollActive}
               />
             )}
+          </div>
+        </div>
+      )}
+
+      {/* High-fidelity elegant Custom Confirmation Dialog */}
+      {confirmDialog && confirmDialog.isOpen && (
+        <div style={{ zIndex: 200000 }} className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 select-none animate-fadeIn">
+          <div className="bg-white rounded-2xl w-full max-w-[320px] p-6 shadow-2xl border border-slate-150 flex flex-col items-center text-center animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 bg-rose-50 rounded-full flex items-center justify-center mb-4 text-rose-500">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <h3 className="font-bold text-slate-900 text-sm mb-2">
+              <T>{confirmDialog.title}</T>
+            </h3>
+            <p className="text-slate-500 text-[11px] mb-6 leading-relaxed px-1">
+              <T>{confirmDialog.message}</T>
+            </p>
+            <div className="grid grid-cols-2 gap-3 w-full">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                className="py-2.5 text-[11px] font-bold border border-slate-200 rounded-xl text-slate-650 hover:bg-slate-50 active:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <T>QUAY LẠI</T>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  confirmDialog.onConfirm();
+                }}
+                className="py-2.5 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl transition-colors shadow-sm cursor-pointer"
+              >
+                <T>ĐỒNG Ý</T>
+              </button>
+            </div>
           </div>
         </div>
       )}

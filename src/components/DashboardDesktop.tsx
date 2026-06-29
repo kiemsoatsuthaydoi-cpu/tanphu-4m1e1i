@@ -499,6 +499,23 @@ function DesktopDirectiveForm({
   );
 }
 
+const safeSetItem = (key: string, value: string): void => {
+  try {
+    localStorage.setItem(key, value);
+  } catch (error) {
+    console.warn(`[localStorage] Failed to save key "${key}" in DashboardDesktop. Quota exceeded:`, error);
+  }
+};
+
+const safeGetItem = (key: string): string | null => {
+  try {
+    return localStorage.getItem(key);
+  } catch (error) {
+    console.warn(`[localStorage] Failed to read key "${key}" in DashboardDesktop:`, error);
+    return null;
+  }
+};
+
 export default function DashboardDesktop({
   currentUser,
   users,
@@ -556,18 +573,18 @@ export default function DashboardDesktop({
   const [forceSyncState, setForceSyncState] = useState<"idle" | "syncing" | "success" | "error">("idle");
   const [forceSyncUsersState, setForceSyncUsersState] = useState<"idle" | "syncing" | "success" | "error">("idle");
   const [branchNameFormat, setBranchNameFormat] = useState<'standard' | 'with-company-id'>(() => {
-    return (localStorage.getItem("4m1e1i_branch_format") as any) || 'standard';
+    return (safeGetItem("4m1e1i_branch_format") as any) || 'standard';
   });
   const [deptNameFormat, setDeptNameFormat] = useState<'standard' | 'with-branch-id'>(() => {
-    return (localStorage.getItem("4m1e1i_dept_format") as any) || 'standard';
+    return (safeGetItem("4m1e1i_dept_format") as any) || 'standard';
   });
 
   useEffect(() => {
-    localStorage.setItem("4m1e1i_branch_format", branchNameFormat);
+    safeSetItem("4m1e1i_branch_format", branchNameFormat);
   }, [branchNameFormat]);
 
   useEffect(() => {
-    localStorage.setItem("4m1e1i_dept_format", deptNameFormat);
+    safeSetItem("4m1e1i_dept_format", deptNameFormat);
   }, [deptNameFormat]);
 
   // Local entry inputs for Mã hóa lookup creation

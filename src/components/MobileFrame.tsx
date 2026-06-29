@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import html2canvas from "html2canvas";
-import { Search, RotateCw, RotateCcw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone } from "lucide-react";
+import { Search, RotateCw, RotateCcw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle } from "lucide-react";
 import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Company, ChatMessage } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
@@ -628,6 +628,23 @@ function MobileApprovalView({
   );
 }
 
+const safeSetItem = (key: string, value: string): void => {
+  try {
+    localStorage.setItem(key, value);
+  } catch (error) {
+    console.warn(`[localStorage] Failed to save key "${key}" in MobileFrame. Quota exceeded:`, error);
+  }
+};
+
+const safeGetItem = (key: string): string | null => {
+  try {
+    return localStorage.getItem(key);
+  } catch (error) {
+    console.warn(`[localStorage] Failed to read key "${key}" in MobileFrame:`, error);
+    return null;
+  }
+};
+
 export default function MobileFrame({
   reports,
   currentUserId,
@@ -1004,7 +1021,7 @@ export default function MobileFrame({
   const [onlineTabFilter, setOnlineTabFilter] = useState<"ONLINE" | "ALL">("ONLINE");
   const [readNotifIds, setReadNotifIds] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem("4m1e1i_read_notifications");
+      const saved = safeGetItem("4m1e1i_read_notifications");
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -1012,12 +1029,12 @@ export default function MobileFrame({
   });
 
   useEffect(() => {
-    localStorage.setItem("4m1e1i_read_notifications", JSON.stringify(readNotifIds));
+    safeSetItem("4m1e1i_read_notifications", JSON.stringify(readNotifIds));
   }, [readNotifIds]);
 
   const [deletedNotifIds, setDeletedNotifIds] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem("4m1e1i_deleted_notifications");
+      const saved = safeGetItem("4m1e1i_deleted_notifications");
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -1025,14 +1042,14 @@ export default function MobileFrame({
   });
 
   useEffect(() => {
-    localStorage.setItem("4m1e1i_deleted_notifications", JSON.stringify(deletedNotifIds));
+    safeSetItem("4m1e1i_deleted_notifications", JSON.stringify(deletedNotifIds));
   }, [deletedNotifIds]);
 
   const [notifIdConfirmDlt, setNotifIdConfirmDlt] = useState<string | null>(null);
 
   const [likedReports, setLikedReports] = useState<Record<string, boolean>>(() => {
     try {
-      const saved = localStorage.getItem("4m1e1i_liked_reports");
+      const saved = safeGetItem("4m1e1i_liked_reports");
       return saved ? JSON.parse(saved) : {};
     } catch {
       return {};
@@ -1040,9 +1057,10 @@ export default function MobileFrame({
   });
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [shareModalReport, setShareModalReport] = useState<QualityReport | null>(null);
+  const [directiveToDelete, setDirectiveToDelete] = useState<{ report: QualityReport; dirId: string } | null>(null);
 
   useEffect(() => {
-    localStorage.setItem("4m1e1i_liked_reports", JSON.stringify(likedReports));
+    safeSetItem("4m1e1i_liked_reports", JSON.stringify(likedReports));
   }, [likedReports]);
 
   useEffect(() => {
@@ -2979,15 +2997,7 @@ App Link: ${window.location.origin}`;
                                       <button
                                         type="button"
                                         onClick={() => {
-                                          if (confirm("Chủ quản có chắc muốn XÓA chỉ đạo này không?")) {
-                                            const updatedDirectives = report.directives.filter((d) => d.id !== dir.id);
-                                            if (onUpdateReport) {
-                                              onUpdateReport({
-                                                ...report,
-                                                directives: updatedDirectives
-                                              });
-                                            }
-                                          }
+                                          setDirectiveToDelete({ report, dirId: dir.id });
                                         }}
                                         className="text-slate-400 hover:text-rose-600 transition-colors cursor-pointer border-none bg-transparent p-0.5"
                                         title="Xóa chỉ đạo (Admin)"
@@ -3055,9 +3065,7 @@ App Link: ${window.location.origin}`;
                           <button
                             type="button"
                             onClick={() => {
-                              if (confirm("Bạn có chắc chắn muốn xóa bản tin này không? Hành động này không thể hoàn tác.")) {
-                                onDeleteReport(report.id);
-                              }
+                              onDeleteReport(report.id);
                             }}
                             className="flex items-center justify-center p-1 cursor-pointer transition-all hover:scale-110 active:scale-90 text-rose-600 hover:text-rose-800 border-none bg-transparent"
                             title="Xóa bản tin"
@@ -3449,6 +3457,49 @@ App Link: ${window.location.origin}`;
       {toastMessage && (
         <div className="absolute top-24 left-1/2 -translate-x-1/2 bg-[#065f46] text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 text-[11px] font-bold z-50 tracking-wide min-w-[280px] justify-center text-center border-2 border-white select-none animate-fadeIn">
           <T>{toastMessage}</T>
+        </div>
+      )}
+
+      {directiveToDelete && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center p-4 z-50 select-none animate-fadeIn">
+          <div className="bg-white rounded-2xl w-full max-w-[290px] p-5 shadow-2xl border border-slate-100 flex flex-col items-center text-center animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 bg-rose-50 rounded-full flex items-center justify-center mb-3 text-rose-500">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <h3 className="font-bold text-slate-950 text-sm mb-2">
+              <T>Xác nhận xóa chỉ đạo?</T>
+            </h3>
+            <p className="text-slate-500 text-[11px] mb-5 leading-relaxed">
+              <T>Chủ quản có chắc chắn muốn XÓA chỉ đạo này không? Thao tác này không thể khôi phục.</T>
+            </p>
+            <div className="grid grid-cols-2 gap-2.5 w-full">
+              <button
+                type="button"
+                onClick={() => setDirectiveToDelete(null)}
+                className="py-2.5 text-[11px] font-bold border border-slate-200 rounded-xl text-slate-650 hover:bg-slate-50 active:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <T>QUAY LẠI</T>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const { report, dirId } = directiveToDelete;
+                  const updatedDirectives = report.directives.filter((d) => d.id !== dirId);
+                  if (onUpdateReport) {
+                    onUpdateReport({
+                      ...report,
+                      directives: updatedDirectives
+                    });
+                    showToast("Đã xóa chỉ đạo thành công! 🗑️");
+                  }
+                  setDirectiveToDelete(null);
+                }}
+                className="py-2.5 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl transition-colors shadow-sm cursor-pointer"
+              >
+                <T>ĐỒNG Ý</T>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
