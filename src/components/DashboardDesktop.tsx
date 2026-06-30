@@ -562,7 +562,7 @@ export default function DashboardDesktop({
   onShowToast
 }: DashboardDesktopProps) {
   const [activeTab, setActiveTab] = useState<
-    "PHÊ_DUYỆT" | "MÃ_HÓA" | "THỐNG_KÊ" | "DỮ_LIỆU" | "QUY_CHẾ" | "CÁ_NHÂN" | "THÔNG_BÁO" | "TRAO_ĐỔI" | "TRIỂN_KHAI"
+    "PHÊ_DUYỆT" | "MÃ_HÓA" | "THỐNG_KÊ" | "DỮ_LIỆU" | "QUY_CHẾ" | "CÁ_NHÂN" | "THÔNG_BÁO" | "TRAO_ĐỔI" | "TRIỂN_KHAI" | "ĐỀ_XUẤT"
   >("PHÊ_DUYỆT");
 
   const [showTrashLogs, setShowTrashLogs] = useState(false);
@@ -888,12 +888,27 @@ export default function DashboardDesktop({
   const [logsCategory, setLogsCategory] = useState("Tất cả");
   const [logsAbnormalOnly, setLogsAbnormalOnly] = useState(false);
 
+  // Proposal filters state
+  const [proposalSearch, setProposalSearch] = useState("");
+  const [proposalFactory, setProposalFactory] = useState("Tất cả");
+  const [proposalCategory, setProposalCategory] = useState("Tất cả");
+
   // Stats calculation
   const totalReportsCount = reports.filter((r) => !r.isDeleted).length;
   const abnormalReportsCount = reports.filter((r) => r.isAbnormal && !r.isDeleted).length;
   const safeReportsCount = totalReportsCount - abnormalReportsCount;
   const activeStaffCount = users.filter((u) => u.status === UserStatus.ACTIVE).length;
   const pendingApprovalsCount = users.filter((u) => u.status === UserStatus.PENDING).length;
+
+  const pendingReportsCount = reports.filter((r) => {
+    if (r.isDeleted) return false;
+    if (r.isApproved !== false) return false;
+    if (currentUser?.role === UserRole.ADMIN) return true;
+    if (currentUser?.role === UserRole.REVIEWER) {
+      return r.factory === currentUser.branch;
+    }
+    return false;
+  }).length;
 
   // Pie chart variables
   const colorMap: Record<Category4M1E1I, string> = {
@@ -1421,10 +1436,15 @@ export default function DashboardDesktop({
         <nav className="w-full md:w-64 bg-[#1E293B] border-r border-[#1E293B] p-4 shrink-0 overflow-y-auto select-none space-y-2 text-white">
           <T className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest pl-3 block mb-3">PANEL ĐIỀU HÀNH</T>
           {[
-            { id: "PHÊ_DUYỆT", label: "Phê duyệt nhân sự", icon: UserCheck, count: pendingApprovalsCount, color: "text-amber-400" },
+            ...(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.REVIEWER
+              ? [{ id: "PHÊ_DUYỆT", label: "Phê duyệt nhân sự", icon: UserCheck, count: pendingApprovalsCount, color: "text-amber-400" }]
+              : []),
             { id: "MÃ_HÓA", label: "Khai báo mã hóa", icon: Sliders, color: "text-purple-400" },
             { id: "TRIỂN_KHAI", label: "Triển khai đơn hàng", icon: Package, color: "text-rose-400" },
             { id: "THỐNG_KÊ", label: "Báo cáo thống kê", icon: BarChart4, color: "text-emerald-400" },
+            ...(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.REVIEWER
+              ? [{ id: "ĐỀ_XUẤT", label: "Đề xuất chờ duyệt", icon: CheckSquare, count: pendingReportsCount, color: "text-sky-400" }]
+              : []),
             { id: "DỮ_LỆU", label: "Nhật ký dữ liệu & PDF", icon: Database, color: "text-blue-450" },
             { id: "THÔNG_BÁO", label: "Phát sóng & Ticker", icon: Bell, color: "text-yellow-400" },
             { id: "TRAO_ĐỔI", label: "Trao đổi diễn đàn", icon: MessageSquare, color: "text-pink-400" },
@@ -1687,6 +1707,27 @@ export default function DashboardDesktop({
                                       title={u.canSpeciallyEditDelete ? "Hủy đặt cách Sửa/Xóa bản tin chi nhánh" : "Đặt cách Sửa/Xóa bản tin chi nhánh"}
                                     >
                                       <Zap className={`w-3.5 h-3.5 ${u.canSpeciallyEditDelete ? "fill-indigo-600 font-extrabold text-indigo-700" : ""}`} />
+                                    </button>
+                                  )}
+
+                                  {/* Button 1.5: Đặc cách Đăng tin không cần duyệt (Sparkles) */}
+                                  {u.role === UserRole.STAFF && onUpdateUser && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        onUpdateUser({
+                                          ...u,
+                                          bypassApproval: !u.bypassApproval
+                                        });
+                                      }}
+                                      className={`p-1.5 rounded-lg border flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95 ${
+                                        u.bypassApproval
+                                          ? "bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100/80"
+                                          : "bg-white text-slate-400 border-slate-200 hover:bg-slate-50 hover:text-amber-600"
+                                      }`}
+                                      title={u.bypassApproval ? "Hủy đặc cách Đăng tin không duyệt" : "Đặc cách Đăng tin không duyệt (Nhân viên lâu năm)"}
+                                    >
+                                      <Sparkles className={`w-3.5 h-3.5 ${u.bypassApproval ? "fill-amber-500 text-amber-650" : ""}`} />
                                     </button>
                                   )}
 
@@ -3038,6 +3079,227 @@ export default function DashboardDesktop({
             );
           })()}
 
+          {/* TAB: ĐỀ XUẤT CHỜ DUYỆT */}
+          {activeTab === "ĐỀ_XUẤT" && (
+            <div className="space-y-6">
+              <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-850 flex items-center gap-2">
+                    <CheckSquare className="w-5 h-5 text-sky-500" />
+                    <T><span translate="no" className="notranslate">Hệ thống Đề xuất chờ phê duyệt</span></T>
+                  </h2>
+                  <T className="text-xs text-slate-500 mt-1 block">
+                    <span translate="no" className="notranslate">Xem xét, kiểm duyệt và phê duyệt các tin bài đề xuất của nhân viên trước khi phát hành lên Bản tin chính (Home).</span>
+                  </T>
+                </div>
+              </div>
+
+              {/* Filtering block for proposals */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 shadow-3xs space-y-3 select-none">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Category Filter */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block">
+                      <T><span translate="no" className="notranslate">Phân loại 4M1E1I:</span></T>
+                    </label>
+                    <select
+                      value={proposalCategory}
+                      onChange={(e) => setProposalCategory(e.target.value)}
+                      className="w-full bg-white border border-slate-250 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 shadow-3xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="Tất cả" translate="no" className="notranslate">Tất cả phân tố</option>
+                      <option value="CON NGƯỜI" translate="no" className="notranslate">CON NGƯỜI</option>
+                      <option value="NGUYÊN VẬT LIỆU" translate="no" className="notranslate">NGUYÊN VẬT LIỆU</option>
+                      <option value="MÁY MÓC" translate="no" className="notranslate">MÁY MÓC</option>
+                      <option value="PHƯƠNG PHÁP" translate="no" className="notranslate">PHƯƠNG PHÁP</option>
+                      <option value="MÔI TRƯỜNG" translate="no" className="notranslate">MÔI TRƯỜNG</option>
+                      <option value="THÔNG TIN" translate="no" className="notranslate">THÔNG TIN</option>
+                    </select>
+                  </div>
+
+                  {/* Factory Filter */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block">
+                      <T><span translate="no" className="notranslate">Nhà máy / Xưởng:</span></T>
+                    </label>
+                    <select
+                      value={proposalFactory}
+                      onChange={(e) => setProposalFactory(e.target.value)}
+                      className="w-full bg-white border border-slate-250 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 shadow-3xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="Tất cả" translate="no" className="notranslate">Tất cả chi nhánh</option>
+                      <option value="CN Long An" translate="no" className="notranslate">CN Long An</option>
+                      <option value="CN Bắc Ninh" translate="no" className="notranslate">CN Bắc Ninh</option>
+                      <option value="Tòa nhà Thành Công" translate="no" className="notranslate">Tòa nhà Thành Công</option>
+                      <option value="VP Hồ Chí Minh" translate="no" className="notranslate">VP Hồ Chí Minh</option>
+                    </select>
+                  </div>
+
+                  {/* Search input */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block">
+                      <T><span translate="no" className="notranslate">Tìm kiếm nhanh:</span></T>
+                    </label>
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={proposalSearch}
+                        onChange={(e) => setProposalSearch(e.target.value)}
+                        placeholder="Tìm theo người đăng, nội dung đề xuất..."
+                        className="w-full bg-white border border-slate-250 rounded-lg pl-9 pr-3 py-2 text-xs font-semibold text-slate-750 shadow-3xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Data Table */}
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-left">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-[10px] text-slate-505 font-extrabold uppercase tracking-wider">
+                        <th className="p-4 w-12 text-center"><T><span translate="no" className="notranslate">STT</span></T></th>
+                        <th className="p-4"><T><span translate="no" className="notranslate">Thời gian</span></T></th>
+                        <th className="p-4"><T><span translate="no" className="notranslate">Nhà máy / Xưởng</span></T></th>
+                        <th className="p-4 text-center"><T><span translate="no" className="notranslate">Phân tố.</span></T></th>
+                        <th className="p-4 w-[40%]"><T><span translate="no" className="notranslate">Nội dung đề xuất</span></T></th>
+                        <th className="p-4"><T><span translate="no" className="notranslate">Người ghi / SĐT</span></T></th>
+                        <th className="p-4 text-center"><T><span translate="no" className="notranslate">Hình ảnh</span></T></th>
+                        <th className="p-4 text-center"><T><span translate="no" className="notranslate">Trạng thái</span></T></th>
+                        <th className="p-4 text-center"><T><span translate="no" className="notranslate">Thao tác</span></T></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
+                      {(() => {
+                        const filteredProposals = reports.filter((r) => {
+                          if (r.isDeleted) return false;
+                          if (r.isApproved !== false) return false;
+
+                          // Reviewer checks
+                          if (currentUser?.role === UserRole.REVIEWER && r.factory !== currentUser.branch) {
+                            return false;
+                          }
+
+                          const s = proposalSearch.toLowerCase();
+                          const matchesSearch =
+                            r.uploaderName.toLowerCase().includes(s) ||
+                            r.content.toLowerCase().includes(s) ||
+                            r.category.toLowerCase().includes(s);
+
+                          const matchesFactory = proposalFactory === "Tất cả" ? true : r.factory === proposalFactory;
+                          const matchesCategory = proposalCategory === "Tất cả" ? true : r.category === proposalCategory;
+
+                          return matchesSearch && matchesFactory && matchesCategory;
+                        });
+
+                        if (filteredProposals.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={9} className="p-8 text-center text-slate-400 italic">
+                                <T><span translate="no" className="notranslate">Không có đề xuất nào đang chờ phê duyệt.</span></T>
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return filteredProposals.map((r, index) => (
+                          <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="p-4 text-center font-mono text-slate-400">{index + 1}</td>
+                            <td className="p-4 font-mono font-semibold text-slate-500 whitespace-nowrap">{r.timestamp}</td>
+                            <td className="p-4 font-bold text-slate-800 whitespace-nowrap">{getFactoryDisplayName(r.factory)}</td>
+                            <td className="p-4 text-center select-none whitespace-nowrap">
+                              <span
+                                className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase text-white block"
+                                style={{ backgroundColor: colorMap[r.category] }}
+                              >
+                                <T><span translate="no" className="notranslate">{r.category}</span></T>
+                              </span>
+                            </td>
+                            <td className="p-4 leading-relaxed text-slate-700 max-w-sm font-medium">
+                              <T><span translate="no" className="notranslate">{r.content}</span></T>
+                              {r.notes && (
+                                <div className="mt-1 text-[10px] text-slate-500 italic block border-l-2 border-amber-500 pl-1.5">
+                                  <T><span translate="no" className="notranslate">Ghi chú: {r.notes}</span></T>
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-4 whitespace-nowrap">
+                              <T className="font-semibold block text-slate-800"><span translate="no" className="notranslate">{r.uploaderName}</span></T>
+                              <T className="text-[10px] text-slate-400 block font-mono"><span translate="no" className="notranslate">{r.uploaderPhone}</span></T>
+                            </td>
+                            <td className="p-4 text-center">
+                              {r.imageUrl ? (
+                                <DesktopThumbnailSlider imageUrls={r.imageUrls} fallbackUrl={r.imageUrl} />
+                              ) : (
+                                <T className="text-slate-400 text-[10px]"><span translate="no" className="notranslate">Trống</span></T>
+                              )}
+                            </td>
+                            <td className="p-4 text-center select-none whitespace-nowrap">
+                              <span className="bg-amber-100 text-amber-800 border border-amber-200 font-extrabold text-[10px] px-2.5 py-1 rounded tracking-wider animate-pulse inline-flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 block animate-ping" />
+                                <T><span translate="no" className="notranslate">Chờ duyệt</span></T>
+                              </span>
+                            </td>
+                            <td className="p-4 text-center whitespace-nowrap">
+                              <div className="flex items-center justify-center gap-2">
+                                {/* Duyệt Đăng button */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (onUpdateReport) {
+                                      const now = new Date();
+                                      const hrs = String(now.getHours()).padStart(2, '0');
+                                      const mns = String(now.getMinutes()).padStart(2, '0');
+                                      const scs = String(now.getSeconds()).padStart(2, '0');
+                                      const date = String(now.getDate()).padStart(2, '0');
+                                      const month = String(now.getMonth() + 1).padStart(2, '0');
+                                      const year = String(now.getFullYear()).slice(-2);
+                                      const timeStr = `${hrs}:${mns}:${scs} ${date}/${month}/${year}`;
+
+                                      onUpdateReport({
+                                        ...r,
+                                        isApproved: true,
+                                        approvedBy: currentUser?.fullName || "Admin",
+                                        approvedAt: timeStr,
+                                        updateLogs: [...(r.updateLogs || []), `Phê duyệt tin bởi ${currentUser?.fullName || "Admin"} (${timeStr})`]
+                                      });
+                                      onShowToast("Đã phê duyệt và phát hành đề xuất lên Bản tin chính! 🎉", "success");
+                                    }
+                                  }}
+                                  className="px-2.5 py-1.5 bg-[#DEF7EC] hover:bg-emerald-100 border border-emerald-250 text-[#03543F] font-black rounded-lg cursor-pointer transition-all text-[10px] uppercase flex items-center gap-1 shadow-3xs"
+                                  title="Phê duyệt bài viết"
+                                >
+                                  <CheckCircle className="w-3.5 h-3.5 text-[#03543F]" />
+                                  <T><span translate="no" className="notranslate">Duyệt đăng</span></T>
+                                </button>
+
+                                {/* Từ chối button */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onDeleteReport(r.id, false);
+                                    onShowToast("Đã từ chối đề xuất bài viết thành công! ♻️", "warning");
+                                  }}
+                                  className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-black rounded-lg cursor-pointer transition-all text-[10px] uppercase flex items-center gap-1 shadow-3xs"
+                                  title="Từ chối đề xuất"
+                                >
+                                  <FileX className="w-3.5 h-3.5 text-rose-700" />
+                                  <T><span translate="no" className="notranslate">Từ chối</span></T>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ));
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* TAB 4: DỮ LIỆU (Database history & PDF exports) */}
           {activeTab === "DỮ_LỆU" && (
             <div className="space-y-6">
@@ -3381,6 +3643,7 @@ export default function DashboardDesktop({
                           {reports
                             .filter((r) => {
                               if (r.isDeleted) return false;
+                              if (r.isApproved === false) return false;
                               const s = logsSearch.toLowerCase();
                               const matchesSearch =
                                 r.uploaderName.toLowerCase().includes(s) ||

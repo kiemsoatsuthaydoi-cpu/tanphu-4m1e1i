@@ -1962,9 +1962,12 @@ export default function App() {
       } else {
         // New report flow
         const newId = `R-${Date.now()}`;
+        const needsApproval = currentUser && currentUser.role === UserRole.STAFF && !currentUser.bypassApproval;
+
         const newReport: QualityReport = {
           ...payload,
           id: newId,
+          isApproved: !needsApproval,
           googleDrivePath: `My Drive > 4M1E1I Reports > AutoSync > ${payload.timestamp.replace(/[:\/]/g, "")}.pdf`
         };
         setReports((prev) => [newReport, ...prev]);
@@ -1977,9 +1980,17 @@ export default function App() {
         
         // Auto alert sound simulator if abnormal
         if (payload.isAbnormal) {
-          showToast(`CẢNH BÁO BẤT THƯỜNG: Nhân viên ${payload.uploaderName} vừa phát hiện báo cáo tại ${payload.factory}. Hệ thống đã gửi thông báo khẩn cho Admin!`, "warning");
+          if (needsApproval) {
+            showToast(`CẢNH BÁO BẤT THƯỜNG (CHỜ DUYỆT): Bản đề xuất lỗi tại ${payload.factory} đã được ghi nhận và đang chờ Duyệt viên xét duyệt!`, "warning");
+          } else {
+            showToast(`CẢNH BÁO BẤT THƯỜNG: Nhân viên ${payload.uploaderName} vừa phát hiện báo cáo tại ${payload.factory}. Hệ thống đã gửi thông báo khẩn cho Admin!`, "warning");
+          }
         } else {
-          showToast("Đã gửi báo cáo chất lượng 4M1E1I lên máy chủ thành công!", "success");
+          if (needsApproval) {
+            showToast("Gửi đề xuất thành công! Đang chờ Duyệt viên của bộ phận phê duyệt.", "success");
+          } else {
+            showToast("Đã gửi báo cáo chất lượng 4M1E1I lên máy chủ thành công!", "success");
+          }
         }
       }
     }

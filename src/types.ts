@@ -24,6 +24,7 @@ export interface User {
   lastActive?: number;
   company?: string;
   canSpeciallyEditDelete?: boolean;
+  bypassApproval?: boolean;
 }
 
 export type Category4M1E1I = 
@@ -67,6 +68,9 @@ export interface QualityReport {
   updateLogs?: string[];
   isDeleted?: boolean;
   deletedAt?: string;
+  isApproved?: boolean;
+  approvedBy?: string;
+  approvedAt?: string;
 }
 
 export interface Company {

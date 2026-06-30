@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import html2canvas from "html2canvas";
-import { Search, RotateCw, RotateCcw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle } from "lucide-react";
+import { Search, RotateCw, RotateCcw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle } from "lucide-react";
 import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Company, ChatMessage } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
@@ -893,6 +893,7 @@ export default function MobileFrame({
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedFactoryFilter, setSelectedFactoryFilter] = useState<string | null>(null);
   const [activeBottomTab, setActiveBottomTab] = useState<"BAO_CAO" | "PHAN_TICH" | "PHE_DUYET">("BAO_CAO");
+  const [mobileFeedSubTab, setMobileFeedSubTab] = useState<"FEED" | "PROPOSAL">("FEED");
   const [showTrash, setShowTrash] = useState(false);
   const [mobileBranchFilter, setMobileBranchFilter] = useState<string>("Tất cả");
   const [mobileTimeFilter, setMobileTimeFilter] = useState<"NGAY" | "TUAN" | "THANG">("THANG");
@@ -1606,6 +1607,26 @@ App Link: ${window.location.origin}`;
   // Filter items based on uploader or factory search or description search
   const filteredReports = reports.filter((r) => {
     if (r.isDeleted) return false;
+
+    // Approval status filtering rules
+    const isApproved = r.isApproved !== false;
+    const isUploader = r.uploaderId === currentUser?.id;
+
+    if (currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) {
+      if (mobileFeedSubTab === "PROPOSAL") {
+        if (isApproved) return false;
+        // Reviewer can only see pending proposals for their own branch/factory
+        if (currentUser.role === UserRole.REVIEWER && r.factory !== currentUser.branch) {
+          return false;
+        }
+      } else {
+        if (!isApproved) return false;
+      }
+    } else {
+      // Regular Staff: show approved reports, OR their own pending proposals (which show a "Chờ duyệt" badge)
+      if (!isApproved && !isUploader) return false;
+    }
+
     const s = searchTerm.toLowerCase();
     const matchesSearch =
       r.factory.toLowerCase().includes(s) ||
@@ -2086,7 +2107,7 @@ App Link: ${window.location.origin}`;
             setShowNotifDrawer(false);
           }}
           className="absolute bottom-20 right-5 w-[42px] h-[42px] bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-all z-50 cursor-pointer border-none"
-          title="Trở về Trang Báo Cáo"
+          title="Trở về Trang Home"
         >
           <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
         </button>
@@ -2325,97 +2346,89 @@ App Link: ${window.location.origin}`;
       {/* Internal layout controls (Search inputs) */}
       {activeBottomTab === "BAO_CAO" && (
         <div className={`transition-all duration-300 overflow-hidden shrink-0 ${
-          showFilters ? "max-h-[160px] opacity-100" : "max-h-0 opacity-0 pointer-events-none"
+          showFilters ? "max-h-[50px] opacity-100" : "max-h-0 opacity-0 pointer-events-none"
         }`}>
-        <div className="bg-white px-3 py-2 border-b border-slate-200 shadow-sm flex flex-col gap-1.5">
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400" />
+          <div className="bg-white px-3 py-1.5 border-b border-slate-200 shadow-xs flex items-center gap-1.5">
+            {/* Search Input */}
+            <div className="relative flex-[0.9] min-w-0">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
               <input
                 type="text"
-                placeholder="Tìm kiếm nhà máy, người đăng..."
+                placeholder="Tìm kiếm..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 bg-slate-100 rounded-full text-xs focus:ring-1 focus:ring-blue-500 outline-none placeholder:text-slate-400 text-slate-700 font-medium"
+                className="w-full pl-7 pr-1 py-1 bg-slate-100 rounded-lg text-[10px] focus:ring-1 focus:ring-blue-500 outline-none placeholder:text-slate-400 text-slate-700 font-bold border-none"
               />
             </div>
+
+            {/* Branch Dropdown */}
+            <div className="flex-[1.1] min-w-0 max-w-[95px]">
+              <select
+                value={selectedFactoryFilter || "ALL"}
+                onChange={(e) => setSelectedFactoryFilter(e.target.value === "ALL" ? null : e.target.value)}
+                className="w-full bg-slate-100 text-[10px] font-extrabold text-slate-700 rounded-lg pl-1.5 pr-3 py-1.5 focus:ring-1 focus:ring-blue-500 outline-none border-none select-none h-7 truncate cursor-pointer"
+              >
+                <option value="ALL" translate="no" className="notranslate font-extrabold text-[10px]">TẤT CẢ</option>
+                {(() => {
+                  const activeFactoryChips = branches && branches.length > 0
+                    ? branches
+                        .filter((b) => b.isScoring)
+                        .map((b) => {
+                          const label = getFactoryDisplayName(b.name);
+                          return { key: b.id, label };
+                        })
+                    : [
+                        { key: "TPP-BNI", label: "TPP-BNI" },
+                        { key: "TPP-LAN", label: "TPP-LAN" },
+                        { key: "TPP-CTY", label: "TPP-CTY" },
+                        { key: "TPP-314", label: "TPP-314" }
+                      ];
+                  return activeFactoryChips.map((item) => (
+                    <option
+                      key={item.key}
+                      value={item.key}
+                      translate="no"
+                      className="notranslate font-semibold text-[10px]"
+                    >
+                      {item.label}
+                    </option>
+                  ));
+                })()}
+              </select>
+            </div>
+
+            {/* Category Dropdown */}
+            <div className="flex-[1.1] min-w-0 max-w-[95px]">
+              <select
+                value={selectedCategory || "ALL"}
+                onChange={(e) => setSelectedCategory(e.target.value === "ALL" ? null : e.target.value)}
+                className="w-full bg-slate-100 text-[10px] font-extrabold text-slate-700 rounded-lg pl-1.5 pr-3 py-1.5 focus:ring-1 focus:ring-blue-500 outline-none border-none select-none h-7 truncate cursor-pointer"
+              >
+                <option value="ALL" translate="no" className="notranslate font-extrabold text-[10px]">TẤT CẢ</option>
+                {(["CON NGƯỜI", "MÁY MÓC", "NGUYÊN VẬT LIỆU", "PHƯƠNG PHÁP", "MÔI TRƯỜNG", "THÔNG TIN"] as Category4M1E1I[]).map((cat) => (
+                  <option
+                    key={cat}
+                    value={cat}
+                    translate="no"
+                    className="notranslate font-semibold text-[10px]"
+                  >
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* QR Code Trigger Button */}
             <button
+              type="button"
               onClick={() => setShowQrCodeView(true)}
-              className="p-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 active:scale-95 transition-all cursor-pointer shrink-0 border-none flex items-center justify-center"
+              className="p-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 active:scale-95 transition-all cursor-pointer shrink-0 border-none flex items-center justify-center w-7 h-7"
               title="Mã QR ứng dụng"
             >
-              <QrCode className="w-[18px] h-[18px] text-slate-600" />
+              <QrCode className="w-3.5 h-3.5 text-slate-600" />
             </button>
-          </div>
-          {/* Factory/Branch quick filter chips */}
-          <div className="flex py-0.5 gap-1.5 overflow-x-auto no-scrollbar scroll-smooth border-b border-slate-100 pb-1.5" id="factory-filter-chips">
-            <button
-              onClick={() => setSelectedFactoryFilter(null)}
-              className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase shrink-0 transition-all ${
-                selectedFactoryFilter === null
-                  ? `${theme.bg} text-white shadow`
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              <span translate="no" className="notranslate">TẤT CẢ ĐV</span>
-            </button>
-            {(() => {
-              const activeFactoryChips = branches && branches.length > 0
-                ? branches
-                    .filter((b) => b.isScoring)
-                    .map((b) => {
-                      const label = getFactoryDisplayName(b.name);
-                      return { key: b.id, label };
-                    })
-                : [
-                    { key: "TPP-BNI", label: "TPP-BNI" },
-                    { key: "TPP-LAN", label: "TPP-LAN" },
-                    { key: "TPP-CTY", label: "TPP-CTY" },
-                    { key: "TPP-314", label: "TPP-314" }
-                  ];
-              return activeFactoryChips.map((item) => (
-                <button
-                  key={item.key}
-                  onClick={() => setSelectedFactoryFilter(item.key)}
-                  className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase shrink-0 transition-all ${
-                    selectedFactoryFilter === item.key
-                      ? "bg-sky-600 text-white shadow"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  <span translate="no" className="notranslate">{item.label}</span>
-                </button>
-              ));
-            })()}
-          </div>
-          {/* Rapid filter chips */}
-          <div className="flex py-0.5 gap-1.5 overflow-x-auto no-scrollbar scroll-smooth">
-            <button
-              onClick={() => setSelectedCategory(null)}
-              className={`px-3 py-1 rounded-full text-[9px] font-extrabold uppercase shrink-0 transition-all ${
-                selectedCategory === null
-                  ? `${theme.bg} text-white shadow-sm`
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              <T>TẤT CẢ</T>
-            </button>
-            {(["CON NGƯỜI", "MÁY MÓC", "NGUYÊN VẬT LIỆU", "PHƯƠNG PHÁP", "MÔI TRƯỜNG", "THÔNG TIN"] as Category4M1E1I[]).map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
-                className={`px-2 py-1 rounded-full text-[9px] font-bold uppercase shrink-0 transition-all ${
-                  selectedCategory === cat
-                    ? `${theme.bg} text-white shadow-sm`
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                <T>{cat}</T>
-              </button>
-            ))}
           </div>
         </div>
-      </div>
       )}
 
       {/* Offline Alert Sticky Banner */}
@@ -2805,11 +2818,59 @@ App Link: ${window.location.origin}`;
           showToast={showToast}
         />
       ) : (
-        <div
-          ref={scrollContainerRef}
-          onScroll={handleScroll}
-          className={`flex-1 p-3 space-y-3.5 bg-slate-50 relative ${isNativeScrollMode ? "overflow-visible h-auto" : "overflow-y-auto"}`}
-        >
+        <>
+          {/* Top segment control switcher for ADMIN and REVIEWER */}
+          {(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) && (
+            <div className="bg-white border-b border-slate-200 px-3 py-2 flex items-center justify-between shrink-0 select-none shadow-3xs">
+              <div className="flex bg-slate-100 p-0.5 rounded-lg items-center w-full border border-slate-200/40">
+                <button
+                  type="button"
+                  onClick={() => setMobileFeedSubTab("FEED")}
+                  className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-[10px] font-black border-none cursor-pointer transition-all ${
+                    mobileFeedSubTab === "FEED"
+                      ? `${theme.bg} text-white shadow-sm`
+                      : "text-slate-650 hover:text-slate-850 bg-transparent"
+                  }`}
+                >
+                  <T><span translate="no" className="notranslate font-black uppercase">Bản Tin</span></T>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMobileFeedSubTab("PROPOSAL")}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[10px] font-black border-none cursor-pointer transition-all relative ${
+                    mobileFeedSubTab === "PROPOSAL"
+                      ? `${theme.bg} text-white shadow-sm`
+                      : "text-slate-650 hover:text-slate-850 bg-transparent"
+                  }`}
+                >
+                  <T><span translate="no" className="notranslate font-black uppercase">Đề Xuất</span></T>
+                  {(() => {
+                    const pendingCount = reports.filter((r) => {
+                      if (r.isDeleted) return false;
+                      if (r.isApproved !== false) return false;
+                      if (currentUser?.role === UserRole.ADMIN) return true;
+                      if (currentUser?.role === UserRole.REVIEWER) {
+                        return r.factory === currentUser.branch;
+                      }
+                      return false;
+                    }).length;
+                    if (pendingCount === 0) return null;
+                    return (
+                      <span className="bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full block select-none ml-1 animate-pulse leading-none">
+                        {pendingCount}
+                      </span>
+                    );
+                  })()}
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div
+            ref={scrollContainerRef}
+            onScroll={handleScroll}
+            className={`flex-1 p-3 space-y-3.5 bg-slate-50 relative ${isNativeScrollMode ? "overflow-visible h-auto" : "overflow-y-auto"}`}
+          >
         {sortedReports.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-6 bg-white rounded-2xl border border-slate-200 bg-opacity-70">
             <T className="text-slate-400 text-xs font-semibold">Không tìm thấy báo cáo nào phù hợp.</T>
@@ -2849,6 +2910,64 @@ App Link: ${window.location.origin}`;
                     ) : null}
                   </div>
                 </div>
+
+                {/* Proposal Pending Banner */}
+                {report.isApproved === false && (
+                  <div className="bg-amber-50 border-b border-amber-200 px-3 py-2 flex items-center justify-between select-none">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping shrink-0" />
+                      <span className="text-[10px] font-black text-amber-800 uppercase tracking-wide truncate">
+                        <T><span translate="no" className="notranslate">Đề xuất chờ phê duyệt</span></T>
+                      </span>
+                    </div>
+                    
+                    {/* Reviewer / Admin Action Buttons directly on the mobile card! */}
+                    {(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) && (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Approve button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const now = new Date();
+                            const hrs = String(now.getHours()).padStart(2, '0');
+                            const mns = String(now.getMinutes()).padStart(2, '0');
+                            const scs = String(now.getSeconds()).padStart(2, '0');
+                            const date = String(now.getDate()).padStart(2, '0');
+                            const month = String(now.getMonth() + 1).padStart(2, '0');
+                            const year = String(now.getFullYear()).slice(-2);
+                            const timeStr = `${hrs}:${mns}:${scs} ${date}/${month}/${year}`;
+
+                            onUpdateReport({
+                              ...report,
+                              isApproved: true,
+                              approvedBy: currentUser?.fullName || "Admin",
+                              approvedAt: timeStr,
+                              updateLogs: [...(report.updateLogs || []), `Phê duyệt tin bởi ${currentUser?.fullName || "Admin"} (${timeStr})`]
+                            });
+                            showToast("Đã duyệt đề xuất bài viết này lên Bản tin! 🎉");
+                          }}
+                          className="bg-emerald-600 active:bg-emerald-700 text-white font-black text-[9px] px-2.5 py-1.5 rounded-lg flex items-center gap-1 border-none cursor-pointer uppercase shadow-3xs"
+                        >
+                          <Check className="w-3 h-3 stroke-[2.5px]" />
+                          <T><span translate="no" className="notranslate">Duyệt đăng</span></T>
+                        </button>
+
+                        {/* Reject / Delete button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onDeleteReport(report.id, false);
+                            showToast("Đã từ chối bài viết đề xuất! ♻️");
+                          }}
+                          className="bg-rose-500 active:bg-rose-600 text-white font-black text-[9px] px-2.5 py-1.5 rounded-lg flex items-center gap-1 border-none cursor-pointer uppercase shadow-3xs"
+                        >
+                          <X className="w-3 h-3 stroke-[2.5px]" />
+                          <T><span translate="no" className="notranslate">Từ chối</span></T>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Update Information Sub-bar (Hidden in UI as requested, but still recorded in data) */}
                 {/* 
@@ -3164,16 +3283,8 @@ App Link: ${window.location.origin}`;
                       );
                     })()}
                     {(() => {
-                      const userLikedLocally = likedReports[report.id];
-                      const userInLikedBy = report.likedBy?.includes(currentUser?.fullName || "Kiểm soát viên");
-                      const isReportLiked = userInLikedBy || userLikedLocally;
-                      
-                      let likesCount = report.likedBy?.length || 0;
-                      if (userLikedLocally && !userInLikedBy) {
-                        likesCount += 1;
-                      } else if (!userLikedLocally && userInLikedBy) {
-                        likesCount = Math.max(0, likesCount - 1);
-                      }
+                      const isReportLiked = report.likedBy?.includes(currentUser?.fullName || "Kiểm soát viên") || false;
+                      const likesCount = report.likedBy?.length || 0;
 
                       return (
                         <div className="flex items-center gap-1 bg-slate-50 border border-slate-100 rounded-lg py-0.5 px-1.5 shrink-0">
@@ -3328,7 +3439,7 @@ App Link: ${window.location.origin}`;
           })
         )}
         </div>
-      )}
+      </>)}
 
       {/* Scroll to Top floating button */}
       {showScrollTop && activeBottomTab === "BAO_CAO" && !showTrash && (
@@ -3364,14 +3475,14 @@ App Link: ${window.location.origin}`;
             setShowQrCodeView(false);
           }}
           className="absolute bottom-20 right-5 w-[42px] h-[42px] bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-all z-50 cursor-pointer border-none"
-          title="Trở về Trang Báo Cáo"
+          title="Trở về Trang Home"
         >
           <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
         </button>
       )}
 
       {/* Modern bottom navigation tab bar containing Phân Tích & Báo Cáo */}
-      <div id="mobile-bottom-nav" className={`bg-slate-50 border-t border-slate-200 grid ${(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) ? "grid-cols-4" : "grid-cols-3"} py-2 text-center text-[10px] font-bold select-none shrink-0 font-sans shadow-inner shrink-0`}>
+      <div id="mobile-bottom-nav" className={`bg-slate-50 border-t border-slate-200 grid ${(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) ? "grid-cols-4" : "grid-cols-3"} py-2 text-center text-[9.3px] font-bold select-none shrink-0 font-sans shadow-inner shrink-0`}>
         <button
           type="button"
           onClick={() => {
@@ -3410,7 +3521,7 @@ App Link: ${window.location.origin}`;
           <FileText className={`w-4 h-4 mx-auto mb-0.5 transition-transform hover:scale-110 ${
             activeBottomTab === "BAO_CAO" ? "text-sky-600 font-extrabold" : "text-sky-400"
           }`} />
-          <T><span translate="no" className="notranslate truncate w-full block text-center">Báo Cáo</span></T>
+          <T><span translate="no" className="notranslate truncate w-full block text-center">Home</span></T>
         </button>
 
         {(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) && (
@@ -3440,7 +3551,7 @@ App Link: ${window.location.origin}`;
                 );
               })()}
             </div>
-            <T><span translate="no" className="notranslate truncate w-full block text-center">Phê Duyệt</span></T>
+            <T><span translate="no" className="notranslate truncate w-full block text-center">Duyệt NS</span></T>
           </button>
         )}
 
@@ -3450,7 +3561,7 @@ App Link: ${window.location.origin}`;
           className="flex flex-col items-center justify-center py-0.5 text-slate-400 hover:text-rose-500 transition-colors cursor-pointer select-none border-none bg-transparent w-full min-w-0 overflow-hidden"
         >
           <LogOut className="w-4 h-4 mx-auto mb-0.5 text-rose-500 hover:text-rose-600 hover:scale-110 transition-transform" />
-          <T><span translate="no" className="notranslate truncate w-full block text-center text-[9px] font-semibold">{currentUser?.fullName || "Đăng Xuất"}</span></T>
+          <T><span translate="no" className="notranslate truncate w-full block text-center text-[8.3px] font-semibold">{currentUser?.fullName || "Đăng Xuất"}</span></T>
         </button>
       </div>
 
@@ -3904,7 +4015,7 @@ App Link: ${window.location.origin}`}
               setShowQrCodeView(false);
             }}
             className="absolute bottom-20 right-5 w-[42px] h-[42px] bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-all z-50 cursor-pointer border-none"
-            title="Trở về Trang Báo Cáo"
+            title="Trở về Trang Home"
           >
             <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
           </button>
@@ -4108,7 +4219,7 @@ App Link: ${window.location.origin}`}
             type="button"
             onClick={() => setShowOnlineUsersDrawer(false)}
             className="absolute bottom-20 right-5 w-[42px] h-[42px] bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-all z-50 cursor-pointer border-none"
-            title="Trở về Trang Báo Cáo"
+            title="Trở về Trang Home"
           >
             <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
           </button>
