@@ -2773,6 +2773,40 @@ export default function App() {
     }
   };
 
+  const confirmDialogMarkup = confirmDialog && confirmDialog.isOpen && (
+    <div style={{ zIndex: 200000 }} className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 select-none animate-fadeIn">
+      <div className="bg-white rounded-2xl w-full max-w-[320px] p-6 shadow-2xl border border-slate-150 flex flex-col items-center text-center animate-in fade-in zoom-in-95 duration-200">
+        <div className="w-12 h-12 bg-rose-50 rounded-full flex items-center justify-center mb-4 text-rose-500">
+          <AlertTriangle className="w-6 h-6" />
+        </div>
+        <h3 className="font-bold text-slate-900 text-sm mb-2">
+          <T>{confirmDialog.title}</T>
+        </h3>
+        <p className="text-slate-500 text-[11px] mb-6 leading-relaxed px-1">
+          <T>{confirmDialog.message}</T>
+        </p>
+        <div className="grid grid-cols-2 gap-3 w-full">
+          <button
+            type="button"
+            onClick={() => setConfirmDialog(null)}
+            className="py-2.5 text-[11px] font-bold border border-slate-200 rounded-xl text-slate-650 hover:bg-slate-50 active:bg-slate-100 transition-colors cursor-pointer"
+          >
+            <T>QUAY LẠI</T>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              confirmDialog.onConfirm();
+            }}
+            className="py-2.5 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl transition-colors shadow-sm cursor-pointer"
+          >
+            <T>ĐỒNG Ý</T>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   // Nếu đang kích hoạt chụp cuộn xả khung, cưỡng bức kết xuất duy nhất danh sách báo cáo, không giữ bất kỳ lớp giao diện máy tính nào trong DOM
   if (isNativeScrollActive) {
     return (
@@ -2871,6 +2905,8 @@ export default function App() {
             </button>
           </div>
         )}
+
+        {confirmDialogMarkup}
       </div>
     );
   }
@@ -2964,6 +3000,8 @@ export default function App() {
             </button>
           </div>
         )}
+
+        {confirmDialogMarkup}
       </div>
     );
   }
@@ -3168,39 +3206,7 @@ export default function App() {
       )}
 
       {/* High-fidelity elegant Custom Confirmation Dialog */}
-      {confirmDialog && confirmDialog.isOpen && (
-        <div style={{ zIndex: 200000 }} className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 select-none animate-fadeIn">
-          <div className="bg-white rounded-2xl w-full max-w-[320px] p-6 shadow-2xl border border-slate-150 flex flex-col items-center text-center animate-in fade-in zoom-in-95 duration-200">
-            <div className="w-12 h-12 bg-rose-50 rounded-full flex items-center justify-center mb-4 text-rose-500">
-              <AlertTriangle className="w-6 h-6" />
-            </div>
-            <h3 className="font-bold text-slate-900 text-sm mb-2">
-              <T>{confirmDialog.title}</T>
-            </h3>
-            <p className="text-slate-500 text-[11px] mb-6 leading-relaxed px-1">
-              <T>{confirmDialog.message}</T>
-            </p>
-            <div className="grid grid-cols-2 gap-3 w-full">
-              <button
-                type="button"
-                onClick={() => setConfirmDialog(null)}
-                className="py-2.5 text-[11px] font-bold border border-slate-200 rounded-xl text-slate-650 hover:bg-slate-50 active:bg-slate-100 transition-colors cursor-pointer"
-              >
-                <T>QUAY LẠI</T>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  confirmDialog.onConfirm();
-                }}
-                className="py-2.5 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl transition-colors shadow-sm cursor-pointer"
-              >
-                <T>ĐỒNG Ý</T>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {confirmDialogMarkup}
 
       {/* High-fidelity elegant Custom Toast system */}
       {toast && (
