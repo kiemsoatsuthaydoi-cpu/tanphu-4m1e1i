@@ -42,6 +42,28 @@ export interface QualityReportDirective {
   timestamp: string;
 }
 
+export interface QualityReportResolution {
+  id: string;
+  departmentName: string;
+  handlerName: string;
+  status: "Đang xử lý" | "Đã xử lý";
+  resultText: string;
+  updatedAt: string;
+}
+
+export interface QualityReportReplication {
+  id: string;
+  factoryName: string;
+  departmentName: string;
+  registrantName: string;
+  status: "Đang chuẩn bị" | "Đang triển khai" | "Đã hoàn thành";
+  targetDate: string; // Must be dd/mm/yy
+  notes?: string;
+  currentState: string;
+  supportRequired: string;
+  updatedAt: string;
+}
+
 export interface QualityReport {
   id: string;
   factory: string;
@@ -71,6 +93,8 @@ export interface QualityReport {
   isApproved?: boolean;
   approvedBy?: string;
   approvedAt?: string;
+  resolutions?: QualityReportResolution[];
+  replications?: QualityReportReplication[];
 }
 
 export interface Company {
