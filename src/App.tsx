@@ -2834,7 +2834,7 @@ export default function App() {
   // Active user view workspace: 1. Real mobile device logic (Strictly separate DOM from Desktop layout)
   if (currentUser && isMobile) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center font-sans relative overflow-x-hidden p-0">
+      <div className="min-h-screen bg-white flex flex-col font-sans relative overflow-x-hidden p-0">
         {isFormOpen ? (
           <ReportForm
             currentUser={currentUser}

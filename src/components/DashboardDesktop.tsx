@@ -1025,11 +1025,15 @@ export default function DashboardDesktop({
       }
     });
 
-    return Object.keys(map).map((name) => ({
-      name: name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn phòng ", "VP "),
-      "Không Phù Hợp (KPH)": map[name].kph,
-      "Điểm Sáng (DSA)": map[name].dsa
-    }));
+    return Object.keys(map).map((name) => {
+      const match = name.match(/\(([^)]+)\)/);
+      const shortName = match ? match[1] : name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn phòng ", "VP ");
+      return {
+        name: shortName,
+        "Không Phù Hợp (KPH)": map[name].kph,
+        "Điểm Sáng (DSA)": map[name].dsa
+      };
+    });
   };
 
   // 3. Phân tích Pareto cho các nguyên nhân / danh mục sự cố Không Phù Hợp (KPH)
@@ -2828,32 +2832,35 @@ export default function DashboardDesktop({
                   </div>
 
                   {/* Branch / VP segment selector */}
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-200 shadow-inner">
-                    <span className="text-[10px] uppercase font-mono font-extrabold text-slate-500 px-2 tracking-wider">
-                      <T><span translate="no" className="notranslate">Lọc Chi nhánh:</span></T>
-                    </span>
-                    <div className="flex flex-wrap gap-1">
+                  <div className="flex flex-col gap-2.5 bg-slate-50/70 p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
+                    <div className="flex items-center gap-2 border-b border-slate-200/40 pb-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                      <span translate="no" className="notranslate text-[10px] uppercase font-bold tracking-wider text-slate-500 font-mono">
+                        LỌC CHI NHÁNH / ĐƠN VỊ THÀNH VIÊN:
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
                       <button
                         onClick={() => setStatsBranchFilter("Tất cả")}
-                        className={`px-3 py-1 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer border ${
                           statsBranchFilter === "Tất cả"
-                            ? "bg-slate-800 text-white shadow"
-                            : "text-slate-600 hover:bg-slate-200"
+                            ? "bg-slate-800 border-slate-850 text-white shadow-xs font-black"
+                            : "bg-white border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-800"
                         }`}
                       >
-                        <T><span translate="no" className="notranslate">Tất cả</span></T>
+                        <span translate="no" className="notranslate">Tất cả</span>
                       </button>
                       {branches.filter(b => b.isScoring).map((b) => (
                         <button
                           key={b.id}
                           onClick={() => setStatsBranchFilter(b.name)}
-                          className={`px-3 py-1 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer border ${
                             statsBranchFilter === b.name
-                              ? "bg-indigo-650 bg-indigo-600 text-white shadow"
-                              : "text-slate-600 hover:bg-slate-200"
+                              ? "bg-indigo-600 border-indigo-650 text-white shadow-xs font-black"
+                              : "bg-white border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-800"
                           }`}
                         >
-                          <T><span translate="no" className="notranslate">{b.name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn phòng ", "VP ")}</span></T>
+                          <span translate="no" className="notranslate">{b.name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn phòng ", "VP ")}</span>
                         </button>
                       ))}
                     </div>

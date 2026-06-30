@@ -669,6 +669,11 @@ export default function MobileFrame({
   isNativeScrollActive,
   setIsNativeScrollActive
 }: MobileFrameProps) {
+  const isRealMobile = typeof window !== "undefined" && (
+    window.innerWidth < 1024 || 
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+  );
+
   const config = mobileUIConfig || {};
   const displayRule = config.displayRule || "clean";
   const customAliases = config.customAliases || {};
@@ -1985,9 +1990,20 @@ App Link: ${window.location.origin}`;
     };
 
     return (
-      <div id="mobile-viewport" onDoubleClick={handleViewportDoubleClick} onTouchStart={handleViewportTouchStart} className="w-full h-[100dvh] max-w-[440px] lg:w-[375px] lg:h-[780px] bg-slate-950 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl overflow-hidden flex flex-col relative">
+      <div 
+        id="mobile-viewport" 
+        onDoubleClick={handleViewportDoubleClick} 
+        onTouchStart={handleViewportTouchStart} 
+        className={`w-full flex flex-col relative transition-all duration-300 ${
+          isRealMobile 
+            ? "max-w-none rounded-none border-0 shadow-none h-[100dvh] overflow-hidden" 
+            : "max-w-[440px] lg:w-[375px] h-[100dvh] lg:h-[780px] bg-slate-950 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl overflow-hidden"
+        }`}
+      >
         {/* Main Title Bar / Header */}
-        <div className={`text-white px-4 py-3 flex items-center justify-between shadow-md shrink-0 select-none rounded-t-[15px] lg:rounded-t-[28px] ${theme.bg}`}>
+        <div className={`text-white px-4 py-3 flex items-center justify-between shadow-md shrink-0 select-none ${
+          isRealMobile ? "rounded-none" : "rounded-t-[15px] lg:rounded-t-[28px]"
+        } ${theme.bg}`}>
           <button
             onClick={() => setShowQrCodeView(false)}
             className="flex items-center gap-1.5 text-xs text-white/90 hover:text-white font-black bg-transparent border-none cursor-pointer transition-all active:scale-95"
@@ -2120,7 +2136,11 @@ App Link: ${window.location.origin}`;
       id="mobile-viewport" 
       onDoubleClick={handleViewportDoubleClick} 
       onTouchStart={handleViewportTouchStart} 
-      className={`w-full max-w-[440px] lg:w-[375px] bg-slate-950 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl flex flex-col relative transition-all duration-300 ${
+      className={`w-full flex flex-col relative transition-all duration-300 ${
+        isRealMobile 
+          ? "max-w-none rounded-none border-0 shadow-none" 
+          : "max-w-[440px] lg:w-[375px] bg-slate-950 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl"
+      } ${
         isNativeScrollMode 
           ? "h-auto overflow-visible" 
           : "h-[100dvh] lg:h-[780px] overflow-hidden"
@@ -2243,7 +2263,9 @@ App Link: ${window.location.origin}`;
       )}
 
       {/* Main Appsheet Blue Title Bar */}
-      <div id="mobile-header" className={`text-white px-4 py-3 flex items-center justify-between shadow-md shrink-0 select-none rounded-t-[15px] lg:rounded-t-[28px] ${theme.bg}`}>
+      <div id="mobile-header" className={`text-white px-4 py-3 flex items-center justify-between shadow-md shrink-0 select-none ${
+        isRealMobile ? "rounded-none" : "rounded-t-[15px] lg:rounded-t-[28px]"
+      } ${theme.bg}`}>
         <div className="flex items-center gap-2">
           {/* TANPHU simulated logo block */}
           <div className="relative">

@@ -36,6 +36,11 @@ export default function ReportForm({
   mobileUIConfig,
   onShowToast
 }: ReportFormProps) {
+  const isRealMobile = typeof window !== "undefined" && (
+    window.innerWidth < 1024 || 
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+  );
+
   // Config fallbacks
   const config = mobileUIConfig || {};
   const displayRule = config.displayRule || "clean";
@@ -478,9 +483,15 @@ export default function ReportForm({
   };
 
   return (
-    <div className="w-full h-[100dvh] max-w-[440px] lg:w-[375px] lg:h-[780px] bg-slate-950 text-slate-800 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl flex flex-col relative overflow-hidden select-none">
+    <div className={`w-full flex flex-col relative overflow-hidden select-none text-slate-800 bg-slate-950 transition-all duration-300 ${
+      isRealMobile 
+        ? "max-w-none rounded-none border-0 shadow-none h-[100dvh]" 
+        : "max-w-[440px] lg:w-[375px] h-[100dvh] lg:h-[780px] rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl"
+    }`}>
       {/* Header view standard and title */}
-      <div className="bg-[#1e3a8a] text-white px-4 py-3.5 flex items-center shrink-0 border-b border-blue-900 shadow-md rounded-t-[15px] lg:rounded-t-[28px]">
+      <div className={`bg-[#1e3a8a] text-white px-4 py-3.5 flex items-center shrink-0 border-b border-blue-900 shadow-md ${
+        isRealMobile ? "rounded-none" : "rounded-t-[15px] lg:rounded-t-[28px]"
+      }`}>
         <button onClick={handleCancelWithConfirm} className="mr-3 hover:scale-110 active:scale-90 transition-transform">
           <ArrowLeft className="w-5 h-5" />
         </button>
