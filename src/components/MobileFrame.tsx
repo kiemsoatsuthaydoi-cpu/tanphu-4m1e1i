@@ -22,7 +22,10 @@ function convertModernColorsToRgb(cssValue: string): string {
         const parts = content.trim().split(/[\s/]+/).filter(Boolean);
         if (parts.length < 3) return "rgba(0,0,0,0)";
 
-        const L = parseFloat(parts[0]);
+        let L = parseFloat(parts[0]);
+        if (parts[0].endsWith("%")) {
+          L = L / 100;
+        }
         const C = parseFloat(parts[1]);
         const H = parseFloat(parts[2]);
         let alpha = 1;
@@ -81,7 +84,10 @@ function convertModernColorsToRgb(cssValue: string): string {
         const parts = content.trim().split(/[\s/]+/).filter(Boolean);
         if (parts.length < 3) return "rgba(0,0,0,0)";
 
-        const L = parseFloat(parts[0]);
+        let L = parseFloat(parts[0]);
+        if (parts[0].endsWith("%")) {
+          L = L / 100;
+        }
         const a = parseFloat(parts[1]);
         const b = parseFloat(parts[2]);
         let alpha = 1;
@@ -1001,6 +1007,7 @@ export default function MobileFrame({
   const [showAcksListReport, setShowAcksListReport] = useState<QualityReport | null>(null);
   const lastScrollTopRef = useRef(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const lastTouchTimeRef = useRef(0);
 
   const handleRefreshClick = async () => {
@@ -1480,7 +1487,7 @@ App Link: ${window.location.origin}`;
     // Đợi 200ms để đảm bảo toast đã hiển thị và các hiệu ứng ổn định
     await new Promise((resolve) => setTimeout(resolve, 200));
 
-    const viewport = document.getElementById("mobile-viewport");
+    const viewport = viewportRef.current || document.getElementById("mobile-viewport");
     if (!viewport) {
       showToast("Không tìm thấy giao diện điện thoại để chụp! ❌");
       setIsCapturingScreenshot(false);
@@ -1517,6 +1524,8 @@ App Link: ${window.location.origin}`;
         const style = originalGetComputedStyle(el, pseudoElt);
         return new Proxy(style, {
           get(target, prop) {
+            // Sử dụng Reflect.get(target, prop, target) thay vì target[prop] để bảo toàn 'this' context cho native getters tránh lỗi Illegal invocation
+            const val = Reflect.get(target, prop, target);
             if (typeof prop === "string") {
               if (prop === "getPropertyValue") {
                 return function (propertyName: string) {
@@ -1527,7 +1536,6 @@ App Link: ${window.location.origin}`;
                   return val;
                 };
               }
-              const val = (target as any)[prop];
               if (typeof val === "string" && (val.includes("oklch") || val.includes("oklab"))) {
                 return convertModernColorsToRgb(val);
               }
@@ -1536,7 +1544,6 @@ App Link: ${window.location.origin}`;
               }
               return val;
             }
-            const val = (target as any)[prop];
             if (typeof val === "function") {
               return val.bind(target);
             }
@@ -2051,6 +2058,7 @@ App Link: ${window.location.origin}`;
 
     return (
       <div 
+        ref={viewportRef}
         id="mobile-viewport" 
         onDoubleClick={handleViewportDoubleClick} 
         onTouchStart={handleViewportTouchStart} 
@@ -2193,6 +2201,7 @@ App Link: ${window.location.origin}`;
 
   return (
     <div 
+      ref={viewportRef}
       id="mobile-viewport" 
       onDoubleClick={handleViewportDoubleClick} 
       onTouchStart={handleViewportTouchStart} 
@@ -2335,7 +2344,7 @@ App Link: ${window.location.origin}`;
           </div>
           <T className="font-bold text-[13.6px] tracking-wide whitespace-nowrap">META 4M1E1I</T>
         </div>
-        <div className="flex items-center gap-[9.5px]">
+        <div className="flex items-center gap-[6.7px]">
           {currentUser?.role !== UserRole.STAFF && currentUser?.role !== UserRole.REVIEWER && (
             <button
               onClick={() => setShowTrash(true)}
@@ -5191,17 +5200,13 @@ App Link: ${window.location.origin}`}
               <button
                 onClick={() => {
                   setShowScreenshotMenu(false);
-                  if (setIsNativeScrollActive) {
-                    setIsNativeScrollActive(true, sortedReports);
-                  } else {
-                    setIsNativeScrollMode(true);
-                  }
+                  setIsNativeScrollMode(true);
                 }}
                 className={`w-full hover:bg-slate-50 border p-3.5 rounded-2xl flex items-start gap-3.5 text-left transition-all active:scale-98 shadow-xs cursor-pointer ${
-                  isNativeScrollActive || isNativeScrollMode ? "bg-amber-50/50 border-amber-300" : "bg-white border-slate-200"
+                  isNativeScrollMode ? "bg-amber-50/50 border-amber-300" : "bg-white border-slate-200"
                 }`}
               >
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isNativeScrollActive || isNativeScrollMode ? "bg-amber-100 text-amber-700" : "bg-emerald-50 text-emerald-600"}`}>
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isNativeScrollMode ? "bg-amber-100 text-amber-700" : "bg-emerald-50 text-emerald-600"}`}>
                   <Smartphone className="w-5 h-5" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -5210,10 +5215,35 @@ App Link: ${window.location.origin}`}
                     <span className="text-[8px] bg-emerald-100 text-emerald-700 font-black px-1.5 py-0.5 rounded">KHUYÊN DÙNG</span>
                   </h4>
                   <p className="text-[10px] text-slate-500 font-medium mt-1 leading-relaxed">
-                    <T>Bung dài màn hình tạm thời để bạn sử dụng chức năng "Chụp cuộn" mặc định có sẵn trên điện thoại của mình (bấm phím cứng). Cực kỳ ổn định và sắc nét không giới hạn chiều dài.</T>
+                    <T>Bung dài màn hình tạm thời để bạn sử dụng chức năng "Chụp cuộn" mặc định có sẵn trên điện thoại của mình (bấm phím cứng). Giữ nguyên đầy đủ giao diện, màu sắc và thông tin chi tiết.</T>
                   </p>
                 </div>
               </button>
+
+              {/* Option 3: Clean printable extract */}
+              {setIsNativeScrollActive && (
+                <button
+                  onClick={() => {
+                    setShowScreenshotMenu(false);
+                    setIsNativeScrollActive(true, sortedReports);
+                  }}
+                  className={`w-full hover:bg-slate-50 border p-3.5 rounded-2xl flex items-start gap-3.5 text-left transition-all active:scale-98 shadow-xs cursor-pointer ${
+                    isNativeScrollActive ? "bg-amber-50/50 border-amber-300" : "bg-white border-slate-200"
+                  }`}
+                >
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isNativeScrollActive ? "bg-amber-100 text-amber-700" : "bg-indigo-50 text-indigo-600"}`}>
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-[11.5px] font-extrabold text-slate-800 flex items-center gap-1.5 leading-tight">
+                      <T>PHƯƠNG ÁN 3: BẢN IN TRÍCH XUẤT SẠCH (FILE PDF/ẢNH)</T>
+                    </h4>
+                    <p className="text-[10px] text-slate-500 font-medium mt-1 leading-relaxed">
+                      <T>Bản phẳng đơn giản tối ưu, không phím bấm hay viền điện thoại để dễ dàng in ấn tài liệu lưu trữ.</T>
+                    </p>
+                  </div>
+                </button>
+              )}
             </div>
           </div>
         </div>

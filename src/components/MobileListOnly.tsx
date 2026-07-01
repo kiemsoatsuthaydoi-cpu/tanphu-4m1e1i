@@ -253,6 +253,90 @@ export function MobileListOnly({
                       ))}
                     </div>
                   )}
+
+                  {/* Resolutions/Kết quả xử lý chi tiết rendered clean */}
+                  {report.resolutions && report.resolutions.length > 0 && (
+                    <div className="mt-2.5 pt-2.5 border-t border-slate-100 space-y-1.5">
+                      <div className="text-[9px] text-indigo-800 font-extrabold uppercase flex items-center gap-1">
+                        <span>✅</span>
+                        <span translate="no" className="notranslate">KẾT QUẢ XỬ LÝ CHI TIẾT (BP/ĐV PHẢN HỒI):</span>
+                      </div>
+                      {report.resolutions.map((res) => (
+                        <div key={res.id} className="p-2 bg-slate-50 border border-slate-150 rounded">
+                          <div className="flex justify-between items-center text-[8.5px] font-bold text-slate-500 mb-1">
+                            <span className="text-indigo-800 font-extrabold">
+                              <span translate="no" className="notranslate">{res.departmentName}</span>
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span translate="no" className={`notranslate text-[7.5px] font-extrabold px-1 py-0.2 rounded border uppercase scale-90 ${
+                                res.status === "Đã xử lý"
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : "bg-amber-50 text-amber-700 border-amber-200"
+                              }`}>
+                                {res.status}
+                              </span>
+                              <span translate="no" className="notranslate">{res.updatedAt}</span>
+                            </div>
+                          </div>
+                          <p className="text-[10px] text-slate-800 font-medium whitespace-pre-wrap">
+                            <span translate="no" className="notranslate">{res.resultText}</span>
+                          </p>
+                          <div className="text-[8px] text-slate-400 mt-1 select-none">
+                            <span translate="no" className="notranslate">Đại diện: {res.handlerName}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Replications/Yêu cầu nhân bản rendered clean */}
+                  {report.replications && report.replications.length > 0 && (
+                    <div className="mt-2.5 pt-2.5 border-t border-slate-100 space-y-1.5">
+                      <div className="text-[9px] text-emerald-800 font-extrabold uppercase flex items-center gap-1">
+                        <span>✨</span>
+                        <span translate="no" className="notranslate">YÊU CẦU NHÂN BẢN (REPLICATION):</span>
+                      </div>
+                      {report.replications.map((rep) => (
+                        <div key={rep.id} className="p-2 bg-emerald-50/40 border border-emerald-100 rounded text-[9.5px]">
+                          <div className="flex justify-between text-[8px] text-slate-400 font-bold mb-1">
+                            <span className="text-emerald-800 font-extrabold">
+                              <span translate="no" className="notranslate">{rep.factoryName} - {rep.departmentName}</span>
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span translate="no" className={`notranslate text-[7.5px] font-black px-1.5 py-0.2 rounded uppercase ${
+                                rep.status === "Đã hoàn thành"
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : rep.status === "Đang triển khai"
+                                  ? "bg-blue-100 text-blue-800"
+                                  : "bg-amber-100 text-amber-800"
+                              }`}>
+                                {rep.status}
+                              </span>
+                              <span translate="no" className="notranslate">{rep.updatedAt}</span>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-1 text-slate-700 mt-1">
+                            <div>
+                              <span className="font-extrabold text-slate-500 uppercase text-[8px]"><T>Hiện trạng:</T> </span>
+                              <span translate="no" className="notranslate font-medium">{rep.currentState}</span>
+                            </div>
+                            <div>
+                              <span className="font-extrabold text-slate-500 uppercase text-[8px]"><T>Hỗ trợ cần thiết:</T> </span>
+                              <span translate="no" className="notranslate font-medium">{rep.supportRequired}</span>
+                            </div>
+                          </div>
+                          {rep.notes && (
+                            <div className="mt-1 text-[8.5px] italic text-slate-500">
+                              <span translate="no" className="notranslate">Ghi chú nhân bản: {rep.notes}</span>
+                            </div>
+                          )}
+                          <div className="text-[8px] text-slate-400 mt-1.5 text-right select-none">
+                            <span translate="no" className="notranslate">Người thực hiện: {rep.registrantName} | Hạn: {rep.targetDate}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
