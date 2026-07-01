@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import html2canvas from "html2canvas";
-import { Search, RotateCw, RotateCcw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, Cloud } from "lucide-react";
+import { Search, RotateCw, RotateCcw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, Cloud, ChevronDown, ChevronRight } from "lucide-react";
 import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Company, ChatMessage, QualityReportResolution, QualityReportReplication } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
@@ -998,6 +998,7 @@ export default function MobileFrame({
   const [editingDirectiveId, setEditingDirectiveId] = useState<string | null>(null);
   const [editingDirectiveText, setEditingDirectiveText] = useState("");
   const [showLikesListReport, setShowLikesListReport] = useState<QualityReport | null>(null);
+  const [showAcksListReport, setShowAcksListReport] = useState<QualityReport | null>(null);
   const lastScrollTopRef = useRef(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const lastTouchTimeRef = useRef(0);
@@ -1069,9 +1070,49 @@ export default function MobileFrame({
 
   // Resolution editor states for KPH items
   const [editingResolutionReportId, setEditingResolutionReportId] = useState<string | null>(null);
+  const [editingResolutionId, setEditingResolutionId] = useState<string | null>(null);
+  const [resolutionToDelete, setResolutionToDelete] = useState<{ report: QualityReport; resId: string } | null>(null);
   const [resDeptName, setResDeptName] = useState<string>("");
   const [resResultText, setResResultText] = useState<string>("");
   const [resStatus, setResStatus] = useState<"Đang xử lý" | "Đã xử lý">("Đang xử lý");
+  const [expandedResolutions, setExpandedResolutions] = useState<Record<string, boolean>>({});
+
+  const toggleResolutionsExpand = (reportId: string) => {
+    setExpandedResolutions((prev) => ({
+      ...prev,
+      [reportId]: !prev[reportId],
+    }));
+  };
+
+  useEffect(() => {
+    const handleDocumentClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target) return;
+
+      // If clicking inside a modal overlay, dropdown list, confirmation dialog, or other z-50/fixed portal element, do not trigger auto-collapse
+      if (target.closest(".fixed") || target.closest(".z-50")) {
+        return;
+      }
+
+      const expandedKeys = Object.keys(expandedResolutions).filter((k) => expandedResolutions[k]);
+      if (expandedKeys.length === 0) return;
+
+      expandedKeys.forEach((reportId) => {
+        const container = document.getElementById(`receivers-section-${reportId}`);
+        if (container && !container.contains(target)) {
+          setExpandedResolutions((prev) => ({
+            ...prev,
+            [reportId]: false,
+          }));
+        }
+      });
+    };
+
+    document.addEventListener("click", handleDocumentClick, true);
+    return () => {
+      document.removeEventListener("click", handleDocumentClick, true);
+    };
+  }, [expandedResolutions]);
 
   // Replication editor states for DSA items
   const [editingReplicationReportId, setEditingReplicationReportId] = useState<string | null>(null);
@@ -3207,22 +3248,51 @@ App Link: ${window.location.origin}`;
                         showToast={showToast}
                       />
                     )}
-                    {/* BP/ĐV TIẾP NHẬN list display */}
+                    {/* BP/ĐV PHẢN HỒI list display */}
                     {(report.isAbnormal || report.reportType === "KPH") && (
                       <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-col gap-1.5" id={`receivers-section-${report.id}`}>
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1 text-[10px] font-extrabold text-sky-700 uppercase">
+                        <button
+                          type="button"
+                          onClick={() => toggleResolutionsExpand(report.id)}
+                          className="flex items-center gap-1.5 text-[10px] font-extrabold text-sky-700 uppercase hover:text-sky-900 transition-colors cursor-pointer border-none bg-transparent p-0"
+                          title="Click để ẩn/hiện kết quả xử lý chi tiết"
+                        >
                           <Check className="w-3.5 h-3.5 stroke-[3px]" />
-                          <span translate="no" className="notranslate">BP/ĐV TIẾP NHẬN & XỬ LÝ:</span>
-                        </div>
+                          <span translate="no" className="notranslate">BP/ĐV PHẢN HỒI:</span>
+                          {(() => {
+                            const resCount = report.resolutions?.length || 0;
+                            const isExpanded = !!expandedResolutions[report.id];
+                            return (
+                              <span
+                                className={`text-[10px] font-black font-sans px-1.5 py-0.5 rounded flex items-center gap-0.5 ${
+                                  resCount > 0 
+                                    ? "text-sky-700 bg-sky-50 hover:bg-sky-100" 
+                                    : "text-slate-400 bg-transparent"
+                                }`}
+                              >
+                                <span translate="no" className="notranslate"><T>{resCount}</T></span>
+                                {resCount > 0 && (
+                                  isExpanded ? (
+                                    <ChevronDown className="w-3 h-3 text-sky-700 stroke-[2.5px]" />
+                                  ) : (
+                                    <ChevronRight className="w-3 h-3 text-sky-700 stroke-[2.5px]" />
+                                  )
+                                )}
+                              </span>
+                            );
+                          })()}
+                        </button>
                         {(report.isAbnormal || report.reportType === "KPH") && (
                           <button
                             type="button"
                             onClick={() => {
                               if (editingResolutionReportId === report.id) {
                                 setEditingResolutionReportId(null);
+                                setEditingResolutionId(null);
                               } else {
                                 setEditingResolutionReportId(report.id);
+                                setEditingResolutionId(null);
                                 setResDeptName(currentUser?.department || "");
                                 setResResultText("");
                                 setResStatus("Đang xử lý");
@@ -3235,57 +3305,51 @@ App Link: ${window.location.origin}`;
                         )}
                       </div>
 
-                      {report.sharedBy && report.sharedBy.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {report.sharedBy.map((item, i) => {
-                            const deptMatch = item.match(/\(([^)]+)\)/);
-                            const deptName = deptMatch ? deptMatch[1] : item;
-                            const resForDept = report.resolutions?.find(
-                              (r) => r.departmentName.trim().toLowerCase() === deptName.trim().toLowerCase()
-                            );
-                            
-                            return (
-                              <span
-                                key={i}
-                                onClick={() => {
-                                  if (report.isAbnormal || report.reportType === "KPH") {
-                                    setEditingResolutionReportId(report.id);
-                                    setResDeptName(deptName);
-                                    setResResultText(resForDept ? resForDept.resultText : "");
-                                    setResStatus(resForDept ? resForDept.status : "Đang xử lý");
-                                  }
-                                }}
-                                className={`text-[9px] px-2 py-0.5 rounded border font-bold flex items-center gap-1 cursor-pointer select-none transition-all duration-200 ${
-                                  resForDept
-                                    ? resForDept.status === "Đã xử lý"
-                                      ? "bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100"
-                                      : "bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100"
-                                    : "bg-sky-50 border-sky-100 text-sky-800 hover:bg-sky-100"
-                                }`}
-                                title={resForDept ? `Kết quả: ${resForDept.resultText}` : "Click để ghi nhận/cập nhật kết quả"}
-                              >
-                                <span translate="no" className="notranslate">{item}</span>
-                                {resForDept && (
-                                  <span className="text-[8px] font-extrabold uppercase ml-0.5">
-                                    {resForDept.status === "Đã xử lý" ? "✓" : "⏳"}
-                                  </span>
-                                )}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <span className="text-slate-400 text-[9px] italic select-none">
-                          <span translate="no" className="notranslate">Chưa có bộ phận nào tiếp nhận</span>
-                        </span>
-                      )}
-
                       {/* Displaying detailed Resolution logs list */}
-                      {(report.isAbnormal || report.reportType === "KPH") && report.resolutions && report.resolutions.length > 0 && (
+                      {!!expandedResolutions[report.id] && (report.isAbnormal || report.reportType === "KPH") && report.resolutions && report.resolutions.length > 0 && (
                         <div className="mt-1.5 p-2 bg-slate-50 border border-slate-150 rounded-lg flex flex-col gap-1.5 max-h-36 overflow-y-auto">
-                          <div className="text-[8px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-1 select-none">
-                            <span className="w-1 h-1 rounded-full bg-slate-500"></span>
-                            <span translate="no" className="notranslate">KẾT QUẢ XỬ LÝ CHI TIẾT:</span>
+                          <div className="text-[8px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center justify-between select-none">
+                            <div className="flex items-center gap-1">
+                              <span className="w-1 h-1 rounded-full bg-slate-500"></span>
+                              <span translate="no" className="notranslate">KẾT QUẢ XỬ LÝ CHI TIẾT:</span>
+                            </div>
+                            {currentUser?.role === UserRole.ADMIN && (
+                              <div className="flex items-center gap-1.5 bg-slate-100/80 px-1 py-0.5 rounded border border-slate-200">
+                                {report.resolutions.map((res, idx) => (
+                                  <div key={res.id} className="flex items-center gap-0.5 shrink-0 scale-90">
+                                    {report.resolutions.length > 1 && (
+                                      <span className="text-[7.5px] text-slate-600 font-extrabold select-none mr-0.5">
+                                        BP{idx + 1}
+                                      </span>
+                                    )}
+                                    <button
+                                      type="button"
+                                      title={`Sửa kết quả ${res.departmentName}`}
+                                      onClick={() => {
+                                        setEditingResolutionReportId(report.id);
+                                        setEditingResolutionId(res.id);
+                                        setResDeptName(res.departmentName);
+                                        setResResultText(res.resultText);
+                                        setResStatus(res.status);
+                                      }}
+                                      className="p-0.5 text-slate-500 hover:text-indigo-600 rounded transition-colors cursor-pointer border-none bg-transparent"
+                                    >
+                                      <Edit className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      title={`Xóa kết quả ${res.departmentName}`}
+                                      onClick={() => {
+                                        setResolutionToDelete({ report, resId: res.id });
+                                      }}
+                                      className="p-0.5 text-slate-500 hover:text-rose-600 rounded transition-colors cursor-pointer border-none bg-transparent"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                           {report.resolutions.map((res) => (
                             <div key={res.id} className="text-[9px] bg-white p-1.5 rounded border border-slate-100 shadow-3xs relative">
@@ -3293,13 +3357,15 @@ App Link: ${window.location.origin}`;
                                 <span translate="no" className="notranslate font-bold text-slate-700">
                                   {res.departmentName}
                                 </span>
-                                <span translate="no" className={`notranslate text-[8px] font-extrabold px-1 py-0.2 rounded border uppercase scale-90 ${
-                                  res.status === "Đã xử lý"
-                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                    : "bg-amber-50 text-amber-700 border-amber-200"
-                                }`}>
-                                  {res.status}
-                                </span>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <span translate="no" className={`notranslate text-[8px] font-extrabold px-1 py-0.2 rounded border uppercase scale-90 ${
+                                    res.status === "Đã xử lý"
+                                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                      : "bg-amber-50 text-amber-700 border-amber-200"
+                                  }`}>
+                                    {res.status}
+                                  </span>
+                                </div>
                               </div>
                               <p translate="no" className="notranslate text-slate-600 font-medium leading-relaxed whitespace-pre-wrap pl-1.5 border-l border-slate-200">
                                 {res.resultText}
@@ -3319,10 +3385,15 @@ App Link: ${window.location.origin}`;
                       {editingResolutionReportId === report.id && (
                         <div className="mt-2 p-2.5 bg-indigo-50/50 border border-indigo-100 rounded-lg flex flex-col gap-2 transition-all duration-300">
                           <div className="text-[9.5px] font-bold text-indigo-800 flex items-center justify-between">
-                            <span translate="no" className="notranslate">✍️ GHI NHẬN KẾT QUẢ XỬ LÝ KPH:</span>
+                            <span translate="no" className="notranslate">
+                              {editingResolutionId ? "✏️ CẬP NHẬT KẾT QUẢ XỬ LÝ KPH:" : "✍️ GHI NHẬN KẾT QUẢ XỬ LÝ KPH:"}
+                            </span>
                             <button
                               type="button"
-                              onClick={() => setEditingResolutionReportId(null)}
+                              onClick={() => {
+                                setEditingResolutionReportId(null);
+                                setEditingResolutionId(null);
+                              }}
                               className="text-slate-400 hover:text-slate-600 font-extrabold text-[11px] p-0.5 border-none bg-transparent cursor-pointer"
                             >
                               ✕
@@ -3389,7 +3460,10 @@ App Link: ${window.location.origin}`;
                           <div className="flex justify-end gap-1.5 pt-1 border-t border-indigo-100/30">
                             <button
                               type="button"
-                              onClick={() => setEditingResolutionReportId(null)}
+                              onClick={() => {
+                                setEditingResolutionReportId(null);
+                                setEditingResolutionId(null);
+                              }}
                               className="text-[9px] font-bold text-slate-550 hover:text-slate-700 px-2 py-0.5 rounded border border-slate-200 hover:bg-slate-100 cursor-pointer active:scale-95 transition-all"
                             >
                               <span translate="no" className="notranslate">Hủy</span>
@@ -3419,14 +3493,21 @@ App Link: ${window.location.origin}`;
                                   return `${d}/${m}/${y} ${h}:${min}:${sec}`;
                                 };
 
-                                const existingIndex = currentResolutions.findIndex(
-                                  (r) => r.departmentName.trim().toLowerCase() === resDeptName.trim().toLowerCase()
-                                );
+                                let existingIndex = -1;
+                                if (editingResolutionId) {
+                                  existingIndex = currentResolutions.findIndex(
+                                    (r) => r.id === editingResolutionId
+                                  );
+                                } else {
+                                  existingIndex = currentResolutions.findIndex(
+                                    (r) => r.departmentName.trim().toLowerCase() === resDeptName.trim().toLowerCase()
+                                  );
+                                }
 
                                 const newRes: QualityReportResolution = {
                                   id: existingIndex >= 0 ? currentResolutions[existingIndex].id : `res-${Date.now()}`,
                                   departmentName: resDeptName.trim(),
-                                  handlerName: currentUser?.fullName || "Kiểm soát viên",
+                                  handlerName: existingIndex >= 0 ? currentResolutions[existingIndex].handlerName : (currentUser?.fullName || "Kiểm soát viên"),
                                   status: resStatus,
                                   resultText: resResultText.trim(),
                                   updatedAt: getFormattedNow()
@@ -3448,6 +3529,7 @@ App Link: ${window.location.origin}`;
                                 }
 
                                 setEditingResolutionReportId(null);
+                                setEditingResolutionId(null);
                                 showToast("Đã lưu kết quả xử lý thành công! ✅");
                               }}
                               className="text-[9px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1 rounded shadow-xs cursor-pointer active:scale-95 transition-all border-none"
@@ -3973,18 +4055,42 @@ App Link: ${window.location.origin}`;
                     })()}
                     {(() => {
                       const isAcknowledged = report.sharedBy?.some(name => name.startsWith(currentUser?.fullName || "Kiểm soát viên")) || false;
+                      const ackCount = report.sharedBy?.length || 0;
                       return (
-                        <button
-                          type="button"
-                          onClick={() => toggleAcknowledge(report.id)}
-                          className={`flex items-center gap-1 p-1 px-1.5 rounded-lg border transition-all hover:scale-110 active:scale-95 cursor-pointer bg-transparent whitespace-nowrap shrink-0 ${
-                            isAcknowledged ? "text-sky-700 border-sky-200 bg-sky-50 animate-pulse" : "text-slate-400 hover:text-sky-600 border-slate-200 bg-white"
-                          }`}
-                          title={isAcknowledged ? "Đã tiếp nhận" : "Tiếp nhận"}
-                        >
-                          <Check className={`w-3.5 h-3.5 shrink-0 ${isAcknowledged ? "stroke-[3px] text-sky-700" : "stroke-[2px]"}`} />
-                          <span className="text-[9.5px] font-black font-sans uppercase tracking-tight whitespace-nowrap"><T>Tiếp nhận/ Xử lý</T></span>
-                        </button>
+                        <div className="flex items-center gap-1 bg-slate-50 border border-slate-100 rounded-lg py-0.5 px-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => toggleAcknowledge(report.id)}
+                            className={`flex items-center gap-1 p-1 rounded transition-all hover:scale-110 active:scale-95 cursor-pointer bg-transparent whitespace-nowrap shrink-0 border-none ${
+                              isAcknowledged ? "text-sky-700 font-bold" : "text-slate-400 hover:text-sky-600"
+                            }`}
+                            title={isAcknowledged ? "Đã tiếp nhận" : "Tiếp nhận"}
+                          >
+                            <Check className={`w-3.5 h-3.5 shrink-0 ${isAcknowledged ? "stroke-[3px] text-sky-700" : "stroke-[2px]"}`} />
+                            <span className="text-[9.5px] font-black font-sans uppercase tracking-tight whitespace-nowrap">
+                              <span translate="no" className="notranslate"><T>Tiếp nhận/ Xử lý</T></span>
+                            </span>
+                          </button>
+                          
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (ackCount > 0) {
+                                setShowAcksListReport(report);
+                              }
+                            }}
+                            disabled={ackCount === 0}
+                            className={`text-[10px] font-black font-sans px-1.5 py-0.5 rounded cursor-pointer transition-all border-none ${
+                              ackCount > 0 
+                                ? "text-sky-700 hover:text-sky-800 bg-sky-50 hover:bg-sky-100 hover:scale-105" 
+                                : "text-slate-400 bg-transparent cursor-default"
+                            }`}
+                            title={ackCount > 0 ? "Xem ai đã tiếp nhận/ xử lý" : "Chưa có lượt tiếp nhận"}
+                          >
+                            <span translate="no" className="notranslate"><T>{ackCount}</T></span>
+                          </button>
+                        </div>
                       );
                     })()}
                   </div>
@@ -4266,6 +4372,50 @@ App Link: ${window.location.origin}`;
         </div>
       )}
 
+      {resolutionToDelete && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center p-4 z-50 select-none animate-fadeIn">
+          <div className="bg-white rounded-2xl w-full max-w-[290px] p-5 shadow-2xl border border-slate-100 flex flex-col items-center text-center animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 bg-rose-50 rounded-full flex items-center justify-center mb-3 text-rose-500">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <h3 className="font-bold text-slate-950 text-sm mb-2">
+              <span translate="no" className="notranslate">Xác nhận xóa kết quả?</span>
+            </h3>
+            <p className="text-slate-500 text-[11px] mb-5 leading-relaxed">
+              <span translate="no" className="notranslate">Quản trị viên có chắc chắn muốn XÓA kết quả xử lý chi tiết này không? Thao tác này không thể khôi phục.</span>
+            </p>
+            <div className="grid grid-cols-2 gap-2.5 w-full">
+              <button
+                type="button"
+                onClick={() => setResolutionToDelete(null)}
+                className="py-2.5 text-[11px] font-bold border border-slate-200 rounded-xl text-slate-650 hover:bg-slate-50 active:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <span translate="no" className="notranslate">QUAY LẠI</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const { report, resId } = resolutionToDelete;
+                  const currentResolutions = report.resolutions ? [...report.resolutions] : [];
+                  const updatedResolutions = currentResolutions.filter((r) => r.id !== resId);
+                  if (onUpdateReport) {
+                    onUpdateReport({
+                      ...report,
+                      resolutions: updatedResolutions
+                    });
+                    showToast("Đã xóa kết quả xử lý thành công! 🗑️");
+                  }
+                  setResolutionToDelete(null);
+                }}
+                className="py-2.5 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl transition-colors shadow-sm cursor-pointer"
+              >
+                <span translate="no" className="notranslate">ĐỒNG Ý</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {shareModalReport && (
         <div className="fixed lg:absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-end justify-center z-50 select-none">
           <div className="bg-white rounded-t-3xl w-full max-h-[85%] overflow-y-auto p-5 pb-8 flex flex-col shadow-2xl border-t border-slate-100">
@@ -4443,6 +4593,80 @@ App Link: ${window.location.origin}`}
                       </span>
                     </div>
                   ))
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {showAcksListReport && (() => {
+        const activeReport = reports.find(r => r.id === showAcksListReport.id) || showAcksListReport;
+        const displayAcks = activeReport.sharedBy || [];
+        return (
+          <div 
+            onClick={() => setShowAcksListReport(null)}
+            className="fixed lg:absolute inset-0 bg-slate-900/65 backdrop-blur-xs flex items-end justify-center z-50 select-none animate-fadeIn cursor-pointer"
+          >
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-t-3xl w-full max-h-[70%] overflow-hidden flex flex-col shadow-2xl border-t border-slate-100 animate-slideUp cursor-default"
+            >
+              {/* Header */}
+              <div className="flex justify-between items-center px-4 py-3.5 border-b border-sky-100 shrink-0 bg-sky-50/50">
+                <div className="flex items-center gap-1.5 text-sky-700">
+                  <Check className="w-4 h-4 text-sky-600 stroke-[3px]" />
+                  <span className="font-extrabold text-[12px] uppercase tracking-tight font-sans">
+                    <span translate="no" className="notranslate"><T>DANH SÁCH TIẾP NHẬN & XỬ LÝ ({displayAcks.length})</T></span>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAcksListReport(null)}
+                  className="w-7 h-7 rounded-full bg-slate-150 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-xs border-none"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* List of Who Acknowledged */}
+              <div className="flex-1 overflow-y-auto p-4 bg-slate-50/30 space-y-2 pb-8">
+                {displayAcks.length === 0 ? (
+                  <div className="py-10 text-center text-slate-400 text-xs font-medium">
+                    <span translate="no" className="notranslate"><T>Chưa có ai tiếp nhận/ xử lý nội dung này.</T></span>
+                  </div>
+                ) : (
+                  displayAcks.map((name, i) => {
+                    const deptMatch = name.match(/\(([^)]+)\)/);
+                    const cleanName = name.replace(/\([^)]+\)/g, "").trim();
+                    const deptName = deptMatch ? deptMatch[1] : "";
+                    
+                    return (
+                      <div
+                        key={i}
+                        className="flex items-center justify-between p-2.5 rounded-xl border border-slate-150 bg-white shadow-3xs"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7.5 h-7.5 rounded-full bg-sky-50 border border-sky-100 flex items-center justify-center text-sky-600 text-xs font-extrabold select-none">
+                            {cleanName.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-xs font-extrabold text-slate-800">
+                              <span translate="no" className="notranslate"><T>{cleanName}</T></span>
+                            </span>
+                            {deptName && (
+                              <span className="text-[9px] text-slate-500 font-medium">
+                                <span translate="no" className="notranslate">{deptName}</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <span className="text-[9px] bg-sky-50 text-sky-700 font-extrabold px-2.5 py-0.5 rounded-full border border-sky-100 tracking-tight flex items-center gap-0.5">
+                          ✓ <span translate="no" className="notranslate"><T>Tiếp nhận</T></span>
+                        </span>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>

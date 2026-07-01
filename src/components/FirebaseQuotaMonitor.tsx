@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { 
   Cloud, Database, Users, AlertTriangle, CheckCircle2, 
-  Trash2, RefreshCw, BookOpen, HardDrive, ArrowRight, ShieldCheck, Zap, Activity
+  RefreshCw, BookOpen, HardDrive, ShieldCheck, Zap, Activity
 } from "lucide-react";
 
 interface FirebaseQuotaMonitorProps {
@@ -31,7 +31,7 @@ export default function FirebaseQuotaMonitor({
     simulatedDailyDeletes: 42
   });
 
-  // Calculate dynamic data footprint based on actual memory arrays
+  // Calculate data footprint
   const calculateDataSizeKb = () => {
     try {
       const payload = {
@@ -42,9 +42,7 @@ export default function FirebaseQuotaMonitor({
         productionRequests
       };
       const jsonStr = JSON.stringify(payload);
-      // UTF-8 bytes approximation (1 byte per character)
       const bytes = jsonStr.length;
-      // Convert to KB with a baseline of 180KB for firebase indexes and config definitions
       const kb = (bytes / 1024) + 184.5;
       return parseFloat(kb.toFixed(2));
     } catch (e) {
@@ -55,36 +53,31 @@ export default function FirebaseQuotaMonitor({
   const dbSizeKb = calculateDataSizeKb() - (optimizationSavedKb || 0);
   const dbSizeMb = dbSizeKb / 1024;
   
-  // Spark plan limits (Firebase Free Quotas)
   const LIMITS = {
     storageKb: 1024 * 1024, // 1 GB in KB
-    storageMb: 1024, // 1 GB in MB
-    mauUsers: 50000, // 50,000 monthly active users for Auth free tier
-    dailyReads: 50000, // 50,000 reads per day
-    dailyWrites: 20000, // 20,000 writes per day
-    dailyDeletes: 20000 // 20,000 deletes per day
+    storageMb: 1024,
+    mauUsers: 50000,
+    dailyReads: 50000,
+    dailyWrites: 20000,
+    dailyDeletes: 20000
   };
 
-  // Calculations for percentages
   const storagePercentage = (dbSizeKb / LIMITS.storageKb) * 100;
   const usersPercentage = (users.length / LIMITS.mauUsers) * 100;
   const readsPercentage = ((realtimeMetrics.simulatedDailyReads + sessionReads) / LIMITS.dailyReads) * 100;
   const writesPercentage = ((realtimeMetrics.simulatedDailyWrites + sessionWrites) / LIMITS.dailyWrites) * 100;
 
-  // Determine overall health level
   const maxPercentage = Math.max(storagePercentage, usersPercentage, readsPercentage, writesPercentage);
   
-  let healthStatus = "safe"; // safe, warning, critical
+  let healthStatus = "safe";
   if (maxPercentage > 80) {
     healthStatus = "critical";
   } else if (maxPercentage > 50) {
     healthStatus = "warning";
   }
 
-  // Live effect - simulate minor active reads and writes during workspace interactions
   useEffect(() => {
     const interval = setInterval(() => {
-      // Simulate passive background reads from other factory users
       setRealtimeMetrics(prev => ({
         ...prev,
         simulatedDailyReads: prev.simulatedDailyReads + Math.floor(Math.random() * 3) + 1
@@ -116,7 +109,6 @@ export default function FirebaseQuotaMonitor({
 
   return (
     <div className="space-y-6 animate-fade-in text-slate-800">
-      {/* 1. Header Hero Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-blue-950 text-white rounded-2xl p-6 shadow-md border border-slate-800 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/5 rounded-full blur-2xl -ml-16 -mb-16 pointer-events-none" />
@@ -163,7 +155,6 @@ export default function FirebaseQuotaMonitor({
         </div>
       </div>
 
-      {/* 2. Health Threshold and Alerts */}
       <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-4">
         <h3 className="font-extrabold text-slate-800 text-xs uppercase tracking-wide border-l-2 border-emerald-500 pl-2">
           <span translate="no" className="notranslate">Hệ Thống Phân Tích & Cảnh Báo Chủ Động</span>
@@ -210,7 +201,7 @@ export default function FirebaseQuotaMonitor({
             {healthStatus === "critical" && (
               <div className="space-y-2">
                 <div className="w-16 h-16 rounded-full bg-rose-50 border border-rose-200 flex items-center justify-center mx-auto text-rose-500 shadow-sm">
-                  <AlertTriangle className="w-8 h-8 animate-ping" />
+                  <AlertTriangle className="w-8 h-8" />
                 </div>
                 <div className="pt-2">
                   <span className="bg-rose-100 text-rose-850 border border-rose-200 text-[10px] font-black px-2.5 py-1 rounded-full uppercase">
@@ -266,9 +257,7 @@ export default function FirebaseQuotaMonitor({
         </div>
       </div>
 
-      {/* 3. Detailed Quota Gauges and Progress */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Firestore Storage & Accounts */}
         <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-4">
           <h4 className="font-extrabold text-slate-800 text-xs uppercase tracking-wide flex items-center gap-1.5 border-b border-slate-100 pb-3">
             <HardDrive className="w-4 h-4 text-slate-500" />
@@ -276,7 +265,6 @@ export default function FirebaseQuotaMonitor({
           </h4>
 
           <div className="space-y-4">
-            {/* Storage Metric */}
             <div className="space-y-1.5">
               <div className="flex justify-between items-center text-xs">
                 <span className="font-bold text-slate-700 flex items-center gap-1">
@@ -299,7 +287,6 @@ export default function FirebaseQuotaMonitor({
               </div>
             </div>
 
-            {/* Users Metric */}
             <div className="space-y-1.5">
               <div className="flex justify-between items-center text-xs">
                 <span className="font-bold text-slate-700 flex items-center gap-1">
@@ -322,7 +309,6 @@ export default function FirebaseQuotaMonitor({
               </div>
             </div>
 
-            {/* Breakdown box */}
             <div className="bg-slate-50 rounded-xl p-3 border border-slate-150 space-y-2">
               <span className="text-[10px] font-black text-slate-400 uppercase block tracking-wider">
                 <span translate="no" className="notranslate">CHI TIẾT BẢN GHI ĐÃ TẢI</span>
@@ -349,7 +335,6 @@ export default function FirebaseQuotaMonitor({
           </div>
         </div>
 
-        {/* Firestore Operations (Daily Reads/Writes) */}
         <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-4">
           <h4 className="font-extrabold text-slate-800 text-xs uppercase tracking-wide flex items-center gap-1.5 border-b border-slate-100 pb-3">
             <Activity className="w-4 h-4 text-slate-500" />
@@ -357,7 +342,6 @@ export default function FirebaseQuotaMonitor({
           </h4>
 
           <div className="space-y-4">
-            {/* Daily Reads */}
             <div className="space-y-1.5">
               <div className="flex justify-between items-center text-xs">
                 <span className="font-bold text-slate-700 flex items-center gap-1">
@@ -380,7 +364,6 @@ export default function FirebaseQuotaMonitor({
               </div>
             </div>
 
-            {/* Daily Writes */}
             <div className="space-y-1.5">
               <div className="flex justify-between items-center text-xs">
                 <span className="font-bold text-slate-700 flex items-center gap-1">
@@ -412,7 +395,6 @@ export default function FirebaseQuotaMonitor({
         </div>
       </div>
 
-      {/* 4. Firebase Optimization & Budget Configuration Handbook */}
       <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-4">
         <h3 className="font-extrabold text-slate-800 text-xs uppercase tracking-wide flex items-center gap-2 border-b border-slate-100 pb-3">
           <BookOpen className="w-4 h-4 text-emerald-600" />
