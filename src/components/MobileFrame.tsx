@@ -958,49 +958,6 @@ export default function MobileFrame({
   const [showMobileCloudQuota, setShowMobileCloudQuota] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isCapturingScreenshot, setIsCapturingScreenshot] = useState(false);
-  const [isNativeScrollMode, setIsNativeScrollMode] = useState(false);
-  const [showScreenshotMenu, setShowScreenshotMenu] = useState(false);
-
-  useEffect(() => {
-    if (isNativeScrollMode) {
-      document.body.classList.add("native-scroll-active");
-      document.documentElement.classList.add("native-scroll-active");
-      
-      const originalBodyOverflow = document.body.style.overflow;
-      const originalBodyHeight = document.body.style.height;
-      const originalHtmlOverflow = document.documentElement.style.overflow;
-      const originalHtmlHeight = document.documentElement.style.height;
-
-      document.body.style.setProperty("overflow", "visible", "important");
-      document.body.style.setProperty("height", "auto", "important");
-      document.documentElement.style.setProperty("overflow", "visible", "important");
-      document.documentElement.style.setProperty("height", "auto", "important");
-
-      const parent = document.getElementById("mobile-viewport")?.parentElement;
-      if (parent) {
-        parent.style.setProperty("overflow", "visible", "important");
-        parent.style.setProperty("height", "auto", "important");
-        parent.style.setProperty("display", "block", "important");
-      }
-
-      showToast("Đã bật chế độ Cuộn Hệ Thống! Bạn có thể Chụp cuộn bằng điện thoại của mình ngay bây giờ. 📱📸");
-
-      return () => {
-        document.body.classList.remove("native-scroll-active");
-        document.documentElement.classList.remove("native-scroll-active");
-        document.body.style.overflow = originalBodyOverflow;
-        document.body.style.height = originalBodyHeight;
-        document.documentElement.style.overflow = originalHtmlOverflow;
-        document.documentElement.style.height = originalHtmlHeight;
-        if (parent) {
-          parent.style.overflow = "";
-          parent.style.height = "";
-          parent.style.display = "";
-        }
-      };
-    }
-  }, [isNativeScrollMode]);
   const [editingDirectiveId, setEditingDirectiveId] = useState<string | null>(null);
   const [editingDirectiveText, setEditingDirectiveText] = useState("");
   const [showLikesListReport, setShowLikesListReport] = useState<QualityReport | null>(null);
@@ -1479,160 +1436,7 @@ App Link: ${window.location.origin}`;
     }
   };
   
-  const handleCaptureScrollingScreenshot = async () => {
-    if (isCapturingScreenshot) return;
-    setIsCapturingScreenshot(true);
-    showToast("Đang chuẩn bị chụp cuộn màn hình ở mức tối đa... 📸");
-
-    // Đợi 200ms để đảm bảo toast đã hiển thị và các hiệu ứng ổn định
-    await new Promise((resolve) => setTimeout(resolve, 200));
-
-    const viewport = viewportRef.current || document.getElementById("mobile-viewport");
-    if (!viewport) {
-      showToast("Không tìm thấy giao diện điện thoại để chụp! ❌");
-      setIsCapturingScreenshot(false);
-      return;
-    }
-
-    // Tìm tất cả các phần tử con có overflow cuộn dọc
-    const scrollElements = Array.from(viewport.querySelectorAll(".overflow-y-auto, .overflow-y-scroll, [class*='overflow-y-']")) as HTMLElement[];
-    if (scrollContainerRef.current && !scrollElements.includes(scrollContainerRef.current)) {
-      scrollElements.push(scrollContainerRef.current);
-    }
-
-    // Lưu lại style cũ của viewport và các phần tử cuộn để khôi phục sau khi chụp
-    const originalViewportStyle = {
-      height: viewport.style.height,
-      maxHeight: viewport.style.maxHeight,
-      overflow: viewport.style.overflow,
-      position: viewport.style.position,
-    };
-
-    const originalScrollStyles = scrollElements.map(el => ({
-      element: el,
-      height: el.style.height,
-      maxHeight: el.style.maxHeight,
-      overflow: el.style.overflow,
-      overflowY: el.style.overflowY,
-    }));
-
-    const originalGetComputedStyle = window.getComputedStyle;
-
-    try {
-      // Tạm thời hook getComputedStyle để chuyển đổi oklch/oklab colors sang rgb/rgba chuẩn tránh lỗi html2canvas
-      (window as any).getComputedStyle = function (el: HTMLElement, pseudoElt?: string) {
-        const style = originalGetComputedStyle(el, pseudoElt);
-        return new Proxy(style, {
-          get(target, prop) {
-            // Sử dụng Reflect.get(target, prop, target) thay vì target[prop] để bảo toàn 'this' context cho native getters tránh lỗi Illegal invocation
-            const val = Reflect.get(target, prop, target);
-            if (typeof prop === "string") {
-              if (prop === "getPropertyValue") {
-                return function (propertyName: string) {
-                  const val = target.getPropertyValue(propertyName);
-                  if (typeof val === "string" && (val.includes("oklch") || val.includes("oklab"))) {
-                    return convertModernColorsToRgb(val);
-                  }
-                  return val;
-                };
-              }
-              if (typeof val === "string" && (val.includes("oklch") || val.includes("oklab"))) {
-                return convertModernColorsToRgb(val);
-              }
-              if (typeof val === "function") {
-                return val.bind(target);
-              }
-              return val;
-            }
-            if (typeof val === "function") {
-              return val.bind(target);
-            }
-            return val;
-          }
-        });
-      };
-
-      // Thiết lập style tạm thời bung hết cỡ cho viewport để chụp cuộn tối đa
-      viewport.style.setProperty("height", "auto", "important");
-      viewport.style.setProperty("max-height", "none", "important");
-      viewport.style.setProperty("overflow", "visible", "important");
-
-      // Thiết lập style tạm thời bung hết cỡ cho toàn bộ các danh sách cuộn bên trong
-      scrollElements.forEach(el => {
-        el.style.setProperty("height", "auto", "important");
-        el.style.setProperty("max-height", "none", "important");
-        el.style.setProperty("overflow", "visible", "important");
-        el.style.setProperty("overflow-y", "visible", "important");
-      });
-
-      // Đợi 250ms để layout vẽ lại hoàn chỉnh với chiều cao tự nhiên mới
-      await new Promise((resolve) => setTimeout(resolve, 250));
-
-      const unrolledHeight = viewport.offsetHeight || 1000;
-      let optimalScale = 1.8;
-      if (unrolledHeight > 6000) {
-        optimalScale = 0.85;
-      } else if (unrolledHeight > 4000) {
-        optimalScale = 1.1;
-      } else if (unrolledHeight > 2000) {
-        optimalScale = 1.4;
-      }
-
-      const canvas = await html2canvas(viewport, {
-        useCORS: true,
-        allowTaint: false,
-        scale: optimalScale,
-        backgroundColor: "#f8fafc",
-        logging: false,
-        scrollX: 0,
-        scrollY: 0,
-        windowWidth: viewport.offsetWidth,
-        windowHeight: unrolledHeight,
-      });
-
-      // Tạo đường dẫn tải xuống
-      const imageUri = canvas.toDataURL("image/png");
-      if (!imageUri || imageUri === "data:," || imageUri.length < 100) {
-        throw new Error("Không thể trích xuất dữ liệu ảnh do bộ nhớ thiết bị giới hạn. Vui lòng chuyển sang Chế độ Chụp Cuộn Hệ Thống!");
-      }
-
-      const now = new Date();
-      const d = String(now.getDate()).padStart(2, '0');
-      const m = String(now.getMonth() + 1).padStart(2, '0');
-      const y = String(now.getFullYear()).slice(-2);
-      const formattedDate = `${d}-${m}-${y}`; // format dd/mm/yy using safe filename hyphens
-
-      const link = document.createElement("a");
-      link.href = imageUri;
-      link.download = `4M1E1I_ChupCuon_${formattedDate}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      showToast("Đã chụp cuộn màn hình thành công! 🎉");
-    } catch (err: any) {
-      console.error("Lỗi khi chụp cuộn màn hình:", err);
-      showToast("Có lỗi xảy ra khi chụp cuộn màn hình: " + err.message);
-    } finally {
-      // Khôi phục getComputedStyle gốc
-      window.getComputedStyle = originalGetComputedStyle;
-
-      // Luôn luôn khôi phục lại styles ban đầu
-      viewport.style.height = originalViewportStyle.height;
-      viewport.style.maxHeight = originalViewportStyle.maxHeight;
-      viewport.style.overflow = originalViewportStyle.overflow;
-      viewport.style.position = originalViewportStyle.position;
-
-      originalScrollStyles.forEach(item => {
-        item.element.style.height = item.height;
-        item.element.style.maxHeight = item.maxHeight;
-        item.element.style.overflow = item.overflow;
-        item.element.style.overflowY = item.overflowY;
-      });
-
-      setIsCapturingScreenshot(false);
-    }
-  };
+  
 
   const handleViewportDoubleClick = (e?: React.MouseEvent) => {
     if (isFullscreen) {
@@ -2209,127 +2013,8 @@ App Link: ${window.location.origin}`;
         isRealMobile 
           ? "max-w-none rounded-none border-0 shadow-none" 
           : "max-w-[440px] lg:w-[375px] bg-slate-950 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl"
-      } ${
-        isNativeScrollMode 
-          ? "h-auto overflow-visible" 
-          : "h-[100dvh] lg:h-[780px] overflow-hidden"
-      }`}
+      } h-[100dvh] lg:h-[780px] overflow-hidden`}
     >
-      {isNativeScrollMode && (
-        <style>{`
-          /* ONLY target mobile-viewport's own children for natural expansion */
-          .native-scroll-active #mobile-viewport {
-            height: auto !important;
-            max-height: none !important;
-            overflow: visible !important;
-            border: none !important;
-            border-radius: 0 !important;
-            box-shadow: none !important;
-            margin: 0 auto !important;
-            padding-top: 50px !important; /* Space for the yellow fixed banner */
-            background: #ffffff !important;
-          }
-          .native-scroll-active #mobile-viewport .overflow-y-auto,
-          .native-scroll-active #mobile-viewport .overflow-y-scroll,
-          .native-scroll-active #mobile-viewport [class*='overflow-y-'] {
-            height: auto !important;
-            max-height: none !important;
-            overflow: visible !important;
-            overflow-y: visible !important;
-          }
-          .native-scroll-active #mobile-viewport .flex-1 {
-            flex: none !important;
-          }
-
-          /* Hide other irrelevant desktop structures and UI chromes entirely when capturing */
-          .native-scroll-active .main-app-header,
-          .native-scroll-active .dashboard-desktop-wrapper,
-          .native-scroll-active .header-mobile-controls,
-          .native-scroll-active #mobile-header,
-          .native-scroll-active #mobile-bottom-nav,
-          .native-scroll-active #float-home-qr,
-          .native-scroll-active #float-home-trash,
-          .native-scroll-active button[title='Công cụ Chụp ảnh'],
-          .native-scroll-active button[title='Tải lại dữ liệu'],
-          .native-scroll-active .absolute.bottom-20,
-          .native-scroll-active .bg-slate-800\\/90,
-          .native-scroll-active #floating-menu-control-bar {
-            display: none !important;
-          }
-
-          /* Make the containing dock responsive and scroll-transparent */
-          .native-scroll-active .mobile-preview-dock {
-            width: 100% !important;
-            max-width: none !important;
-            border: none !important;
-            padding: 0 !important;
-            background: #ffffff !important;
-            height: auto !important;
-            overflow: visible !important;
-          }
-
-          /* Ensure body and html can grow naturally with zero constraints */
-          html.native-scroll-active,
-          body.native-scroll-active,
-          #root.native-scroll-active,
-          .native-scroll-active {
-            height: auto !important;
-            min-height: 0 !important;
-            overflow: visible !important;
-            overflow-x: hidden !important;
-            background: #ffffff !important;
-            position: relative !important;
-          }
-          
-          /* Remove fixed and overflow-hidden classes of wrapping elements */
-          .native-scroll-active .min-h-screen {
-            display: block !important;
-            height: auto !important;
-            min-height: 0 !important;
-            overflow: visible !important;
-            background: #ffffff !important;
-            padding: 0 !important;
-          }
-          
-          /* Hide other irrelevant background spots and decorative circles */
-          .native-scroll-active .min-h-screen > .pointer-events-none,
-          .native-scroll-active [class*='bg-cyan-400'],
-          .native-scroll-active [class*='bg-[#6366f1]'] {
-            display: none !important;
-          }
-          
-          /* Target Admin Mobile Simulator Wrapper overlays in App.tsx */
-          .native-scroll-active .fixed.inset-0,
-          .native-scroll-active .fixed.inset-0.z-50 {
-            position: absolute !important;
-            display: block !important;
-            height: auto !important;
-            min-height: 0 !important;
-            overflow: visible !important;
-            background: transparent !important;
-            top: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            bottom: auto !important;
-          }
-          .native-scroll-active .fixed.inset-0 > div,
-          .native-scroll-active .fixed.inset-0.z-50 > div {
-            display: block !important;
-            height: auto !important;
-            min-height: 0 !important;
-            overflow: visible !important;
-          }
-        `}</style>
-      )}
-
-      {isNativeScrollMode && (
-        <div 
-          onClick={() => setIsNativeScrollMode(false)}
-          className="fixed top-0 left-0 right-0 z-[100000] bg-amber-500 hover:bg-amber-400 text-slate-950 px-4 py-3 text-xs font-black text-center flex items-center justify-center gap-1.5 cursor-pointer shadow-lg select-none border-b border-amber-600 font-sans"
-        >
-          <span translate="no" className="notranslate">📸 ĐANG TRONG CHẾ ĐỘ CHỤP CUỘN. Hãy dùng phím cứng điện thoại để chụp ngay! [X ĐÓNG]</span>
-        </div>
-      )}
 
       {/* Main Appsheet Blue Title Bar */}
       <div id="mobile-header" className={`text-white px-4 py-3 flex items-center justify-between shadow-md shrink-0 select-none ${
@@ -2344,11 +2029,11 @@ App Link: ${window.location.origin}`;
           </div>
           <T className="font-bold text-[13.6px] tracking-wide whitespace-nowrap">META 4M1E1I</T>
         </div>
-        <div className="flex items-center gap-[3px]">
+        <div className="flex items-center gap-[7.5px]">
           {currentUser?.role !== UserRole.STAFF && currentUser?.role !== UserRole.REVIEWER && (
             <button
               onClick={() => setShowTrash(true)}
-              className="relative hover:scale-115 active:scale-95 transition-transform p-0.5 cursor-pointer"
+              className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
               title="Lưu trữ / Thùng rác"
             >
               <Archive className="w-[18px] h-[18px] text-amber-300 hover:text-amber-100" />
@@ -2368,7 +2053,7 @@ App Link: ${window.location.origin}`;
                 setShowMobileCloudQuota(true);
                 setShowTrash(false);
               }}
-              className="relative hover:scale-115 active:scale-95 transition-transform p-0.5 cursor-pointer"
+              className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
               title="Giám sát Cloud Quota"
             >
               <Cloud className="w-[19px] h-[19px] text-sky-300 hover:text-sky-100" />
@@ -2377,7 +2062,7 @@ App Link: ${window.location.origin}`;
 
           <button
             onClick={() => setShowNotifDrawer(true)}
-            className="relative hover:scale-115 active:scale-95 transition-transform p-0.5 cursor-pointer"
+            className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
             title="Thông báo hệ thống"
           >
             <Bell className="w-[19px] h-[19px] text-white" />
@@ -2393,7 +2078,7 @@ App Link: ${window.location.origin}`;
           {currentUser?.role !== UserRole.ADMIN && (
             <button 
               onClick={handleRefreshClick} 
-              className="hover:scale-115 active:scale-95 transition-transform p-0.5 cursor-pointer"
+              className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
               title="Tải lại dữ liệu"
               disabled={isRefreshing}
             >
@@ -2409,7 +2094,7 @@ App Link: ${window.location.origin}`;
                 setOnlineTabFilter("ONLINE");
                 setShowOnlineUsersDrawer(true);
               }}
-              className="relative hover:scale-115 active:scale-95 transition-all p-0.5 cursor-pointer bg-transparent border-none outline-none"
+              className="relative hover:scale-115 active:scale-95 transition-all p-1 cursor-pointer bg-transparent border-none outline-none"
               title="Số nhân viên đang online"
             >
               <Users className="w-[18px] h-[18px] text-emerald-300 pointer-events-none" />
@@ -2418,18 +2103,6 @@ App Link: ${window.location.origin}`;
                   {onlineCount}
                 </span>
               </span>
-            </button>
-          )}
-
-          {/* ICON máy ảnh (Công cụ Chụp ảnh) đặt bên phải ICON người online cho tất cả vai trò */}
-          {!isNativeScrollMode && (
-            <button
-              type="button"
-              onClick={() => setShowScreenshotMenu(true)}
-              className="relative hover:scale-115 active:scale-95 transition-all p-0.5 cursor-pointer bg-transparent border-none outline-none flex items-center justify-center"
-              title="Công cụ Chụp ảnh"
-            >
-              <Camera className="w-[19px] h-[19px] text-white stroke-[2.2px]" />
             </button>
           )}
         </div>
@@ -2654,7 +2327,7 @@ App Link: ${window.location.origin}`;
           )}
         </div>
       ) : activeBottomTab === "PHAN_TICH" ? (
-        <div className={`flex-1 p-4 bg-slate-50 space-y-4 select-none ${isNativeScrollMode ? "overflow-visible h-auto" : "overflow-y-auto"}`}>
+        <div className="flex-1 p-4 bg-slate-50 space-y-4 select-none overflow-y-auto">
           {/* Header Analysis info with custom icon */}
           <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
             <div className="flex items-center gap-2 mb-1.5 flex-wrap">
@@ -2983,7 +2656,7 @@ App Link: ${window.location.origin}`;
           <div
             ref={scrollContainerRef}
             onScroll={handleScroll}
-            className={`flex-1 p-3 space-y-3.5 bg-slate-50 relative ${isNativeScrollMode ? "overflow-visible h-auto" : "overflow-y-auto"}`}
+            className="flex-1 p-3 space-y-3.5 bg-slate-50 relative overflow-y-auto"
           >
         {sortedReports.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-6 bg-white rounded-2xl border border-slate-200 bg-opacity-70">
@@ -5148,106 +4821,6 @@ App Link: ${window.location.origin}`}
         </div>
       )}
 
-      {showScreenshotMenu && (
-        <div className="fixed lg:absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-end justify-center z-[70] select-none animate-fadeIn">
-          <div className="bg-white rounded-t-3xl w-full max-h-[85%] overflow-hidden flex flex-col shadow-2xl border-t border-slate-100 animate-slideUp">
-            {/* Header */}
-            <div className="flex justify-between items-center px-4 py-4 border-b border-slate-100 shrink-0 bg-slate-50">
-              <div className="flex items-center gap-2">
-                <Camera className="w-5 h-5 text-blue-600 animate-pulse" />
-                <span className="font-extrabold text-[13px] text-[#1e3a8a] tracking-tight uppercase">
-                  <T>CHỤP CUỘN MÀN HÌNH 📸</T>
-                </span>
-              </div>
-              <button
-                onClick={() => setShowScreenshotMenu(false)}
-                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-xs"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* Menu options content */}
-            <div className="p-4 bg-slate-50/50 space-y-3 pb-8 overflow-y-auto">
-              <p className="text-[11px] text-slate-500 font-medium leading-relaxed text-center mb-1">
-                <T>Chọn phương thức phù hợp nhất với thiết bị của bạn để chụp lại toàn bộ báo cáo chất lượng 4M1E1I.</T>
-              </p>
-
-              {/* Option 1: Auto capture using html2canvas */}
-              <button
-                onClick={() => {
-                  setShowScreenshotMenu(false);
-                  handleCaptureScrollingScreenshot();
-                }}
-                disabled={isCapturingScreenshot}
-                className="w-full bg-white hover:bg-slate-50 border border-slate-200 p-3.5 rounded-2xl flex items-start gap-3.5 text-left transition-all active:scale-98 shadow-xs cursor-pointer"
-              >
-                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                  <Camera className="w-5 h-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-[11.5px] font-extrabold text-slate-800 flex items-center gap-1.5 leading-tight">
-                    <T>PHƯƠNG ÁN 1: CHỤP TỰ ĐỘNG (FILE PNG)</T>
-                    {isCapturingScreenshot && <span className="text-[8px] bg-amber-100 text-amber-700 font-black px-1.5 py-0.5 rounded animate-pulse">RUNNING</span>}
-                  </h4>
-                  <p className="text-[10px] text-slate-500 font-medium mt-1 leading-relaxed">
-                    <T>Hệ thống tự động cuộn hết danh sách báo cáo, chụp lại ảnh nét cao và tự động tải file ảnh PNG về máy bạn.</T>
-                  </p>
-                </div>
-              </button>
-
-              {/* Option 2: Native Scroll Capture */}
-              <button
-                onClick={() => {
-                  setShowScreenshotMenu(false);
-                  setIsNativeScrollMode(true);
-                }}
-                className={`w-full hover:bg-slate-50 border p-3.5 rounded-2xl flex items-start gap-3.5 text-left transition-all active:scale-98 shadow-xs cursor-pointer ${
-                  isNativeScrollMode ? "bg-amber-50/50 border-amber-300" : "bg-white border-slate-200"
-                }`}
-              >
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isNativeScrollMode ? "bg-amber-100 text-amber-700" : "bg-emerald-50 text-emerald-600"}`}>
-                  <Smartphone className="w-5 h-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-[11.5px] font-extrabold text-slate-800 flex items-center gap-1.5 leading-tight">
-                    <T>PHƯƠNG ÁN 2: CHỤP HỆ THỐNG ĐIỆN THOẠI</T>
-                    <span className="text-[8px] bg-emerald-100 text-emerald-700 font-black px-1.5 py-0.5 rounded">KHUYÊN DÙNG</span>
-                  </h4>
-                  <p className="text-[10px] text-slate-500 font-medium mt-1 leading-relaxed">
-                    <T>Bung dài màn hình tạm thời để bạn sử dụng chức năng "Chụp cuộn" mặc định có sẵn trên điện thoại của mình (bấm phím cứng). Giữ nguyên đầy đủ giao diện, màu sắc và thông tin chi tiết.</T>
-                  </p>
-                </div>
-              </button>
-
-              {/* Option 3: Clean printable extract */}
-              {setIsNativeScrollActive && (
-                <button
-                  onClick={() => {
-                    setShowScreenshotMenu(false);
-                    setIsNativeScrollActive(true, sortedReports);
-                  }}
-                  className={`w-full hover:bg-slate-50 border p-3.5 rounded-2xl flex items-start gap-3.5 text-left transition-all active:scale-98 shadow-xs cursor-pointer ${
-                    isNativeScrollActive ? "bg-amber-50/50 border-amber-300" : "bg-white border-slate-200"
-                  }`}
-                >
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isNativeScrollActive ? "bg-amber-100 text-amber-700" : "bg-indigo-50 text-indigo-600"}`}>
-                    <FileText className="w-5 h-5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-[11.5px] font-extrabold text-slate-800 flex items-center gap-1.5 leading-tight">
-                      <T>PHƯƠNG ÁN 3: BẢN IN TRÍCH XUẤT SẠCH (FILE PDF/ẢNH)</T>
-                    </h4>
-                    <p className="text-[10px] text-slate-500 font-medium mt-1 leading-relaxed">
-                      <T>Bản phẳng đơn giản tối ưu, không phím bấm hay viền điện thoại để dễ dàng in ấn tài liệu lưu trữ.</T>
-                    </p>
-                  </div>
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
