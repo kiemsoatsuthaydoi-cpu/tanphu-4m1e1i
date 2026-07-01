@@ -2344,11 +2344,11 @@ App Link: ${window.location.origin}`;
           </div>
           <T className="font-bold text-[13.6px] tracking-wide whitespace-nowrap">META 4M1E1I</T>
         </div>
-        <div className="flex items-center gap-[6.7px]">
+        <div className="flex items-center gap-[3px]">
           {currentUser?.role !== UserRole.STAFF && currentUser?.role !== UserRole.REVIEWER && (
             <button
               onClick={() => setShowTrash(true)}
-              className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
+              className="relative hover:scale-115 active:scale-95 transition-transform p-0.5 cursor-pointer"
               title="Lưu trữ / Thùng rác"
             >
               <Archive className="w-[18px] h-[18px] text-amber-300 hover:text-amber-100" />
@@ -2368,7 +2368,7 @@ App Link: ${window.location.origin}`;
                 setShowMobileCloudQuota(true);
                 setShowTrash(false);
               }}
-              className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
+              className="relative hover:scale-115 active:scale-95 transition-transform p-0.5 cursor-pointer"
               title="Giám sát Cloud Quota"
             >
               <Cloud className="w-[19px] h-[19px] text-sky-300 hover:text-sky-100" />
@@ -2377,7 +2377,7 @@ App Link: ${window.location.origin}`;
 
           <button
             onClick={() => setShowNotifDrawer(true)}
-            className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
+            className="relative hover:scale-115 active:scale-95 transition-transform p-0.5 cursor-pointer"
             title="Thông báo hệ thống"
           >
             <Bell className="w-[19px] h-[19px] text-white" />
@@ -2393,7 +2393,7 @@ App Link: ${window.location.origin}`;
           {currentUser?.role !== UserRole.ADMIN && (
             <button 
               onClick={handleRefreshClick} 
-              className="hover:scale-115 active:scale-95 transition-transform cursor-pointer"
+              className="hover:scale-115 active:scale-95 transition-transform p-0.5 cursor-pointer"
               title="Tải lại dữ liệu"
               disabled={isRefreshing}
             >
@@ -2409,7 +2409,7 @@ App Link: ${window.location.origin}`;
                 setOnlineTabFilter("ONLINE");
                 setShowOnlineUsersDrawer(true);
               }}
-              className="relative hover:scale-115 active:scale-95 transition-all p-1 cursor-pointer bg-transparent border-none outline-none"
+              className="relative hover:scale-115 active:scale-95 transition-all p-0.5 cursor-pointer bg-transparent border-none outline-none"
               title="Số nhân viên đang online"
             >
               <Users className="w-[18px] h-[18px] text-emerald-300 pointer-events-none" />
@@ -2426,7 +2426,7 @@ App Link: ${window.location.origin}`;
             <button
               type="button"
               onClick={() => setShowScreenshotMenu(true)}
-              className="relative hover:scale-115 active:scale-95 transition-all p-1 cursor-pointer bg-transparent border-none outline-none flex items-center justify-center"
+              className="relative hover:scale-115 active:scale-95 transition-all p-0.5 cursor-pointer bg-transparent border-none outline-none flex items-center justify-center"
               title="Công cụ Chụp ảnh"
             >
               <Camera className="w-[19px] h-[19px] text-white stroke-[2.2px]" />
