@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from "react";
 import html2canvas from "html2canvas";
-import { Search, RotateCw, RotateCcw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle } from "lucide-react";
+import { Search, RotateCw, RotateCcw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, Cloud } from "lucide-react";
 import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Company, ChatMessage, QualityReportResolution, QualityReportReplication } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
 import { QRCodeSVG } from "qrcode.react";
 import { isSameBranchOrFactory } from "../utils/branchHelpers";
 import { AutoImageSlider } from "./AutoImageSlider";
+import FirebaseQuotaMonitor from "./FirebaseQuotaMonitor";
 
 function convertModernColorsToRgb(cssValue: string): string {
   if (!cssValue || typeof cssValue !== "string") return cssValue;
@@ -948,6 +949,7 @@ export default function MobileFrame({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showMobileCloudQuota, setShowMobileCloudQuota] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isCapturingScreenshot, setIsCapturingScreenshot] = useState(false);
@@ -1241,7 +1243,7 @@ App Link: ${window.location.origin}`;
 👤 Người đăng: ${report.uploaderName}
 📂 Loại biến động: ${report.category}
 📝 Nội dung: ${report.content}
-${report.notes ? `✍️ Ghi chú: ${report.notes}\n` : ""}${report.imageUrl ? `������ Hình ảnh minh chứng: ${report.imageUrl}\n` : ""}
+${report.notes ? `✍️ Ghi chú: ${report.notes}\n` : ""}${report.imageUrl ? `📷 Hình ảnh minh chứng: ${report.imageUrl}\n` : ""}
 App Link: ${window.location.origin}`;
 
     const reportUrl = `${window.location.origin}?reportId=${report.id}`;
@@ -2310,7 +2312,18 @@ App Link: ${window.location.origin}`;
             </button>
           )}
 
-
+          {(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) && (
+            <button
+              onClick={() => {
+                setShowMobileCloudQuota(true);
+                setShowTrash(false);
+              }}
+              className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
+              title="Giám sát Cloud Quota"
+            >
+              <Cloud className="w-[19px] h-[19px] text-sky-300 hover:text-sky-100" />
+            </button>
+          )}
 
           <button
             onClick={() => setShowNotifDrawer(true)}
@@ -2324,17 +2337,7 @@ App Link: ${window.location.origin}`;
               </span>
             )}
           </button>
-          <button 
-            onClick={toggleFullscreen}
-            className="hover:scale-115 active:scale-95 transition-transform"
-            title={isFullscreen ? "Thoát toàn màn hình" : "Bung toàn màn hình"}
-          >
-            {isFullscreen ? (
-              <Minimize className="w-[18px] h-[18px] text-white" />
-            ) : (
-              <Maximize className="w-[18px] h-[18px] text-white" />
-            )}
-          </button>
+          
           
 
           {currentUser?.role !== UserRole.ADMIN && (
@@ -2478,7 +2481,29 @@ App Link: ${window.location.origin}`;
       )}
 
       {/* Main card list scroll area */}
-      {showTrash ? (
+      {showMobileCloudQuota ? (
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 relative">
+          <div className="flex items-center justify-between mb-2 border-b border-slate-200 pb-3">
+            <button
+              onClick={() => setShowMobileCloudQuota(false)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-black rounded-lg border-none cursor-pointer transition-all flex items-center"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 mr-1" />
+              <T><span translate="no" className="notranslate">Quay Lại</span></T>
+            </button>
+            <span className="bg-blue-100 text-blue-800 text-[8px] font-black px-2 py-0.5 rounded-full uppercase select-none">
+              <span translate="no" className="notranslate">Firebase Quota</span>
+            </span>
+          </div>
+
+          <FirebaseQuotaMonitor
+            reports={reports}
+            users={users}
+            chats={chats}
+            onShowToast={(msg) => showToast(msg)}
+          />
+        </div>
+      ) : showTrash ? (
         <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-slate-50 relative">
           {/* Trash Header Panel */}
           <div className="bg-slate-900 text-white rounded-xl p-3 shadow-md border-b-4 border-rose-500">

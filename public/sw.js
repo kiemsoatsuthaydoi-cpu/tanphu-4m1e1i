@@ -62,11 +62,15 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SET_BADGE') {
     const count = event.data.count;
-    if (navigator.setAppBadge) {
+    if (self.registration && self.registration.setBadge) {
+      self.registration.setBadge(count).catch((err) => console.error('Error setting badge via SW registration:', err));
+    } else if (navigator && navigator.setAppBadge) {
       navigator.setAppBadge(count).catch((err) => console.error('Error setting badge from SW:', err));
     }
   } else if (event.data && event.data.type === 'CLEAR_BADGE') {
-    if (navigator.clearAppBadge) {
+    if (self.registration && self.registration.clearBadge) {
+      self.registration.clearBadge().catch((err) => console.error('Error clearing badge via SW registration:', err));
+    } else if (navigator && navigator.clearAppBadge) {
       navigator.clearAppBadge().catch((err) => console.error('Error clearing badge from SW:', err));
     }
   }

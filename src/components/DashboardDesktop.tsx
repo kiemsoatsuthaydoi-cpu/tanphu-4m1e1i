@@ -85,6 +85,7 @@ import { STANDARDIZED_QC_DEPT } from "../data";
 import { generateDailyReportPDF } from "../utils/pdfGenerator";
 import OrderPipeline from "./OrderPipeline";
 import { MentionInput, MentionTextArea } from "./MentionTextArea";
+import FirebaseQuotaMonitor from "./FirebaseQuotaMonitor";
 
 interface DashboardDesktopProps {
   currentUser: User;
@@ -562,7 +563,7 @@ export default function DashboardDesktop({
   onShowToast
 }: DashboardDesktopProps) {
   const [activeTab, setActiveTab] = useState<
-    "PHÊ_DUYỆT" | "MÃ_HÓA" | "THỐNG_KÊ" | "DỮ_LIỆU" | "QUY_CHẾ" | "CÁ_NHÂN" | "THÔNG_BÁO" | "TRAO_ĐỔI" | "TRIỂN_KHAI" | "ĐỀ_XUẤT"
+    "PHÊ_DUYỆT" | "MÃ_HÓA" | "THỐNG_KÊ" | "DỮ_LIỆU" | "QUY_CHẾ" | "CÁ_NHÂN" | "THÔNG_BÁO" | "TRAO_ĐỔI" | "TRIỂN_KHAI" | "ĐỀ_XUẤT" | "QUOTA_CLOUD"
   >("PHÊ_DUYỆT");
 
   const [showTrashLogs, setShowTrashLogs] = useState(false);
@@ -1441,7 +1442,10 @@ export default function DashboardDesktop({
           <T className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest pl-3 block mb-3">PANEL ĐIỀU HÀNH</T>
           {[
             ...(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.REVIEWER
-              ? [{ id: "PHÊ_DUYỆT", label: "Phê duyệt nhân sự", icon: UserCheck, count: pendingApprovalsCount, color: "text-amber-400" }]
+              ? [
+                  { id: "PHÊ_DUYỆT", label: "Phê duyệt nhân sự", icon: UserCheck, count: pendingApprovalsCount, color: "text-amber-400" },
+                  { id: "QUOTA_CLOUD", label: "Giám sát Cloud Quota", icon: CloudLightning, color: "text-amber-300" }
+                ]
               : []),
             { id: "MÃ_HÓA", label: "Khai báo mã hóa", icon: Sliders, color: "text-purple-400" },
             { id: "TRIỂN_KHAI", label: "Triển khai đơn hàng", icon: Package, color: "text-rose-400" },
@@ -3945,6 +3949,18 @@ export default function DashboardDesktop({
                 </div>
               </div>
             </div>
+          )}
+
+          {/* TAB: CLOUD QUOTA MONITOR */}
+          {activeTab === "QUOTA_CLOUD" && (
+            <FirebaseQuotaMonitor
+              reports={reports}
+              users={users}
+              chats={chats}
+              broadcasts={broadcasts}
+              productionRequests={productionRequests}
+              onShowToast={onShowToast}
+            />
           )}
 
           {/* TAB 6: CÁ NHÂN (User profile) */}
