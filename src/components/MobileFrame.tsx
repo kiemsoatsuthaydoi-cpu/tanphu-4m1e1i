@@ -905,6 +905,26 @@ export default function MobileFrame({
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedFactoryFilter, setSelectedFactoryFilter] = useState<string | null>(null);
   const [selectedWeekFilter, setSelectedWeekFilter] = useState<string>("ALL");
+  const [activeFilterSheet, setActiveFilterSheet] = useState<"BRANCH" | "CATEGORY" | "WEEK" | null>(null);
+  const [onboardingStep, setOnboardingStep] = useState<number | null>(null);
+
+  useEffect(() => {
+    const completed = localStorage.getItem("tanphu_onboarding_completed_v3");
+    if (!completed) {
+      const timer = setTimeout(() => {
+        setOnboardingStep(1);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (onboardingStep === 2) {
+      setActiveBottomTab("BAO_CAO");
+      setShowFilters(true);
+      setShowTrash(false);
+    }
+  }, [onboardingStep]);
 
   const getWeekOptionLabel = (weeksAgo: number): string => {
     const d = new Date();
@@ -2155,6 +2175,14 @@ App Link: ${window.location.origin}`;
             <QrCode className="w-[18px] h-[18px] text-sky-200 hover:text-white" />
           </button>
           
+          <button
+            onClick={() => setOnboardingStep(1)}
+            className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
+            title="Hướng dẫn nhanh"
+          >
+            <Info className="w-[18px] h-[18px] text-teal-200 hover:text-white" />
+          </button>
+          
           {/* Bong bóng số báo tổng số người online */}
           {currentUser?.role !== UserRole.STAFF && currentUser?.role !== UserRole.REVIEWER && (
             <button 
@@ -2191,80 +2219,65 @@ App Link: ${window.location.origin}`;
                 placeholder="Tìm kiếm..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                autoComplete="one-time-code"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck="false"
                 className="w-full pl-6 pr-1 py-1 bg-slate-100 rounded-lg text-[9px] focus:ring-1 focus:ring-blue-500 outline-none placeholder:text-slate-400 text-slate-700 font-bold border-none h-[26px]"
               />
             </div>
 
             {/* Branch Dropdown */}
+            {/* Branch Dropdown */}
             <div className="flex-[0.75] min-w-0 max-w-[68px]">
-              <select
-                value={selectedFactoryFilter || "ALL"}
-                onChange={(e) => setSelectedFactoryFilter(e.target.value === "ALL" ? null : e.target.value)}
-                className="w-full bg-slate-100 text-[9px] font-extrabold text-slate-700 rounded-lg pl-1 pr-1.5 py-1 focus:ring-1 focus:ring-blue-500 outline-none border-none select-none h-[26px] truncate cursor-pointer"
+              <button
+                type="button"
+                onClick={() => setActiveFilterSheet("BRANCH")}
+                className="w-full bg-slate-100 text-[9px] font-extrabold text-slate-700 rounded-lg pl-1.5 pr-1 py-1 focus:ring-1 focus:ring-blue-500 outline-none border-none select-none h-[26px] truncate cursor-pointer flex items-center justify-between gap-0.5"
               >
-                <option value="ALL" translate="no" className="notranslate font-extrabold text-[9px]">TẤT CẢ</option>
-                {(() => {
-                  const activeFactoryChips = branches && branches.length > 0
-                    ? branches
-                        .filter((b) => b.isScoring)
-                        .map((b) => {
-                          const label = getFactoryDisplayName(b.name);
-                          return { key: b.id, label };
-                        })
-                    : [
-                        { key: "TPP-BNI", label: "TPP-BNI" },
-                        { key: "TPP-LAN", label: "TPP-LAN" },
-                        { key: "TPP-CTY", label: "TPP-CTY" },
-                        { key: "TPP-314", label: "TPP-314" }
-                      ];
-                  return activeFactoryChips.map((item) => (
-                    <option
-                      key={item.key}
-                      value={item.key}
-                      translate="no"
-                      className="notranslate font-semibold text-[9px]"
-                    >
-                      {item.label}
-                    </option>
-                  ));
-                })()}
-              </select>
+                <span className="truncate">
+                  {(() => {
+                    if (!selectedFactoryFilter) return "TẤT CẢ";
+                    return selectedFactoryFilter;
+                  })()}
+                </span>
+                <span className="text-[7px] text-slate-400 shrink-0">▼</span>
+              </button>
             </div>
 
             {/* Category Dropdown */}
             <div className="flex-[0.95] min-w-0 max-w-[85px]">
-              <select
-                value={selectedCategory || "ALL"}
-                onChange={(e) => setSelectedCategory(e.target.value === "ALL" ? null : e.target.value)}
-                className="w-full bg-slate-100 text-[9px] font-extrabold text-slate-700 rounded-lg pl-1 pr-1.5 py-1 focus:ring-1 focus:ring-blue-500 outline-none border-none select-none h-[26px] truncate cursor-pointer"
+              <button
+                type="button"
+                onClick={() => setActiveFilterSheet("CATEGORY")}
+                className="w-full bg-slate-100 text-[9px] font-extrabold text-slate-700 rounded-lg pl-1.5 pr-1 py-1 focus:ring-1 focus:ring-blue-500 outline-none border-none select-none h-[26px] truncate cursor-pointer flex items-center justify-between gap-0.5"
               >
-                <option value="ALL" translate="no" className="notranslate font-extrabold text-[9px]">YẾU TỐ</option>
-                {(["CON NGƯỜI", "MÁY MÓC", "NGUYÊN VẬT LIỆU", "PHƯƠNG PHÁP", "MÔI TRƯỜNG", "THÔNG TIN"] as Category4M1E1I[]).map((cat) => (
-                  <option
-                    key={cat}
-                    value={cat}
-                    translate="no"
-                    className="notranslate font-semibold text-[9px]"
-                  >
-                    {cat}
-                  </option>
-                ))}
-              </select>
+                <span className="truncate">
+                  {selectedCategory || "YẾU TỐ"}
+                </span>
+                <span className="text-[7px] text-slate-400 shrink-0">▼</span>
+              </button>
             </div>
 
             {/* Week Dropdown */}
             <div className="flex-[0.8] min-w-0 max-w-[78px]">
-              <select
-                value={selectedWeekFilter}
-                onChange={(e) => setSelectedWeekFilter(e.target.value)}
-                className="w-full bg-slate-100 text-[9px] font-extrabold text-slate-700 rounded-lg pl-1 pr-1.5 py-1 focus:ring-1 focus:ring-blue-500 outline-none border-none select-none h-[26px] truncate cursor-pointer"
+              <button
+                type="button"
+                onClick={() => setActiveFilterSheet("WEEK")}
+                className="w-full bg-slate-100 text-[9px] font-extrabold text-slate-700 rounded-lg pl-1.5 pr-1 py-1 focus:ring-1 focus:ring-blue-500 outline-none border-none select-none h-[26px] truncate cursor-pointer flex items-center justify-between gap-0.5"
               >
-                <option value="ALL" translate="no" className="notranslate font-extrabold text-[9px]">MỌI TUẦN</option>
-                <option value="THIS_WEEK" translate="no" className="notranslate font-semibold text-[9px]">{getWeekOptionLabel(0)}</option>
-                <option value="LAST_WEEK" translate="no" className="notranslate font-semibold text-[9px]">{getWeekOptionLabel(1)}</option>
-                <option value="2_WEEKS_AGO" translate="no" className="notranslate font-semibold text-[9px]">{getWeekOptionLabel(2)}</option>
-                <option value="3_WEEKS_AGO" translate="no" className="notranslate font-semibold text-[9px]">{getWeekOptionLabel(3)}</option>
-              </select>
+                <span className="truncate">
+                  {(() => {
+                    if (selectedWeekFilter === "ALL") return "MỌI TUẦN";
+                    if (selectedWeekFilter === "THIS_WEEK") return getWeekOptionLabel(0);
+                    if (selectedWeekFilter === "LAST_WEEK") return getWeekOptionLabel(1);
+                    if (selectedWeekFilter === "2_WEEKS_AGO") return getWeekOptionLabel(2);
+                    if (selectedWeekFilter === "3_WEEKS_AGO") return getWeekOptionLabel(3);
+                    return "MỌI TUẦN";
+                  })()}
+                </span>
+                <span className="text-[7px] text-slate-400 shrink-0">▼</span>
+              </button>
             </div>
           </div>
         </div>
@@ -4858,6 +4871,179 @@ App Link: ${window.location.origin}`}
         </div>
       )}
 
+      {activeFilterSheet && (
+        <div 
+          onClick={() => setActiveFilterSheet(null)}
+          className="fixed lg:absolute inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-[70] select-none animate-fadeIn cursor-pointer"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl w-full max-w-[280px] p-4 shadow-2xl border border-slate-150 flex flex-col animate-in fade-in zoom-in-95 duration-150 cursor-default"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-2 shrink-0">
+              <span className="font-extrabold text-[10px] text-slate-850 tracking-wider uppercase">
+                {activeFilterSheet === "BRANCH" && <T>Lọc theo Nhà máy</T>}
+                {activeFilterSheet === "CATEGORY" && <T>Lọc theo Yếu tố 4M1E1I</T>}
+                {activeFilterSheet === "WEEK" && <T>Lọc theo Tuần</T>}
+              </span>
+              <button
+                type="button"
+                onClick={() => setActiveFilterSheet(null)}
+                className="w-5 h-5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-[9px] border-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* List Option Container */}
+            <div className="max-h-[220px] overflow-y-auto space-y-1 pr-0.5 thin-scrollbar">
+              {activeFilterSheet === "BRANCH" && (() => {
+                const activeFactoryChips = branches && branches.length > 0
+                  ? branches
+                      .filter((b) => b.isScoring)
+                      .map((b) => {
+                        const label = getFactoryDisplayName(b.name);
+                        return { key: b.id, label };
+                      })
+                  : [
+                      { key: "TPP-BNI", label: "TPP-BNI" },
+                      { key: "TPP-LAN", label: "TPP-LAN" },
+                      { key: "TPP-CTY", label: "TPP-CTY" },
+                      { key: "TPP-314", label: "TPP-314" }
+                    ];
+
+                return (
+                  <>
+                    {/* Option All */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedFactoryFilter(null);
+                        setActiveFilterSheet(null);
+                      }}
+                      className={`w-full flex items-center justify-between p-2 rounded-xl text-left text-[9px] font-bold transition-all border-none cursor-pointer ${
+                        !selectedFactoryFilter 
+                          ? "bg-sky-50 text-[#1e3a8a] font-extrabold" 
+                          : "bg-transparent text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      <T>TẤT CẢ (ALL)</T>
+                      {!selectedFactoryFilter && <Check className="w-3.5 h-3.5 text-[#1e3a8a] stroke-[3px]" />}
+                    </button>
+                    
+                    {/* Dynamic Branch Options */}
+                    {activeFactoryChips.map((item) => {
+                      const isSelected = selectedFactoryFilter === item.key;
+                      return (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => {
+                            setSelectedFactoryFilter(item.key);
+                            setActiveFilterSheet(null);
+                          }}
+                          className={`w-full flex items-center justify-between p-2 rounded-xl text-left text-[9px] font-bold transition-all border-none cursor-pointer ${
+                            isSelected 
+                              ? "bg-sky-50 text-[#1e3a8a] font-extrabold" 
+                              : "bg-transparent text-slate-600 hover:bg-slate-50"
+                          }`}
+                        >
+                          <T>{item.label}</T>
+                          {isSelected && <Check className="w-3.5 h-3.5 text-[#1e3a8a] stroke-[3px]" />}
+                        </button>
+                      );
+                    })}
+                  </>
+                );
+              })()}
+
+              {activeFilterSheet === "CATEGORY" && (() => {
+                const categories: Category4M1E1I[] = ["CON NGƯỜI", "MÁY MÓC", "NGUYÊN VẬT LIỆU", "PHƯƠNG PHÁP", "MÔI TRƯỜNG", "THÔNG TIN"];
+                return (
+                  <>
+                    {/* Option All */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedCategory(null);
+                        setActiveFilterSheet(null);
+                      }}
+                      className={`w-full flex items-center justify-between p-2 rounded-xl text-left text-[9px] font-bold transition-all border-none cursor-pointer ${
+                        !selectedCategory 
+                          ? "bg-sky-50 text-[#1e3a8a] font-extrabold" 
+                          : "bg-transparent text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      <T>TẤT CẢ YẾU TỐ</T>
+                      {!selectedCategory && <Check className="w-3.5 h-3.5 text-[#1e3a8a] stroke-[3px]" />}
+                    </button>
+                    
+                    {/* Category Options */}
+                    {categories.map((cat) => {
+                      const isSelected = selectedCategory === cat;
+                      return (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => {
+                            setSelectedCategory(cat);
+                            setActiveFilterSheet(null);
+                          }}
+                          className={`w-full flex items-center justify-between p-2 rounded-xl text-left text-[9px] font-bold transition-all border-none cursor-pointer ${
+                            isSelected 
+                              ? "bg-sky-50 text-[#1e3a8a] font-extrabold" 
+                              : "bg-transparent text-slate-600 hover:bg-slate-50"
+                          }`}
+                        >
+                          <T>{cat}</T>
+                          {isSelected && <Check className="w-3.5 h-3.5 text-[#1e3a8a] stroke-[3px]" />}
+                        </button>
+                      );
+                    })}
+                  </>
+                );
+              })()}
+
+              {activeFilterSheet === "WEEK" && (() => {
+                const weekOptions = [
+                  { key: "ALL", label: "MỌI TUẦN" },
+                  { key: "THIS_WEEK", label: getWeekOptionLabel(0) },
+                  { key: "LAST_WEEK", label: getWeekOptionLabel(1) },
+                  { key: "2_WEEKS_AGO", label: getWeekOptionLabel(2) },
+                  { key: "3_WEEKS_AGO", label: getWeekOptionLabel(3) },
+                ];
+                return (
+                  <>
+                    {weekOptions.map((opt) => {
+                      const isSelected = selectedWeekFilter === opt.key;
+                      return (
+                        <button
+                          key={opt.key}
+                          type="button"
+                          onClick={() => {
+                            setSelectedWeekFilter(opt.key);
+                            setActiveFilterSheet(null);
+                          }}
+                          className={`w-full flex items-center justify-between p-2 rounded-xl text-left text-[9px] font-bold transition-all border-none cursor-pointer ${
+                            isSelected 
+                              ? "bg-sky-50 text-[#1e3a8a] font-extrabold" 
+                              : "bg-transparent text-slate-600 hover:bg-slate-50"
+                          }`}
+                        >
+                          <T>{opt.label}</T>
+                          {isSelected && <Check className="w-3.5 h-3.5 text-[#1e3a8a] stroke-[3px]" />}
+                        </button>
+                      );
+                    })}
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
       {showLogoutConfirm && (
         <div className="fixed lg:absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-[60] select-none animate-fadeIn">
           <div className="bg-white rounded-2xl w-full max-w-[280px] p-5 shadow-2xl border border-slate-100 flex flex-col items-center text-center">
@@ -4892,6 +5078,162 @@ App Link: ${window.location.origin}`}
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {onboardingStep !== null && (
+        <div className="absolute inset-0 z-[100] select-none overflow-hidden flex flex-col pointer-events-auto">
+          {/* Spotlight box */}
+          {onboardingStep === 1 && (
+            <div className="absolute inset-0 bg-slate-950/75 flex flex-col items-center justify-center p-6 text-center animate-fadeIn">
+              {/* Double tap gesture graphic */}
+              <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center mb-6 relative animate-pulse border border-white/20">
+                <div className="absolute inset-0 rounded-full bg-sky-500/20 animate-ping" />
+                <Smartphone className="w-8 h-8 text-sky-400" />
+                {/* Hand pointer or double click rings */}
+                <span className="absolute -top-1 -right-1 bg-sky-500 text-white font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider animate-bounce">Double Tap</span>
+              </div>
+
+              <div className="bg-white rounded-2xl p-5 shadow-2xl border border-slate-100 max-w-[290px] space-y-3">
+                <div className="space-y-1">
+                  <span className="text-[9px] font-black tracking-widest text-sky-600 uppercase block">Bước 1 / 3</span>
+                  <h3 className="font-extrabold text-[13px] text-slate-850 tracking-tight uppercase">
+                    <T>Cử chỉ Toàn màn hình</T>
+                  </h3>
+                </div>
+                
+                <p className="text-[10.5px] text-slate-600 font-semibold leading-relaxed">
+                  <T>Nhấp đúp (Double click) vào bất kỳ vị trí trống nào trên màn hình để Phóng to / Thu nhỏ ứng dụng rộng rãi và dễ nhìn hơn.</T>
+                </p>
+
+                <div className="pt-2 flex items-center justify-between gap-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      localStorage.setItem("tanphu_onboarding_completed_v3", "true");
+                      setOnboardingStep(null);
+                    }}
+                    className="text-slate-400 hover:text-slate-600 font-extrabold text-[10px] uppercase tracking-wider cursor-pointer py-1.5 px-2 bg-transparent border-none"
+                  >
+                    <T>Bỏ qua</T>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOnboardingStep(2)}
+                    className="bg-sky-600 hover:bg-sky-700 active:scale-95 text-white font-black text-[10px] py-1.5 px-4 rounded-xl shadow-md cursor-pointer transition-all uppercase border-none flex items-center gap-1"
+                  >
+                    <T>Tiếp theo</T> ➜
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {onboardingStep === 2 && (
+            <div className="absolute inset-0 z-[100] animate-fadeIn">
+              {/* Spotlight cutout covering the filter bar: top: 48px, left: 6px, right: 6px, height: 32px */}
+              <div 
+                className="absolute rounded-lg border-2 border-dashed border-sky-400 pointer-events-none"
+                style={{
+                  top: "48px",
+                  left: "6px",
+                  width: "calc(100% - 12px)",
+                  height: "32px",
+                  boxShadow: "0 0 0 9999px rgba(15, 23, 42, 0.65)"
+                }}
+              />
+
+              {/* Tooltip Card below the spotlight */}
+              <div className="absolute top-[92px] left-[12px] right-[12px] bg-white rounded-2xl p-5 shadow-2xl border border-slate-100 space-y-3 z-[110] animate-slideIn">
+                {/* Arrow pointing up */}
+                <div className="absolute -top-1.5 left-1/4 -translate-x-1/2 w-3 h-3 bg-white rotate-45 border-t border-l border-slate-100" />
+
+                <div className="space-y-1">
+                  <span className="text-[9px] font-black tracking-widest text-sky-600 uppercase block">Bước 2 / 3</span>
+                  <h3 className="font-extrabold text-[13px] text-slate-850 tracking-tight uppercase">
+                    <T>Bộ lọc chọn Xinh xắn</T>
+                  </h3>
+                </div>
+                
+                <p className="text-[10.5px] text-slate-600 font-semibold leading-relaxed">
+                  <T>Các nút bộ lọc vừa được thiết kế lại nhỏ gọn và chuyên nghiệp hơn! Chạm trực tiếp vào để lọc nhanh danh sách theo Nhà máy, Yếu tố 4M1E1I hoặc Tuần.</T>
+                </p>
+
+                <div className="pt-2 flex items-center justify-between gap-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      localStorage.setItem("tanphu_onboarding_completed_v3", "true");
+                      setOnboardingStep(null);
+                    }}
+                    className="text-slate-400 hover:text-slate-600 font-extrabold text-[10px] uppercase tracking-wider cursor-pointer py-1.5 px-2 bg-transparent border-none"
+                  >
+                    <T>Bỏ qua</T>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOnboardingStep(3)}
+                    className="bg-sky-600 hover:bg-sky-700 active:scale-95 text-white font-black text-[10px] py-1.5 px-4 rounded-xl shadow-md cursor-pointer transition-all uppercase border-none flex items-center gap-1"
+                  >
+                    <T>Tiếp theo</T> ➜
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {onboardingStep === 3 && (
+            <div className="absolute inset-0 z-[100] animate-fadeIn">
+              {/* Spotlight cutout covering the bottom "+" button: right: 20px, bottom: 80px, w: 40px, h: 40px */}
+              <div 
+                className="absolute rounded-xl border-2 border-dashed border-sky-400 pointer-events-none"
+                style={{
+                  bottom: "80px",
+                  right: "20px",
+                  width: "40px",
+                  height: "40px",
+                  boxShadow: "0 0 0 9999px rgba(15, 23, 42, 0.65)"
+                }}
+              />
+
+              {/* Tooltip Card above the spotlight */}
+              <div className="absolute bottom-[136px] left-[12px] right-[12px] bg-white rounded-2xl p-5 shadow-2xl border border-slate-100 space-y-3 z-[110] animate-slideUp">
+                {/* Arrow pointing down */}
+                <div className="absolute -bottom-1.5 right-[34px] w-3 h-3 bg-white rotate-45 border-b border-r border-slate-100" />
+
+                <div className="space-y-1">
+                  <span className="text-[9px] font-black tracking-widest text-emerald-600 uppercase block">Bước 3 / 3</span>
+                  <h3 className="font-extrabold text-[13px] text-slate-850 tracking-tight uppercase">
+                    <T>Đăng tin thay đổi</T>
+                  </h3>
+                </div>
+                
+                <p className="text-[10.5px] text-slate-600 font-semibold leading-relaxed">
+                  <T>Bấm vào dấu cộng "+" màu xanh này để đăng tin phản ánh thay đổi 4M1E1I hoặc điểm sáng chất lượng mới.</T>
+                </p>
+
+                <div className="pt-2 flex items-center justify-between gap-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setOnboardingStep(2)}
+                    className="text-slate-400 hover:text-slate-600 font-extrabold text-[10px] uppercase tracking-wider cursor-pointer py-1.5 px-2 bg-transparent border-none"
+                  >
+                    ➜ <T>Quay lại</T>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      localStorage.setItem("tanphu_onboarding_completed_v3", "true");
+                      setOnboardingStep(null);
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-[10px] py-1.5 px-4 rounded-xl shadow-md cursor-pointer transition-all uppercase border-none flex items-center gap-1 animate-pulse"
+                  >
+                    <T>Khám phá ngay</T> ✓
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
