@@ -253,7 +253,7 @@ function MobileDirectiveForm({
           users={users}
           value={text}
           onChange={setText}
-          placeholder="Chỉ đạo"
+          placeholder="Chỉ đạo của các cấp quản lý"
           rows={1}
           style={{ height: '32px', minHeight: '32px', maxHeight: '72px', resize: 'none' }}
           onInput={(e) => {
@@ -267,7 +267,7 @@ function MobileDirectiveForm({
               e.currentTarget.form?.requestSubmit();
             }
           }}
-          className="block w-full bg-slate-50 border border-slate-200 text-[11px] rounded-lg px-2.5 py-1.5 text-slate-800 placeholder-slate-400 font-medium focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all select-text overflow-y-auto thin-scrollbar leading-normal"
+          className="block w-full bg-slate-50 border border-slate-200 text-[11px] rounded-lg px-2.5 py-1.5 text-slate-800 placeholder-slate-400 placeholder:text-[10px] font-medium focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all select-text overflow-y-auto thin-scrollbar leading-normal"
         />
       </div>
       <button
@@ -904,6 +904,19 @@ export default function MobileFrame({
   }, [openChatReportId]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedFactoryFilter, setSelectedFactoryFilter] = useState<string | null>(null);
+  const [selectedWeekFilter, setSelectedWeekFilter] = useState<string>("ALL");
+
+  const getWeekOptionLabel = (weeksAgo: number): string => {
+    const d = new Date();
+    d.setDate(d.getDate() - weeksAgo * 7);
+    const utcDate = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const dayNum = utcDate.getUTCDay() || 7;
+    utcDate.setUTCDate(utcDate.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((utcDate.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    return `${weekNo}/${utcDate.getUTCFullYear()}`;
+  };
+
   const [activeBottomTab, setActiveBottomTab] = useState<"BAO_CAO" | "PHAN_TICH" | "PHE_DUYET">("BAO_CAO");
   const [mobileFeedSubTab, setMobileFeedSubTab] = useState<"FEED" | "PROPOSAL">("FEED");
   const [showTrash, setShowTrash] = useState(false);
@@ -1480,6 +1493,49 @@ App Link: ${window.location.origin}`;
     return false;
   };
 
+  const isDateInWeekFilter = (date: Date, filter: string): boolean => {
+    if (filter === "ALL") return true;
+    const now = new Date();
+    const currentDay = now.getDay();
+    const distanceToMonday = currentDay === 0 ? 6 : currentDay - 1;
+    
+    const startOfThisWeek = new Date(now);
+    startOfThisWeek.setDate(now.getDate() - distanceToMonday);
+    startOfThisWeek.setHours(0, 0, 0, 0);
+    
+    const endOfThisWeek = new Date(startOfThisWeek);
+    endOfThisWeek.setDate(startOfThisWeek.getDate() + 7);
+    
+    if (filter === "THIS_WEEK") {
+      return date >= startOfThisWeek && date < endOfThisWeek;
+    }
+    
+    if (filter === "LAST_WEEK") {
+      const startOfLastWeek = new Date(startOfThisWeek);
+      startOfLastWeek.setDate(startOfThisWeek.getDate() - 7);
+      const endOfLastWeek = new Date(startOfThisWeek);
+      return date >= startOfLastWeek && date < endOfLastWeek;
+    }
+    
+    if (filter === "2_WEEKS_AGO") {
+      const startOf2WeeksAgo = new Date(startOfThisWeek);
+      startOf2WeeksAgo.setDate(startOfThisWeek.getDate() - 14);
+      const endOf2WeeksAgo = new Date(startOfThisWeek);
+      endOf2WeeksAgo.setDate(startOfThisWeek.getDate() - 7);
+      return date >= startOf2WeeksAgo && date < endOf2WeeksAgo;
+    }
+    
+    if (filter === "3_WEEKS_AGO") {
+      const startOf3WeeksAgo = new Date(startOfThisWeek);
+      startOf3WeeksAgo.setDate(startOfThisWeek.getDate() - 21);
+      const endOf3WeeksAgo = new Date(startOfThisWeek);
+      endOf3WeeksAgo.setDate(startOfThisWeek.getDate() - 14);
+      return date >= startOf3WeeksAgo && date < endOf3WeeksAgo;
+    }
+    
+    return true;
+  };
+
   // Filter items based on uploader or factory search or description search
   const filteredReports = reports.filter((r) => {
     if (r.isDeleted) return false;
@@ -1512,8 +1568,10 @@ App Link: ${window.location.origin}`;
 
     const matchesCategory = selectedCategory ? r.category === selectedCategory : true;
     const matchesFactoryFilter = selectedFactoryFilter ? matchSelectedFactory(r.factory, selectedFactoryFilter) : true;
+    const rDate = parseReportTimestamp(r.timestamp);
+    const matchesWeek = isDateInWeekFilter(rDate, selectedWeekFilter);
     
-    return matchesSearch && matchesCategory && matchesFactoryFilter;
+    return matchesSearch && matchesCategory && matchesFactoryFilter && matchesWeek;
   });
 
   // Sort reports according to the prioritized layout:
@@ -2027,7 +2085,10 @@ App Link: ${window.location.origin}`;
               <T>TANPHU</T>
             </div>
           </div>
-          <T className="font-bold text-[13.6px] tracking-wide whitespace-nowrap">META 4M1E1I</T>
+          <div className="flex flex-col justify-center select-none">
+            <T className="font-bold text-[13.6px] tracking-wide whitespace-nowrap leading-none block text-left">META 4M1E1I</T>
+            <T className="text-[8px] font-bold tracking-[-0.015em] opacity-90 whitespace-nowrap block text-left leading-none mt-1">Mỗi nhân viên là một QC</T>
+          </div>
         </div>
         <div className="flex items-center gap-[7.5px]">
           {currentUser?.role !== UserRole.STAFF && currentUser?.role !== UserRole.REVIEWER && (
@@ -2085,6 +2146,14 @@ App Link: ${window.location.origin}`;
               <RotateCw className={`w-[18px] h-[18px] text-white ${isRefreshing ? "animate-spin" : ""}`} />
             </button>
           )}
+
+          <button
+            onClick={() => setShowQrCodeView(true)}
+            className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
+            title="Mã QR ứng dụng"
+          >
+            <QrCode className="w-[18px] h-[18px] text-sky-200 hover:text-white" />
+          </button>
           
           {/* Bong bóng số báo tổng số người online */}
           {currentUser?.role !== UserRole.STAFF && currentUser?.role !== UserRole.REVIEWER && (
@@ -2113,27 +2182,27 @@ App Link: ${window.location.origin}`;
         <div className={`transition-all duration-300 overflow-hidden shrink-0 ${
           showFilters ? "max-h-[50px] opacity-100" : "max-h-0 opacity-0 pointer-events-none"
         }`}>
-          <div className="bg-white px-3 py-1.5 border-b border-slate-200 shadow-xs flex items-center gap-1.5">
+          <div className="bg-white px-2 py-1.5 border-b border-slate-200 shadow-xs flex items-center gap-1">
             {/* Search Input */}
-            <div className="relative flex-[0.9] min-w-0">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+            <div className="relative flex-[1] min-w-0">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
               <input
                 type="text"
                 placeholder="Tìm kiếm..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-7 pr-1 py-1 bg-slate-100 rounded-lg text-[10px] focus:ring-1 focus:ring-blue-500 outline-none placeholder:text-slate-400 text-slate-700 font-bold border-none"
+                className="w-full pl-6 pr-1 py-1 bg-slate-100 rounded-lg text-[9px] focus:ring-1 focus:ring-blue-500 outline-none placeholder:text-slate-400 text-slate-700 font-bold border-none h-[26px]"
               />
             </div>
 
             {/* Branch Dropdown */}
-            <div className="flex-[1.1] min-w-0 max-w-[95px]">
+            <div className="flex-[0.75] min-w-0 max-w-[68px]">
               <select
                 value={selectedFactoryFilter || "ALL"}
                 onChange={(e) => setSelectedFactoryFilter(e.target.value === "ALL" ? null : e.target.value)}
-                className="w-full bg-slate-100 text-[10px] font-extrabold text-slate-700 rounded-lg pl-1.5 pr-3 py-1.5 focus:ring-1 focus:ring-blue-500 outline-none border-none select-none h-7 truncate cursor-pointer"
+                className="w-full bg-slate-100 text-[9px] font-extrabold text-slate-700 rounded-lg pl-1 pr-1.5 py-1 focus:ring-1 focus:ring-blue-500 outline-none border-none select-none h-[26px] truncate cursor-pointer"
               >
-                <option value="ALL" translate="no" className="notranslate font-extrabold text-[10px]">TẤT CẢ</option>
+                <option value="ALL" translate="no" className="notranslate font-extrabold text-[9px]">TẤT CẢ</option>
                 {(() => {
                   const activeFactoryChips = branches && branches.length > 0
                     ? branches
@@ -2153,7 +2222,7 @@ App Link: ${window.location.origin}`;
                       key={item.key}
                       value={item.key}
                       translate="no"
-                      className="notranslate font-semibold text-[10px]"
+                      className="notranslate font-semibold text-[9px]"
                     >
                       {item.label}
                     </option>
@@ -2163,19 +2232,19 @@ App Link: ${window.location.origin}`;
             </div>
 
             {/* Category Dropdown */}
-            <div className="flex-[1.1] min-w-0 max-w-[95px]">
+            <div className="flex-[0.95] min-w-0 max-w-[85px]">
               <select
                 value={selectedCategory || "ALL"}
                 onChange={(e) => setSelectedCategory(e.target.value === "ALL" ? null : e.target.value)}
-                className="w-full bg-slate-100 text-[10px] font-extrabold text-slate-700 rounded-lg pl-1.5 pr-3 py-1.5 focus:ring-1 focus:ring-blue-500 outline-none border-none select-none h-7 truncate cursor-pointer"
+                className="w-full bg-slate-100 text-[9px] font-extrabold text-slate-700 rounded-lg pl-1 pr-1.5 py-1 focus:ring-1 focus:ring-blue-500 outline-none border-none select-none h-[26px] truncate cursor-pointer"
               >
-                <option value="ALL" translate="no" className="notranslate font-extrabold text-[10px]">TẤT CẢ</option>
+                <option value="ALL" translate="no" className="notranslate font-extrabold text-[9px]">YẾU TỐ</option>
                 {(["CON NGƯỜI", "MÁY MÓC", "NGUYÊN VẬT LIỆU", "PHƯƠNG PHÁP", "MÔI TRƯỜNG", "THÔNG TIN"] as Category4M1E1I[]).map((cat) => (
                   <option
                     key={cat}
                     value={cat}
                     translate="no"
-                    className="notranslate font-semibold text-[10px]"
+                    className="notranslate font-semibold text-[9px]"
                   >
                     {cat}
                   </option>
@@ -2183,15 +2252,20 @@ App Link: ${window.location.origin}`;
               </select>
             </div>
 
-            {/* QR Code Trigger Button */}
-            <button
-              type="button"
-              onClick={() => setShowQrCodeView(true)}
-              className="p-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 active:scale-95 transition-all cursor-pointer shrink-0 border-none flex items-center justify-center w-7 h-7"
-              title="Mã QR ứng dụng"
-            >
-              <QrCode className="w-3.5 h-3.5 text-slate-600" />
-            </button>
+            {/* Week Dropdown */}
+            <div className="flex-[0.8] min-w-0 max-w-[78px]">
+              <select
+                value={selectedWeekFilter}
+                onChange={(e) => setSelectedWeekFilter(e.target.value)}
+                className="w-full bg-slate-100 text-[9px] font-extrabold text-slate-700 rounded-lg pl-1 pr-1.5 py-1 focus:ring-1 focus:ring-blue-500 outline-none border-none select-none h-[26px] truncate cursor-pointer"
+              >
+                <option value="ALL" translate="no" className="notranslate font-extrabold text-[9px]">MỌI TUẦN</option>
+                <option value="THIS_WEEK" translate="no" className="notranslate font-semibold text-[9px]">{getWeekOptionLabel(0)}</option>
+                <option value="LAST_WEEK" translate="no" className="notranslate font-semibold text-[9px]">{getWeekOptionLabel(1)}</option>
+                <option value="2_WEEKS_AGO" translate="no" className="notranslate font-semibold text-[9px]">{getWeekOptionLabel(2)}</option>
+                <option value="3_WEEKS_AGO" translate="no" className="notranslate font-semibold text-[9px]">{getWeekOptionLabel(3)}</option>
+              </select>
+            </div>
           </div>
         </div>
       )}

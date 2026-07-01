@@ -162,7 +162,7 @@ export function AutoImageSlider({ imageUrls, fallbackUrl, isAbnormal, isSpotligh
     <>
       <div 
         onClick={handleOpenLightbox}
-        className="relative group bg-slate-900 border-b border-slate-100 flex items-center justify-center overflow-hidden h-44 w-full select-none cursor-pointer"
+        className="relative group bg-slate-900 border-b border-slate-100 flex items-center justify-center overflow-hidden h-[211px] w-full select-none cursor-pointer"
       >
         {list.map((url, i) => (
           <img
