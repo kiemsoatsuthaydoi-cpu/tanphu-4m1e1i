@@ -3172,11 +3172,8 @@ export default function DashboardDesktop({
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-200 text-[10px] text-slate-505 font-extrabold uppercase tracking-wider">
                         <th className="p-4 w-12 text-center"><T><span translate="no" className="notranslate">STT</span></T></th>
-                        <th className="p-4"><T><span translate="no" className="notranslate">Thời gian</span></T></th>
-                        <th className="p-4"><T><span translate="no" className="notranslate">Nhà máy / Xưởng</span></T></th>
-                        <th className="p-4 text-center"><T><span translate="no" className="notranslate">Phân tố.</span></T></th>
-                        <th className="p-4 w-[40%]"><T><span translate="no" className="notranslate">Nội dung đề xuất</span></T></th>
-                        <th className="p-4"><T><span translate="no" className="notranslate">Người ghi / SĐT</span></T></th>
+                        <th className="p-4 min-w-[180px]"><T><span translate="no" className="notranslate">Thông tin ghi nhận</span></T></th>
+                        <th className="p-4 w-[28%]"><T><span translate="no" className="notranslate">Nội dung đề xuất</span></T></th>
                         <th className="p-4 text-center"><T><span translate="no" className="notranslate">Hình ảnh</span></T></th>
                         <th className="p-4 text-center"><T><span translate="no" className="notranslate">Trạng thái</span></T></th>
                         <th className="p-4 text-center"><T><span translate="no" className="notranslate">Thao tác</span></T></th>
@@ -3208,7 +3205,7 @@ export default function DashboardDesktop({
                         if (filteredProposals.length === 0) {
                           return (
                             <tr>
-                              <td colSpan={9} className="p-8 text-center text-slate-400 italic">
+                              <td colSpan={6} className="p-8 text-center text-slate-400 italic">
                                 <T><span translate="no" className="notranslate">Không có đề xuất nào đang chờ phê duyệt.</span></T>
                               </td>
                             </tr>
@@ -3218,15 +3215,25 @@ export default function DashboardDesktop({
                         return filteredProposals.map((r, index) => (
                           <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
                             <td className="p-4 text-center font-mono text-slate-400">{index + 1}</td>
-                            <td className="p-4 font-mono font-semibold text-slate-500 whitespace-nowrap">{r.timestamp}</td>
-                            <td className="p-4 font-bold text-slate-800 whitespace-nowrap">{getFactoryDisplayName(r.factory)}</td>
-                            <td className="p-4 text-center select-none whitespace-nowrap">
-                              <span
-                                className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase text-white block"
-                                style={{ backgroundColor: colorMap[r.category] }}
-                              >
-                                <T><span translate="no" className="notranslate">{r.category}</span></T>
-                              </span>
+                            <td className="p-4 space-y-1.5 min-w-[180px]">
+                              <div className="flex items-center gap-1 font-mono text-[9.5px] text-slate-400 select-none">
+                                <span translate="no" className="notranslate">🕒 {r.timestamp}</span>
+                              </div>
+                              <div className="font-bold text-slate-800 text-[11px] leading-tight">
+                                <span translate="no" className="notranslate">{getFactoryDisplayName(r.factory)}</span>
+                              </div>
+                              <div className="select-none w-fit">
+                                <span
+                                  className="px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase text-white block tracking-wider leading-none"
+                                  style={{ backgroundColor: colorMap[r.category] }}
+                                >
+                                  <T><span translate="no" className="notranslate">{r.category}</span></T>
+                                </span>
+                              </div>
+                              <div className="text-[10.5px] text-slate-600 leading-snug">
+                                <span className="font-extrabold text-slate-700 block"><span translate="no" className="notranslate">{r.uploaderName}</span></span>
+                                <span className="text-[9.5px] text-slate-400 font-mono block"><span translate="no" className="notranslate">{r.uploaderPhone}</span></span>
+                              </div>
                             </td>
                             <td className="p-4 leading-relaxed text-slate-700 max-w-sm font-medium">
                               <T><span translate="no" className="notranslate">{r.content}</span></T>
@@ -3235,10 +3242,6 @@ export default function DashboardDesktop({
                                   <T><span translate="no" className="notranslate">Ghi chú: {r.notes}</span></T>
                                 </div>
                               )}
-                            </td>
-                            <td className="p-4 whitespace-nowrap">
-                              <T className="font-semibold block text-slate-800"><span translate="no" className="notranslate">{r.uploaderName}</span></T>
-                              <T className="text-[10px] text-slate-400 block font-mono"><span translate="no" className="notranslate">{r.uploaderPhone}</span></T>
                             </td>
                             <td className="p-4 text-center">
                               {r.imageUrl ? (
@@ -3447,11 +3450,8 @@ export default function DashboardDesktop({
                           <thead>
                             <tr className="bg-slate-50 border-b border-rose-100 text-[10px] text-slate-505 font-extrabold uppercase tracking-wider">
                               <th className="p-4 w-12 text-center"><T><span translate="no" className="notranslate">STT</span></T></th>
-                              <th className="p-4"><T><span translate="no" className="notranslate">Thời gian</span></T></th>
-                              <th className="p-4"><T><span translate="no" className="notranslate">Nhà máy / Xưởng</span></T></th>
-                              <th className="p-4 text-center"><T><span translate="no" className="notranslate">Phân tố</span></T></th>
-                              <th className="p-4 w-[40%]"><T><span translate="no" className="notranslate">Nội dung chi tiết bị xóa</span></T></th>
-                              <th className="p-4"><T><span translate="no" className="notranslate">Người ghi / SĐT</span></T></th>
+                              <th className="p-4 min-w-[180px]"><T><span translate="no" className="notranslate">Thông tin ghi nhận</span></T></th>
+                              <th className="p-4 w-[28%]"><T><span translate="no" className="notranslate">Nội dung chi tiết bị xóa</span></T></th>
                               <th className="p-4 text-center"><T><span translate="no" className="notranslate">Phân loại</span></T></th>
                               <th className="p-4 text-center"><T><span translate="no" className="notranslate">Hành động Phục hồi / Xóa</span></T></th>
                             </tr>
@@ -3462,15 +3462,25 @@ export default function DashboardDesktop({
                               .map((r, index) => (
                                 <tr key={r.id} className="hover:bg-rose-50/20 transition-colors">
                                   <td className="p-4 text-center font-mono text-slate-400">{index + 1}</td>
-                                  <td className="p-4 font-mono font-semibold text-slate-500 whitespace-nowrap">{r.timestamp}</td>
-                                  <td className="p-4 font-bold text-slate-800 whitespace-nowrap">{getFactoryDisplayName(r.factory)}</td>
-                                  <td className="p-4 text-center select-none whitespace-nowrap">
-                                    <span
-                                      className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase text-white block"
-                                      style={{ backgroundColor: colorMap[r.category] }}
-                                    >
-                                      <T><span translate="no" className="notranslate">{r.category}</span></T>
-                                    </span>
+                                  <td className="p-4 space-y-1.5 min-w-[180px]">
+                                    <div className="flex items-center gap-1 font-mono text-[9.5px] text-slate-400 select-none">
+                                      <span translate="no" className="notranslate">🕒 {r.timestamp}</span>
+                                    </div>
+                                    <div className="font-bold text-slate-800 text-[11px] leading-tight">
+                                      <span translate="no" className="notranslate">{getFactoryDisplayName(r.factory)}</span>
+                                    </div>
+                                    <div className="select-none w-fit">
+                                      <span
+                                        className="px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase text-white block tracking-wider leading-none"
+                                        style={{ backgroundColor: colorMap[r.category] }}
+                                      >
+                                        <T><span translate="no" className="notranslate">{r.category}</span></T>
+                                      </span>
+                                    </div>
+                                    <div className="text-[10.5px] text-slate-600 leading-snug">
+                                      <span className="font-extrabold text-slate-700 block"><span translate="no" className="notranslate">{r.uploaderName}</span></span>
+                                      <span className="text-[9.5px] text-slate-400 font-mono block"><span translate="no" className="notranslate">{r.uploaderPhone}</span></span>
+                                    </div>
                                   </td>
                                   <td className="p-4 leading-relaxed text-slate-600 max-w-sm">
                                     <div className="line-through text-slate-400">
@@ -3481,10 +3491,6 @@ export default function DashboardDesktop({
                                         <T><span translate="no" className="notranslate">Ghi chú: {r.notes}</span></T>
                                       </div>
                                     )}
-                                  </td>
-                                  <td className="p-4 whitespace-nowrap">
-                                    <T><span translate="no" className="notranslate font-semibold block text-slate-800">{r.uploaderName}</span></T>
-                                    <T><span translate="no" className="notranslate text-[10px] text-slate-400 block font-mono">{r.uploaderPhone}</span></T>
                                   </td>
                                   <td className="p-4 text-center select-none whitespace-nowrap font-mono font-bold text-xs font-black">
                                     {r.reportType === "KPH" || r.isAbnormal ? (
@@ -3636,18 +3642,15 @@ export default function DashboardDesktop({
                       <table className="w-full border-collapse text-left">
                         <thead>
                           <tr className="bg-slate-50 border-b border-slate-200 text-[10px] text-slate-505 font-extrabold uppercase tracking-wider">
-                            <th className="p-4 w-12 text-center">STT</th>
-                            <th className="p-4">Thời gian</th>
-                            <th className="p-4">Nhà máy / Xưởng</th>
-                            <th className="p-4 text-center">Phân tố.</th>
-                            <th className="p-4 w-[40%]">Nội dung chi tiết</th>
-                            <th className="p-4">Người ghi / SĐT</th>
-                            <th className="p-4 text-center">Người Thích</th>
+                            <th className="p-4 w-12 text-center"><T><span translate="no" className="notranslate">STT</span></T></th>
+                            <th className="p-4 min-w-[180px]"><T><span translate="no" className="notranslate">Thông tin ghi nhận</span></T></th>
+                            <th className="p-4 w-[28%]"><T><span translate="no" className="notranslate">Nội dung chi tiết</span></T></th>
+                            <th className="p-4 text-center"><T><span translate="no" className="notranslate">Người Thích</span></T></th>
                             <th className="p-4 text-center"><span translate="no" className="notranslate">Tiếp nhận / Nhân rộng</span></th>
-                            <th className="p-4 text-center">Hình ảnh</th>
-                            <th className="p-4 text-center"><T>Phân loại</T></th>
-                            <th className="p-4 text-center">Trạng thái</th>
-                            <th className="p-4 text-center">Thao tác</th>
+                            <th className="p-4 text-center"><T><span translate="no" className="notranslate">Hình ảnh</span></T></th>
+                            <th className="p-4 text-center"><T><span translate="no" className="notranslate">Phân loại</span></T></th>
+                            <th className="p-4 text-center"><T><span translate="no" className="notranslate">Trạng thái</span></T></th>
+                            <th className="p-4 text-center"><T><span translate="no" className="notranslate">Thao tác</span></T></th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
@@ -3670,15 +3673,25 @@ export default function DashboardDesktop({
                             .map((r, index) => (
                               <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
                                 <td className="p-4 text-center font-mono text-slate-400">{index + 1}</td>
-                                <td className="p-4 font-mono font-semibold text-slate-500 whitespace-nowrap">{r.timestamp}</td>
-                                <td className="p-4 font-bold text-slate-800 whitespace-nowrap">{getFactoryDisplayName(r.factory)}</td>
-                                <td className="p-4 text-center select-none whitespace-nowrap">
-                                  <span
-                                    className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase text-white block"
-                                    style={{ backgroundColor: colorMap[r.category] }}
-                                  >
-                                    <T>{r.category}</T>
-                                  </span>
+                                <td className="p-4 space-y-1.5 min-w-[180px]">
+                                  <div className="flex items-center gap-1 font-mono text-[9.5px] text-slate-400 select-none">
+                                    <span translate="no" className="notranslate">🕒 {r.timestamp}</span>
+                                  </div>
+                                  <div className="font-bold text-slate-800 text-[11px] leading-tight">
+                                    <span translate="no" className="notranslate">{getFactoryDisplayName(r.factory)}</span>
+                                  </div>
+                                  <div className="select-none w-fit">
+                                    <span
+                                      className="px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase text-white block tracking-wider leading-none"
+                                      style={{ backgroundColor: colorMap[r.category] }}
+                                    >
+                                      <T><span translate="no" className="notranslate">{r.category}</span></T>
+                                    </span>
+                                  </div>
+                                  <div className="text-[10.5px] text-slate-600 leading-snug">
+                                    <span className="font-extrabold text-slate-700 block"><span translate="no" className="notranslate">{r.uploaderName}</span></span>
+                                    <span className="text-[9.5px] text-slate-400 font-mono block"><span translate="no" className="notranslate">{r.uploaderPhone}</span></span>
+                                  </div>
                                 </td>
                                 <td className="p-4 leading-relaxed text-slate-700 max-w-sm font-medium">
                                   <T>{r.content}</T>
@@ -3710,10 +3723,6 @@ export default function DashboardDesktop({
                                     users={users}
                                     onUpdateReport={onUpdateReport}
                                   />
-                                </td>
-                                <td className="p-4 whitespace-nowrap">
-                                  <T className="font-semibold block text-slate-800">{r.uploaderName}</T>
-                                  <T className="text-[10px] text-slate-400 block font-mono">{r.uploaderPhone}</T>
                                 </td>
                                 {/* Two new columns tracking likes and shares */}
                                 <td className="p-4 min-w-[120px]">
