@@ -1568,8 +1568,10 @@ App Link: ${window.location.origin}`;
       if (mobileFeedSubTab === "PROPOSAL") {
         if (isApproved) return false;
         // Reviewer can only see pending proposals for their own branch/factory
-        if (currentUser.role === UserRole.REVIEWER && r.factory !== currentUser.branch) {
-          return false;
+        if (currentUser.role === UserRole.REVIEWER) {
+          const clean = (s: string) => (s || "").replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
+          const isMatch = clean(r.factory) === clean(currentUser.branch || "") || r.factory.toLowerCase() === (currentUser.branch || "").toLowerCase();
+          if (!isMatch) return false;
         }
       } else {
         if (!isApproved) return false;
@@ -2724,7 +2726,8 @@ App Link: ${window.location.origin}`;
                       if (r.isApproved !== false) return false;
                       if (currentUser?.role === UserRole.ADMIN) return true;
                       if (currentUser?.role === UserRole.REVIEWER) {
-                        return r.factory === currentUser.branch;
+                        const clean = (s: string) => (s || "").replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
+                        return clean(r.factory) === clean(currentUser.branch || "") || r.factory.toLowerCase() === (currentUser.branch || "").toLowerCase();
                       }
                       return false;
                     }).length;

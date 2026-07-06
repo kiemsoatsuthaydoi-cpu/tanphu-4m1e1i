@@ -906,7 +906,8 @@ export default function DashboardDesktop({
     if (r.isApproved !== false) return false;
     if (currentUser?.role === UserRole.ADMIN) return true;
     if (currentUser?.role === UserRole.REVIEWER) {
-      return r.factory === currentUser.branch;
+      const clean = (s: string) => (s || "").replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
+      return clean(r.factory) === clean(currentUser.branch || "") || r.factory.toLowerCase() === (currentUser.branch || "").toLowerCase();
     }
     return false;
   }).length;
@@ -3139,10 +3140,11 @@ export default function DashboardDesktop({
                       className="w-full bg-white border border-slate-250 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 shadow-3xs focus:outline-none focus:ring-1 focus:ring-blue-500"
                     >
                       <option value="Tất cả" translate="no" className="notranslate">Tất cả chi nhánh</option>
-                      <option value="CN Long An" translate="no" className="notranslate">CN Long An</option>
-                      <option value="CN Bắc Ninh" translate="no" className="notranslate">CN Bắc Ninh</option>
-                      <option value="Tòa nhà Thành Công" translate="no" className="notranslate">Tòa nhà Thành Công</option>
-                      <option value="VP Hồ Chí Minh" translate="no" className="notranslate">VP Hồ Chí Minh</option>
+                      {branches.filter((b) => b.isScoring).map((b) => (
+                        <option key={b.id} value={b.name} translate="no" className="notranslate">
+                          {getFactoryDisplayName(b.name)}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
@@ -3186,8 +3188,10 @@ export default function DashboardDesktop({
                           if (r.isApproved !== false) return false;
 
                           // Reviewer checks
-                          if (currentUser?.role === UserRole.REVIEWER && r.factory !== currentUser.branch) {
-                            return false;
+                          if (currentUser?.role === UserRole.REVIEWER) {
+                            const clean = (s: string) => (s || "").replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
+                            const isMatch = clean(r.factory) === clean(currentUser.branch || "") || r.factory.toLowerCase() === (currentUser.branch || "").toLowerCase();
+                            if (!isMatch) return false;
                           }
 
                           const s = proposalSearch.toLowerCase();
@@ -3216,6 +3220,10 @@ export default function DashboardDesktop({
                           <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
                             <td className="p-4 text-center font-mono text-slate-400">{index + 1}</td>
                             <td className="p-4 space-y-1.5 min-w-[180px]">
+                              <div className="text-[10.5px] text-slate-600 leading-snug">
+                                <span className="font-extrabold text-slate-700 block"><span translate="no" className="notranslate">{r.uploaderName}</span></span>
+                                <span className="text-[9.5px] text-slate-400 font-mono block"><span translate="no" className="notranslate">{r.uploaderPhone}</span></span>
+                              </div>
                               <div className="flex items-center gap-1 font-mono text-[9.5px] text-slate-400 select-none">
                                 <span translate="no" className="notranslate">🕒 {r.timestamp}</span>
                               </div>
@@ -3229,10 +3237,6 @@ export default function DashboardDesktop({
                                 >
                                   <T><span translate="no" className="notranslate">{r.category}</span></T>
                                 </span>
-                              </div>
-                              <div className="text-[10.5px] text-slate-600 leading-snug">
-                                <span className="font-extrabold text-slate-700 block"><span translate="no" className="notranslate">{r.uploaderName}</span></span>
-                                <span className="text-[9.5px] text-slate-400 font-mono block"><span translate="no" className="notranslate">{r.uploaderPhone}</span></span>
                               </div>
                             </td>
                             <td className="p-4 leading-relaxed text-slate-700 max-w-sm font-medium">
@@ -3463,6 +3467,10 @@ export default function DashboardDesktop({
                                 <tr key={r.id} className="hover:bg-rose-50/20 transition-colors">
                                   <td className="p-4 text-center font-mono text-slate-400">{index + 1}</td>
                                   <td className="p-4 space-y-1.5 min-w-[180px]">
+                                    <div className="text-[10.5px] text-slate-600 leading-snug">
+                                      <span className="font-extrabold text-slate-700 block"><span translate="no" className="notranslate">{r.uploaderName}</span></span>
+                                      <span className="text-[9.5px] text-slate-400 font-mono block"><span translate="no" className="notranslate">{r.uploaderPhone}</span></span>
+                                    </div>
                                     <div className="flex items-center gap-1 font-mono text-[9.5px] text-slate-400 select-none">
                                       <span translate="no" className="notranslate">🕒 {r.timestamp}</span>
                                     </div>
@@ -3476,10 +3484,6 @@ export default function DashboardDesktop({
                                       >
                                         <T><span translate="no" className="notranslate">{r.category}</span></T>
                                       </span>
-                                    </div>
-                                    <div className="text-[10.5px] text-slate-600 leading-snug">
-                                      <span className="font-extrabold text-slate-700 block"><span translate="no" className="notranslate">{r.uploaderName}</span></span>
-                                      <span className="text-[9.5px] text-slate-400 font-mono block"><span translate="no" className="notranslate">{r.uploaderPhone}</span></span>
                                     </div>
                                   </td>
                                   <td className="p-4 leading-relaxed text-slate-600 max-w-sm">
@@ -3674,6 +3678,10 @@ export default function DashboardDesktop({
                               <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
                                 <td className="p-4 text-center font-mono text-slate-400">{index + 1}</td>
                                 <td className="p-4 space-y-1.5 min-w-[180px]">
+                                  <div className="text-[10.5px] text-slate-600 leading-snug">
+                                    <span className="font-extrabold text-slate-700 block"><span translate="no" className="notranslate">{r.uploaderName}</span></span>
+                                    <span className="text-[9.5px] text-slate-400 font-mono block"><span translate="no" className="notranslate">{r.uploaderPhone}</span></span>
+                                  </div>
                                   <div className="flex items-center gap-1 font-mono text-[9.5px] text-slate-400 select-none">
                                     <span translate="no" className="notranslate">🕒 {r.timestamp}</span>
                                   </div>
@@ -3687,10 +3695,6 @@ export default function DashboardDesktop({
                                     >
                                       <T><span translate="no" className="notranslate">{r.category}</span></T>
                                     </span>
-                                  </div>
-                                  <div className="text-[10.5px] text-slate-600 leading-snug">
-                                    <span className="font-extrabold text-slate-700 block"><span translate="no" className="notranslate">{r.uploaderName}</span></span>
-                                    <span className="text-[9.5px] text-slate-400 font-mono block"><span translate="no" className="notranslate">{r.uploaderPhone}</span></span>
                                   </div>
                                 </td>
                                 <td className="p-4 leading-relaxed text-slate-700 max-w-sm font-medium">
@@ -3905,12 +3909,6 @@ export default function DashboardDesktop({
               </div>
 
               <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-6 leading-relaxed text-sm text-slate-700 shadow-sm">
-                <div className="border-b border-slate-100 pb-4 text-center">
-                  <T className="text-base font-extrabold text-[#03543F] block">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</T>
-                  <T className="text-xs font-bold text-slate-400 block mt-1">Độc lập - Tự do - Hạnh phúc</T>
-                  <div className="w-24 h-px bg-slate-200 mx-auto mt-2" />
-                </div>
-
                 <div className="space-y-4">
                   <h3 className="font-extrabold text-slate-800 text-xs uppercase tracking-wide border-l-2 border-emerald-500 pl-2">
                     <T>Mục Tiêu Chỉ Đạo Vận Hành</T>
