@@ -1077,7 +1077,9 @@ export default function App() {
           match.status !== currentUser.status ||
           match.fullName !== currentUser.fullName ||
           match.department !== currentUser.department ||
-          match.branch !== currentUser.branch
+          match.branch !== currentUser.branch ||
+          match.bypassApproval !== currentUser.bypassApproval ||
+          match.canSpeciallyEditDelete !== currentUser.canSpeciallyEditDelete
         ) {
           setCurrentUser(match);
         }
@@ -1171,12 +1173,13 @@ export default function App() {
           const latestUsers = await fetchCollection<User>(COLLECTIONS.USERS);
           if (latestUsers && latestUsers.length > 0) {
             setUsers((prev) => {
-              // Cập nhật lastActive từ server, nhưng bảo toàn các thông tin cục bộ chưa sync nếu có
+              // Đồng bộ toàn bộ các trường phân quyền (role, status, bypassApproval, canSpeciallyEditDelete) từ server
               return prev.map((u) => {
                 const fetched = latestUsers.find((lu) => lu.id === u.id);
                 if (fetched) {
                   return {
                     ...u,
+                    ...fetched,
                     lastActive: fetched.lastActive || u.lastActive
                   };
                 }
@@ -1906,7 +1909,7 @@ export default function App() {
   };
 
   // Report Submission Handler
-  const handleSubmitReport = (payload: Omit<QualityReport, "id" | "googleDrivePath">) => {
+  const handleSubmitReport = async (payload: Omit<QualityReport, "id" | "googleDrivePath">) => {
     if (offlineMode) {
       // Save inside local offline storage queue
       const offlineItem: QualityReport = {
@@ -1962,7 +1965,28 @@ export default function App() {
       } else {
         // New report flow
         const newId = `R-${Date.now()}`;
-        const needsApproval = currentUser && currentUser.role === UserRole.STAFF && !currentUser.bypassApproval;
+        
+        let finalBypass = currentUser?.bypassApproval;
+        let finalRole = currentUser?.role;
+
+        if (syncCompleted && dbConnected && !dbLoading && currentUser?.id) {
+          try {
+            // Chủ động tải về thông tin phân quyền mới nhất của tài khoản này ngay khi bấm Đăng tin
+            const latestUsers = await fetchCollection<User>(COLLECTIONS.USERS);
+            const freshUser = latestUsers.find(u => u.id === currentUser.id);
+            if (freshUser) {
+              finalBypass = freshUser.bypassApproval;
+              finalRole = freshUser.role;
+              // Đồng bộ tức thì vào bộ nhớ local
+              setUsers(prev => prev.map(u => u.id === freshUser.id ? freshUser : u));
+              setCurrentUser(freshUser);
+            }
+          } catch (err) {
+            console.warn("Could not fetch fresh user profile before submitting, falling back to local memory:", err);
+          }
+        }
+
+        const needsApproval = currentUser && finalRole === UserRole.STAFF && !finalBypass;
 
         const newReport: QualityReport = {
           ...payload,
@@ -2137,7 +2161,7 @@ export default function App() {
                 META
               </span>
               <span translate="no" className="notranslate font-sans font-black text-lg sm:text-xl tracking-wider text-white leading-none">
-                4M1E1I
+                ANDON
               </span>
             </div>
             <p className="text-[10px] text-slate-500 font-bold tracking-normal mt-0.5 uppercase">
