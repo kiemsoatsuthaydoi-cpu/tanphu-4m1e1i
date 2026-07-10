@@ -128,7 +128,7 @@ export async function processImage(
   const qualityTries = [0.95, 0.85, 0.75, 0.60, 0.45, 0.30];
   
   for (const q of qualityTries) {
-    const testBase64 = processingCanvas.toDataURL("image/webp", q);
+    const testBase64 = processingCanvas.toDataURL("image/jpeg", q);
     // Calculate size in KB: length of base64 * 3/4 / 1024
     const headLen = testBase64.indexOf(",") + 1;
     const sizeKb = Math.round(((testBase64.length - headLen) * 3) / 4 / 102.4) / 10;

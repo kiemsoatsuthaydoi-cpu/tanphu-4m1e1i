@@ -652,6 +652,73 @@ const safeGetItem = (key: string): string | null => {
   }
 };
 
+let audioCtx: any = null;
+let lastPlayedTime = 0;
+
+export const playNotificationSound = () => {
+  try {
+    const nowMs = Date.now();
+    if (nowMs - lastPlayedTime < 3000) {
+      // Cooldown of 3 seconds to prevent continuous rapid ringing
+      return;
+    }
+    lastPlayedTime = nowMs;
+
+    const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    if (!audioCtx) {
+      audioCtx = new AudioContextClass();
+    }
+    if (audioCtx.state === "suspended") {
+      audioCtx.resume();
+    }
+    
+    const now = audioCtx.currentTime;
+    
+    // First note (ding) - elegant clear high-frequency ring chime
+    const osc1 = audioCtx.createOscillator();
+    const osc1Filter = audioCtx.createBiquadFilter();
+    const gain1 = audioCtx.createGain();
+    
+    osc1.type = "sine";
+    osc1.frequency.setValueAtTime(880, now); // A5 note
+    
+    osc1Filter.type = "lowpass";
+    osc1Filter.frequency.setValueAtTime(2000, now);
+    
+    gain1.gain.setValueAtTime(0.25, now);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+    
+    osc1.connect(osc1Filter);
+    osc1Filter.connect(gain1);
+    gain1.connect(audioCtx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.8);
+    
+    // Second note (dong)
+    const osc2 = audioCtx.createOscillator();
+    const osc2Filter = audioCtx.createBiquadFilter();
+    const gain2 = audioCtx.createGain();
+    
+    osc2.type = "sine";
+    osc2.frequency.setValueAtTime(1046.5, now + 0.12); // C6 note
+    
+    osc2Filter.type = "lowpass";
+    osc2Filter.frequency.setValueAtTime(2000, now + 0.12);
+    
+    gain2.gain.setValueAtTime(0.18, now + 0.12);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 1.0);
+    
+    osc2.connect(osc2Filter);
+    osc2Filter.connect(gain2);
+    gain2.connect(audioCtx.destination);
+    osc2.start(now + 0.12);
+    osc2.stop(now + 1.0);
+  } catch (err) {
+    console.warn("Failed to play notification sound:", err);
+  }
+};
+
 export default function MobileFrame({
   reports,
   currentUserId,
@@ -1686,72 +1753,107 @@ App Link: ${window.location.origin}`;
 
       // 2. Report edited / updated notification
       if (report.updateLogs && report.updateLogs.length > 0) {
+        const capitalizeName = (name: string): string => {
+          if (!name) return "";
+          return name
+            .split(/\s+/)
+            .map((word) => {
+              if (!word) return "";
+              return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+            })
+            .join(" ");
+        };
+
         const guessGenderPrefix = (fullName: string): string => {
-          const name = fullName.toLowerCase();
-          if (
-            name.includes(" thị ") || 
-            name.includes(" thị") || 
-            name.includes("hông") || 
-            name.includes("hồng") || 
-            name.includes("phượng") || 
-            name.includes("tuyền") || 
-            name.includes("vy") || 
-            name.includes("hiền") || 
-            name.includes("lan") || 
-            name.includes("nga") || 
-            name.includes("trang") || 
-            name.includes("yến") || 
-            name.includes("thảo") || 
-            name.includes("oanh") || 
-            name.includes("dung") || 
-            name.includes("hằng") || 
-            name.includes("mai") || 
-            name.includes("thoại") ||
-            name.includes("thanh thiện")
-          ) {
+          const realName = fullName.replace(/\s*\(.*?\)\s*/g, " ").trim().toLowerCase();
+          
+          if (realName.includes(" thị ") || realName.includes(" thị") || realName.endsWith(" thị")) {
             return "Chị";
           }
-          return "Anh";
+          if (realName.includes(" văn ") || realName.includes(" văn") || realName.endsWith(" văn")) {
+            return "Anh";
+          }
+          
+          const words = realName.split(/\s+/);
+          if (words.length > 0) {
+            const givenName = words[words.length - 1];
+            
+            const femaleGivenNames = [
+              "phượng", "tuyền", "lan", "nga", "yến", "thảo", "quỳnh", 
+              "diệp", "liên", "hương", "bích", "nguyệt", "tuyết", "hằng", 
+              "dung", "oanh", "mai", "vy"
+            ];
+            
+            const maleGivenNames = [
+              "thông", "tuấn", "quốc", "đức", "hùng", "mạnh", "dũng", 
+              "sơn", "huy", "nam", "trung", "hoàng", "toàn", "thắng", 
+              "minh", "long", "khang", "phúc", "hải", "phong", "kiệt", 
+              "thịnh", "tùng", "bảo", "thành", "sáng", "tiến", "quang",
+              "đạt", "quân"
+            ];
+            
+            if (femaleGivenNames.includes(givenName)) {
+              return "Chị";
+            }
+            if (maleGivenNames.includes(givenName)) {
+              return "Anh";
+            }
+          }
+          return "";
         };
 
         const getCleanName = (name: string | undefined | null): string => {
           if (!name || typeof name !== "string") return "";
-          return name.replace(/\s+/g, " ").trim();
+          const cleaned = name.replace(/\s+/g, " ").trim();
+          const match = cleaned.match(/^(.*?)\((.*?)\)$/);
+          if (match) {
+            const namePart = capitalizeName(match[1].trim());
+            const deptPart = capitalizeName(match[2].trim());
+            return `${namePart} (${deptPart})`;
+          }
+          return capitalizeName(cleaned);
         };
 
         report.updateLogs.forEach((log, idx) => {
           const timeMatch = log.match(/\((\d{2}:\d{2}:\d{2} \d{2}\/\d{2}\/\d{2})\)/);
           const logTimestamp = timeMatch ? timeMatch[1] : report.updatedAt || report.timestamp;
 
-          let description = `Bản tin của ${report.uploaderName} tại ${report.factory} vừa thay đổi thông tin.`;
+          // Strip timestamp from the log to make regex matching robust against nested parentheses
+          const cleanLog = log.replace(/\s*\(\d{2}:\d{2}:\d{2} \d{2}\/\d{2}\/\d{2}\)\s*$/, "").trim();
+
+          const uploaderNameCapitalized = getCleanName(report.uploaderName);
+          let description = `Bản tin của ${uploaderNameCapitalized} tại ${report.factory} vừa thay đổi thông tin.`;
           
-          const likeMatch = log.match(/Lượt thích mới \((.*?)\)/);
+          const likeMatch = cleanLog.match(/^Lượt thích mới \((.*)\)$/);
           if (likeMatch) {
             const actor = getCleanName(likeMatch[1]);
             const gender = guessGenderPrefix(actor);
-            description = `Bản tin của ${report.uploaderName} vừa được ${gender} @${actor} thả 1 lượt like.`;
+            const genderPrefix = gender ? `${gender} ` : "";
+            description = `Bản tin của ${uploaderNameCapitalized} vừa được ${genderPrefix}@${actor} thả 1 lượt like.`;
           } else {
-            const shareMatch = log.match(/Chia sẻ mới \((.*?)\)/);
+            const shareMatch = cleanLog.match(/^Chia sẻ mới \((.*)\)$/) || cleanLog.match(/^Tiếp nhận mới \((.*)\)$/);
             if (shareMatch) {
               const actor = getCleanName(shareMatch[1]);
               const gender = guessGenderPrefix(actor);
-              description = `Bản tin của ${report.uploaderName} vừa được ${gender} @${actor} chia sẻ.`;
+              const genderPrefix = gender ? `${gender} ` : "";
+              description = `Bản tin của ${uploaderNameCapitalized} vừa được ${genderPrefix}@${actor} xác nhận tiếp nhận.`;
             } else {
-              const chatMatch = log.match(/Tương tác bình luận mới từ (.*?) \(/) || log.match(/Tương tác bình luận mới từ (.*?)$/);
+              const chatMatch = cleanLog.match(/^Tương tác bình luận mới từ (.*?)$/);
               if (chatMatch) {
                 const actor = getCleanName(chatMatch[1]);
                 const gender = guessGenderPrefix(actor);
-                description = `Bản tin của ${report.uploaderName} vừa nhận bình luận tương tác từ ${gender} @${actor}.`;
+                const genderPrefix = gender ? `${gender} ` : "";
+                description = `Bản tin của ${uploaderNameCapitalized} vừa nhận bình luận tương tác từ ${genderPrefix}@${actor}.`;
               } else {
-                const dirMatch = log.match(/Chỉ đạo mới \((.*?): "(.*?)"\)/);
+                const dirMatch = cleanLog.match(/^Chỉ đạo mới \((.*?): "(.*)"\)$/);
                 if (dirMatch) {
                   const actor = getCleanName(dirMatch[1]);
                   const content = dirMatch[2];
                   const gender = guessGenderPrefix(actor);
-                  description = `${gender} @${actor} vừa ban hành chỉ đạo mới trên bản tin của ${report.uploaderName}: "${content}"`;
-                } else if (log.includes("Sửa chi tiết") || log.includes("Sửa chi nhánh") || log.includes("Sửa hạng mục 4M1E1I") || log.includes("Sửa ghi chú") || log.includes("Thay đổi mức cảnh báo") || log.includes("Sửa ảnh")) {
-                  const cleanPart = log.replace(/\s*\(\d{2}:\d{2}:\d{2}.*?\)\s*$/, "").trim();
-                  description = `Bản tin của ${report.uploaderName} tại ${report.factory} vừa thay đổi: ${cleanPart}.`;
+                  const genderPrefix = gender ? `${gender} ` : "";
+                  description = `${genderPrefix}@${actor} vừa ban hành chỉ đạo mới trên bản tin của ${uploaderNameCapitalized}: "${content}"`;
+                } else if (cleanLog.includes("Sửa chi tiết") || cleanLog.includes("Sửa chi nhánh") || cleanLog.includes("Sửa hạng mục 4M1E1I") || cleanLog.includes("Sửa ghi chú") || cleanLog.includes("Thay đổi mức cảnh báo") || cleanLog.includes("Sửa ảnh")) {
+                  description = `Bản tin của ${uploaderNameCapitalized} tại ${report.factory} vừa thay đổi: ${cleanLog}.`;
                 }
               }
             }
@@ -1851,6 +1953,52 @@ App Link: ${window.location.origin}`;
       }
     }
   }, [unreadCount]);
+
+  const lastUnreadCountRef = useRef(unreadCount);
+
+  // Play synthesized bell chime when unreadCount increases (new notification)
+  useEffect(() => {
+    if (unreadCount > lastUnreadCountRef.current) {
+      playNotificationSound();
+    }
+    lastUnreadCountRef.current = unreadCount;
+  }, [unreadCount]);
+
+  // Unlock AudioContext on touch / click to comply with iOS Safari & modern browser autoplay policies
+  useEffect(() => {
+    const unlockAudio = () => {
+      try {
+        const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
+        if (AudioContextClass) {
+          if (!audioCtx) {
+            audioCtx = new AudioContextClass();
+          }
+          if (audioCtx.state === "suspended") {
+            audioCtx.resume();
+          }
+          
+          // Create and play a silent buffer to truly activate hardware output on iOS Safari
+          const buffer = audioCtx.createBuffer(1, 1, 22050);
+          const source = audioCtx.createBufferSource();
+          source.buffer = buffer;
+          source.connect(audioCtx.destination);
+          source.start(0);
+        }
+      } catch (err) {
+        console.warn("Failed to initialize/unlock AudioContext:", err);
+      }
+      window.removeEventListener("click", unlockAudio, { capture: true });
+      window.removeEventListener("touchstart", unlockAudio, { capture: true });
+    };
+
+    window.addEventListener("click", unlockAudio, { capture: true, once: true });
+    window.addEventListener("touchstart", unlockAudio, { capture: true, once: true });
+
+    return () => {
+      window.removeEventListener("click", unlockAudio, { capture: true });
+      window.removeEventListener("touchstart", unlockAudio, { capture: true });
+    };
+  }, []);
 
   const handleNotificationClick = (notif: AppNotification) => {
     if (!readNotifIds.includes(notif.id)) {
@@ -2130,7 +2278,7 @@ App Link: ${window.location.origin}`;
             </button>
           )}
 
-          {(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) && (
+          {currentUser?.role === UserRole.ADMIN && (
             <button
               onClick={() => {
                 setShowMobileCloudQuota(true);
@@ -2143,22 +2291,7 @@ App Link: ${window.location.origin}`;
             </button>
           )}
 
-          <button
-            onClick={() => setShowNotifDrawer(true)}
-            className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
-            title="Thông báo hệ thống"
-          >
-            <Bell className="w-[19px] h-[19px] text-white" />
-            {unreadCount > 0 && (
-              <span className={`absolute -top-1.5 -right-1.5 bg-rose-600 text-[8px] text-white font-extrabold w-4.5 h-4.5 rounded-full flex items-center justify-center border ${theme.border} animate-pulse`}>
-                {unreadCount > 99 ? "99+" : unreadCount}
-              </span>
-            )}
-          </button>
-          
-          
-
-          {currentUser?.role !== UserRole.ADMIN && (
+          {currentUser?.role !== UserRole.ADMIN && currentUser?.role !== UserRole.REVIEWER && (
             <button 
               onClick={handleRefreshClick} 
               className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
@@ -2170,19 +2303,19 @@ App Link: ${window.location.origin}`;
           )}
 
           <button
-            onClick={() => setShowQrCodeView(true)}
-            className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
-            title="Mã QR ứng dụng"
-          >
-            <QrCode className="w-[18px] h-[18px] text-sky-200 hover:text-white" />
-          </button>
-          
-          <button
             onClick={() => setOnboardingStep(1)}
             className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
             title="Hướng dẫn nhanh"
           >
             <Info className="w-[18px] h-[18px] text-teal-200 hover:text-white" />
+          </button>
+
+          <button
+            onClick={() => setShowQrCodeView(true)}
+            className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
+            title="Mã QR ứng dụng"
+          >
+            <QrCode className="w-[18px] h-[18px] text-sky-200 hover:text-white" />
           </button>
           
           {/* Bong bóng số báo tổng số người online */}
@@ -2204,6 +2337,31 @@ App Link: ${window.location.origin}`;
               </span>
             </button>
           )}
+
+          <button
+            onClick={() => setShowNotifDrawer(true)}
+            className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer ml-[2px]"
+            title="Thông báo hệ thống"
+          >
+            <Bell className="w-[19px] h-[19px] text-white" />
+            {unreadCount > 0 && (
+              <span className={`absolute -top-1.5 -right-1.5 bg-rose-600 text-[8px] text-white font-extrabold w-4.5 h-4.5 rounded-full flex items-center justify-center border ${theme.border} animate-pulse`}>
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={toggleFullscreen}
+            className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer ml-[2px]"
+            title={isFullscreen ? "Thu nhỏ màn hình" : "Phóng to màn hình"}
+          >
+            {isFullscreen ? (
+              <Minimize className="w-[19px] h-[19px] text-white" />
+            ) : (
+              <Maximize className="w-[19px] h-[19px] text-white" />
+            )}
+          </button>
         </div>
       </div>
 

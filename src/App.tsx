@@ -52,8 +52,24 @@ import {
 const safeSetItem = (key: string, value: string): void => {
   try {
     localStorage.setItem(key, value);
-  } catch (error) {
+  } catch (error: any) {
     console.warn(`[localStorage] Failed to save key "${key}". Quota exceeded or storage is disabled:`, error);
+    if (error && (error.name === "QuotaExceededError" || error.code === 22 || error.name === "NS_ERROR_DOM_QUOTA_REACHED" || error.message?.includes("quota"))) {
+      try {
+        console.warn("[localStorage] Storage quota exceeded. Automatically clearing older caches to preserve critical user data...");
+        // Clear less critical caches to free up space
+        localStorage.removeItem("4m1e1i_products_catalog");
+        localStorage.removeItem("4m1e1i_molds_catalog");
+        localStorage.removeItem("4m1e1i_chats");
+        localStorage.removeItem("4m1e1i_broadcasts");
+        
+        // Try writing the value again after clearing space
+        localStorage.setItem(key, value);
+        console.log(`[localStorage] Retry writing key "${key}" succeeded after clearing caches!`);
+      } catch (retryError) {
+        console.error(`[localStorage] Retry failed for key "${key}":`, retryError);
+      }
+    }
   }
 };
 
@@ -738,7 +754,36 @@ export default function App() {
       return;
     }
     try {
-      const fUsers = await fetchCollection<User>(COLLECTIONS.USERS);
+      const [
+        fUsers,
+        fReports,
+        fCompanies,
+        fBranches,
+        fDepts,
+        fBroadcasts,
+        fChats,
+        fProdRequests,
+        fRequestItems,
+        fOrderImpls,
+        fProducts,
+        fMolds,
+        fConfigs
+      ] = await Promise.all([
+        fetchCollection<User>(COLLECTIONS.USERS),
+        fetchCollection<QualityReport>(COLLECTIONS.REPORTS),
+        fetchCollection<Company>(COLLECTIONS.COMPANIES),
+        fetchCollection<Branch>(COLLECTIONS.BRANCHES),
+        fetchCollection<Department>(COLLECTIONS.DEPARTMENTS),
+        fetchCollection<BroadcastNotice>(COLLECTIONS.BROADCASTS),
+        fetchCollection<ChatMessage>(COLLECTIONS.CHATS),
+        fetchCollection<ProductionRequest>(COLLECTIONS.PRODUCTION_REQUESTS),
+        fetchCollection<{ prId: string; items: any[] }>(COLLECTIONS.PRODUCTION_REQUEST_ITEMS),
+        fetchCollection<OrderImplementation>(COLLECTIONS.ORDER_IMPLEMENTATIONS),
+        fetchCollection<CatalogProduct>(COLLECTIONS.PRODUCTS_CATALOG),
+        fetchCollection<CatalogMold>(COLLECTIONS.MOLDS_CATALOG),
+        fetchCollection<any>("config")
+      ]);
+
       let finalUsers = fUsers.length > 0 ? fUsers : [...users];
       finalUsers = sanitizeUsers(finalUsers.map((u) => {
         let userPwd = u.password;
@@ -776,12 +821,8 @@ export default function App() {
       }));
       setUsers(finalUsers);
 
-      const fReports = await fetchCollection<QualityReport>(COLLECTIONS.REPORTS);
       const finalReports = sanitizeReports(fReports.length > 0 ? fReports : [...reports]);
       setReports(finalReports);
-
-      const fCompanies = await fetchCollection<Company>(COLLECTIONS.COMPANIES);
-      const fBranches = await fetchCollection<Branch>(COLLECTIONS.BRANCHES);
 
       let latestCompanies = fCompanies.length > 0 ? fCompanies : [...companies];
       let latestBranches = fBranches.length > 0 ? fBranches : [...branches];
@@ -853,7 +894,6 @@ export default function App() {
         }
       }
 
-      const fDepts = await fetchCollection<Department>(COLLECTIONS.DEPARTMENTS);
       let latestDepts = fDepts.length > 0 ? fDepts : [...departments];
       latestDepts = sanitizeAndMigrateDepartments(latestDepts);
       setDepartments(latestDepts);
@@ -871,16 +911,10 @@ export default function App() {
         }
       }
 
-      const fBroadcasts = await fetchCollection<BroadcastNotice>(COLLECTIONS.BROADCASTS);
       setBroadcasts(fBroadcasts);
-
-      const fChats = await fetchCollection<ChatMessage>(COLLECTIONS.CHATS);
       setChats(fChats);
-
-      const fProdRequests = await fetchCollection<ProductionRequest>(COLLECTIONS.PRODUCTION_REQUESTS);
       setProductionRequests(fProdRequests);
 
-      const fRequestItems = await fetchCollection<{ prId: string; items: any[] }>(COLLECTIONS.PRODUCTION_REQUEST_ITEMS);
       if (fRequestItems.length > 0) {
         const itemsMap: Record<string, any[]> = {};
         fRequestItems.forEach((x) => {
@@ -889,33 +923,25 @@ export default function App() {
         setProductionRequestItemsMap(itemsMap);
       }
 
-      const fOrderImpls = await fetchCollection<OrderImplementation>(COLLECTIONS.ORDER_IMPLEMENTATIONS);
       if (fOrderImpls.length > 0) {
          setOrderImplementations(fOrderImpls);
       }
 
-      const fProducts = await fetchCollection<CatalogProduct>(COLLECTIONS.PRODUCTS_CATALOG);
       if (fProducts.length > 0) {
         setProductsCatalog(fProducts);
       }
 
-      const fMolds = await fetchCollection<CatalogMold>(COLLECTIONS.MOLDS_CATALOG);
       if (fMolds.length > 0) {
         setMoldsCatalog(fMolds);
       }
 
-      try {
-        const fConfigs = await fetchCollection<any>("config");
-        const remoteConfig = fConfigs.find((c) => c.id === "mobile_ui");
-        if (remoteConfig) {
-          const { id, ...cleanCfg } = remoteConfig;
-          setMobileUIConfig((prev: any) => ({
-            ...prev,
-            ...cleanCfg
-          }));
-        }
-      } catch (err) {
-        console.error("Failed fetching remote config from cloud:", err);
+      const remoteConfig = fConfigs.find((c: any) => c.id === "mobile_ui");
+      if (remoteConfig) {
+        const { id, ...cleanCfg } = remoteConfig;
+        setMobileUIConfig((prev: any) => ({
+          ...prev,
+          ...cleanCfg
+        }));
       }
 
       setDbConnected(true);
@@ -999,7 +1025,19 @@ export default function App() {
   }, [users]);
 
   useEffect(() => {
-    safeSetItem("4m1e1i_reports", JSON.stringify(reports));
+    // Sắp xếp và chỉ giữ hình ảnh (Base64) cho 10 báo cáo mới nhất trong localStorage để tránh lỗi QuotaExceededError (giới hạn bộ nhớ đệm 5MB của trình duyệt)
+    const sorted = [...reports].sort((a, b) => parseReportDate(b.timestamp) - parseReportDate(a.timestamp));
+    const pruned = sorted.map((report, idx) => {
+      if (idx < 10) {
+        return report;
+      }
+      return {
+        ...report,
+        imageUrl: "",
+        imageUrls: []
+      };
+    });
+    safeSetItem("4m1e1i_reports", JSON.stringify(pruned));
   }, [reports]);
 
   useEffect(() => {
@@ -1056,7 +1094,22 @@ export default function App() {
   }, [moldsCatalog, dbConnected, dbLoading, syncCompleted]);
 
   useEffect(() => {
-    safeSetItem("4m1e1i_chats", JSON.stringify(chats));
+    // Giới hạn lịch sử chat lưu trong localStorage xuống 100 tin nhắn mới nhất để tránh lỗi đầy bộ nhớ trình duyệt QuotaExceededError
+    const sorted = [...chats].sort((a, b) => {
+      const parseChatDate = (dateStr: string | undefined): number => {
+        if (!dateStr) return 0;
+        const match = dateStr.trim().match(/^(\d{1,2}):(\d{1,2}):(\d{1,2})\s+(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+        if (match) {
+          const [, h, m, s, day, month, year] = match;
+          const fullYear = year.length === 2 ? 2000 + parseInt(year, 10) : parseInt(year, 10);
+          return new Date(fullYear, parseInt(month, 10) - 1, parseInt(day, 10), parseInt(h, 10), parseInt(m, 10), parseInt(s, 10)).getTime();
+        }
+        return 0;
+      };
+      return parseChatDate(b.timestamp) - parseChatDate(a.timestamp);
+    });
+    const pruned = sorted.slice(0, 100);
+    safeSetItem("4m1e1i_chats", JSON.stringify(pruned));
   }, [chats]);
 
   useEffect(() => {
@@ -1139,9 +1192,11 @@ export default function App() {
 
         if (dbConnected && !dbLoading) {
           // Lưu TRÚC TIẾP định dạng chỉ cập nhật lastActive lên Firestore để tránh ghi đè làm thay đổi trạng thái phê duyệt (Active/Pending) thực tế của người dùng từ admin
-          await saveDocument(COLLECTIONS.USERS, currentUser.id, {
-            lastActive: now
-          });
+          if (currentUser.fullName && currentUser.phone) {
+            await saveDocument(COLLECTIONS.USERS, currentUser.id, {
+              lastActive: now
+            });
+          }
         }
       } catch (err) {
         console.warn("Cập nhật trạng thái hoạt động thất bại (bỏ qua lỗi chạy ngầm):", err);
@@ -1956,9 +2011,16 @@ export default function App() {
         );
 
         if (syncCompleted && dbConnected && !dbLoading) {
-          saveDocument(COLLECTIONS.REPORTS, editingReport.id, updatedReport).catch((err) => {
-            console.error("Lỗi khi tải báo cáo cập nhật lên Firestore:", err);
-          });
+          saveDocument(COLLECTIONS.REPORTS, editingReport.id, updatedReport)
+            .then((success) => {
+              if (!success) {
+                showToast("Lỗi máy chủ! Không thể cập nhật báo cáo lên hệ thống đám mây. Vui lòng kiểm tra kết nối 4G/Wifi.", "error");
+              }
+            })
+            .catch((err) => {
+              console.error("Lỗi khi tải báo cáo cập nhật lên Firestore:", err);
+              showToast("Lỗi đồng bộ máy chủ! Bản cập nhật chưa được lưu lên đám mây.", "error");
+            });
         }
 
         showToast("Đã cập nhật tệp tin biến động chất lượng thành công!", "success");
@@ -1997,9 +2059,16 @@ export default function App() {
         setReports((prev) => [newReport, ...prev]);
 
         if (syncCompleted && dbConnected && !dbLoading) {
-          saveDocument(COLLECTIONS.REPORTS, newId, newReport).catch((err) => {
-            console.error("Lỗi khi tải báo cáo mới lên Firestore:", err);
-          });
+          saveDocument(COLLECTIONS.REPORTS, newId, newReport)
+            .then((success) => {
+              if (!success) {
+                showToast("Lỗi máy chủ! Không thể gửi báo cáo lên đám mây. Vui lòng kiểm tra kết nối 4G/Wifi.", "error");
+              }
+            })
+            .catch((err) => {
+              console.error("Lỗi khi tải báo cáo mới lên Firestore:", err);
+              showToast("Lỗi đồng bộ máy chủ! Bản tin mới chưa được gửi thành công lên đám mây.", "error");
+            });
         }
         
         // Auto alert sound simulator if abnormal
@@ -2104,7 +2173,7 @@ export default function App() {
     const newShares = updatedReport.sharedBy || [];
     if (newShares.length > oldShares.length) {
       const addedShare = newShares.find(s => !oldShares.includes(s)) || "Kiểm soát viên";
-      changes.push(`Chia sẻ mới (${addedShare})`);
+      changes.push(`Tiếp nhận mới (${addedShare})`);
     }
 
     const oldDirs = existing.directives || [];
