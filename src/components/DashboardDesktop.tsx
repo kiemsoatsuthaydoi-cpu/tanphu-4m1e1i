@@ -656,7 +656,7 @@ export default function DashboardDesktop({
   const [editTickerSpacing, setEditTickerSpacing] = useState(50);
 
   const handleStartEditTicker = () => {
-    setEditTickerText(tickerConfig?.text !== undefined ? tickerConfig.text : "Ban Quản Trị xin gửi lời cảm ơn đến CN.BNI; CN.LAN; P.QLCL; Khối QLCCƯ và các cá nhân Chị @Xiêm - TP.HRD (TPP-BNI); Chị @Phượng - TP.QLCL (TPP-LAN); Em @Hùng (Kho HBN)... đã sưu tầm, tổng hợp gửi câu hỏi của Tasco để BQT cập nhật trên \"Ứng Dụng Ôn Tập Quiz 3T Hàng Ngày\" của chúng ta. Xin cảm ơn.");
+    setEditTickerText(tickerConfig?.text !== undefined ? tickerConfig.text : "");
     setEditTickerSpeed(tickerConfig?.speed || 35);
     setEditTickerSpacing(tickerConfig?.spacing || 50);
     setIsEditingTicker(true);

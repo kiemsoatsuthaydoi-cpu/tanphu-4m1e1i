@@ -977,6 +977,8 @@ export default function MobileFrame({
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedFactoryFilter, setSelectedFactoryFilter] = useState<string | null>(null);
   const [selectedWeekFilter, setSelectedWeekFilter] = useState<string>("ALL");
+  const [selectedReportTypeFilter, setSelectedReportTypeFilter] = useState<"KPH" | "DSA" | null>(null);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [activeFilterSheet, setActiveFilterSheet] = useState<"BRANCH" | "CATEGORY" | "WEEK" | null>(null);
   const [onboardingStep, setOnboardingStep] = useState<number | null>(null);
 
@@ -1109,6 +1111,7 @@ export default function MobileFrame({
     setSelectedCategory(null);
     setSearchTerm("");
     setSelectedFactoryFilter(null);
+    setSelectedReportTypeFilter(null);
     
     try {
       if (onManualRefresh) {
@@ -1695,8 +1698,13 @@ App Link: ${window.location.origin}`;
     const matchesFactoryFilter = selectedFactoryFilter ? matchSelectedFactory(r.factory, selectedFactoryFilter) : true;
     const rDate = parseReportTimestamp(r.timestamp);
     const matchesWeek = isDateInWeekFilter(rDate, selectedWeekFilter);
+    const matchesType = !selectedReportTypeFilter
+      ? true
+      : selectedReportTypeFilter === "KPH"
+      ? (r.reportType === "KPH" || r.isAbnormal)
+      : (r.reportType === "DSA" || r.isSpotlight);
     
-    return matchesSearch && matchesCategory && matchesFactoryFilter && matchesWeek;
+    return matchesSearch && matchesCategory && matchesFactoryFilter && matchesWeek && matchesType;
   });
 
   // Sort reports according to the prioritized layout:
@@ -2299,8 +2307,8 @@ App Link: ${window.location.origin}`;
             </div>
           </div>
           <div className="relative flex items-center select-none">
-            {/* Subtle left gradient fade to indicate scrollable content */}
-            <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-r from-black/25 to-transparent pointer-events-none z-10" />
+            {/* Solid mask of the same theme background to cover any protruding icon part */}
+            <div className={`absolute left-0 top-0 bottom-0 w-3 ${theme.bg} pointer-events-none z-10`} />
 
             <div 
               ref={secondaryIconsRef}
@@ -2309,7 +2317,7 @@ App Link: ${window.location.origin}`;
               style={{
                 scrollbarWidth: "none",
                 msOverflowStyle: "none",
-                maxWidth: "112px", // Fits exactly 3 main icons with their gaps
+                maxWidth: "108px", // Adjusted to cleanly fit exactly 3 main icons
                 WebkitOverflowScrolling: "touch"
               }}
             >
@@ -2453,75 +2461,125 @@ App Link: ${window.location.origin}`;
         <div className={`transition-all duration-300 overflow-hidden shrink-0 ${
           showFilters ? "max-h-[50px] opacity-100" : "max-h-0 opacity-0 pointer-events-none"
         }`}>
-          <div className="bg-white px-2 py-1.5 border-b border-slate-200 shadow-xs flex items-center gap-1">
+          <div className="bg-white pl-2.5 pr-1.5 py-1.5 border-b border-slate-200 shadow-xs flex items-center gap-0.5 flex-nowrap overflow-x-auto scrollbar-none select-none">
             {/* Search Input */}
-            <div className="relative flex-[1] min-w-0">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+            <div className={`relative transition-all duration-300 flex-1 ${isSearchFocused ? "min-w-[140px]" : "min-w-[70px]"}`}>
+              <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
               <input
                 type="text"
-                placeholder="Tìm kiếm..."
+                placeholder="Tìm..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setIsSearchFocused(false)}
                 autoComplete="one-time-code"
                 autoCorrect="off"
                 autoCapitalize="off"
                 spellCheck="false"
-                className="w-full pl-6 pr-1 py-1 bg-slate-100 rounded-lg text-[9px] focus:ring-1 focus:ring-blue-500 outline-none placeholder:text-slate-400 text-slate-700 font-bold border-none h-[26px]"
+                className="w-full pl-5 pr-1 py-1 bg-slate-100 rounded-lg text-[9px] focus:ring-1 focus:ring-blue-500 outline-none placeholder:text-slate-400 text-slate-700 font-bold border-none h-[26px]"
               />
             </div>
 
             {/* Branch Dropdown */}
-            {/* Branch Dropdown */}
-            <div className="flex-[0.75] min-w-0 max-w-[68px]">
+            <div className={`transition-all duration-300 origin-left ${isSearchFocused ? "w-0 opacity-0 max-w-0 p-0 m-0 overflow-hidden pointer-events-none" : "w-[68px] shrink-0"}`}>
               <button
                 type="button"
                 onClick={() => setActiveFilterSheet("BRANCH")}
-                className="w-full bg-slate-100 text-[9px] font-extrabold text-slate-700 rounded-lg pl-1.5 pr-1 py-1 focus:ring-1 focus:ring-blue-500 outline-none border-none select-none h-[26px] truncate cursor-pointer flex items-center justify-between gap-0.5"
+                className="w-full bg-slate-100 text-[8.5px] font-extrabold text-slate-700 rounded-lg px-1.5 py-1 focus:ring-1 focus:ring-blue-500 outline-none border-none select-none h-[26px] cursor-pointer flex items-center justify-between gap-0.5"
               >
-                <span className="truncate">
-                  {(() => {
-                    if (!selectedFactoryFilter) return "TẤT CẢ";
-                    return selectedFactoryFilter;
-                  })()}
+                <span className="truncate block text-left">
+                  <span translate="no" className="notranslate">
+                    {(() => {
+                      if (!selectedFactoryFilter) return "TẤT CẢ";
+                      return selectedFactoryFilter;
+                    })()}
+                  </span>
                 </span>
                 <span className="text-[7px] text-slate-400 shrink-0">▼</span>
               </button>
             </div>
 
             {/* Category Dropdown */}
-            <div className="flex-[0.95] min-w-0 max-w-[85px]">
+            <div className={`transition-all duration-300 origin-left ${isSearchFocused ? "w-0 opacity-0 max-w-0 p-0 m-0 overflow-hidden pointer-events-none" : "w-[68px] shrink-0"}`}>
               <button
                 type="button"
                 onClick={() => setActiveFilterSheet("CATEGORY")}
-                className="w-full bg-slate-100 text-[9px] font-extrabold text-slate-700 rounded-lg pl-1.5 pr-1 py-1 focus:ring-1 focus:ring-blue-500 outline-none border-none select-none h-[26px] truncate cursor-pointer flex items-center justify-between gap-0.5"
+                className="w-full bg-slate-100 text-[8.5px] font-extrabold text-slate-700 rounded-lg px-1.5 py-1 focus:ring-1 focus:ring-blue-500 outline-none border-none select-none h-[26px] cursor-pointer flex items-center justify-between gap-0.5"
               >
-                <span className="truncate">
-                  {selectedCategory || "YẾU TỐ"}
+                <span className="truncate block text-left">
+                  <span translate="no" className="notranslate">
+                    {selectedCategory || "YẾU TỐ"}
+                  </span>
                 </span>
                 <span className="text-[7px] text-slate-400 shrink-0">▼</span>
               </button>
             </div>
 
             {/* Week Dropdown */}
-            <div className="flex-[0.8] min-w-0 max-w-[78px]">
+            <div className={`transition-all duration-300 origin-left ${isSearchFocused ? "w-0 opacity-0 max-w-0 p-0 m-0 overflow-hidden pointer-events-none" : "w-[68px] shrink-0"}`}>
               <button
                 type="button"
                 onClick={() => setActiveFilterSheet("WEEK")}
-                className="w-full bg-slate-100 text-[9px] font-extrabold text-slate-700 rounded-lg pl-1.5 pr-1 py-1 focus:ring-1 focus:ring-blue-500 outline-none border-none select-none h-[26px] truncate cursor-pointer flex items-center justify-between gap-0.5"
+                className="w-full bg-slate-100 text-[8.5px] font-extrabold text-slate-700 rounded-lg px-1.5 py-1 focus:ring-1 focus:ring-blue-500 outline-none border-none select-none h-[26px] cursor-pointer flex items-center justify-between gap-0.5"
               >
-                <span className="truncate">
-                  {(() => {
-                    if (selectedWeekFilter === "ALL") return "MỌI TUẦN";
-                    if (selectedWeekFilter === "THIS_WEEK") return getWeekOptionLabel(0);
-                    if (selectedWeekFilter === "LAST_WEEK") return getWeekOptionLabel(1);
-                    if (selectedWeekFilter === "2_WEEKS_AGO") return getWeekOptionLabel(2);
-                    if (selectedWeekFilter === "3_WEEKS_AGO") return getWeekOptionLabel(3);
-                    return "MỌI TUẦN";
-                  })()}
+                <span className="truncate block text-left">
+                  <span translate="no" className="notranslate">
+                    {(() => {
+                      if (selectedWeekFilter === "ALL") return "MỌI TUẦN";
+                      if (selectedWeekFilter === "THIS_WEEK") return getWeekOptionLabel(0);
+                      if (selectedWeekFilter === "LAST_WEEK") return getWeekOptionLabel(1);
+                      if (selectedWeekFilter === "2_WEEKS_AGO") return getWeekOptionLabel(2);
+                      if (selectedWeekFilter === "3_WEEKS_AGO") return getWeekOptionLabel(3);
+                      return "MỌI TUẦN";
+                    })()}
+                  </span>
                 </span>
                 <span className="text-[7px] text-slate-400 shrink-0">▼</span>
               </button>
             </div>
+
+            {/* KPH Filter Button */}
+            <button
+              type="button"
+              onClick={() => setSelectedReportTypeFilter(prev => prev === "KPH" ? null : "KPH")}
+              className={`h-[26px] px-1.5 rounded-lg text-[9.5px] font-black shrink-0 border transition-all cursor-pointer flex items-center justify-center gap-1 shadow-xs ${
+                selectedReportTypeFilter === "KPH"
+                  ? "border-white ring-1 ring-red-600 font-extrabold z-10 opacity-100"
+                  : "border-transparent opacity-85"
+              }`}
+              style={{
+                minWidth: "36px",
+                backgroundColor: "#dc2626",
+                color: "#ffffff"
+              }}
+            >
+              {selectedReportTypeFilter === "KPH" && (
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block shrink-0" />
+              )}
+              <span translate="no" className="notranslate">KPH</span>
+            </button>
+
+            {/* DSA Filter Button */}
+            <button
+              type="button"
+              onClick={() => setSelectedReportTypeFilter(prev => prev === "DSA" ? null : "DSA")}
+              className={`h-[26px] px-1.5 rounded-lg text-[9.5px] font-black shrink-0 border transition-all cursor-pointer flex items-center justify-center gap-1 shadow-xs ${
+                selectedReportTypeFilter === "DSA"
+                  ? "border-white ring-1 ring-emerald-600 font-extrabold z-10 opacity-100"
+                  : "border-transparent opacity-85"
+              }`}
+              style={{
+                minWidth: "36px",
+                backgroundColor: "#059669",
+                color: "#ffffff"
+              }}
+            >
+              {selectedReportTypeFilter === "DSA" && (
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block shrink-0" />
+              )}
+              <span translate="no" className="notranslate">DSA</span>
+            </button>
+            <div className="w-2 shrink-0" />
           </div>
         </div>
       )}
