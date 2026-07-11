@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { getBranchCodeSuffix, formatNameCapitalized } from "./utils/branchHelpers";
 import { AlertCircle, LogIn, Heart, ShieldCheck, Wifi, WifiOff, RefreshCw, Smartphone, Monitor, Lock, Building, ChevronDown, Briefcase, User as UserIcon, Check, CheckCircle, XCircle, AlertTriangle, Info } from "lucide-react";
 import { T } from "./components/TranslateText";
@@ -650,17 +650,28 @@ export default function App() {
 
   useEffect(() => {
     safeSetItem("4m1e1i_ticker_config", JSON.stringify(tickerConfig));
-    if (syncCompleted && dbConnected && !dbLoading) {
-      saveDocument("config", "ticker", tickerConfig).catch(console.error);
-    }
-  }, [tickerConfig, dbConnected, dbLoading, syncCompleted]);
+  }, [tickerConfig]);
 
   useEffect(() => {
     safeSetItem("4m1e1i_mobile_ui_config", JSON.stringify(mobileUIConfig));
-    if (syncCompleted && dbConnected && !dbLoading) {
-      saveDocument("config", "mobile_ui", mobileUIConfig).catch(console.error);
+  }, [mobileUIConfig]);
+
+  const handleUpdateTickerConfig = useCallback((newConfig: any) => {
+    setTickerConfig(newConfig);
+    if (dbConnected) {
+      saveDocument("config", "ticker", newConfig).catch(console.error);
     }
-  }, [mobileUIConfig, dbConnected, dbLoading, syncCompleted]);
+  }, [dbConnected]);
+
+  const handleUpdateMobileUIConfig = useCallback((updater: any) => {
+    setMobileUIConfig((prev: any) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      if (dbConnected) {
+        saveDocument("config", "mobile_ui", next).catch(console.error);
+      }
+      return next;
+    });
+  }, [dbConnected]);
 
   // Sign up and login screens
   const [authScreen, setAuthScreen] = useState<"LOGIN" | "REGISTER">("LOGIN");
@@ -1124,10 +1135,51 @@ export default function App() {
       }
     );
 
+    const unsubscribeConfigs = onSnapshot(
+      collection(db, "config"),
+      (snapshot) => {
+        snapshot.forEach((doc) => {
+          if (doc.id === "ticker") {
+            const data = doc.data();
+            setTickerConfig((prev: any) => {
+              if (
+                prev.text !== data.text ||
+                prev.speed !== data.speed ||
+                prev.spacing !== data.spacing
+              ) {
+                return {
+                  text: data.text || "",
+                  speed: data.speed || 35,
+                  spacing: data.spacing || 50
+                };
+              }
+              return prev;
+            });
+          } else if (doc.id === "mobile_ui") {
+            const data = doc.data();
+            setMobileUIConfig((prev: any) => {
+              const { id, ...cleanData } = data;
+              if (JSON.stringify(prev) !== JSON.stringify({ ...prev, ...cleanData })) {
+                return {
+                  ...prev,
+                  ...cleanData
+                };
+              }
+              return prev;
+            });
+          }
+        });
+      },
+      (error) => {
+        console.error("Lỗi đồng bộ cấu hình thời gian thực:", error);
+      }
+    );
+
     return () => {
       unsubscribeReports();
       unsubscribeChats();
       unsubscribeBroadcasts();
+      unsubscribeConfigs();
     };
   }, [dbConnected, dbLoading]);
 
@@ -3083,7 +3135,7 @@ export default function App() {
             currentUser={currentUser}
             onUpdateReport={handleUpdateReport}
             mobileUIConfig={mobileUIConfig}
-            onUpdateMobileUIConfig={setMobileUIConfig}
+            onUpdateMobileUIConfig={handleUpdateMobileUIConfig}
             onLogout={() => setCurrentUser(null)}
             branches={branches}
             onManualRefresh={syncFromDb}
@@ -3180,7 +3232,7 @@ export default function App() {
             currentUser={currentUser}
             onUpdateReport={handleUpdateReport}
             mobileUIConfig={mobileUIConfig}
-            onUpdateMobileUIConfig={setMobileUIConfig}
+            onUpdateMobileUIConfig={handleUpdateMobileUIConfig}
             onLogout={() => setCurrentUser(null)}
             branches={branches}
             onManualRefresh={syncFromDb}
@@ -3338,7 +3390,7 @@ export default function App() {
             onShowToast={showToast}
             onDeleteBroadcast={handleDeleteBroadcast}
             tickerConfig={tickerConfig}
-            onUpdateTickerConfig={setTickerConfig}
+            onUpdateTickerConfig={handleUpdateTickerConfig}
           />
         </div>
 
@@ -3377,7 +3429,7 @@ export default function App() {
                 currentUser={currentUser}
                 onUpdateReport={handleUpdateReport}
                 mobileUIConfig={mobileUIConfig}
-                onUpdateMobileUIConfig={setMobileUIConfig}
+                onUpdateMobileUIConfig={handleUpdateMobileUIConfig}
                 onLogout={() => setCurrentUser(null)}
                 branches={branches}
                 onManualRefresh={syncFromDb}
@@ -3428,7 +3480,7 @@ export default function App() {
                 currentUser={currentUser}
                 onUpdateReport={handleUpdateReport}
                 mobileUIConfig={mobileUIConfig}
-                onUpdateMobileUIConfig={setMobileUIConfig}
+                onUpdateMobileUIConfig={handleUpdateMobileUIConfig}
                 onLogout={() => setCurrentUser(null)}
                 branches={branches}
                 onManualRefresh={syncFromDb}
