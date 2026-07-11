@@ -181,6 +181,9 @@ interface MobileFrameProps {
   setIsNativeScrollActive?: (active: boolean, filteredReports?: any[]) => void;
   broadcasts?: BroadcastNotice[];
   tickerConfig?: { text: string; speed: number; spacing: number };
+  onUpdateTickerConfig?: (config: { text: string; speed: number; spacing: number }) => void;
+  onAddBroadcast?: (notice: string, type: string) => void;
+  onDeleteBroadcast?: (id: string) => void;
 }
 
 function formatTimestampToDMY(tsStr: string): string {
@@ -745,7 +748,10 @@ export default function MobileFrame({
   isNativeScrollActive,
   setIsNativeScrollActive,
   broadcasts = [],
-  tickerConfig
+  tickerConfig,
+  onUpdateTickerConfig,
+  onAddBroadcast,
+  onDeleteBroadcast
 }: MobileFrameProps) {
   const isRealMobile = typeof window !== "undefined" && (
     window.innerWidth < 1024 || 
@@ -1128,6 +1134,28 @@ export default function MobileFrame({
 
   // Notification states
   const [showNotifDrawer, setShowNotifDrawer] = useState(false);
+  const [notifTab, setNotifTab] = useState<"HOT" | "SYSTEM">("HOT");
+  const [newNoticeContent, setNewNoticeContent] = useState("");
+  const [noticeType, setNoticeType] = useState("Quản trị viên phát sóng");
+  
+  // Ticker states
+  const [isEditingTicker, setIsEditingTicker] = useState(false);
+  const [tickerText, setTickerText] = useState("");
+  const [tickerSpeed, setTickerSpeed] = useState(35);
+  const [tickerSpacing, setTickerSpacing] = useState(50);
+
+  // Broadcast editing states
+  const [editingBroadcastId, setEditingBroadcastId] = useState<string | null>(null);
+  const [editingBroadcastText, setEditingBroadcastText] = useState("");
+
+  // Sync ticker state fields when tickerConfig prop changes
+  useEffect(() => {
+    if (tickerConfig) {
+      setTickerText(tickerConfig.text || "");
+      setTickerSpeed(tickerConfig.speed !== undefined ? tickerConfig.speed : 35);
+      setTickerSpacing(tickerConfig.spacing !== undefined ? tickerConfig.spacing : 50);
+    }
+  }, [tickerConfig]);
   const [showOnlineUsersDrawer, setShowOnlineUsersDrawer] = useState(false);
   const [onlineSearchTerm, setOnlineSearchTerm] = useState("");
   const [onlineTabFilter, setOnlineTabFilter] = useState<"ONLINE" | "ALL">("ONLINE");
@@ -2302,7 +2330,7 @@ App Link: ${window.location.origin}`;
               </div>
             </div>
             <div className="flex flex-col justify-center select-none">
-              <T className="font-bold text-[13.6px] tracking-wide whitespace-nowrap leading-none block text-left">META ANDON</T>
+              <T className="font-bold text-[13.2px] tracking-wide whitespace-nowrap leading-none block text-left">META ANDON</T>
               <T className="text-[8px] font-bold tracking-[-0.015em] opacity-90 whitespace-nowrap block text-left leading-none mt-1">Mỗi nhân viên là một QC</T>
             </div>
           </div>
@@ -4750,204 +4778,478 @@ App Link: ${window.location.origin}`}
         <div className="fixed lg:absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-end justify-center z-50 select-none animate-fadeIn">
           <div className="bg-white rounded-t-3xl w-full max-h-[85%] overflow-hidden flex flex-col shadow-2xl border-t border-slate-100 animate-slideUp">
             {/* Header */}
-            <div className="flex justify-between items-center px-4 py-4 border-b border-slate-100 shrink-0 bg-slate-50">
-              <div className="flex items-center gap-2">
-                <Bell className="w-5 h-5 text-[#1e3a8a] animate-bounce" />
-                <span className="font-extrabold text-[13px] text-[#1e3a8a] tracking-tight uppercase">
-                  <T>THÔNG BÁO HỆ THỐNG</T>
-                </span>
-                {unreadCount > 0 && (
-                  <span className="bg-rose-100 text-rose-700 text-[10px] font-black px-2 py-0.5 rounded-full ml-1">
-                    <T>MỚI</T> <span translate="no" className="font-mono">{unreadCount}</span>
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2.5">
-                {unreadCount > 0 && (
-                  <button
-                    onClick={handleMarkAllAsRead}
-                    className="text-blue-600 hover:text-blue-800 text-[10px] font-extrabold transition-colors cursor-pointer mr-1"
-                  >
-                    <T>ĐỌC TẤT CẢ</T>
-                  </button>
-                )}
+            {currentUser?.role === UserRole.ADMIN && notifTab === "HOT" ? (
+              <div className="flex justify-between items-center px-4 py-4 border-b border-slate-100 shrink-0 bg-slate-50">
                 <button
                   onClick={() => setShowNotifDrawer(false)}
-                  className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-xs"
+                  className="flex items-center gap-1.5 text-slate-600 hover:text-slate-800 text-[12px] font-extrabold bg-transparent border-none cursor-pointer p-1"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <ArrowLeft className="w-4 h-4" />
+                  <T>Sảnh chính</T>
+                </button>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-extrabold text-[12px] text-slate-850 tracking-tight uppercase">
+                    🔔 <T>NHẬT KÝ THÔNG BÁO</T>
+                  </span>
+                </div>
+                <div className="bg-amber-100 border border-amber-200 text-amber-800 px-2 py-0.5 rounded-full text-[9.5px] font-mono font-black shrink-0">
+                  {broadcasts.length} tin
+                </div>
+              </div>
+            ) : (
+              <div className="flex justify-between items-center px-4 py-4 border-b border-slate-100 shrink-0 bg-slate-50">
+                <div className="flex items-center gap-2">
+                  <Bell className="w-5 h-5 text-[#1e3a8a] animate-bounce" />
+                  <span className="font-extrabold text-[13px] text-[#1e3a8a] tracking-tight uppercase">
+                    <T>THÔNG BÁO HỆ THỐNG</T>
+                  </span>
+                  {unreadCount > 0 && (
+                    <span className="bg-rose-100 text-rose-700 text-[10px] font-black px-2 py-0.5 rounded-full ml-1">
+                      <T>MỚI</T> <span translate="no" className="font-mono">{unreadCount}</span>
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2.5">
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={handleMarkAllAsRead}
+                      className="text-blue-600 hover:text-blue-800 text-[10px] font-extrabold transition-colors cursor-pointer mr-1"
+                    >
+                      <T>ĐỌC TẤT CẢ</T>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowNotifDrawer(false)}
+                    className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-xs"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Admin Toggle Tabs inside Notification Drawer */}
+            {currentUser?.role === UserRole.ADMIN && (
+              <div className="bg-slate-100 px-3.5 py-1.5 flex gap-1 border-b border-slate-250 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setNotifTab("HOT")}
+                  className={`flex-1 py-1.5 rounded-lg text-[9.5px] font-black border-none cursor-pointer transition-all ${
+                    notifTab === "HOT"
+                      ? "bg-[#1e3a8a] text-white shadow-xs"
+                      : "text-slate-650 hover:text-slate-850 bg-transparent"
+                  }`}
+                >
+                  <T>THÔNG BÁO CHẠY / BẢNG TIN</T>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNotifTab("SYSTEM")}
+                  className={`flex-1 py-1.5 rounded-lg text-[9.5px] font-black border-none cursor-pointer transition-all ${
+                    notifTab === "SYSTEM"
+                      ? "bg-[#1e3a8a] text-white shadow-xs"
+                      : "text-slate-650 hover:text-slate-850 bg-transparent"
+                  }`}
+                >
+                  <T>THÔNG BÁO ĐẨY HỆ THỐNG ({notifications.length})</T>
                 </button>
               </div>
-            </div>
+            )}
 
             {/* Notifications scroll list */}
-            <div className="flex-1 overflow-y-auto p-3.5 bg-slate-50/50 space-y-2 pb-8">
-              {/* Setup Badging card */}
-              <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-2xl space-y-2 mb-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-extrabold text-[#1e3a8a] flex items-center gap-1 uppercase">
-                    ⭐ <T><span translate="no" className="notranslate text-[#1e3a8a] font-extrabold">KÍCH HOẠT BONG BÓNG SỐ</span></T>
-                  </span>
-                  <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-white flex items-center gap-1 select-none border border-blue-100">
-                    <span translate="no" className="notranslate">Huy hiệu:</span>
-                    {notificationPermission === "granted" ? (
-                      <span translate="no" className="text-emerald-700 font-black notranslate">ĐÃ BẬT</span>
-                    ) : notificationPermission === "denied" ? (
-                      <span translate="no" className="text-rose-600 font-black notranslate">BỊ KHÓA</span>
-                    ) : (
-                      <span translate="no" className="text-amber-600 font-black notranslate">CHƯA BẬT</span>
-                    )}
-                  </span>
-                </div>
-                
-                <p className="text-[9px] text-slate-550 leading-normal">
-                  <T><span translate="no" className="notranslate">Để hiển thị bong bóng số thông báo màu đỏ trực tiếp trên biểu tượng ngoài màn hình chính giống như TikTok hoặc Zalo, quý khách cần cài đặt PWA:</span></T>
-                </p>
-
-                <div className="space-y-1.5 text-[9px] text-slate-650">
-                  <div className="flex gap-1.5 items-start bg-white p-2 rounded-xl border border-blue-50 shadow-3xs">
-                    <span className="text-blue-600 font-extrabold shrink-0">1.</span>
-                    <div className="leading-relaxed">
-                      <span translate="no" className="font-bold text-slate-700 notranslate">Cài đặt Màn hình chính:</span>
-                      <span translate="no" className="text-slate-500 notranslate"> Nhấn biểu tượng </span>
-                      <span translate="no" className="font-extrabold text-[#1e3a8a] notranslate">Chia sẻ (Safari)</span>
-                      <span translate="no" className="text-slate-500 notranslate"> hoặc nút </span>
-                      <span translate="no" className="font-extrabold text-[#1e3a8a] notranslate">Menu (Chrome)</span>
-                      <span translate="no" className="text-slate-500 notranslate"> rồi chọn </span>
-                      <span translate="no" className="font-black text-blue-700 underline notranslate">"Thêm vào Màn hình chính" (Add to Home Screen)</span>
-                      <span translate="no" className="text-slate-500 notranslate"> để sử dụng ứng dụng độc lập.</span>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-1.5 items-start bg-white p-2 rounded-xl border border-blue-50 shadow-3xs">
-                    <span className="text-blue-600 font-extrabold shrink-0">2.</span>
-                    <div className="flex-1 leading-relaxed">
-                      <span translate="no" className="font-bold text-slate-700 notranslate">Cho phép hiển thị số thông báo:</span>
-                      <span translate="no" className="text-slate-550 notranslate"> Cấp quyền thông báo cho ứng dụng trên điện thoại của bạn.</span>
-                      {notificationPermission !== "granted" ? (
+            <div className="flex-1 overflow-y-auto p-3.5 bg-slate-50/50 space-y-3 pb-8">
+              {currentUser?.role === UserRole.ADMIN && notifTab === "HOT" ? (
+                <>
+                  {/* BOX 1: THÔNG BÁO NỔI BẬT HỆ THỐNG */}
+                  <div className="bg-amber-50/40 border border-amber-250/75 p-4 rounded-2xl space-y-2.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[11px] font-extrabold text-amber-900 flex items-center gap-1 uppercase">
+                        📢 <T>THÔNG BÁO NỔI BẬT HỆ THỐNG</T>
+                      </span>
+                      {!isEditingTicker && (
                         <button
-                          onClick={handleRequestNotificationPermission}
-                          className="mt-1.5 w-full bg-[#1e3a8a] text-white text-[8.5px] font-black py-1.5 px-3 rounded-lg cursor-pointer transition-colors block uppercase shadow-xs border-none"
+                          onClick={() => {
+                            setIsEditingTicker(true);
+                            setTickerText(tickerConfig?.text || "");
+                            setTickerSpeed(tickerConfig?.speed || 35);
+                            setTickerSpacing(tickerConfig?.spacing || 50);
+                          }}
+                          className="text-[10px] font-black text-blue-600 flex items-center gap-1 hover:underline cursor-pointer border-none bg-transparent"
                         >
-                          <T><span translate="no" className="notranslate font-black">YÊU CẦU QUYỀN HIỂN THỊ</span></T>
+                          <Edit className="w-3.5 h-3.5" /> <T>Sửa</T>
                         </button>
-                      ) : (
-                        <div className="mt-1 flex items-center gap-1 text-emerald-700 font-extrabold text-[8.5px]">
-                          ✅ <span translate="no" className="notranslate">Đã ủy quyền thành công! Số thông báo sẽ tự động đồng bộ.</span>
-                        </div>
                       )}
                     </div>
-                  </div>
-                </div>
-              </div>
 
-              {notifications.length === 0 ? (
-                <div className="py-20 text-center flex flex-col items-center justify-center gap-3">
-                  <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-slate-300">
-                    <BellOff className="w-7 h-7" />
-                  </div>
-                  <div className="text-slate-400 text-xs font-bold"><T>Chưa có thông báo nào!</T></div>
-                  <div className="text-slate-300 text-[10px] font-medium leading-relaxed max-w-[210px] mx-auto">
-                    <T>Mọi thay đổi về bản tin hoặc ý kiến chỉ đạo sẽ xuất hiện tại đây.</T>
-                  </div>
-                </div>
-              ) : (
-                notifications.map((notif) => {
-                  const isUnread = !readNotifIds.includes(notif.id);
-                  return (
-                    <div
-                      key={notif.id}
-                      onClick={() => handleNotificationClick(notif)}
-                      className={`p-3 rounded-xl border transition-all active:scale-99 cursor-pointer flex gap-3 relative select-none text-left ${
-                        isUnread
-                          ? "bg-blue-50/75 border-blue-200 hover:bg-blue-50"
-                          : "bg-white border-slate-200 hover:bg-slate-50"
-                      }`}
-                    >
-                      {/* Left Side Icon Indicator */}
-                      <div className="shrink-0">
-                        {notif.type === "new_report" && (
-                          <div className="w-8.5 h-8.5 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs shadow-2xs">
-                            📝
+                    {isEditingTicker ? (
+                      <div className="space-y-3">
+                        <div className="space-y-1">
+                          <label className="text-[9px] text-slate-500 block font-extrabold uppercase tracking-wider">
+                            <T>NỘI DUNG CHỮ CHẠY:</T>
+                          </label>
+                          <textarea
+                            value={tickerText}
+                            onChange={(e) => setTickerText(e.target.value)}
+                            className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-lg focus:outline-none font-semibold leading-relaxed"
+                            rows={3}
+                            placeholder="Nhập nội dung chữ chạy hiển thị trên thanh marquee..."
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2.5">
+                          <div className="space-y-1">
+                            <label className="text-[9px] text-slate-500 block font-extrabold uppercase tracking-wider">
+                              ⏱ <T>THỜI GIAN CHẠY (GIÂY):</T>
+                            </label>
+                            <input
+                              type="number"
+                              value={tickerSpeed}
+                              onChange={(e) => setTickerSpeed(Number(e.target.value))}
+                              className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg focus:outline-none font-mono font-black"
+                              placeholder="Mặc định: 35"
+                            />
                           </div>
-                        )}
-                        {notif.type === "new_directive" && (
-                          <div className="w-8.5 h-8.5 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-xs shadow-2xs">
-                            💬
-                          </div>
-                        )}
-                        {notif.type === "update_report" && (
-                          <div className="w-8.5 h-8.5 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs shadow-2xs">
-                            🔄
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Right Side Info */}
-                      {notifIdConfirmDlt === notif.id ? (
-                        <div className="flex-1 flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
-                          <span className="text-[10px] text-rose-650 font-extrabold select-none uppercase tracking-wider">
-                            <span translate="no" className="notranslate">Xác nhận xóa?</span>
-                          </span>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button
-                              onClick={() => {
-                                setDeletedNotifIds((prev) => [...prev, notif.id]);
-                                setNotifIdConfirmDlt(null);
-                              }}
-                              className="bg-rose-650 hover:bg-rose-700 text-white font-extrabold text-[9px] px-2.5 py-1 rounded transition-colors cursor-pointer uppercase"
-                            >
-                              <span translate="no" className="notranslate">Xóa</span>
-                            </button>
-                            <button
-                              onClick={() => setNotifIdConfirmDlt(null)}
-                              className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold text-[9px] px-2.5 py-1 rounded transition-colors cursor-pointer uppercase"
-                            >
-                              <span translate="no" className="notranslate">Hủy</span>
-                            </button>
+                          <div className="space-y-1">
+                            <label className="text-[9px] text-slate-500 block font-extrabold uppercase tracking-wider">
+                              📐 <T>KHOẢNG CÁCH (PX):</T>
+                            </label>
+                            <input
+                              type="number"
+                              value={tickerSpacing}
+                              onChange={(e) => setTickerSpacing(Number(e.target.value))}
+                              className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg focus:outline-none font-mono font-black"
+                              placeholder="Mặc định: 50"
+                            />
                           </div>
                         </div>
-                      ) : (
-                        <div className="flex-1 min-w-0 pr-1 flex justify-between gap-1.5 items-start">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex justify-between items-start gap-1 flex-wrap">
-                              <span className={`text-[10px] tracking-wide block uppercase ${
-                                isUnread ? "font-black text-blue-900" : "font-extrabold text-slate-700"
-                              }`}>
-                                <T>{notif.title}</T>
-                              </span>
-                              <span className="text-[8px] text-slate-400 font-bold shrink-0 font-mono" translate="no">
-                                {notif.timestamp}
+                        <div className="flex justify-end gap-2 pt-1.5">
+                          <button
+                            onClick={() => setIsEditingTicker(false)}
+                            className="py-1.5 px-3 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-[10px] font-black border-none cursor-pointer"
+                          >
+                            <T>HỦY BỎ</T>
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (onUpdateTickerConfig) {
+                                onUpdateTickerConfig({
+                                  text: tickerText,
+                                  speed: Number(tickerSpeed) || 35,
+                                  spacing: Number(tickerSpacing) || 50
+                                });
+                                setIsEditingTicker(false);
+                                showToast("Cập nhật thông báo chạy thành công! 🎉");
+                              }
+                            }}
+                            className="py-1.5 px-3 bg-[#1D4ED8] hover:bg-[#1E40AF] text-white rounded-lg text-[10px] font-black border-none cursor-pointer"
+                          >
+                            <T>LƯU CẤU HÌNH</T>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="bg-white p-3 rounded-xl border border-amber-200/60 text-xs text-amber-950 font-bold leading-relaxed break-words whitespace-pre-wrap">
+                          {tickerConfig?.text ? tickerConfig.text : <span className="text-slate-400 italic font-medium"><T>Chưa cấu hình thông báo chạy.</T></span>}
+                        </div>
+                        <div className="flex gap-2.5 items-center text-[9.5px] text-slate-500 font-extrabold">
+                          <span className="flex items-center gap-1 bg-slate-150 px-2 py-0.5 rounded-full">⏱ <T>Chạy: {tickerConfig?.speed || 35} giây/vòng</T></span>
+                          <span className="flex items-center gap-1 bg-slate-150 px-2 py-0.5 rounded-full">📐 <T>Khoảng cách: {tickerConfig?.spacing || 50}px</T></span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* BOX 2: ĐĂNG THÔNG BÁO TỪ BAN QUẢN TRỊ */}
+                  <div className="bg-white border border-slate-200/85 p-4 rounded-2xl space-y-3 shadow-3xs">
+                    <span className="text-[11px] font-extrabold text-slate-850 flex items-center gap-1 uppercase">
+                      ✨ <T>ĐĂNG THÔNG BÁO TỪ BAN QUẢN TRỊ</T>
+                    </span>
+                    <textarea
+                      value={newNoticeContent}
+                      onChange={(e) => setNewNoticeContent(e.target.value)}
+                      className="w-full text-xs p-3 bg-slate-50/70 border border-slate-200 rounded-xl focus:outline-none font-semibold leading-relaxed focus:bg-white placeholder-slate-400"
+                      rows={3}
+                      placeholder="Ví dụ: Chú ý: Cập nhật tài liệu văn hóa mới hoặc có thay đổi thời gian thi đua..."
+                    />
+                    <button
+                      onClick={() => {
+                        if (!newNoticeContent.trim()) {
+                          showToast("Vui lòng nhập nội dung thông báo! ⚠️");
+                          return;
+                        }
+                        if (onAddBroadcast) {
+                          onAddBroadcast(newNoticeContent, "Quản trị viên phát sóng");
+                          setNewNoticeContent("");
+                          showToast("Đăng thông báo lên bảng tin thành công! 🎉");
+                        }
+                      }}
+                      className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-sm active:scale-98 transition-all border-none cursor-pointer uppercase tracking-wider"
+                    >
+                      <span>✨</span>
+                      <T>Đăng Thông Báo Nóng</T>
+                    </button>
+                  </div>
+
+                  {/* PAST BROADCASTS LIST */}
+                  <div className="space-y-2.5 pt-1">
+                    <div className="flex justify-between items-center border-b border-slate-200/60 pb-1.5 mb-1 shrink-0">
+                      <span className="text-[11.5px] font-extrabold text-slate-800 flex items-center gap-1 uppercase">
+                        📋 <T>NHẬT KÝ THÔNG BÁO</T>
+                      </span>
+                      <span className="bg-slate-100 px-2 py-0.5 rounded-full text-slate-600 font-mono text-[9.5px] font-black">
+                        {broadcasts.length} tin
+                      </span>
+                    </div>
+
+                    {broadcasts.length === 0 ? (
+                      <div className="py-12 text-center flex flex-col items-center justify-center text-slate-400">
+                        <T className="text-xs font-semibold">Chưa có thông báo nào được tạo.</T>
+                      </div>
+                    ) : (
+                      broadcasts.map((b) => (
+                        <div key={b.id} className="p-3.5 bg-amber-50/40 border border-amber-250/50 rounded-2xl space-y-2.5 relative">
+                          <div className="flex justify-between items-center border-b border-amber-200/40 pb-2">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-amber-600 text-xs">🔔</span>
+                              <span className="text-[8.5px] font-black text-amber-800 bg-[#FEF3C7] border border-[#FDE68A] px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                <T>BAN QUẢN TRỊ</T>
                               </span>
                             </div>
-                            <p className={`text-[10px] mt-1 leading-normal ${
-                              isUnread ? "font-bold text-blue-800" : "font-medium text-slate-500"
-                            }`}>
-                              <T>{notif.description}</T>
-                            </p>
-                            {isUnread && (
-                              <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-rose-600 animate-ping"></span>
-                            )}
+                            <div className="flex items-center gap-2">
+                              <span className="text-[8.5px] text-slate-400 font-bold font-mono">
+                                {b.timestamp}
+                              </span>
+                              {editingBroadcastId === b.id ? (
+                                <button
+                                  onClick={() => {
+                                    if (!editingBroadcastText.trim()) return;
+                                    if (onDeleteBroadcast && onAddBroadcast) {
+                                      onDeleteBroadcast(b.id);
+                                      onAddBroadcast(editingBroadcastText, b.type);
+                                      setEditingBroadcastId(null);
+                                      showToast("Cập nhật thông báo thành công! 🎉");
+                                    }
+                                  }}
+                                  className="text-[9.5px] text-emerald-600 font-bold hover:underline cursor-pointer border-none bg-transparent"
+                                >
+                                  <T>Lưu</T>
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    setEditingBroadcastId(b.id);
+                                    setEditingBroadcastText(b.content);
+                                  }}
+                                  className="text-slate-400 hover:text-blue-600 p-0.5 cursor-pointer border-none bg-transparent"
+                                  title="Sửa bản tin"
+                                >
+                                  <Edit className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              {onDeleteBroadcast && (
+                                <button
+                                  onClick={() => {
+                                    if (confirm("Chủ quản có chắc chắn muốn XÓA thông báo này?")) {
+                                      onDeleteBroadcast(b.id);
+                                      showToast("Xóa thông báo thành công! 🗑️");
+                                    }
+                                  }}
+                                  className="text-slate-400 hover:text-rose-655 p-0.5 cursor-pointer border-none bg-transparent"
+                                  title="Xóa bản tin"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
                           </div>
-                          
-                          {/* Admin Only Delete Trigger */}
-                          {currentUser?.role === UserRole.ADMIN && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setNotifIdConfirmDlt(notif.id);
-                              }}
-                              className="text-slate-400 hover:text-rose-650 p-1 rounded hover:bg-slate-100 transition-colors cursor-pointer shrink-0 ml-1 mt-0.5"
-                              title="Xóa thông báo"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+
+                          {editingBroadcastId === b.id ? (
+                            <textarea
+                              value={editingBroadcastText}
+                              onChange={(e) => setEditingBroadcastText(e.target.value)}
+                              className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-lg focus:outline-none font-semibold leading-relaxed"
+                              rows={3}
+                            />
+                          ) : (
+                            <div className="text-[11px] text-slate-800 leading-relaxed font-semibold break-words whitespace-pre-wrap font-sans">
+                              {b.content}
+                            </div>
                           )}
                         </div>
-                      )}
+                      ))
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Setup Badging card */}
+                  <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-2xl space-y-2 mb-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-extrabold text-[#1e3a8a] flex items-center gap-1 uppercase">
+                        ⭐ <T><span translate="no" className="notranslate text-[#1e3a8a] font-extrabold">KÍCH HOẠT BONG BÓNG SỐ</span></T>
+                      </span>
+                      <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-white flex items-center gap-1 select-none border border-blue-100">
+                        <span translate="no" className="notranslate">Huy hiệu:</span>
+                        {notificationPermission === "granted" ? (
+                          <span translate="no" className="text-emerald-700 font-black notranslate">ĐÃ BẬT</span>
+                        ) : notificationPermission === "denied" ? (
+                          <span translate="no" className="text-rose-600 font-black notranslate">BỊ KHÓA</span>
+                        ) : (
+                          <span translate="no" className="text-amber-600 font-black notranslate">CHƯA BẬT</span>
+                        )}
+                      </span>
                     </div>
-                  );
-                })
+                    
+                    <p className="text-[9px] text-slate-550 leading-normal">
+                      <T><span translate="no" className="notranslate">Để hiển thị bong bóng số thông báo màu đỏ trực tiếp trên biểu tượng ngoài màn hình chính giống như TikTok hoặc Zalo, quý khách cần cài đặt PWA:</span></T>
+                    </p>
+
+                    <div className="space-y-1.5 text-[9px] text-slate-650">
+                      <div className="flex gap-1.5 items-start bg-white p-2 rounded-xl border border-blue-50 shadow-3xs">
+                        <span className="text-blue-600 font-extrabold shrink-0">1.</span>
+                        <div className="leading-relaxed">
+                          <span translate="no" className="font-bold text-slate-700 notranslate">Cài đặt Màn hình chính:</span>
+                          <span translate="no" className="text-slate-500 notranslate"> Nhấn biểu tượng </span>
+                          <span translate="no" className="font-extrabold text-[#1e3a8a] notranslate">Chia sẻ (Safari)</span>
+                          <span translate="no" className="text-slate-500 notranslate"> hoặc nút </span>
+                          <span translate="no" className="font-extrabold text-[#1e3a8a] notranslate">Menu (Chrome)</span>
+                          <span translate="no" className="text-slate-500 notranslate"> rồi chọn </span>
+                          <span translate="no" className="font-black text-blue-700 underline notranslate">"Thêm vào Màn hình chính" (Add to Home Screen)</span>
+                          <span translate="no" className="text-slate-500 notranslate"> để sử dụng ứng dụng độc lập.</span>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-1.5 items-start bg-white p-2 rounded-xl border border-blue-50 shadow-3xs">
+                        <span className="text-blue-600 font-extrabold shrink-0">2.</span>
+                        <div className="flex-1 leading-relaxed">
+                          <span translate="no" className="font-bold text-slate-700 notranslate">Cho phép hiển thị số thông báo:</span>
+                          <span translate="no" className="text-slate-550 notranslate"> Cấp quyền thông báo cho ứng dụng trên điện thoại của bạn.</span>
+                          {notificationPermission !== "granted" ? (
+                            <button
+                              onClick={handleRequestNotificationPermission}
+                              className="mt-1.5 w-full bg-[#1e3a8a] text-white text-[8.5px] font-black py-1.5 px-3 rounded-lg cursor-pointer transition-colors block uppercase shadow-xs border-none"
+                            >
+                              <T><span translate="no" className="notranslate font-black">YÊU CẦU QUYỀN HIỂN THỊ</span></T>
+                            </button>
+                          ) : (
+                            <div className="mt-1 flex items-center gap-1 text-emerald-700 font-extrabold text-[8.5px]">
+                              ✅ <span translate="no" className="notranslate">Đã ủy quyền thành công! Số thông báo sẽ tự động đồng bộ.</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {notifications.length === 0 ? (
+                    <div className="py-20 text-center flex flex-col items-center justify-center gap-3">
+                      <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-slate-300">
+                        <BellOff className="w-7 h-7" />
+                      </div>
+                      <div className="text-slate-400 text-xs font-bold"><T>Chưa có thông báo nào!</T></div>
+                      <div className="text-slate-300 text-[10px] font-medium leading-relaxed max-w-[210px] mx-auto">
+                        <T>Mọi thay đổi về bản tin hoặc ý kiến chỉ đạo sẽ xuất hiện tại đây.</T>
+                      </div>
+                    </div>
+                  ) : (
+                    notifications.map((notif) => {
+                      const isUnread = !readNotifIds.includes(notif.id);
+                      return (
+                        <div
+                          key={notif.id}
+                          onClick={() => handleNotificationClick(notif)}
+                          className={`p-3 rounded-xl border transition-all active:scale-99 cursor-pointer flex gap-3 relative select-none text-left ${
+                            isUnread
+                              ? "bg-blue-50/75 border-blue-200 hover:bg-blue-50"
+                              : "bg-white border-slate-200 hover:bg-slate-50"
+                          }`}
+                        >
+                          {/* Left Side Icon Indicator */}
+                          <div className="shrink-0">
+                            {notif.type === "new_report" && (
+                              <div className="w-8.5 h-8.5 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs shadow-2xs">
+                                📝
+                              </div>
+                            )}
+                            {notif.type === "new_directive" && (
+                              <div className="w-8.5 h-8.5 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-xs shadow-2xs">
+                                💬
+                              </div>
+                            )}
+                            {notif.type === "update_report" && (
+                              <div className="w-8.5 h-8.5 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs shadow-2xs">
+                                🔄
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Right Side Info */}
+                          {notifIdConfirmDlt === notif.id ? (
+                            <div className="flex-1 flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
+                              <span className="text-[10px] text-rose-650 font-extrabold select-none uppercase tracking-wider">
+                                <span translate="no" className="notranslate">Xác nhận xóa?</span>
+                              </span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  onClick={() => {
+                                    setDeletedNotifIds((prev) => [...prev, notif.id]);
+                                    setNotifIdConfirmDlt(null);
+                                  }}
+                                  className="bg-rose-650 hover:bg-rose-700 text-white font-extrabold text-[9px] px-2.5 py-1 rounded transition-colors cursor-pointer uppercase"
+                                >
+                                  <span translate="no" className="notranslate">Xóa</span>
+                                </button>
+                                <button
+                                  onClick={() => setNotifIdConfirmDlt(null)}
+                                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold text-[9px] px-2.5 py-1 rounded transition-colors cursor-pointer uppercase"
+                                >
+                                  <span translate="no" className="notranslate">Hủy</span>
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex-1 min-w-0 pr-1 flex justify-between gap-1.5 items-start">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex justify-between items-start gap-1 flex-wrap">
+                                  <span className={`text-[10px] tracking-wide block uppercase ${
+                                    isUnread ? "font-black text-blue-900" : "font-extrabold text-slate-700"
+                                  }`}>
+                                    <T>{notif.title}</T>
+                                  </span>
+                                  <span className="text-[8px] text-slate-400 font-bold shrink-0 font-mono" translate="no">
+                                    {notif.timestamp}
+                                  </span>
+                                </div>
+                                <p className={`text-[10px] mt-1 leading-normal ${
+                                  isUnread ? "font-bold text-blue-800" : "font-medium text-slate-500"
+                                }`}>
+                                  <T>{notif.description}</T>
+                                </p>
+                                {isUnread && (
+                                  <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-rose-600 animate-ping"></span>
+                                )}
+                              </div>
+                              
+                              {/* Admin Only Delete Trigger */}
+                              {currentUser?.role === UserRole.ADMIN && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setNotifIdConfirmDlt(notif.id);
+                                  }}
+                                  className="text-slate-400 hover:text-rose-650 p-1 rounded hover:bg-slate-100 transition-colors cursor-pointer shrink-0 ml-1 mt-0.5"
+                                  title="Xóa thông báo"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </>
               )}
             </div>
           </div>

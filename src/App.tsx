@@ -3150,6 +3150,9 @@ export default function App() {
             setIsNativeScrollActive={handleSetNativeScrollActive}
             tickerConfig={tickerConfig}
             broadcasts={broadcasts}
+            onUpdateTickerConfig={handleUpdateTickerConfig}
+            onAddBroadcast={handleAddBroadcast}
+            onDeleteBroadcast={handleDeleteBroadcast}
           />
         )}
 
@@ -3247,6 +3250,9 @@ export default function App() {
             setIsNativeScrollActive={handleSetNativeScrollActive}
             tickerConfig={tickerConfig}
             broadcasts={broadcasts}
+            onUpdateTickerConfig={handleUpdateTickerConfig}
+            onAddBroadcast={handleAddBroadcast}
+            onDeleteBroadcast={handleDeleteBroadcast}
           />
         )}
 
@@ -3444,6 +3450,9 @@ export default function App() {
                 setIsNativeScrollActive={handleSetNativeScrollActive}
                 tickerConfig={tickerConfig}
                 broadcasts={broadcasts}
+                onUpdateTickerConfig={handleUpdateTickerConfig}
+                onAddBroadcast={handleAddBroadcast}
+                onDeleteBroadcast={handleDeleteBroadcast}
               />
             )}
           </div>
@@ -3495,6 +3504,9 @@ export default function App() {
                 setIsNativeScrollActive={handleSetNativeScrollActive}
                 tickerConfig={tickerConfig}
                 broadcasts={broadcasts}
+                onUpdateTickerConfig={handleUpdateTickerConfig}
+                onAddBroadcast={handleAddBroadcast}
+                onDeleteBroadcast={handleDeleteBroadcast}
               />
             )}
           </div>
