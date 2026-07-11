@@ -4,6 +4,7 @@ import { T } from "./TranslateText";
 import { Category4M1E1I, QualityReport, User, Branch, UserRole } from "../types";
 import { initialBranches, STANDARDIZED_QC_DEPT } from "../data";
 import { loadImage, processImage, CompressingResult } from "../utils/imageProcessor";
+import { formatNameCapitalized } from "../utils/branchHelpers";
 import { MentionTextArea } from "./MentionTextArea";
 
 interface ReportFormProps {
@@ -870,7 +871,7 @@ export default function ReportForm({
           </T>
           <div className="flex justify-between items-center mt-1">
             <T className="text-xs font-bold text-slate-700 block">
-              {editingReport ? editingReport.uploaderName : currentUser.fullName}
+              {formatNameCapitalized(editingReport ? editingReport.uploaderName : currentUser.fullName)}
             </T>
             <T className="text-[9px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-bold">
               {editingReport 

@@ -16,6 +16,8 @@ import {
   FileX,
   Sliders,
   Download,
+  Upload,
+  Smartphone,
   CloudLightning,
   UserMinus,
   Check,
@@ -38,7 +40,11 @@ import {
   RotateCcw,
   ArrowLeft,
   ZoomIn,
-  ZoomOut
+  ZoomOut,
+  Globe,
+  Megaphone,
+  Pencil,
+  Clock
 } from "lucide-react";
 import {
   BarChart,
@@ -83,6 +89,7 @@ import {
 } from "../types";
 import { STANDARDIZED_QC_DEPT } from "../data";
 import { generateDailyReportPDF } from "../utils/pdfGenerator";
+import { formatNameCapitalized } from "../utils/branchHelpers";
 import OrderPipeline from "./OrderPipeline";
 import { MentionInput, MentionTextArea } from "./MentionTextArea";
 import FirebaseQuotaMonitor from "./FirebaseQuotaMonitor";
@@ -132,6 +139,9 @@ interface DashboardDesktopProps {
   onForceSyncUsers?: () => Promise<void>;
   onDeleteReport?: (id: string, forcePermanent?: boolean) => void;
   onShowToast?: (message: string, type?: "success" | "error" | "warning" | "info") => void;
+  onDeleteBroadcast?: (id: string) => void;
+  tickerConfig?: { text: string; speed: number; spacing: number };
+  onUpdateTickerConfig?: (config: { text: string; speed: number; spacing: number }) => void;
 }
 
 interface DesktopThumbnailSliderProps {
@@ -560,11 +570,108 @@ export default function DashboardDesktop({
   onForceSyncMetadata,
   onForceSyncUsers,
   onDeleteReport,
-  onShowToast
+  onShowToast,
+  onDeleteBroadcast,
+  tickerConfig,
+  onUpdateTickerConfig
 }: DashboardDesktopProps) {
   const [activeTab, setActiveTab] = useState<
     "PHÊ_DUYỆT" | "MÃ_HÓA" | "THỐNG_KÊ" | "DỮ_LIỆU" | "QUY_CHẾ" | "CÁ_NHÂN" | "THÔNG_BÁO" | "TRAO_ĐỔI" | "TRIỂN_KHAI" | "ĐỀ_XUẤT" | "QUOTA_CLOUD"
   >("PHÊ_DUYỆT");
+
+  // Helper functions for auto-generating clean, consistent, neat IDs
+  const generateAutoCompanyId = (name: string): string => {
+    const bracketMatch = name.match(/\(([^)]+)\)/);
+    if (bracketMatch) {
+      return bracketMatch[1].trim().toUpperCase();
+    }
+    const upper = name.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    let cleanWords = upper.split(/\s+/).filter(w => !["CONG", "TY", "TNHH", "CP", "CO", "PHAN", "DAU", "TU", "MEMBER"].includes(w));
+    if (cleanWords.length === 0) {
+      cleanWords = upper.split(/\s+/);
+    }
+    const initials = cleanWords.map(w => w[0]).join("");
+    return initials || "COMP";
+  };
+
+  const generateAutoBranchId = (name: string, companyId: string): string => {
+    const bracketMatch = name.match(/\(([^)]+)\)/);
+    if (bracketMatch) {
+      const code = bracketMatch[1].trim().toUpperCase();
+      if (code.startsWith(`${companyId}-`)) {
+        return code;
+      }
+      return `${companyId}-${code}`;
+    }
+    const upper = name.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    let cleanWords = upper.split(/\s+/).filter(w => !["CHI", "NHANH", "NHA", "MAY", "VAN", "PHONG"].includes(w));
+    if (cleanWords.length === 0) {
+      cleanWords = upper.split(/\s+/);
+    }
+    const initials = cleanWords.map(w => w[0]).join("");
+    return `${companyId}-${initials || "BR"}`;
+  };
+
+  const generateAutoDeptId = (bId: string, deptName: string): string => {
+    const activeBranch = branches.find(b => b.id === bId);
+    const companyId = activeBranch ? (activeBranch.companyId || "TPP") : "TPP";
+    
+    let base = bId;
+    if (base.startsWith(`${companyId}-`)) {
+      base = base.substring(companyId.length + 1);
+    }
+    let prefix = base.toLowerCase();
+    if (prefix === "bni") prefix = "bn";
+    if (prefix === "lan") prefix = "la";
+    if (prefix === "314" || bId.includes("314")) prefix = "nm";
+    
+    // Check if prefix conflicts with another branch's departments
+    const prefixConflict = departments.some(otherD => {
+      if (otherD.branchId === bId) return false;
+      return otherD.id.startsWith(`${prefix}-`);
+    });
+    
+    if (prefixConflict) {
+      prefix = `${companyId.toLowerCase()}-${prefix}`;
+    }
+    
+    // Find next index
+    let maxIdx = 0;
+    departments.forEach(d => {
+      if (d.branchId === bId && d.id.startsWith(`${prefix}-`)) {
+        const numPart = d.id.substring(prefix.length + 1);
+        const num = parseInt(numPart, 10);
+        if (!isNaN(num) && num > maxIdx) {
+          maxIdx = num;
+        }
+      }
+    });
+    
+    return `${prefix}-${maxIdx + 1}`;
+  };
+  
+  const [isEditingTicker, setIsEditingTicker] = useState(false);
+  const [editTickerText, setEditTickerText] = useState("");
+  const [editTickerSpeed, setEditTickerSpeed] = useState(35);
+  const [editTickerSpacing, setEditTickerSpacing] = useState(50);
+
+  const handleStartEditTicker = () => {
+    setEditTickerText(tickerConfig?.text !== undefined ? tickerConfig.text : "Ban Quản Trị xin gửi lời cảm ơn đến CN.BNI; CN.LAN; P.QLCL; Khối QLCCƯ và các cá nhân Chị @Xiêm - TP.HRD (TPP-BNI); Chị @Phượng - TP.QLCL (TPP-LAN); Em @Hùng (Kho HBN)... đã sưu tầm, tổng hợp gửi câu hỏi của Tasco để BQT cập nhật trên \"Ứng Dụng Ôn Tập Quiz 3T Hàng Ngày\" của chúng ta. Xin cảm ơn.");
+    setEditTickerSpeed(tickerConfig?.speed || 35);
+    setEditTickerSpacing(tickerConfig?.spacing || 50);
+    setIsEditingTicker(true);
+  };
+
+  const handleSaveTickerConfig = () => {
+    if (onUpdateTickerConfig) {
+      onUpdateTickerConfig({
+        text: editTickerText,
+        speed: Number(editTickerSpeed) || 35,
+        spacing: Number(editTickerSpacing) || 50
+      });
+    }
+    setIsEditingTicker(false);
+  };
 
   const [showTrashLogs, setShowTrashLogs] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -615,6 +722,15 @@ export default function DashboardDesktop({
   const [branchIdConfirmDlt, setBranchIdConfirmDlt] = useState<string | null>(null);
   const [deptIdConfirmDlt, setDeptIdConfirmDlt] = useState<string | null>(null);
   const [userIdConfirmDlt, setUserIdConfirmDlt] = useState<string | null>(null);
+
+  // States for PHÊ DUYỆT Personnel search & filtering
+  const [userSearchQuery, setUserSearchQuery] = useState("");
+  const [userRoleFilter, setUserRoleFilter] = useState("all");
+  const [userStatusFilter, setUserStatusFilter] = useState("all");
+  const [userBranchFilter, setUserBranchFilter] = useState("all");
+  const [userDepartmentFilter, setUserDepartmentFilter] = useState("all");
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importPastedText, setImportPastedText] = useState("");
 
   // Edit User State
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -1255,35 +1371,40 @@ export default function DashboardDesktop({
 
   const onlineCount = getOnlineCount();
 
+  const hasActiveTicker = !!(tickerConfig?.text && tickerConfig.text.trim() !== "");
+
   return (
     <div className="flex-1 bg-[#F7F9FC] text-slate-800 flex flex-col min-h-0 font-sans">
       {/* Upper Main Broadcast Marquee Bar with specific ticker text */}
-      <div className="bg-amber-500 text-slate-950 font-bold px-4 py-2 border-b border-amber-600 flex items-center select-none overflow-hidden shrink-0">
-        <div className="bg-red-600 text-white font-extrabold text-[9px] px-2 py-0.5 rounded mr-3 uppercase tracking-wider animate-pulse flex items-center gap-1 shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-white block" />
-          <T>BẢNG TIN NÓNG (TICKER):</T>
-        </div>
-        <div className="flex-1 overflow-hidden relative">
-          <div className="animate-marquee whitespace-nowrap text-xs flex gap-12 font-mono">
-            {broadcasts.length > 0 ? (
-              broadcasts.map((b) => (
-                <div key={b.id} className="flex items-center gap-2">
+      {hasActiveTicker && (
+        <div className="bg-amber-500 text-slate-950 font-bold px-4 py-2 border-b border-amber-600 flex items-center select-none overflow-hidden shrink-0">
+          <div className="bg-red-600 text-white font-extrabold text-[9px] px-2 py-0.5 rounded mr-3 uppercase tracking-wider animate-pulse flex items-center gap-1 shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-white block" />
+            <T>BẢNG TIN NÓNG (TICKER):</T>
+          </div>
+          <div className="flex-1 overflow-hidden relative">
+            <div 
+              className="animate-marquee whitespace-nowrap text-xs flex font-mono"
+              style={{ 
+                animationDuration: `${tickerConfig?.speed || 35}s`,
+                gap: `${tickerConfig?.spacing || 50}px`
+              }}
+            >
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-2 shrink-0">
                   <span className="text-red-700 font-extrabold">✦</span>
-                  <T className="font-semibold">{b.type}: {b.content}</T>
-                  <T className="text-[10px] text-slate-700 font-bold">({b.sender} - {b.timestamp})</T>
+                  <T className="font-semibold">{tickerConfig.text}</T>
                 </div>
-              ))
-            ) : (
-              <T>Hệ thống Quản lý Biến động chất lượng Tân Phú Việt Nam đang chạy an toàn.</T>
-            )}
+              ))}
+            </div>
+          </div>
+          {/* Connection status indicator */}
+          <div className="flex items-center gap-2 ml-4 shrink-0 bg-[#1E293B] text-white rounded-full px-3 py-0.5 text-[10px] font-bold">
+            <span className={`w-2 h-2 rounded-full ${offlineMode ? "bg-red-500 animate-pulse" : "bg-emerald-500"}`} />
+            <T>{offlineMode ? "MẤT KẾT NỐI (LƯU LỌC COIL)" : "ĐANG TRỰC TUYẾN"}</T>
           </div>
         </div>
-        {/* Connection status indicator */}
-        <div className="flex items-center gap-2 ml-4 shrink-0 bg-[#1E293B] text-white rounded-full px-3 py-0.5 text-[10px] font-bold">
-          <span className={`w-2 h-2 rounded-full ${offlineMode ? "bg-red-500 animate-pulse" : "bg-emerald-500"}`} />
-          <T>{offlineMode ? "MẤT KẾT NỐI (LƯU LỌC COIL)" : "ĐANG TRỰC TUYẾN"}</T>
-        </div>
-      </div>
+      )}
 
       {/* Main Admin Header Panel */}
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shrink-0 shadow-sm text-slate-800">
@@ -1568,6 +1689,193 @@ export default function DashboardDesktop({
               </div>
 
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                {/* Header panel styled exactly as the screenshot */}
+                <div className="p-4 border-b border-slate-200 bg-slate-50/50">
+                  <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                    <div>
+                      <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                        <Users className="w-4.5 h-4.5 text-[#1e3a8a]" />
+                        <T className="notranslate">DANH SÁCH CBNV ĐĂNG KÝ HỆ THỐNG</T>
+                      </h3>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        <T>Với tư cách Admin tối cao, bạn có thể phê duyệt quyền vào sảnh học tập cho CBNV quốc gia.</T>
+                      </p>
+                    </div>
+
+                    {/* Right side controls matching screenshot: MOBILE, XUẤT EXCEL, NHẬP EXCEL, REFRESH */}
+                    <div className="flex items-center gap-2 self-stretch lg:self-auto justify-end flex-wrap">
+                      <button
+                        onClick={onToggleMobilePreview}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-[11px] uppercase tracking-wider rounded-lg shadow-sm transition-all border-none cursor-pointer select-none"
+                        title="Xem chế độ Mobile Live"
+                      >
+                        <Smartphone className="w-3.5 h-3.5 text-white" />
+                        <T>MOBILE</T>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          const exportUsers = [...users];
+                          const headers = [
+                            "Mã nhân sự",
+                            "Họ tên",
+                            "Số điện thoại",
+                            "Chi nhánh",
+                            "Bộ phận",
+                            "Vai trò",
+                            "Trạng thái"
+                          ];
+                          const rows = exportUsers.map(u => [
+                            u.id,
+                            u.fullName,
+                            u.phone,
+                            u.branch,
+                            u.department,
+                            u.role,
+                            u.status
+                          ]);
+                          const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))].join("\n");
+                          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                          const url = URL.createObjectURL(blob);
+                          const link = document.createElement("a");
+                          link.setAttribute("href", url);
+                          link.setAttribute("download", `DANH_SACH_CBNV_${new Date().toLocaleDateString('vi-VN').replace(/\//g, '-')}.csv`);
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                          if (onShowToast) {
+                            onShowToast("Đã xuất dữ liệu CBNV ra file CSV thành công!", "success");
+                          }
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 border border-emerald-600 text-emerald-600 hover:bg-emerald-50 active:scale-95 font-extrabold text-[11px] uppercase tracking-wider rounded-lg transition-all cursor-pointer bg-white"
+                        title="Xuất file Excel/CSV"
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                        <T>XUẤT EXCEL</T>
+                      </button>
+
+                      <button
+                        onClick={() => setShowImportModal(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 border border-blue-600 text-blue-600 hover:bg-blue-50 active:scale-95 font-extrabold text-[11px] uppercase tracking-wider rounded-lg transition-all cursor-pointer bg-white"
+                        title="Nhập file Excel/CSV"
+                      >
+                        <Upload className="w-3.5 h-3.5 text-blue-600" />
+                        <T>NHẬP EXCEL</T>
+                      </button>
+
+                      <button
+                        onClick={async () => {
+                          if (onForceSyncUsers) {
+                            try {
+                              setForceSyncUsersState("syncing");
+                              await onForceSyncUsers();
+                              setForceSyncUsersState("success");
+                              setTimeout(() => setForceSyncUsersState("idle"), 3000);
+                              if (onShowToast) onShowToast("Đồng bộ danh sách nhân sự thành công!", "success");
+                            } catch (err) {
+                              console.error(err);
+                              setForceSyncUsersState("error");
+                              setTimeout(() => setForceSyncUsersState("idle"), 3000);
+                              if (onShowToast) onShowToast("Lỗi đồng bộ danh sách!", "error");
+                            }
+                          }
+                        }}
+                        disabled={forceSyncUsersState === "syncing" || offlineMode}
+                        className="p-1.5 border border-slate-200 hover:bg-slate-100 active:scale-95 text-slate-600 rounded-lg transition-all cursor-pointer bg-white flex items-center justify-center disabled:opacity-50"
+                        title="Đồng bộ / Làm mới"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${forceSyncUsersState === "syncing" ? "animate-spin" : ""}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Filter Row exactly matching screenshot */}
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mt-4 pt-4 border-t border-slate-200/60">
+                    {/* Search Input */}
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                        <Search className="w-3.5 h-3.5 text-slate-400" />
+                      </span>
+                      <input
+                        type="text"
+                        value={userSearchQuery}
+                        onChange={(e) => setUserSearchQuery(e.target.value)}
+                        placeholder="Tìm tên, SĐT, mã số..."
+                        className="w-full pl-8 pr-7 py-1.5 border border-slate-200 rounded-full text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white transition-all shadow-2xs"
+                      />
+                      {userSearchQuery && (
+                        <button
+                          onClick={() => setUserSearchQuery("")}
+                          className="absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400 hover:text-slate-600 cursor-pointer text-xs font-sans"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Role dropdown */}
+                    <div>
+                      <select
+                        value={userRoleFilter}
+                        onChange={(e) => setUserRoleFilter(e.target.value)}
+                        className="w-full px-3 py-1.5 border border-slate-200 rounded-full text-xs font-semibold text-slate-700 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-2xs appearance-none"
+                        style={{ backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236B7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E")`, backgroundPosition: 'right 0.5rem center', backgroundSize: '1.25rem', backgroundRepeat: 'no-repeat', paddingRight: '1.75rem' }}
+                      >
+                        <option value="all">Mọi vai trò</option>
+                        <option value={UserRole.ADMIN}>{UserRole.ADMIN}</option>
+                        <option value={UserRole.REVIEWER}>{UserRole.REVIEWER}</option>
+                        <option value={UserRole.STAFF}>{UserRole.STAFF}</option>
+                      </select>
+                    </div>
+
+                    {/* Status dropdown */}
+                    <div>
+                      <select
+                        value={userStatusFilter}
+                        onChange={(e) => setUserStatusFilter(e.target.value)}
+                        className="w-full px-3 py-1.5 border border-slate-200 rounded-full text-xs font-semibold text-slate-700 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-2xs appearance-none"
+                        style={{ backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236B7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E")`, backgroundPosition: 'right 0.5rem center', backgroundSize: '1.25rem', backgroundRepeat: 'no-repeat', paddingRight: '1.75rem' }}
+                      >
+                        <option value="all">Mọi trạng thái</option>
+                        <option value={UserStatus.ACTIVE}>{UserStatus.ACTIVE}</option>
+                        <option value={UserStatus.PENDING}>{UserStatus.PENDING}</option>
+                        <option value={UserStatus.LOCKED}>{UserStatus.LOCKED}</option>
+                        <option value={UserStatus.REJECTED}>{UserStatus.REJECTED}</option>
+                      </select>
+                    </div>
+
+                    {/* Branch dropdown */}
+                    <div>
+                      <select
+                        value={userBranchFilter}
+                        onChange={(e) => setUserBranchFilter(e.target.value)}
+                        className="w-full px-3 py-1.5 border border-slate-200 rounded-full text-xs font-semibold text-slate-700 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-2xs appearance-none"
+                        style={{ backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236B7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E")`, backgroundPosition: 'right 0.5rem center', backgroundSize: '1.25rem', backgroundRepeat: 'no-repeat', paddingRight: '1.75rem' }}
+                      >
+                        <option value="all">Mọi chi nhánh</option>
+                        {Array.from(new Set(users.map(u => u.branch).filter(Boolean))).map((br) => (
+                          <option key={br} value={br}>{getFormattedUserBranch(br)}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Department dropdown */}
+                    <div>
+                      <select
+                        value={userDepartmentFilter}
+                        onChange={(e) => setUserDepartmentFilter(e.target.value)}
+                        className="w-full px-3 py-1.5 border border-slate-200 rounded-full text-xs font-semibold text-slate-700 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-2xs appearance-none"
+                        style={{ backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236B7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E")`, backgroundPosition: 'right 0.5rem center', backgroundSize: '1.25rem', backgroundRepeat: 'no-repeat', paddingRight: '1.75rem' }}
+                      >
+                        <option value="all">Mọi bộ phận</option>
+                        {Array.from(new Set(users.map(u => u.department).filter(Boolean))).map((dept) => (
+                          <option key={dept} value={dept}>{dept}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse">
                     <thead>
@@ -1585,6 +1893,33 @@ export default function DashboardDesktop({
                         // If current user is REVIEWER (approver/Trưởng nhóm), only show users in their branch
                         if (currentUser.role === UserRole.REVIEWER) {
                           filteredUsers = filteredUsers.filter((u) => u.branch === currentUser.branch);
+                        }
+
+                        // Apply Search & Filter States
+                        if (userSearchQuery.trim() !== "") {
+                          const query = userSearchQuery.toLowerCase().trim();
+                          filteredUsers = filteredUsers.filter(
+                            (u) =>
+                              (u.fullName && u.fullName.toLowerCase().includes(query)) ||
+                              (u.phone && u.phone.toLowerCase().includes(query)) ||
+                              (u.id && u.id.toLowerCase().includes(query))
+                          );
+                        }
+
+                        if (userRoleFilter !== "all") {
+                          filteredUsers = filteredUsers.filter((u) => u.role === userRoleFilter);
+                        }
+
+                        if (userStatusFilter !== "all") {
+                          filteredUsers = filteredUsers.filter((u) => u.status === userStatusFilter);
+                        }
+
+                        if (userBranchFilter !== "all") {
+                          filteredUsers = filteredUsers.filter((u) => u.branch === userBranchFilter);
+                        }
+
+                        if (userDepartmentFilter !== "all") {
+                          filteredUsers = filteredUsers.filter((u) => u.department === userDepartmentFilter);
                         }
                         
                         // Sort users by priorities: 
@@ -2070,6 +2405,195 @@ export default function DashboardDesktop({
                   </div>
                 </div>
               )}
+
+              {/* Import Users Modal */}
+              {showImportModal && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-[999] transition-all">
+                  <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-6 max-w-xl w-full relative">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowImportModal(false);
+                        setImportPastedText("");
+                      }}
+                      className="absolute top-4 right-4 w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-800 flex items-center justify-center text-xs font-bold transition-all cursor-pointer border-none"
+                      title="Đóng"
+                    >
+                      ✕
+                    </button>
+
+                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-2 pb-2 border-b border-slate-100 flex items-center gap-2">
+                      <Upload className="w-4 h-4 text-blue-600" />
+                      <T>NHẬP DANH SÁCH CBNV TỪ EXCEL / CSV</T>
+                    </h3>
+
+                    <div className="space-y-4">
+                      <div className="text-[11px] text-slate-500 leading-relaxed bg-blue-50/50 p-3 rounded-lg border border-blue-100/60">
+                        <strong className="text-blue-700 block mb-1">💡 Hướng dẫn định dạng dữ liệu:</strong>
+                        <T>Bạn có thể kéo thả file .csv, hoặc copy trực tiếp các hàng từ Excel và dán vào ô văn bản phía dưới.</T>
+                        <ul className="list-disc pl-4 mt-1.5 space-y-1 font-semibold text-slate-600">
+                          <li><T>Thứ tự các cột: Mã nhân sự | Họ và Tên | Số điện thoại | Chi nhánh | Bộ phận | Vai trò | Trạng thái</T></li>
+                          <li><T>Ví dụ: 2018.00281, Lê Nhật Trường, 0907767304, TPP-CTY, Phòng Quản Lý Chất Lượng, NHÂN VIÊN, Đã hoạt động</T></li>
+                        </ul>
+                      </div>
+
+                      {/* File Drag and Drop Zone */}
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">
+                          <T>Tải lên File CSV / Text</T>
+                        </label>
+                        <div 
+                          className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center hover:bg-slate-50 hover:border-blue-400 transition-all cursor-pointer relative"
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            const files = e.dataTransfer.files;
+                            if (files && files[0]) {
+                              const file = files[0];
+                              const reader = new FileReader();
+                              reader.onload = (evt) => {
+                                if (evt.target?.result) {
+                                  setImportPastedText(evt.target.result as string);
+                                  if (onShowToast) onShowToast(`Đã đọc nội dung file: ${file.name}`, "info");
+                                }
+                              };
+                              reader.readAsText(file);
+                            }
+                          }}
+                        >
+                          <input 
+                            type="file" 
+                            accept=".csv, .txt, text/csv, text/plain"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (evt) => {
+                                  if (evt.target?.result) {
+                                    setImportPastedText(evt.target.result as string);
+                                    if (onShowToast) onShowToast(`Đã đọc nội dung file: ${file.name}`, "info");
+                                  }
+                                };
+                                reader.readAsText(file);
+                              }
+                            }}
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" 
+                          />
+                          <FileSpreadsheet className="w-8 h-8 text-slate-400 mx-auto mb-1" />
+                          <p className="text-xs font-bold text-slate-700">
+                            <T>Kéo thả file CSV vào đây hoặc click để chọn file</T>
+                          </p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            <T>Hỗ trợ định dạng .csv hoặc .txt mã hóa UTF-8</T>
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Paste Area */}
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-500 uppercase mb-1 flex justify-between">
+                          <span><T>Nội dung dữ liệu đã đọc hoặc dán</T></span>
+                          {importPastedText && (
+                            <button 
+                              type="button"
+                              onClick={() => setImportPastedText("")}
+                              className="text-red-500 hover:text-red-700 text-[9px] font-bold cursor-pointer border-none bg-transparent"
+                            >
+                              [Xóa hết]
+                            </button>
+                          )}
+                        </label>
+                        <textarea
+                          rows={6}
+                          value={importPastedText}
+                          onChange={(e) => setImportPastedText(e.target.value)}
+                          placeholder="Nhập hoặc dán các dòng dữ liệu tại đây...&#10;Mã nhân sự, Họ tên, Số điện thoại..."
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono font-medium text-slate-800 bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all resize-none"
+                        />
+                      </div>
+
+                      <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowImportModal(false);
+                            setImportPastedText("");
+                          }}
+                          className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg transition-all cursor-pointer uppercase"
+                        >
+                          <T>HỦY BỎ</T>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!importPastedText.trim()) {
+                              if (onShowToast) onShowToast("Vui lòng nhập nội dung cần nhập!", "error");
+                              return;
+                            }
+
+                            const lines = importPastedText.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+                            let successCount = 0;
+                            let duplicateCount = 0;
+
+                            lines.forEach(line => {
+                              let parts = line.split(/[\t,;]/).map(p => p.trim());
+                              if (parts[0] && (parts[0].toLowerCase().includes("mã") || parts[0].toLowerCase().includes("id") || parts[0].toLowerCase().includes("họ tên"))) {
+                                return;
+                              }
+
+                              if (parts.length >= 3) {
+                                const id = parts[0];
+                                const fullName = parts[1];
+                                const phone = parts[2];
+                                const branch = parts[3] || "TPP-CTY";
+                                const department = parts[4] || "Phòng Quản Lý Chất Lượng";
+                                const role = (parts[5] as UserRole) || UserRole.STAFF;
+                                const status = (parts[6] as UserStatus) || UserStatus.ACTIVE;
+
+                                if (!id || !fullName || !phone) return;
+
+                                const exists = users.some(u => u.id === id);
+                                if (exists) {
+                                  duplicateCount++;
+                                  return;
+                                }
+
+                                const newUser: User = {
+                                  id,
+                                  fullName: formatNameCapitalized(fullName),
+                                  phone,
+                                  branch,
+                                  department,
+                                  role,
+                                  status
+                                };
+
+                                onAddUser(newUser);
+                                successCount++;
+                              }
+                            });
+
+                            if (onShowToast) {
+                              if (successCount > 0) {
+                                onShowToast(`Đã nhập thành công ${successCount} nhân sự! ${duplicateCount > 0 ? `(Bỏ qua ${duplicateCount} mã trùng lặp)` : ""}`, "success");
+                              } else {
+                                onShowToast("Không tìm thấy dòng dữ liệu hợp lệ. Vui lòng kiểm tra định dạng!", "warning");
+                              }
+                            }
+
+                            setShowImportModal(false);
+                            setImportPastedText("");
+                          }}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-md transition-all cursor-pointer uppercase flex items-center gap-1"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          <T>BẮT ĐẦU NHẬP</T>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -2302,7 +2826,7 @@ export default function DashboardDesktop({
                     <button
                       onClick={() => {
                         if (!newCompanyName.trim()) return;
-                        const finalId = newCompanyId.trim() || `COMP-${Date.now()}`;
+                        const finalId = newCompanyId.trim() || generateAutoCompanyId(newCompanyName.trim());
                         onAddCompany({ id: finalId, name: newCompanyName.trim() });
                         setSelectedCompanyId(finalId);
                         setNewCompanyName("");
@@ -2548,7 +3072,7 @@ export default function DashboardDesktop({
                     <button
                       onClick={() => {
                         if (!newBranchName.trim()) return;
-                        const finalId = newBranchId.trim() || `BRANCH-${Date.now()}`;
+                        const finalId = newBranchId.trim() || generateAutoBranchId(newBranchName.trim(), selectedCompanyId);
                         onAddBranch({
                            id: finalId,
                            name: newBranchName.trim(),
@@ -2779,7 +3303,7 @@ export default function DashboardDesktop({
                     <button
                       onClick={() => {
                         if (!newDeptName.trim() || activeBranchId === "") return;
-                        const finalId = newDeptId.trim() || `DEPT-${Date.now()}`;
+                        const finalId = newDeptId.trim() || generateAutoDeptId(activeBranchId, newDeptName.trim());
                         onAddDepartment({
                           id: finalId,
                           name: newDeptName.trim(),
@@ -3221,7 +3745,7 @@ export default function DashboardDesktop({
                             <td className="p-4 text-center font-mono text-slate-400">{index + 1}</td>
                             <td className="p-4 space-y-1.5 min-w-[180px]">
                               <div className="text-[10.5px] text-slate-600 leading-snug">
-                                <span className="font-extrabold text-slate-700 block"><span translate="no" className="notranslate">{r.uploaderName}</span></span>
+                                <span className="font-extrabold text-slate-700 block">{formatNameCapitalized(r.uploaderName)}</span>
                                 <span className="text-[9.5px] text-slate-400 font-mono block"><span translate="no" className="notranslate">{r.uploaderPhone}</span></span>
                               </div>
                               <div className="flex items-center gap-1 font-mono text-[9.5px] text-slate-400 select-none">
@@ -3468,7 +3992,7 @@ export default function DashboardDesktop({
                                   <td className="p-4 text-center font-mono text-slate-400">{index + 1}</td>
                                   <td className="p-4 space-y-1.5 min-w-[180px]">
                                     <div className="text-[10.5px] text-slate-600 leading-snug">
-                                      <span className="font-extrabold text-slate-700 block"><span translate="no" className="notranslate">{r.uploaderName}</span></span>
+                                      <span className="font-extrabold text-slate-700 block">{formatNameCapitalized(r.uploaderName)}</span>
                                       <span className="text-[9.5px] text-slate-400 font-mono block"><span translate="no" className="notranslate">{r.uploaderPhone}</span></span>
                                     </div>
                                     <div className="flex items-center gap-1 font-mono text-[9.5px] text-slate-400 select-none">
@@ -3679,7 +4203,7 @@ export default function DashboardDesktop({
                                 <td className="p-4 text-center font-mono text-slate-400">{index + 1}</td>
                                 <td className="p-4 space-y-1.5 min-w-[180px]">
                                   <div className="text-[10.5px] text-slate-600 leading-snug">
-                                    <span className="font-extrabold text-slate-700 block"><span translate="no" className="notranslate">{r.uploaderName}</span></span>
+                                    <span className="font-extrabold text-slate-700 block">{formatNameCapitalized(r.uploaderName)}</span>
                                     <span className="text-[9.5px] text-slate-400 font-mono block"><span translate="no" className="notranslate">{r.uploaderPhone}</span></span>
                                   </div>
                                   <div className="flex items-center gap-1 font-mono text-[9.5px] text-slate-400 select-none">
@@ -3987,7 +4511,7 @@ export default function DashboardDesktop({
                     {currentUser.fullName.charAt(0)}
                   </div>
                   <div>
-                    <T className="text-lg font-bold text-slate-800 block">{currentUser.fullName}</T>
+                    <T className="text-lg font-bold text-slate-800 block">{formatNameCapitalized(currentUser.fullName)}</T>
                     <T className="text-xs text-emerald-800 bg-[#DEF7EC] px-2.5 py-0.5 rounded border border-emerald-200 font-bold inline-block mt-1 uppercase tracking-wider">
                       {currentUser.role}
                     </T>
@@ -4021,74 +4545,255 @@ export default function DashboardDesktop({
             <div className="space-y-6">
               <div>
                 <h2 className="text-lg font-bold text-slate-850 flex items-center gap-2">
-                  <Bell className="w-5 h-5 text-yellow-500" />
-                  <T>Trung tâm Phát sóng & Ticker Thông báo</T>
+                  <Bell className="w-5 h-5 text-amber-500 animate-pulse" />
+                  <T>Trung tâm Cấu hình & Phát sóng Bảng tin</T>
                 </h2>
-                <T className="text-xs text-slate-500 mt-1 block">Thiết lập ticker (chữ chạy) khẩn cấp trên đỉnh hệ thống và tạo mới các tin nhắn chỉ đạo cho Nhật ký bảng tin.</T>
+                <T className="text-xs text-slate-500 mt-1 block">Quản trị toàn quyền thông báo chữ chạy (Ticker) khẩn cấp trên đỉnh hệ thống và đăng tin tức trực tuyến tới toàn bộ cán bộ công nhân viên.</T>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* News broadcaster form */}
-                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                  <T className="font-extrabold text-xs uppercase text-slate-500 tracking-wider block pb-2 border-b border-slate-100">
-                    Kích hoạt thông cáo chỉ thị
-                  </T>
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+                {/* Left side configurations */}
+                <div className="xl:col-span-5 space-y-6">
+                  {/* Card 1: THÔNG BÁO CHỮ CHẠY HỆ THỐNG */}
+                  <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm space-y-4">
+                    <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2 border-b border-slate-100 pb-3">
+                      <Sliders className="w-5 h-5 text-amber-500" />
+                      <T>THÔNG BÁO CHỮ CHẠY HỆ THỐNG</T>
+                    </h3>
 
-                  <div className="select-none">
-                    <label className="text-[10px] text-slate-500 block font-bold uppercase mb-1">Kiểu phát sóng:</label>
-                    <select
-                      value={noticeType}
-                      onChange={(e) => setNoticeType(e.target.value)}
-                      className="bg-slate-50 border border-slate-200 text-slate-800 text-xs rounded p-2 focus:outline-none w-full shadow-sm"
+                    <div className="bg-[#FFFBEB] border border-[#FEF3C7] rounded-xl p-4 space-y-3">
+                      <T className="text-amber-800 text-[10px] font-black block uppercase tracking-wider">DÒNG CHỮ CHẠY HIỆN TẠI (MARQUEE):</T>
+                      <div className="text-xs text-slate-700 leading-relaxed font-sans font-medium whitespace-pre-wrap break-words">
+                        <T>{tickerConfig?.text && tickerConfig.text.trim() !== "" ? tickerConfig.text : "ĐANG TRỐNG (KHÔNG PHÁT SÓNG)"}</T>
+                      </div>
+                      <div className="border-t border-amber-200/55 pt-3 grid grid-cols-2 gap-2 text-xs">
+                        <div className="flex items-center gap-1.5 text-slate-600 font-semibold">
+                          <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+                          <T>Tốc độ: {tickerConfig?.speed || 35} giây/vòng</T>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-slate-600 font-semibold">
+                          <Sliders className="w-4 h-4 text-amber-600 shrink-0" />
+                          <T>Khoảng cách: {tickerConfig?.spacing || 50}px</T>
+                        </div>
+                      </div>
+                    </div>
+
+                    {isEditingTicker ? (
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 animate-fadeIn">
+                        <T className="text-slate-700 text-xs font-black uppercase tracking-wide block">CHỈNH SỬA THÔNG SỐ CHỮ CHẠY</T>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] text-slate-500 block font-bold uppercase"><T>Nội dung thông báo chữ chạy:</T></label>
+                          <textarea
+                            value={editTickerText}
+                            onChange={(e) => setEditTickerText(e.target.value)}
+                            rows={3}
+                            className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                            placeholder="Nhập nội dung thông báo chữ chạy phát sóng..."
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-slate-500 block font-bold uppercase"><T>Tốc độ (giây/vòng):</T></label>
+                            <input
+                              type="number"
+                              value={editTickerSpeed}
+                              onChange={(e) => setEditTickerSpeed(Math.max(5, Number(e.target.value)))}
+                              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-800 focus:outline-none"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-slate-500 block font-bold uppercase"><T>Khoảng cách (px):</T></label>
+                            <input
+                              type="number"
+                              value={editTickerSpacing}
+                              onChange={(e) => setEditTickerSpacing(Math.max(10, Number(e.target.value)))}
+                              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-800 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex gap-2 pt-2">
+                          <button
+                            onClick={handleSaveTickerConfig}
+                            className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <T>LƯU CẤU HÌNH</T>
+                          </button>
+                          <button
+                            onClick={() => setEditTickerText("")}
+                            className="px-3 py-2 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold rounded-lg text-xs transition-all flex items-center justify-center gap-1 cursor-pointer border border-rose-200"
+                            title="Xóa trống dòng chữ"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <T>XÓA CHỮ</T>
+                          </button>
+                          <button
+                            onClick={() => setIsEditingTicker(false)}
+                            className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                            <T>HỦY</T>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={handleStartEditTicker}
+                        className="w-full py-2.5 bg-[#FEF3C7] hover:bg-[#FDE68A] border border-[#FCD34D] text-slate-800 font-extrabold rounded-lg text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                      >
+                        <Pencil className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                        <T>Chỉnh Sửa Thông Báo Chữ Chạy</T>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Card 2: ĐĂNG TIN THÔNG BÁO MỚI */}
+                  <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm space-y-4">
+                    <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2 border-b border-slate-100 pb-3">
+                      <Megaphone className="w-5 h-5 text-blue-500" />
+                      <T>ĐĂNG TIN THÔNG BÁO MỚI</T>
+                    </h3>
+
+                    <div className="select-none space-y-1">
+                      <label className="text-[10px] text-slate-500 block font-extrabold uppercase tracking-wider"><T>PHÂN LOẠI HIỂN THỊ:</T></label>
+                      <select
+                        value={noticeType}
+                        onChange={(e) => setNoticeType(e.target.value)}
+                        className="bg-slate-50 border border-slate-200 text-slate-850 text-xs rounded-lg p-2.5 focus:outline-none w-full shadow-xs font-semibold"
+                      >
+                        <option value="Quản trị viên phát sóng">📢 Quản trị viên phát sóng (Đỏ nổi bật)</option>
+                        <option value="Biểu dương">🌟 Biểu dương (Xanh lá cây)</option>
+                        <option value="Chỉ thị khẩn">🚨 Chỉ thị khẩn (Đỏ tươi)</option>
+                        <option value="Hệ thống tự động">⚙️ Hệ thống tự động (Xám dịu)</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-slate-500 block font-extrabold uppercase tracking-wider"><T>NỘI DUNG CHI TIẾT:</T></label>
+                      <MentionTextArea
+                        users={users}
+                        rows={4}
+                        value={newNoticeContent}
+                        onChange={setNewNoticeContent}
+                        placeholder="Nhập nội dung thông báo gửi tới bảng tin toàn bộ CBNV..."
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-850 placeholder-slate-400 focus:outline-none shadow-xs leading-relaxed"
+                      />
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        if (!newNoticeContent.trim()) return;
+                        onAddBroadcast(newNoticeContent, noticeType);
+                        setNewNoticeContent("");
+                        if (onShowToast) onShowToast("Đăng thông báo lên bảng tin thành công!", "success");
+                      }}
+                      className="w-full py-2.5 bg-[#1D4ED8] hover:bg-[#1E40AF] text-white font-extrabold rounded-lg text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md tracking-wider uppercase"
                     >
-                      <option value="Quản trị viên phát sóng">Quản trị viên phát sóng</option>
-                      <option value="Hệ thống tự động">Hệ thống tự động</option>
-                      <option value="🔴 CHỈ THỊ KHẨN">🔴 CHỈ THỊ KHẨN</option>
-                    </select>
+                      <Globe className="w-4 h-4" />
+                      <T>ĐĂNG LÊN BẢNG TIN</T>
+                    </button>
                   </div>
-
-                  <div>
-                    <label className="text-[10px] text-slate-500 block font-bold uppercase mb-1">Nội dung thông cáo:</label>
-                    <MentionTextArea
-                      users={users}
-                      rows={3}
-                      value={newNoticeContent}
-                      onChange={setNewNoticeContent}
-                      placeholder="Nhập dòng chữ chạy phát sóng hoặc tin nhắn hiển thị tại bảng tin nóng..."
-                      className="w-full bg-slate-50 border border-slate-200 rounded p-2.5 text-xs text-slate-800 placeholder-slate-450 focus:outline-none shadow-sm"
-                    />
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      if (!newNoticeContent.trim()) return;
-                      onAddBroadcast(newNoticeContent, noticeType);
-                      setNewNoticeContent("");
-                    }}
-                    className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-900 font-extrabold rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    <T>PHÁT SÓNG NGAY TỨC THÌ</T>
-                  </button>
                 </div>
 
-                {/* Bulletin Logs list representing snapshot */}
-                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col h-[320px]">
-                  <T className="font-extrabold text-xs uppercase text-slate-500 tracking-wider block pb-2 border-b border-slate-100">
-                    Nhật ký bảng tin hiện sống
-                  </T>
-
-                  <div className="flex-1 overflow-y-auto mt-3 space-y-2.5 pr-1 font-mono text-[11px]">
-                    {broadcasts.map((b) => (
-                      <div key={b.id} className="p-3 bg-slate-50 border border-slate-200 rounded-lg shadow-sm">
-                        <div className="flex justify-between font-bold text-[10px]">
-                          <T className="text-emerald-700">{b.type}</T>
-                          <T className="text-slate-400">{b.timestamp}</T>
-                        </div>
-                        <T className="text-slate-700 block mt-1.5 leading-relaxed font-sans">{b.content}</T>
-                        <T className="text-[9px] text-slate-400 block text-right mt-1 font-sans">— Chỉ đạo bởi: {b.sender}</T>
+                {/* Right side: NHẬT KÝ BẢNG TIN HIỆN TẠI */}
+                <div className="xl:col-span-7">
+                  <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm flex flex-col h-[650px]">
+                    <div className="flex justify-between items-center border-b border-slate-100 pb-3 mb-4 shrink-0">
+                      <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                        <Globe className="w-5 h-5 text-emerald-500" />
+                        <T>NHẬT KÝ BẢNG TIN HIỆN TẠI</T>
+                      </h3>
+                      <div className="bg-slate-100 px-3 py-1 rounded-full text-slate-600 font-mono text-[10.5px] font-black">
+                        <T>{broadcasts.length} tin tức</T>
                       </div>
-                    ))}
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto space-y-3.5 pr-2 custom-scrollbar">
+                      {broadcasts.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-slate-400 py-12 space-y-2">
+                          <Info className="w-8 h-8 opacity-55 text-slate-400" />
+                          <T className="text-xs font-semibold"><T>Chưa có thông báo nào được tạo.</T></T>
+                        </div>
+                      ) : (
+                        broadcasts.map((b) => {
+                          // Determine custom styles and tags based on type or content
+                          let cardBg = "bg-slate-50/70 border-slate-200";
+                          let tag1Text = "📢 THÔNG BÁO";
+                          let tag1Class = "text-slate-700 bg-slate-100 border-slate-200";
+                          let tag2Text = `Người tạo: ${b.sender}`;
+                          let tag2Class = "text-slate-600 bg-slate-100/50 border-slate-200";
+
+                          const typeL = b.type.toLowerCase();
+                          const contentL = b.content.toLowerCase();
+
+                          if (typeL.includes("phát sóng") || typeL.includes("broadcast")) {
+                            cardBg = "bg-rose-50/50 border-rose-100";
+                            tag1Text = "📢 PHÁT SÓNG";
+                            tag1Class = "text-[#E11D48] bg-[#FFE4E6] border-[#FECDD3]";
+                            tag2Text = "BAN QUẢN TRỊ";
+                            tag2Class = "text-[#B45309] bg-[#FEF3C7] border-[#FDE68A]";
+                          } else if (typeL.includes("biểu dương") || contentL.includes("đại gia đình") || contentL.includes("chúc mừng") || contentL.includes("ngân hàng đề thi")) {
+                            cardBg = "bg-[#F0FDF4] border-[#DCFCE7]";
+                            tag1Text = "📢 BIỂU DƯƠNG";
+                            tag1Class = "text-[#16A34A] bg-[#DCFCE7] border-[#BBF7D0]";
+                            tag2Text = b.sender === "Hệ thống" ? "Người tạo: Hệ thống" : `Người tạo: ${b.sender}`;
+                            tag2Class = "text-slate-700 bg-slate-100 border-slate-200";
+                          } else if (typeL.includes("khẩn") || contentL.includes("khẩn") || typeL.includes("chỉ thị")) {
+                            cardBg = "bg-[#FFF5F5] border-red-200";
+                            tag1Text = "🚨 CHỈ THỊ KHẨN";
+                            tag1Class = "text-white bg-[#EF4444] border-[#EF4444] animate-pulse";
+                            tag2Text = "BAN QUẢN TRỊ";
+                            tag2Class = "text-[#B45309] bg-[#FEF3C7] border-[#FDE68A]";
+                          } else if (b.sender === "Hệ thống") {
+                            cardBg = "bg-slate-50/70 border-slate-200";
+                            tag1Text = "⚙️ HỆ THỐNG";
+                            tag1Class = "text-slate-700 bg-slate-100 border-slate-200";
+                            tag2Text = "Người tạo: Hệ thống";
+                            tag2Class = "text-slate-600 bg-slate-100/50 border-slate-200";
+                          }
+
+                          return (
+                            <div 
+                              key={b.id} 
+                              className={`p-4 ${cardBg} border rounded-xl shadow-xs transition-all hover:shadow-md relative group`}
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100/60 pb-2 mb-2.5">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span className={`px-2 py-0.5 rounded text-[9.5px] font-black border uppercase tracking-wider ${tag1Class}`}>
+                                    <T>{tag1Text}</T>
+                                  </span>
+                                  <span className={`px-2 py-0.5 rounded text-[9.5px] font-bold border ${tag2Class}`}>
+                                    <T>{tag2Text}</T>
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2.5">
+                                  <span className="text-[10px] text-slate-400 font-bold font-mono">
+                                    <T>{b.timestamp}</T>
+                                  </span>
+                                  {onDeleteBroadcast && (
+                                    <button
+                                      onClick={() => {
+                                        if (confirm(`Bạn có chắc chắn muốn xóa thông báo này?`)) {
+                                          onDeleteBroadcast(b.id);
+                                          if (onShowToast) onShowToast("Xóa thông báo thành công", "info");
+                                        }
+                                      }}
+                                      className="text-slate-400 hover:text-red-600 transition-colors p-1 rounded-md hover:bg-red-50 cursor-pointer"
+                                      title="Xóa thông báo"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-xs text-slate-800 font-medium font-sans leading-relaxed break-words whitespace-pre-wrap">
+                                <T>{b.content}</T>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

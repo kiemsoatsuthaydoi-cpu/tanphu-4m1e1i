@@ -61,3 +61,18 @@ export const getBranchCodeSuffix = (brName: string | undefined | null) => {
   }
   return ` (${code})`;
 };
+
+export const formatNameCapitalized = (str: string | undefined | null): string => {
+  if (!str) return "";
+  return str
+    .split(/\s+/)
+    .map((word) => {
+      if (!word) return "";
+      // If word is in parentheses or bracketed, keep uppercase
+      if (word.startsWith("(") || word.endsWith(")")) {
+        return word.toUpperCase();
+      }
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(" ");
+};

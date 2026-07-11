@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { getBranchCodeSuffix } from "./utils/branchHelpers";
+import { getBranchCodeSuffix, formatNameCapitalized } from "./utils/branchHelpers";
 import { AlertCircle, LogIn, Heart, ShieldCheck, Wifi, WifiOff, RefreshCw, Smartphone, Monitor, Lock, Building, ChevronDown, Briefcase, User as UserIcon, Check, CheckCircle, XCircle, AlertTriangle, Info } from "lucide-react";
 import { T } from "./components/TranslateText";
 import {
@@ -199,7 +199,80 @@ const sanitizeAndMigrateDepartments = (rawDepts: Department[]): Department[] => 
     list.push({ id: "bbc-2", name: "Phòng Tài chính Kế toán (DNP-BBC)", branchId: "DNP-BBC" });
   }
 
-  return list;
+  // Group by branchId to migrate DEPT- IDs deterministically
+  const branchesMap = new Map<string, Department[]>();
+  list.forEach(d => {
+    const arr = branchesMap.get(d.branchId) || [];
+    arr.push(d);
+    branchesMap.set(d.branchId, arr);
+  });
+
+  const migratedList: Department[] = [];
+
+  branchesMap.forEach((depts, bId) => {
+    const cleanDepts = depts.filter(d => !d.id.startsWith("DEPT-"));
+    const dirtyDepts = depts.filter(d => d.id.startsWith("DEPT-"));
+
+    if (dirtyDepts.length === 0) {
+      migratedList.push(...cleanDepts);
+      return;
+    }
+
+    // Determine default prefix for this branch
+    let companyId = "TPP";
+    if (bId.startsWith("DNP-")) {
+      companyId = "DNP";
+    } else if (bId.includes("-")) {
+      companyId = bId.split("-")[0];
+    }
+
+    let base = bId;
+    if (base.startsWith(`${companyId}-`)) {
+      base = base.substring(companyId.length + 1);
+    }
+    let prefix = base.toLowerCase();
+    if (prefix === "bni") prefix = "bn";
+    if (prefix === "lan") prefix = "la";
+    if (prefix === "314" || bId.includes("314")) prefix = "nm";
+
+    // Check if the prefix conflicts with another branch's prefix (e.g., TPP-CTY uses "cty", so DNP-CTY must not use "cty")
+    const prefixConflict = list.some(otherD => {
+      if (otherD.branchId === bId) return false;
+      return otherD.id.startsWith(`${prefix}-`);
+    });
+
+    if (prefixConflict) {
+      prefix = `${companyId.toLowerCase()}-${prefix}`;
+    }
+
+    // Now find any existing index suffix under this prefix (e.g., prefix-1, prefix-2)
+    let maxIdx = 0;
+    cleanDepts.forEach(d => {
+      if (d.id.startsWith(`${prefix}-`)) {
+        const numPart = d.id.substring(prefix.length + 1);
+        const num = parseInt(numPart, 10);
+        if (!isNaN(num) && num > maxIdx) {
+          maxIdx = num;
+        }
+      }
+    });
+
+    // Sort dirtyDepts by ID (which has timestamp) so it's stable
+    dirtyDepts.sort((a, b) => a.id.localeCompare(b.id));
+
+    // Assign new IDs
+    const migratedDirty = dirtyDepts.map(d => {
+      maxIdx++;
+      return {
+        ...d,
+        id: `${prefix}-${maxIdx}`
+      };
+    });
+
+    migratedList.push(...cleanDepts, ...migratedDirty);
+  });
+
+  return migratedList;
 };
 
 const sanitizeUsers = (rawUsers: User[]): User[] => {
@@ -559,6 +632,29 @@ export default function App() {
     };
   });
 
+  const [tickerConfig, setTickerConfig] = useState(() => {
+    const saved = safeGetItem("4m1e1i_ticker_config");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (err) {
+        // ignore
+      }
+    }
+    return {
+      text: "Ban Quản Trị xin gửi lời cảm ơn đến CN.BNI; CN.LAN; P.QLCL; Khối QLCCƯ và các cá nhân Chị @Xiêm - TP.HRD (TPP-BNI); Chị @Phượng - TP.QLCL (TPP-LAN); Em @Hùng (Kho HBN)... đã sưu tầm, tổng hợp gửi câu hỏi của Tasco để BQT cập nhật trên \"Ứng Dụng Ôn Tập Quiz 3T Hàng Ngày\" của chúng ta. Xin cảm ơn.",
+      speed: 35,
+      spacing: 50
+    };
+  });
+
+  useEffect(() => {
+    safeSetItem("4m1e1i_ticker_config", JSON.stringify(tickerConfig));
+    if (syncCompleted && dbConnected && !dbLoading) {
+      saveDocument("config", "ticker", tickerConfig).catch(console.error);
+    }
+  }, [tickerConfig, dbConnected, dbLoading, syncCompleted]);
+
   useEffect(() => {
     safeSetItem("4m1e1i_mobile_ui_config", JSON.stringify(mobileUIConfig));
     if (syncCompleted && dbConnected && !dbLoading) {
@@ -895,15 +991,22 @@ export default function App() {
       }
 
       let latestDepts = fDepts.length > 0 ? fDepts : [...departments];
+      const oldDeptIdsToDelete = latestDepts.filter(d => d.id.startsWith("DEPT-")).map(d => d.id);
+      
       latestDepts = sanitizeAndMigrateDepartments(latestDepts);
       setDepartments(latestDepts);
       safeSetItem("4m1e1i_departments", JSON.stringify(latestDepts));
 
       if (dbConnected) {
         try {
-          // Force-write correct departments of DNP-BBM and DNP-BBC to database to avoid ghost values
-          const dnpDepts = latestDepts.filter(d => d.branchId === "DNP-BBM" || d.branchId === "DNP-BBC");
-          for (const d of dnpDepts) {
+          // If any old DEPT- IDs were in Firestore, delete them!
+          if (oldDeptIdsToDelete.length > 0) {
+            for (const oldId of oldDeptIdsToDelete) {
+              await deleteDocument(COLLECTIONS.DEPARTMENTS, oldId).catch(console.error);
+            }
+          }
+          // Save ALL departments to Firestore to ensure we have the newly-generated clean IDs updated
+          for (const d of latestDepts) {
             await saveDocument(COLLECTIONS.DEPARTMENTS, d.id, d);
           }
         } catch (err) {
@@ -941,6 +1044,15 @@ export default function App() {
         setMobileUIConfig((prev: any) => ({
           ...prev,
           ...cleanCfg
+        }));
+      }
+
+      const remoteTicker = fConfigs.find((c: any) => c.id === "ticker");
+      if (remoteTicker) {
+        const { id, ...cleanTicker } = remoteTicker;
+        setTickerConfig((prev: any) => ({
+          ...prev,
+          ...cleanTicker
         }));
       }
 
@@ -1482,7 +1594,7 @@ export default function App() {
     // Register user with PENDING state and STAFF (employee) role
     const newUser: User = {
       id: regId.trim(),
-      fullName: regFullName.trim(),
+      fullName: formatNameCapitalized(regFullName.trim()),
       phone: cleanPhone,
       department: regDepartment,
       branch: regBranch,
@@ -1543,7 +1655,13 @@ export default function App() {
   };
 
   const handleAddUser = (user: User) => {
-    setUsers((prev) => [...prev, user]);
+    setUsers((prev) => {
+      if (prev.some((u) => u.id === user.id)) return prev;
+      return [...prev, user];
+    });
+    if (dbConnected) {
+      saveDocument(COLLECTIONS.USERS, user.id, user).catch(console.error);
+    }
   };
 
   const handleUpdateUser = (updatedUser: User) => {
@@ -1903,6 +2021,15 @@ export default function App() {
     if (dbConnected) {
       saveDocument(COLLECTIONS.BROADCASTS, newNotice.id, newNotice).catch((err) => {
         console.error("Lỗi khi gửi thông báo lên Firestore:", err);
+      });
+    }
+  };
+
+  const handleDeleteBroadcast = (id: string) => {
+    setBroadcasts((prev) => prev.filter((b) => b.id !== id));
+    if (dbConnected) {
+      deleteDocument(COLLECTIONS.BROADCASTS, id).catch((err) => {
+        console.error("Lỗi khi xóa thông báo trên Firestore:", err);
       });
     }
   };
@@ -2612,7 +2739,9 @@ export default function App() {
                           --- Chọn Chi nhánh/ Văn Phòng đại diện ---
                         </button>
                         {(() => {
-                          const allBranches = branches;
+                          const allBranches = regCompany 
+                            ? branches.filter((b) => b.companyId === regCompany)
+                            : branches;
                           return allBranches.map((b) => {
                             const nameWithSuffix = b.name.includes("(") 
                               ? b.name 
@@ -2967,6 +3096,8 @@ export default function App() {
             onUpdateUserRole={handleUpdateRole}
             isNativeScrollActive={isNativeScrollActive}
             setIsNativeScrollActive={handleSetNativeScrollActive}
+            tickerConfig={tickerConfig}
+            broadcasts={broadcasts}
           />
         )}
 
@@ -3062,6 +3193,8 @@ export default function App() {
             onUpdateUserRole={handleUpdateRole}
             isNativeScrollActive={isNativeScrollActive}
             setIsNativeScrollActive={handleSetNativeScrollActive}
+            tickerConfig={tickerConfig}
+            broadcasts={broadcasts}
           />
         )}
 
@@ -3203,6 +3336,9 @@ export default function App() {
             onForceSyncMetadata={handleForceSyncMetadata}
             onForceSyncUsers={handleForceSyncUsers}
             onShowToast={showToast}
+            onDeleteBroadcast={handleDeleteBroadcast}
+            tickerConfig={tickerConfig}
+            onUpdateTickerConfig={setTickerConfig}
           />
         </div>
 
@@ -3254,6 +3390,8 @@ export default function App() {
                 onUpdateUserRole={handleUpdateRole}
                 isNativeScrollActive={isNativeScrollActive}
                 setIsNativeScrollActive={handleSetNativeScrollActive}
+                tickerConfig={tickerConfig}
+                broadcasts={broadcasts}
               />
             )}
           </div>
@@ -3303,6 +3441,8 @@ export default function App() {
                 onUpdateUserRole={handleUpdateRole}
                 isNativeScrollActive={isNativeScrollActive}
                 setIsNativeScrollActive={handleSetNativeScrollActive}
+                tickerConfig={tickerConfig}
+                broadcasts={broadcasts}
               />
             )}
           </div>

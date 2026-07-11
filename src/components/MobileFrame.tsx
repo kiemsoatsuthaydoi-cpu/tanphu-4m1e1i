@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
 import html2canvas from "html2canvas";
 import { Search, RotateCw, RotateCcw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft } from "lucide-react";
-import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Company, ChatMessage, QualityReportResolution, QualityReportReplication } from "../types";
+import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
 import { QRCodeSVG } from "qrcode.react";
-import { isSameBranchOrFactory } from "../utils/branchHelpers";
+import { isSameBranchOrFactory, formatNameCapitalized } from "../utils/branchHelpers";
 import { AutoImageSlider } from "./AutoImageSlider";
 import FirebaseQuotaMonitor from "./FirebaseQuotaMonitor";
 
@@ -179,6 +179,8 @@ interface MobileFrameProps {
   onUpdateUserRole?: (id: string, role: UserRole) => void;
   isNativeScrollActive?: boolean;
   setIsNativeScrollActive?: (active: boolean, filteredReports?: any[]) => void;
+  broadcasts?: BroadcastNotice[];
+  tickerConfig?: { text: string; speed: number; spacing: number };
 }
 
 function formatTimestampToDMY(tsStr: string): string {
@@ -741,7 +743,9 @@ export default function MobileFrame({
   onUpdateUserStatus,
   onUpdateUserRole,
   isNativeScrollActive,
-  setIsNativeScrollActive
+  setIsNativeScrollActive,
+  broadcasts = [],
+  tickerConfig
 }: MobileFrameProps) {
   const isRealMobile = typeof window !== "undefined" && (
     window.innerWidth < 1024 || 
@@ -751,6 +755,7 @@ export default function MobileFrame({
   const config = mobileUIConfig || {};
   const displayRule = config.displayRule || "clean";
   const customAliases = config.customAliases || {};
+  const hasActiveTicker = !!(tickerConfig?.text && tickerConfig.text.trim() !== "");
 
   const getThemeClasses = (themeId: string | undefined) => {
     switch (themeId) {
@@ -1067,70 +1072,35 @@ export default function MobileFrame({
   const viewportRef = useRef<HTMLDivElement>(null);
   const lastTouchTimeRef = useRef(0);
   const secondaryIconsRef = useRef<HTMLDivElement>(null);
-  const [showSecondary, setShowSecondary] = useState(false);
-  const swipeStartXRef = useRef<number | null>(null);
-  const swipeStartYRef = useRef<number | null>(null);
-
-  const handleSwipeTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 1) {
-      swipeStartXRef.current = e.touches[0].clientX;
-      swipeStartYRef.current = e.touches[0].clientY;
+  useEffect(() => {
+    const el = secondaryIconsRef.current;
+    if (el) {
+      const timer = setTimeout(() => {
+        el.scrollLeft = el.scrollWidth;
+      }, 150);
+      return () => clearTimeout(timer);
     }
-  };
+  }, []);
 
-  const handleSwipeTouchMove = (e: React.TouchEvent) => {
-    if (swipeStartXRef.current === null || swipeStartYRef.current === null) return;
-    const currentX = e.touches[0].clientX;
-    const currentY = e.touches[0].clientY;
-    const diffX = currentX - swipeStartXRef.current;
-    const diffY = currentY - swipeStartYRef.current;
-
-    if (Math.abs(diffX) > Math.abs(diffY)) {
-      if (diffX < -30) {
-        setShowSecondary(true);
-        swipeStartXRef.current = null;
-        swipeStartYRef.current = null;
-      } else if (diffX > 30) {
-        setShowSecondary(false);
-        swipeStartXRef.current = null;
-        swipeStartYRef.current = null;
-      }
-    }
-  };
-
-  const handleSwipeTouchEnd = () => {
-    swipeStartXRef.current = null;
-    swipeStartYRef.current = null;
-  };
-
-  const handleSwipeMouseDown = (e: React.MouseEvent) => {
-    swipeStartXRef.current = e.clientX;
-    swipeStartYRef.current = e.clientY;
-  };
-
-  const handleSwipeMouseMove = (e: React.MouseEvent) => {
-    if (swipeStartXRef.current === null || swipeStartYRef.current === null) return;
-    const currentX = e.clientX;
-    const currentY = e.clientY;
-    const diffX = currentX - swipeStartXRef.current;
-    const diffY = currentY - swipeStartYRef.current;
-
-    if (Math.abs(diffX) > Math.abs(diffY)) {
-      if (diffX < -30) {
-        setShowSecondary(true);
-        swipeStartXRef.current = null;
-        swipeStartYRef.current = null;
-      } else if (diffX > 30) {
-        setShowSecondary(false);
-        swipeStartXRef.current = null;
-        swipeStartYRef.current = null;
-      }
-    }
-  };
-
-  const handleSwipeMouseUp = () => {
-    swipeStartXRef.current = null;
-    swipeStartYRef.current = null;
+  const handleIconsMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    const ele = secondaryIconsRef.current;
+    if (!ele) return;
+    const startX = e.pageX - ele.offsetLeft;
+    const scrollLeft = ele.scrollLeft;
+    
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const x = moveEvent.pageX - ele.offsetLeft;
+      const walk = (x - startX) * 1.5;
+      ele.scrollLeft = scrollLeft - walk;
+    };
+    
+    const handleMouseUp = () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+    
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
   };
 
   const handleRefreshClick = async () => {
@@ -2305,175 +2275,177 @@ App Link: ${window.location.origin}`;
       onTouchStart={handleViewportTouchStart} 
       className={`w-full flex flex-col relative transition-all duration-300 ${
         isRealMobile 
-          ? "max-w-none rounded-none border-0 shadow-none" 
-          : "max-w-[440px] lg:w-[375px] bg-slate-950 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl"
-      } h-[100dvh] lg:h-[780px] overflow-hidden`}
+          ? "max-w-none rounded-none border-0 shadow-none h-[100dvh] overflow-hidden" 
+          : "max-w-[440px] lg:w-[375px] h-[100dvh] lg:h-[780px] bg-slate-950 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl overflow-hidden"
+      }`}
     >
 
       {/* Main Appsheet Blue Title Bar */}
-      <div id="mobile-header" className={`text-white px-4 py-3 flex items-center justify-between shadow-md shrink-0 select-none ${
+      <div id="mobile-header" className={`text-white px-4 pt-2.5 ${hasActiveTicker ? "pb-0 gap-1" : "pb-2 gap-0"} flex flex-col shadow-md shrink-0 select-none ${
         isRealMobile ? "rounded-none" : "rounded-t-[15px] lg:rounded-t-[28px]"
       } ${theme.bg}`}>
-        <div className="flex items-center gap-2">
-          {/* TANPHU simulated logo block */}
-          <div className="relative">
-            <div className="bg-white text-[9px] font-black px-1.5 py-0.5 rounded flex items-center justify-center font-sans tracking-tighter" style={{ color: "var(--color-primary, #1e3a8a)" }}>
-              <T>TANPHU</T>
+        {/* Row 1: Brand & Icons */}
+        <div className="flex items-center justify-between w-full">
+          <div className="flex items-center gap-2">
+            {/* TANPHU simulated logo block */}
+            <div className="relative">
+              <div className="bg-white text-[9px] font-black px-1.5 py-0.5 rounded flex items-center justify-center font-sans tracking-tighter" style={{ color: "var(--color-primary, #1e3a8a)" }}>
+                <T>TANPHU</T>
+              </div>
+            </div>
+            <div className="flex flex-col justify-center select-none">
+              <T className="font-bold text-[13.6px] tracking-wide whitespace-nowrap leading-none block text-left">META ANDON</T>
+              <T className="text-[8px] font-bold tracking-[-0.015em] opacity-90 whitespace-nowrap block text-left leading-none mt-1">Mỗi nhân viên là một QC</T>
             </div>
           </div>
-          <div className="flex flex-col justify-center select-none">
-            <T className="font-bold text-[13.6px] tracking-wide whitespace-nowrap leading-none block text-left">META ANDON</T>
-            <T className="text-[8px] font-bold tracking-[-0.015em] opacity-90 whitespace-nowrap block text-left leading-none mt-1">Mỗi nhân viên là một QC</T>
-          </div>
-        </div>
-        <div 
-          className="flex items-center gap-[4px] max-w-[215px] sm:max-w-[250px] overflow-hidden select-none"
-          onTouchStart={handleSwipeTouchStart}
-          onTouchMove={handleSwipeTouchMove}
-          onTouchEnd={handleSwipeTouchEnd}
-          onMouseDown={handleSwipeMouseDown}
-          onMouseMove={handleSwipeMouseMove}
-          onMouseUp={handleSwipeMouseUp}
-        >
-          {/* Subtle indicator to show more icons exist */}
-          {!showSecondary && (
-            <button
-              onClick={() => setShowSecondary(true)}
-              className="p-0.5 hover:scale-110 active:scale-95 transition-transform cursor-pointer text-white/40 hover:text-white shrink-0 animate-pulse mr-[2px]"
-              title="Vuốt sang trái hoặc nhấn để xem thêm chức năng"
-            >
-              <ChevronLeft className="w-[14px] h-[14px]" />
-            </button>
-          )}
+          <div className="relative flex items-center select-none">
+            {/* Subtle left gradient fade to indicate scrollable content */}
+            <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-r from-black/25 to-transparent pointer-events-none z-10" />
 
-          {/* Nhóm các icon phụ: Ẩn mặc định, hiện khi showSecondary hoặc vuốt trái */}
-          <div 
-            ref={secondaryIconsRef}
-            className={`flex items-center gap-[7px] overflow-hidden flex-nowrap scrollbar-none py-1 select-none transition-all duration-300 ${
-              showSecondary 
-                ? "max-w-[160px] opacity-100 pr-1.5 border-r border-white/20" 
-                : "max-w-0 opacity-0 pointer-events-none"
-            }`}
-            style={{
-              scrollbarWidth: "none",
-              msOverflowStyle: "none",
-            }}
-          >
-            {currentUser?.role !== UserRole.STAFF && currentUser?.role !== UserRole.REVIEWER && (
-              <button
-                onClick={() => setShowTrash(true)}
-                className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer shrink-0"
-                title="Lưu trữ / Thùng rác"
-              >
-                <Archive className="w-[18px] h-[18px] text-amber-300 hover:text-amber-100" />
-                {reports.filter((r) => r.isDeleted).length > 0 && (
-                  <span className="absolute -top-1 -right-0.5 bg-rose-600 text-[8px] text-white font-extrabold w-4 h-4 rounded-full flex items-center justify-center border border-slate-900 leading-none">
-                    <span translate="no" className="notranslate">
-                      {reports.filter((r) => r.isDeleted).length}
+            <div 
+              ref={secondaryIconsRef}
+              onMouseDown={handleIconsMouseDown}
+              className="flex items-center gap-[8px] overflow-x-auto flex-nowrap scrollbar-none py-1 select-none cursor-grab active:cursor-grabbing [&::-webkit-scrollbar]:hidden"
+              style={{
+                scrollbarWidth: "none",
+                msOverflowStyle: "none",
+                maxWidth: "112px", // Fits exactly 3 main icons with their gaps
+                WebkitOverflowScrolling: "touch"
+              }}
+            >
+              {/* --- 1. ARCHIVE / TRASH (Secondary) --- */}
+              {currentUser?.role !== UserRole.STAFF && currentUser?.role !== UserRole.REVIEWER && (
+                <button
+                  onClick={() => setShowTrash(true)}
+                  className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer shrink-0"
+                  title="Lưu trữ / Thùng rác"
+                >
+                  <Archive className="w-[18px] h-[18px] text-amber-300 hover:text-amber-100" />
+                  {reports.filter((r) => r.isDeleted).length > 0 && (
+                    <span className="absolute -top-1 -right-0.5 bg-rose-600 text-[8px] text-white font-extrabold w-4 h-4 rounded-full flex items-center justify-center border border-slate-900 leading-none">
+                      <span translate="no" className="notranslate">
+                        {reports.filter((r) => r.isDeleted).length}
+                      </span>
                     </span>
+                  )}
+                </button>
+              )}
+
+              {/* --- 2. CLOUD QUOTA (Secondary) --- */}
+              {currentUser?.role === UserRole.ADMIN && (
+                <button
+                  onClick={() => {
+                    setShowMobileCloudQuota(true);
+                    setShowTrash(false);
+                  }}
+                  className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer shrink-0"
+                  title="Giám sát Cloud Quota"
+                >
+                  <Cloud className="w-[19px] h-[19px] text-sky-300 hover:text-sky-100" />
+                </button>
+              )}
+
+              {/* --- 3. REFRESH DATA (Secondary) --- */}
+              {currentUser?.role === UserRole.ADMIN && (
+                <button 
+                  onClick={handleRefreshClick} 
+                  className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer shrink-0"
+                  title="Tải lại dữ liệu"
+                  disabled={isRefreshing}
+                >
+                  <RotateCw className={`w-[18px] h-[18px] text-white ${isRefreshing ? "animate-spin" : ""}`} />
+                </button>
+              )}
+
+              {/* --- 4. GUIDE INFO (Secondary) --- */}
+              <button
+                onClick={() => setOnboardingStep(1)}
+                className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer shrink-0"
+                title="Hướng dẫn nhanh"
+              >
+                <Info className="w-[18px] h-[18px] text-teal-200 hover:text-white" />
+              </button>
+
+              {/* --- 5. QR CODE (Secondary) --- */}
+              <button
+                onClick={() => setShowQrCodeView(true)}
+                className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer shrink-0"
+                title="Mã QR ứng dụng"
+              >
+                <QrCode className="w-[18px] h-[18px] text-sky-200 hover:text-white" />
+              </button>
+
+              {/* --- 6. ONLINE COUNT (Main) --- */}
+              {currentUser?.role !== UserRole.STAFF && currentUser?.role !== UserRole.REVIEWER && (
+                <button 
+                  onClick={() => {
+                    setOnlineSearchTerm("");
+                    setOnlineTabFilter("ONLINE");
+                    setShowOnlineUsersDrawer(true);
+                  }}
+                  className="relative hover:scale-115 active:scale-95 transition-all p-1 cursor-pointer bg-transparent border-none outline-none shrink-0"
+                  title="Số nhân viên đang online"
+                >
+                  <Users className="w-[18px] h-[18px] text-emerald-300 pointer-events-none" />
+                  <span className="absolute -top-1 -right-1 bg-emerald-500 text-[8px] text-white font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border border-slate-900 leading-none shadow-sm animate-pulse pointer-events-none">
+                    <span translate="no" className="notranslate font-mono select-none">
+                      {onlineCount}
+                    </span>
+                  </span>
+                </button>
+              )}
+
+              {/* --- 7. NOTIFICATIONS (Main) --- */}
+              <button
+                onClick={() => setShowNotifDrawer(true)}
+                className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer shrink-0"
+                title="Thông báo hệ thống"
+              >
+                <Bell className="w-[19px] h-[19px] text-white" />
+                {unreadCount > 0 && (
+                  <span className={`absolute -top-1.5 -right-1.5 bg-rose-600 text-[8px] text-white font-extrabold w-4.5 h-4.5 rounded-full flex items-center justify-center border ${theme.border} animate-pulse`}>
+                    {unreadCount > 99 ? "99+" : unreadCount}
                   </span>
                 )}
               </button>
-            )}
 
-            {currentUser?.role === UserRole.ADMIN && (
+              {/* --- 8. FULLSCREEN MODE (Main) --- */}
               <button
-                onClick={() => {
-                  setShowMobileCloudQuota(true);
-                  setShowTrash(false);
-                }}
-                className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer shrink-0"
-                title="Giám sát Cloud Quota"
-              >
-                <Cloud className="w-[19px] h-[19px] text-sky-300 hover:text-sky-100" />
-              </button>
-            )}
-
-            {currentUser?.role === UserRole.ADMIN && (
-              <button 
-                onClick={handleRefreshClick} 
+                onClick={toggleFullscreen}
                 className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer shrink-0"
-                title="Tải lại dữ liệu"
-                disabled={isRefreshing}
+                title={isFullscreen ? "Thu nhỏ màn hình" : "Phóng to màn hình"}
               >
-                <RotateCw className={`w-[18px] h-[18px] text-white ${isRefreshing ? "animate-spin" : ""}`} />
+                {isFullscreen ? (
+                  <Minimize className="w-[19px] h-[19px] text-white" />
+                ) : (
+                  <Maximize className="w-[19px] h-[19px] text-white" />
+                )}
               </button>
-            )}
-
-            <button
-              onClick={() => setOnboardingStep(1)}
-              className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer shrink-0"
-              title="Hướng dẫn nhanh"
-            >
-              <Info className="w-[18px] h-[18px] text-teal-200 hover:text-white" />
-            </button>
-
-            <button
-              onClick={() => setShowQrCodeView(true)}
-              className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer shrink-0"
-              title="Mã QR ứng dụng"
-            >
-              <QrCode className="w-[18px] h-[18px] text-sky-200 hover:text-white" />
-            </button>
-          </div>
-
-          {showSecondary && (
-            <button
-              onClick={() => setShowSecondary(false)}
-              className="p-0.5 hover:scale-110 active:scale-95 transition-transform cursor-pointer text-white/50 hover:text-white shrink-0 mr-[4px]"
-              title="Ẩn bớt chức năng"
-            >
-              <ChevronRight className="w-[14px] h-[14px]" />
-            </button>
-          )}
-
-          {/* Nhóm 3 icon chính: Luôn cố định bên phải */}
-          <div className="flex items-center gap-[7px] shrink-0">
-            {currentUser?.role !== UserRole.STAFF && currentUser?.role !== UserRole.REVIEWER && (
-              <button 
-                onClick={() => {
-                  setOnlineSearchTerm("");
-                  setOnlineTabFilter("ONLINE");
-                  setShowOnlineUsersDrawer(true);
-                }}
-                className="relative hover:scale-115 active:scale-95 transition-all p-1 cursor-pointer bg-transparent border-none outline-none shrink-0"
-                title="Số nhân viên đang online"
-              >
-                <Users className="w-[18px] h-[18px] text-emerald-300 pointer-events-none" />
-                <span className="absolute -top-1 -right-1 bg-emerald-500 text-[8px] text-white font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border border-slate-900 leading-none shadow-sm animate-pulse pointer-events-none">
-                  <span translate="no" className="notranslate font-mono select-none">
-                    {onlineCount}
-                  </span>
-                </span>
-              </button>
-            )}
-
-            <button
-              onClick={() => setShowNotifDrawer(true)}
-              className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer ml-[2px] shrink-0"
-              title="Thông báo hệ thống"
-            >
-              <Bell className="w-[19px] h-[19px] text-white" />
-              {unreadCount > 0 && (
-                <span className={`absolute -top-1.5 -right-1.5 bg-rose-600 text-[8px] text-white font-extrabold w-4.5 h-4.5 rounded-full flex items-center justify-center border ${theme.border} animate-pulse`}>
-                  {unreadCount > 99 ? "99+" : unreadCount}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={toggleFullscreen}
-              className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer ml-[2px] shrink-0"
-              title={isFullscreen ? "Thu nhỏ màn hình" : "Phóng to màn hình"}
-            >
-              {isFullscreen ? (
-                <Minimize className="w-[19px] h-[19px] text-white" />
-              ) : (
-                <Maximize className="w-[19px] h-[19px] text-white" />
-              )}
-            </button>
+            </div>
           </div>
         </div>
+
+        {/* Row 2: Ticker marquee under 'Mỗi nhân viên là một QC' */}
+        {hasActiveTicker && (
+          <div className="w-full overflow-hidden bg-transparent pb-1 flex items-center select-none">
+            <div className="flex-1 overflow-hidden relative h-3 flex items-center">
+              <div 
+                className="animate-marquee whitespace-nowrap text-[8px] flex font-sans text-white font-bold uppercase tracking-[-0.015em] opacity-90"
+                style={{ 
+                  animationDuration: `${tickerConfig?.speed || 35}s`,
+                  gap: `${tickerConfig?.spacing || 50}px`
+                }}
+              >
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-1 shrink-0">
+                    <span className="text-white/60">✦</span>
+                    <T>{tickerConfig.text.toUpperCase()}</T>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Internal layout controls (Search inputs) */}
@@ -2928,7 +2900,7 @@ App Link: ${window.location.origin}`;
                               <span className="text-[7.5px] font-mono text-slate-405 block mt-0.5">
                                 <T><span translate="no" className="notranslate">{dateDisplay}</span></T>
                                 <span className="mx-1">|</span>
-                                <span translate="no" className="notranslate">{rep.uploaderName}</span>
+                                <span>{formatNameCapitalized(rep.uploaderName)}</span>
                               </span>
                             </div>
                             {rep.reportType === "KPH" || rep.isAbnormal ? (
@@ -3158,7 +3130,7 @@ App Link: ${window.location.origin}`;
                     </div>
                     {/* Personnel tags */}
                     <div className="text-right">
-                      <T className="text-[10px] text-slate-500 font-semibold block">{report.uploaderName}</T>
+                      <T className="text-[10px] text-slate-500 font-semibold block">{formatNameCapitalized(report.uploaderName)}</T>
                     </div>
                   </div>
 
@@ -3477,7 +3449,7 @@ App Link: ${window.location.origin}`;
                               <input
                                 type="text"
                                 readOnly
-                                value={currentUser?.fullName || "Kiểm soát viên"}
+                                value={currentUser?.fullName ? formatNameCapitalized(currentUser.fullName) : "Kiểm soát viên"}
                                 className="w-full text-[9px] font-semibold text-slate-500 bg-slate-100 border border-slate-200 rounded px-1.5 py-1 focus:outline-none cursor-not-allowed"
                               />
                             </div>
@@ -3787,7 +3759,7 @@ App Link: ${window.location.origin}`;
                                 <input
                                   type="text"
                                   readOnly
-                                  value={currentUser?.fullName || "Người đại diện"}
+                                  value={currentUser?.fullName ? formatNameCapitalized(currentUser.fullName) : "Người đại diện"}
                                   className="w-full text-[9px] font-semibold text-slate-550 bg-slate-100 border border-slate-200 rounded px-1.5 py-1 focus:outline-none cursor-not-allowed"
                                 />
                               </div>
@@ -4360,7 +4332,7 @@ App Link: ${window.location.origin}`;
           className="flex flex-col items-center justify-center py-0.5 text-slate-400 hover:text-rose-500 transition-colors cursor-pointer select-none border-none bg-transparent w-full min-w-0 overflow-hidden"
         >
           <LogOut className="w-4 h-4 mx-auto mb-0.5 text-rose-500 hover:text-rose-600 hover:scale-110 transition-transform" />
-          <T><span translate="no" className="notranslate truncate w-full block text-center text-[8.3px] font-semibold">{currentUser?.fullName || "Đăng Xuất"}</span></T>
+          <T><span translate="no" className="notranslate truncate w-full block text-center text-[8.3px] font-semibold">{currentUser?.fullName ? formatNameCapitalized(currentUser.fullName) : "Đăng Xuất"}</span></T>
         </button>
       </div>
 

@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { T } from "./TranslateText";
 import { QualityReport, User, Branch } from "../types";
 import { Users, Cpu, Settings, FileText, Heart, Info } from "lucide-react";
+import { formatNameCapitalized } from "../utils/branchHelpers";
 
 interface MobileListOnlyProps {
   reports: QualityReport[];
@@ -218,7 +219,7 @@ export function MobileListOnly({
                     {getCategoryIcon(report.category)}
                     <span translate="no" className="notranslate">{report.category}</span>
                     <span className="text-slate-300">|</span>
-                    <span translate="no" className="notranslate">Người đăng: {report.uploaderName}</span>
+                    <span>Người đăng: {formatNameCapitalized(report.uploaderName)}</span>
                   </div>
 
                   <div className="font-semibold text-slate-800 text-xs">
