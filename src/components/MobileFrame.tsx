@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import html2canvas from "html2canvas";
-import { Search, RotateCw, RotateCcw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, Cloud, ChevronDown, ChevronRight } from "lucide-react";
+import { Search, RotateCw, RotateCcw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft } from "lucide-react";
 import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Company, ChatMessage, QualityReportResolution, QualityReportReplication } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
@@ -1066,6 +1066,72 @@ export default function MobileFrame({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const lastTouchTimeRef = useRef(0);
+  const secondaryIconsRef = useRef<HTMLDivElement>(null);
+  const [showSecondary, setShowSecondary] = useState(false);
+  const swipeStartXRef = useRef<number | null>(null);
+  const swipeStartYRef = useRef<number | null>(null);
+
+  const handleSwipeTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      swipeStartXRef.current = e.touches[0].clientX;
+      swipeStartYRef.current = e.touches[0].clientY;
+    }
+  };
+
+  const handleSwipeTouchMove = (e: React.TouchEvent) => {
+    if (swipeStartXRef.current === null || swipeStartYRef.current === null) return;
+    const currentX = e.touches[0].clientX;
+    const currentY = e.touches[0].clientY;
+    const diffX = currentX - swipeStartXRef.current;
+    const diffY = currentY - swipeStartYRef.current;
+
+    if (Math.abs(diffX) > Math.abs(diffY)) {
+      if (diffX < -30) {
+        setShowSecondary(true);
+        swipeStartXRef.current = null;
+        swipeStartYRef.current = null;
+      } else if (diffX > 30) {
+        setShowSecondary(false);
+        swipeStartXRef.current = null;
+        swipeStartYRef.current = null;
+      }
+    }
+  };
+
+  const handleSwipeTouchEnd = () => {
+    swipeStartXRef.current = null;
+    swipeStartYRef.current = null;
+  };
+
+  const handleSwipeMouseDown = (e: React.MouseEvent) => {
+    swipeStartXRef.current = e.clientX;
+    swipeStartYRef.current = e.clientY;
+  };
+
+  const handleSwipeMouseMove = (e: React.MouseEvent) => {
+    if (swipeStartXRef.current === null || swipeStartYRef.current === null) return;
+    const currentX = e.clientX;
+    const currentY = e.clientY;
+    const diffX = currentX - swipeStartXRef.current;
+    const diffY = currentY - swipeStartYRef.current;
+
+    if (Math.abs(diffX) > Math.abs(diffY)) {
+      if (diffX < -30) {
+        setShowSecondary(true);
+        swipeStartXRef.current = null;
+        swipeStartYRef.current = null;
+      } else if (diffX > 30) {
+        setShowSecondary(false);
+        swipeStartXRef.current = null;
+        swipeStartYRef.current = null;
+      }
+    }
+  };
+
+  const handleSwipeMouseUp = () => {
+    swipeStartXRef.current = null;
+    swipeStartYRef.current = null;
+  };
 
   const handleRefreshClick = async () => {
     if (isRefreshing) return;
@@ -2260,108 +2326,153 @@ App Link: ${window.location.origin}`;
             <T className="text-[8px] font-bold tracking-[-0.015em] opacity-90 whitespace-nowrap block text-left leading-none mt-1">Mỗi nhân viên là một QC</T>
           </div>
         </div>
-        <div className="flex items-center gap-[7.5px]">
-          {currentUser?.role !== UserRole.STAFF && currentUser?.role !== UserRole.REVIEWER && (
+        <div 
+          className="flex items-center gap-[4px] max-w-[215px] sm:max-w-[250px] overflow-hidden select-none"
+          onTouchStart={handleSwipeTouchStart}
+          onTouchMove={handleSwipeTouchMove}
+          onTouchEnd={handleSwipeTouchEnd}
+          onMouseDown={handleSwipeMouseDown}
+          onMouseMove={handleSwipeMouseMove}
+          onMouseUp={handleSwipeMouseUp}
+        >
+          {/* Subtle indicator to show more icons exist */}
+          {!showSecondary && (
             <button
-              onClick={() => setShowTrash(true)}
-              className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
-              title="Lưu trữ / Thùng rác"
+              onClick={() => setShowSecondary(true)}
+              className="p-0.5 hover:scale-110 active:scale-95 transition-transform cursor-pointer text-white/40 hover:text-white shrink-0 animate-pulse mr-[2px]"
+              title="Vuốt sang trái hoặc nhấn để xem thêm chức năng"
             >
-              <Archive className="w-[18px] h-[18px] text-amber-300 hover:text-amber-100" />
-              {reports.filter((r) => r.isDeleted).length > 0 && (
-                <span className="absolute -top-1 -right-0.5 bg-rose-600 text-[8px] text-white font-extrabold w-4 h-4 rounded-full flex items-center justify-center border border-slate-900 leading-none">
-                  <span translate="no" className="notranslate">
-                    {reports.filter((r) => r.isDeleted).length}
+              <ChevronLeft className="w-[14px] h-[14px]" />
+            </button>
+          )}
+
+          {/* Nhóm các icon phụ: Ẩn mặc định, hiện khi showSecondary hoặc vuốt trái */}
+          <div 
+            ref={secondaryIconsRef}
+            className={`flex items-center gap-[7px] overflow-hidden flex-nowrap scrollbar-none py-1 select-none transition-all duration-300 ${
+              showSecondary 
+                ? "max-w-[160px] opacity-100 pr-1.5 border-r border-white/20" 
+                : "max-w-0 opacity-0 pointer-events-none"
+            }`}
+            style={{
+              scrollbarWidth: "none",
+              msOverflowStyle: "none",
+            }}
+          >
+            {currentUser?.role !== UserRole.STAFF && currentUser?.role !== UserRole.REVIEWER && (
+              <button
+                onClick={() => setShowTrash(true)}
+                className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer shrink-0"
+                title="Lưu trữ / Thùng rác"
+              >
+                <Archive className="w-[18px] h-[18px] text-amber-300 hover:text-amber-100" />
+                {reports.filter((r) => r.isDeleted).length > 0 && (
+                  <span className="absolute -top-1 -right-0.5 bg-rose-600 text-[8px] text-white font-extrabold w-4 h-4 rounded-full flex items-center justify-center border border-slate-900 leading-none">
+                    <span translate="no" className="notranslate">
+                      {reports.filter((r) => r.isDeleted).length}
+                    </span>
                   </span>
+                )}
+              </button>
+            )}
+
+            {currentUser?.role === UserRole.ADMIN && (
+              <button
+                onClick={() => {
+                  setShowMobileCloudQuota(true);
+                  setShowTrash(false);
+                }}
+                className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer shrink-0"
+                title="Giám sát Cloud Quota"
+              >
+                <Cloud className="w-[19px] h-[19px] text-sky-300 hover:text-sky-100" />
+              </button>
+            )}
+
+            {currentUser?.role === UserRole.ADMIN && (
+              <button 
+                onClick={handleRefreshClick} 
+                className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer shrink-0"
+                title="Tải lại dữ liệu"
+                disabled={isRefreshing}
+              >
+                <RotateCw className={`w-[18px] h-[18px] text-white ${isRefreshing ? "animate-spin" : ""}`} />
+              </button>
+            )}
+
+            <button
+              onClick={() => setOnboardingStep(1)}
+              className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer shrink-0"
+              title="Hướng dẫn nhanh"
+            >
+              <Info className="w-[18px] h-[18px] text-teal-200 hover:text-white" />
+            </button>
+
+            <button
+              onClick={() => setShowQrCodeView(true)}
+              className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer shrink-0"
+              title="Mã QR ứng dụng"
+            >
+              <QrCode className="w-[18px] h-[18px] text-sky-200 hover:text-white" />
+            </button>
+          </div>
+
+          {showSecondary && (
+            <button
+              onClick={() => setShowSecondary(false)}
+              className="p-0.5 hover:scale-110 active:scale-95 transition-transform cursor-pointer text-white/50 hover:text-white shrink-0 mr-[4px]"
+              title="Ẩn bớt chức năng"
+            >
+              <ChevronRight className="w-[14px] h-[14px]" />
+            </button>
+          )}
+
+          {/* Nhóm 3 icon chính: Luôn cố định bên phải */}
+          <div className="flex items-center gap-[7px] shrink-0">
+            {currentUser?.role !== UserRole.STAFF && currentUser?.role !== UserRole.REVIEWER && (
+              <button 
+                onClick={() => {
+                  setOnlineSearchTerm("");
+                  setOnlineTabFilter("ONLINE");
+                  setShowOnlineUsersDrawer(true);
+                }}
+                className="relative hover:scale-115 active:scale-95 transition-all p-1 cursor-pointer bg-transparent border-none outline-none shrink-0"
+                title="Số nhân viên đang online"
+              >
+                <Users className="w-[18px] h-[18px] text-emerald-300 pointer-events-none" />
+                <span className="absolute -top-1 -right-1 bg-emerald-500 text-[8px] text-white font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border border-slate-900 leading-none shadow-sm animate-pulse pointer-events-none">
+                  <span translate="no" className="notranslate font-mono select-none">
+                    {onlineCount}
+                  </span>
+                </span>
+              </button>
+            )}
+
+            <button
+              onClick={() => setShowNotifDrawer(true)}
+              className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer ml-[2px] shrink-0"
+              title="Thông báo hệ thống"
+            >
+              <Bell className="w-[19px] h-[19px] text-white" />
+              {unreadCount > 0 && (
+                <span className={`absolute -top-1.5 -right-1.5 bg-rose-600 text-[8px] text-white font-extrabold w-4.5 h-4.5 rounded-full flex items-center justify-center border ${theme.border} animate-pulse`}>
+                  {unreadCount > 99 ? "99+" : unreadCount}
                 </span>
               )}
             </button>
-          )}
 
-          {currentUser?.role === UserRole.ADMIN && (
             <button
-              onClick={() => {
-                setShowMobileCloudQuota(true);
-                setShowTrash(false);
-              }}
-              className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
-              title="Giám sát Cloud Quota"
+              onClick={toggleFullscreen}
+              className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer ml-[2px] shrink-0"
+              title={isFullscreen ? "Thu nhỏ màn hình" : "Phóng to màn hình"}
             >
-              <Cloud className="w-[19px] h-[19px] text-sky-300 hover:text-sky-100" />
+              {isFullscreen ? (
+                <Minimize className="w-[19px] h-[19px] text-white" />
+              ) : (
+                <Maximize className="w-[19px] h-[19px] text-white" />
+              )}
             </button>
-          )}
-
-          {currentUser?.role !== UserRole.ADMIN && currentUser?.role !== UserRole.REVIEWER && (
-            <button 
-              onClick={handleRefreshClick} 
-              className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
-              title="Tải lại dữ liệu"
-              disabled={isRefreshing}
-            >
-              <RotateCw className={`w-[18px] h-[18px] text-white ${isRefreshing ? "animate-spin" : ""}`} />
-            </button>
-          )}
-
-          <button
-            onClick={() => setOnboardingStep(1)}
-            className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
-            title="Hướng dẫn nhanh"
-          >
-            <Info className="w-[18px] h-[18px] text-teal-200 hover:text-white" />
-          </button>
-
-          <button
-            onClick={() => setShowQrCodeView(true)}
-            className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer"
-            title="Mã QR ứng dụng"
-          >
-            <QrCode className="w-[18px] h-[18px] text-sky-200 hover:text-white" />
-          </button>
-          
-          {/* Bong bóng số báo tổng số người online */}
-          {currentUser?.role !== UserRole.STAFF && currentUser?.role !== UserRole.REVIEWER && (
-            <button 
-              onClick={() => {
-                setOnlineSearchTerm("");
-                setOnlineTabFilter("ONLINE");
-                setShowOnlineUsersDrawer(true);
-              }}
-              className="relative hover:scale-115 active:scale-95 transition-all p-1 cursor-pointer bg-transparent border-none outline-none"
-              title="Số nhân viên đang online"
-            >
-              <Users className="w-[18px] h-[18px] text-emerald-300 pointer-events-none" />
-              <span className="absolute -top-1 -right-1 bg-emerald-500 text-[8px] text-white font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border border-slate-900 leading-none shadow-sm animate-pulse pointer-events-none">
-                <span translate="no" className="notranslate font-mono select-none">
-                  {onlineCount}
-                </span>
-              </span>
-            </button>
-          )}
-
-          <button
-            onClick={() => setShowNotifDrawer(true)}
-            className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer ml-[2px]"
-            title="Thông báo hệ thống"
-          >
-            <Bell className="w-[19px] h-[19px] text-white" />
-            {unreadCount > 0 && (
-              <span className={`absolute -top-1.5 -right-1.5 bg-rose-600 text-[8px] text-white font-extrabold w-4.5 h-4.5 rounded-full flex items-center justify-center border ${theme.border} animate-pulse`}>
-                {unreadCount > 99 ? "99+" : unreadCount}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={toggleFullscreen}
-            className="hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer ml-[2px]"
-            title={isFullscreen ? "Thu nhỏ màn hình" : "Phóng to màn hình"}
-          >
-            {isFullscreen ? (
-              <Minimize className="w-[19px] h-[19px] text-white" />
-            ) : (
-              <Maximize className="w-[19px] h-[19px] text-white" />
-            )}
-          </button>
+          </div>
         </div>
       </div>
 
