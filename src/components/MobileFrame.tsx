@@ -971,6 +971,54 @@ export default function MobileFrame({
     }
   };
 
+  const handleSendTestNotification = () => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      showToast("Trình duyệt không hỗ trợ thông báo!");
+      return;
+    }
+    
+    if (Notification.permission !== "granted") {
+      showToast("Vui lòng cấp quyền thông báo trước!");
+      return;
+    }
+
+    try {
+      const notifTitle = "🔔 META ANDON - Đồng bộ thành công";
+      const notifBody = "Ứng dụng đã kích hoạt bong bóng số trên màn hình chính! Kiểm tra biểu tượng ứng dụng của bạn.";
+      
+      if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+        navigator.serviceWorker.ready.then((registration) => {
+          registration.showNotification(notifTitle, {
+            body: notifBody,
+            icon: "/logo_meta.jpg",
+            badge: "/logo_meta.jpg",
+            tag: "meta-andon-test-notif",
+            renotify: true
+          } as any);
+          showToast("Đã gửi thông báo kiểm tra! Hãy vuốt xem thanh thông báo và xem icon màn hình chính.");
+        }).catch((err) => {
+          console.warn("Lỗi Service Worker showNotification:", err);
+          new Notification(notifTitle, {
+            body: notifBody,
+            icon: "/logo_meta.jpg",
+            tag: "meta-andon-test-notif"
+          });
+          showToast("Đã gửi thông báo kiểm tra!");
+        });
+      } else {
+        new Notification(notifTitle, {
+          body: notifBody,
+          icon: "/logo_meta.jpg",
+          tag: "meta-andon-test-notif"
+        });
+        showToast("Đã gửi thông báo kiểm tra!");
+      }
+    } catch (err) {
+      console.error("Lỗi gửi thông báo thử:", err);
+      showToast("Lỗi khi gửi thông báo kiểm tra!");
+    }
+  };
+
   const [searchTerm, setSearchTerm] = useState("");
   const [showQrCodeView, setShowQrCodeView] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
@@ -2052,13 +2100,51 @@ App Link: ${window.location.origin}`;
 
   const lastUnreadCountRef = useRef(unreadCount);
 
-  // Play synthesized bell chime when unreadCount increases (new notification)
+  // Play synthesized bell chime when unreadCount increases (new notification) and show real OS notification
   useEffect(() => {
     if (unreadCount > lastUnreadCountRef.current) {
       playNotificationSound();
+
+      // Trigger a real System Notification to place an active icon in the notification drawer (essential for Android Home Screen Badges)
+      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+        try {
+          const newestNotif = unreadNotifications[0]; // unreadNotifications contains unread items, with 0 being the latest
+          if (newestNotif) {
+            const notifTitle = newestNotif.title || "META ANDON";
+            const notifBody = newestNotif.description || "Có bản tin cập nhật mới.";
+            
+            if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+              navigator.serviceWorker.ready.then((registration) => {
+                registration.showNotification(notifTitle, {
+                  body: notifBody,
+                  icon: "/logo_meta.jpg",
+                  badge: "/logo_meta.jpg",
+                  tag: "meta-andon-notif",
+                  renotify: true
+                } as any);
+              }).catch(() => {
+                // Fallback to standard web notification
+                new Notification(notifTitle, {
+                  body: notifBody,
+                  icon: "/logo_meta.jpg",
+                  tag: "meta-andon-notif"
+                });
+              });
+            } else {
+              new Notification(notifTitle, {
+                body: notifBody,
+                icon: "/logo_meta.jpg",
+                tag: "meta-andon-notif"
+              });
+            }
+          }
+        } catch (err) {
+          console.warn("Lỗi kích hoạt hiển thị thông báo hệ thống:", err);
+        }
+      }
     }
     lastUnreadCountRef.current = unreadCount;
-  }, [unreadCount]);
+  }, [unreadCount, unreadNotifications]);
 
   // Unlock AudioContext on touch / click to comply with iOS Safari & modern browser autoplay policies
   useEffect(() => {
@@ -3573,7 +3659,15 @@ App Link: ${window.location.origin}`;
                             <textarea
                               rows={2}
                               value={resResultText}
-                              onChange={(e) => setResResultText(e.target.value)}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setResResultText(val);
+                                if (val.trim().length > 0) {
+                                  setResStatus("Đã xử lý");
+                                } else {
+                                  setResStatus("Đang xử lý");
+                                }
+                              }}
                               placeholder="Nhập nội dung xử lý, giải pháp khắc phục..."
                               className="w-full text-[9px] font-semibold text-slate-800 bg-white border border-slate-250 rounded px-1.5 py-1 focus:outline-none focus:border-indigo-400 resize-none"
                             />
@@ -4815,9 +4909,24 @@ App Link: ${window.location.origin}`}
                   <span className="font-extrabold text-[12px] text-slate-850 tracking-tight uppercase">
                     🔔 <span translate="no" className="notranslate"><T>THÔNG BÁO</T></span>
                   </span>
+                  {unreadCount > 0 && (
+                    <span className="bg-rose-100 text-rose-700 text-[10px] font-black px-2 py-0.5 rounded-full ml-1">
+                      <T>MỚI</T> <span translate="no" className="font-mono">{unreadCount}</span>
+                    </span>
+                  )}
                 </div>
-                <div className="bg-amber-100 border border-amber-200 text-amber-800 px-2 py-0.5 rounded-full text-[9.5px] font-mono font-black shrink-0">
-                  <span translate="no" className="notranslate">{notifications.length} <T>tin</T></span>
+                <div className="flex items-center gap-2">
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={handleMarkAllAsRead}
+                      className="text-blue-600 hover:text-blue-800 text-[10px] font-extrabold transition-colors cursor-pointer mr-2"
+                    >
+                      <T>ĐỌC TẤT CẢ</T>
+                    </button>
+                  )}
+                  <div className="bg-amber-100 border border-amber-200 text-amber-800 px-2 py-0.5 rounded-full text-[9.5px] font-mono font-black shrink-0">
+                    <span translate="no" className="notranslate">{notifications.length} <T>tin</T></span>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -5073,8 +5182,19 @@ App Link: ${window.location.origin}`}
                                 <T>YÊU CẦU QUYỀN HIỂN THỊ</T>
                               </button>
                             ) : (
-                              <div className="mt-1 flex items-center gap-1 text-emerald-700 font-extrabold text-[8.5px]">
-                                ✅ <span translate="no" className="notranslate">Đã ủy quyền thành công! Số thông báo sẽ tự động đồng bộ.</span>
+                              <div className="mt-2 pt-2 border-t border-slate-100 flex flex-col gap-1">
+                                <div className="text-emerald-700 font-extrabold text-[8.5px] flex items-center gap-1">
+                                  ✅ <span translate="no" className="notranslate">Đã ủy quyền thành công! Số thông báo sẽ tự động đồng bộ.</span>
+                                </div>
+                                <button
+                                  onClick={handleSendTestNotification}
+                                  className="mt-1 w-full bg-emerald-600 hover:bg-emerald-700 text-white text-[8px] font-black py-1 px-2 rounded cursor-pointer transition-colors block uppercase shadow-2xs border-none"
+                                >
+                                  ⚡ <T><span translate="no" className="notranslate font-black">GỬI THÔNG BÁO THỬ (KÍCH HOẠT BONG BÓNG)</span></T>
+                                </button>
+                                <p className="text-[7.5px] text-slate-450 mt-1 leading-relaxed">
+                                  <T><span translate="no" className="notranslate">* Lưu ý Android: Cần có ít nhất 1 thông báo hệ thống hiển thị trên thanh trạng thái thì điện thoại mới hiện bong bóng số ngoài màn hình chính.</span></T>
+                                </p>
                               </div>
                             )}
                           </div>
@@ -5242,8 +5362,19 @@ App Link: ${window.location.origin}`}
                               <T><span translate="no" className="notranslate font-black">YÊU CẦU QUYỀN HIỂN THỊ</span></T>
                             </button>
                           ) : (
-                            <div className="mt-1 flex items-center gap-1 text-emerald-700 font-extrabold text-[8.5px]">
-                              ✅ <span translate="no" className="notranslate">Đã ủy quyền thành công! Số thông báo sẽ tự động đồng bộ.</span>
+                            <div className="mt-2 pt-2 border-t border-slate-100 flex flex-col gap-1">
+                              <div className="text-emerald-700 font-extrabold text-[8.5px] flex items-center gap-1">
+                                ✅ <span translate="no" className="notranslate">Đã ủy quyền thành công! Số thông báo sẽ tự động đồng bộ.</span>
+                              </div>
+                              <button
+                                onClick={handleSendTestNotification}
+                                className="mt-1 w-full bg-emerald-600 hover:bg-emerald-700 text-white text-[8px] font-black py-1 px-2 rounded cursor-pointer transition-colors block uppercase shadow-2xs border-none"
+                              >
+                                ⚡ <T><span translate="no" className="notranslate font-black">GỬI THÔNG BÁO THỬ (KÍCH HOẠT BONG BÓNG)</span></T>
+                              </button>
+                              <p className="text-[7.5px] text-slate-450 mt-1 leading-relaxed">
+                                <T><span translate="no" className="notranslate">* Lưu ý Android: Cần có ít nhất 1 thông báo hệ thống hiển thị trên thanh trạng thái thì điện thoại mới hiện bong bóng số ngoài màn hình chính.</span></T>
+                              </p>
                             </div>
                           )}
                         </div>
