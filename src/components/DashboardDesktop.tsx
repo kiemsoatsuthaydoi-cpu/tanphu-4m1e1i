@@ -4743,16 +4743,16 @@ export default function DashboardDesktop({
                   </div>
                 </div>
 
-                {/* Right side: NHẬT KÝ BẢNG TIN HIỆN TẠI */}
+                {/* Right side: THÔNG BÁO */}
                 <div className="xl:col-span-7">
                   <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm flex flex-col h-[650px]">
                     <div className="flex justify-between items-center border-b border-slate-100 pb-3 mb-4 shrink-0">
                       <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
                         <Globe className="w-5 h-5 text-emerald-500" />
-                        <T>NHẬT KÝ BẢNG TIN HIỆN TẠI</T>
+                        <span translate="no" className="notranslate"><T>THÔNG BÁO</T></span>
                       </h3>
                       <div className="bg-slate-100 px-3 py-1 rounded-full text-slate-600 font-mono text-[10.5px] font-black">
-                        <T>{combinedBroadcastsAndNotifications.length} tin tức & thông báo</T>
+                        <span translate="no" className="notranslate">{combinedBroadcastsAndNotifications.length} <T>thông báo</T></span>
                       </div>
                     </div>
 

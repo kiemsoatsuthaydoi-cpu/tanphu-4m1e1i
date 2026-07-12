@@ -3193,6 +3193,7 @@ export default function App() {
             onDeleteBroadcast={handleDeleteBroadcast}
             deletedNotifIds={deletedNotifIds}
             onDeleteNotification={handleDeleteNotification}
+            systemNotifications={systemNotifications}
           />
         )}
 
@@ -3295,6 +3296,7 @@ export default function App() {
             onDeleteBroadcast={handleDeleteBroadcast}
             deletedNotifIds={deletedNotifIds}
             onDeleteNotification={handleDeleteNotification}
+            systemNotifications={systemNotifications}
           />
         )}
 
@@ -3499,6 +3501,7 @@ export default function App() {
                 onDeleteBroadcast={handleDeleteBroadcast}
                 deletedNotifIds={deletedNotifIds}
                 onDeleteNotification={handleDeleteNotification}
+                systemNotifications={systemNotifications}
               />
             )}
           </div>
@@ -3555,6 +3558,7 @@ export default function App() {
                 onDeleteBroadcast={handleDeleteBroadcast}
                 deletedNotifIds={deletedNotifIds}
                 onDeleteNotification={handleDeleteNotification}
+                systemNotifications={systemNotifications}
               />
             )}
           </div>
