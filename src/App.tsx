@@ -691,6 +691,22 @@ export default function App() {
     safeSetItem("4m1e1i_deleted_notifications", JSON.stringify(deletedNotifIds));
   }, [deletedNotifIds]);
 
+  const [readNotifIds, setReadNotifIds] = useState<string[]>(() => {
+    const saved = safeGetItem("4m1e1i_read_notifications");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (err) {
+        // ignore
+      }
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    safeSetItem("4m1e1i_read_notifications", JSON.stringify(readNotifIds));
+  }, [readNotifIds]);
+
   const handleDeleteNotification = useCallback((id: string) => {
     setDeletedNotifIds((prev) => {
       if (prev.includes(id)) return prev;
@@ -3194,6 +3210,8 @@ export default function App() {
             deletedNotifIds={deletedNotifIds}
             onDeleteNotification={handleDeleteNotification}
             systemNotifications={systemNotifications}
+            readNotifIds={readNotifIds}
+            setReadNotifIds={setReadNotifIds}
           />
         )}
 
@@ -3297,6 +3315,8 @@ export default function App() {
             deletedNotifIds={deletedNotifIds}
             onDeleteNotification={handleDeleteNotification}
             systemNotifications={systemNotifications}
+            readNotifIds={readNotifIds}
+            setReadNotifIds={setReadNotifIds}
           />
         )}
 
@@ -3443,6 +3463,8 @@ export default function App() {
             onUpdateTickerConfig={handleUpdateTickerConfig}
             systemNotifications={systemNotifications}
             onDeleteNotification={handleDeleteNotification}
+            readNotifIds={readNotifIds}
+            setReadNotifIds={setReadNotifIds}
           />
         </div>
 
@@ -3502,6 +3524,8 @@ export default function App() {
                 deletedNotifIds={deletedNotifIds}
                 onDeleteNotification={handleDeleteNotification}
                 systemNotifications={systemNotifications}
+                readNotifIds={readNotifIds}
+                setReadNotifIds={setReadNotifIds}
               />
             )}
           </div>
@@ -3559,6 +3583,8 @@ export default function App() {
                 deletedNotifIds={deletedNotifIds}
                 onDeleteNotification={handleDeleteNotification}
                 systemNotifications={systemNotifications}
+                readNotifIds={readNotifIds}
+                setReadNotifIds={setReadNotifIds}
               />
             )}
           </div>

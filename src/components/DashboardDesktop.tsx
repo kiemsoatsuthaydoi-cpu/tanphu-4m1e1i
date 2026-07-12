@@ -44,7 +44,9 @@ import {
   Globe,
   Megaphone,
   Pencil,
-  Clock
+  Clock,
+  Heart,
+  Share2
 } from "lucide-react";
 import {
   BarChart,
@@ -146,6 +148,8 @@ interface DashboardDesktopProps {
   onUpdateTickerConfig?: (config: { text: string; speed: number; spacing: number }) => void;
   systemNotifications?: AppNotification[];
   onDeleteNotification?: (id: string) => void;
+  readNotifIds?: string[];
+  setReadNotifIds?: React.Dispatch<React.SetStateAction<string[]>>;
 }
 
 interface DesktopThumbnailSliderProps {
@@ -579,11 +583,31 @@ export default function DashboardDesktop({
   tickerConfig,
   onUpdateTickerConfig,
   systemNotifications = [],
-  onDeleteNotification
+  onDeleteNotification,
+  readNotifIds: readNotifIdsProp,
+  setReadNotifIds: setReadNotifIdsProp
 }: DashboardDesktopProps) {
   const [activeTab, setActiveTab] = useState<
     "PHÊ_DUYỆT" | "MÃ_HÓA" | "THỐNG_KÊ" | "DỮ_LIỆU" | "QUY_CHẾ" | "CÁ_NHÂN" | "THÔNG_BÁO" | "TRAO_ĐỔI" | "TRIỂN_KHAI" | "ĐỀ_XUẤT" | "QUOTA_CLOUD"
   >("PHÊ_DUYỆT");
+
+  const [localReadNotifIds, setLocalReadNotifIds] = useState<string[]>(() => {
+    try {
+      const saved = safeGetItem("4m1e1i_read_notifications");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const readNotifIds = readNotifIdsProp !== undefined ? readNotifIdsProp : localReadNotifIds;
+  const setReadNotifIds = setReadNotifIdsProp !== undefined ? setReadNotifIdsProp : setLocalReadNotifIds;
+
+  useEffect(() => {
+    if (readNotifIdsProp === undefined) {
+      safeSetItem("4m1e1i_read_notifications", JSON.stringify(localReadNotifIds));
+    }
+  }, [localReadNotifIds, readNotifIdsProp]);
 
   const combinedBroadcastsAndNotifications = React.useMemo(() => {
     const list: Array<{
@@ -625,6 +649,11 @@ export default function DashboardDesktop({
       return tB - tA;
     });
   }, [broadcasts, systemNotifications]);
+
+  const unreadCount = React.useMemo(() => {
+    if (!Array.isArray(systemNotifications)) return 0;
+    return systemNotifications.filter((n) => !readNotifIds.includes(n.id)).length;
+  }, [systemNotifications, readNotifIds]);
 
   // Helper functions for auto-generating clean, consistent, neat IDs
   const generateAutoCompanyId = (name: string): string => {
@@ -1624,7 +1653,7 @@ export default function DashboardDesktop({
               ? [{ id: "ĐỀ_XUẤT", label: "Đề xuất chờ duyệt", icon: CheckSquare, count: pendingReportsCount, color: "text-sky-400" }]
               : []),
             { id: "DỮ_LỆU", label: "Nhật ký dữ liệu & PDF", icon: Database, color: "text-blue-450" },
-            { id: "THÔNG_BÁO", label: "Phát sóng & Ticker", icon: Bell, color: "text-yellow-400" },
+            { id: "THÔNG_BÁO", label: "Phát sóng & Ticker", icon: Bell, count: unreadCount, color: "text-yellow-400" },
             { id: "TRAO_ĐỔI", label: "Trao đổi diễn đàn", icon: MessageSquare, color: "text-pink-400" },
             { id: "QUY_CHẾ", label: "Quy chế & Quy trình", icon: FileSpreadsheet, color: "text-teal-400" },
             { id: "CÁ_NHÂN", label: "Thông tin cá nhân", icon: Users, color: "text-slate-300" }
@@ -4221,11 +4250,10 @@ export default function DashboardDesktop({
                             <th className="p-4 w-12 text-center"><T><span translate="no" className="notranslate">STT</span></T></th>
                             <th className="p-4 min-w-[180px]"><T><span translate="no" className="notranslate">Thông tin ghi nhận</span></T></th>
                             <th className="p-4 w-[28%]"><T><span translate="no" className="notranslate">Nội dung chi tiết</span></T></th>
-                            <th className="p-4 text-center"><T><span translate="no" className="notranslate">Người Thích</span></T></th>
-                            <th className="p-4 text-center"><span translate="no" className="notranslate">Tiếp nhận / Nhân rộng</span></th>
                             <th className="p-4 text-center"><T><span translate="no" className="notranslate">Hình ảnh</span></T></th>
                             <th className="p-4 text-center"><T><span translate="no" className="notranslate">Phân loại</span></T></th>
                             <th className="p-4 text-center"><T><span translate="no" className="notranslate">Trạng thái</span></T></th>
+                            <th className="p-4 text-center"><T><span translate="no" className="notranslate">Thích & Tiếp nhận / Nhân rộng</span></T></th>
                             <th className="p-4 text-center"><T><span translate="no" className="notranslate">Thao tác</span></T></th>
                           </tr>
                         </thead>
@@ -4300,110 +4328,6 @@ export default function DashboardDesktop({
                                     onUpdateReport={onUpdateReport}
                                   />
                                 </td>
-                                {/* Two new columns tracking likes and shares */}
-                                <td className="p-4 min-w-[120px]">
-                                  {r.likedBy && r.likedBy.length > 0 ? (
-                                    <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto max-w-[140px]">
-                                      {r.likedBy.map((name, i) => (
-                                        <span key={i} className="bg-rose-50 text-rose-700 text-[9px] px-1.5 py-0.5 rounded border border-rose-100 font-bold whitespace-nowrap">
-                                          <T>{name}</T>
-                                        </span>
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    <span className="text-slate-400 text-[10px] italic"><T>Chưa có</T></span>
-                                  )}
-                                </td>
-                                <td className="p-4 min-w-[160px]">
-                                  {r.reportType === "KPH" || r.isAbnormal ? (
-                                    r.sharedBy && r.sharedBy.length > 0 ? (
-                                      <div className="flex flex-col gap-1 max-h-24 overflow-y-auto">
-                                        {r.sharedBy.map((name, i) => {
-                                          const deptMatch = name.match(/\(([^)]+)\)/);
-                                          const deptName = deptMatch ? deptMatch[1] : name;
-                                          const resForDept = r.resolutions?.find(
-                                            (res) => res.departmentName.trim().toLowerCase() === deptName.trim().toLowerCase()
-                                          );
-
-                                          return (
-                                            <div key={i} className="flex flex-col gap-0.5 bg-slate-50 p-1.5 rounded border border-slate-150 text-[9.5px]">
-                                              <div className="flex items-center justify-between gap-1.5">
-                                                <span translate="no" className="notranslate font-bold text-slate-700 truncate max-w-[120px]" title={name}>
-                                                  {name}
-                                                </span>
-                                                {resForDept ? (
-                                                  <span translate="no" className={`notranslate text-[8px] font-black px-1 py-0.2 rounded border uppercase scale-90 ${
-                                                    resForDept.status === "Đã xử lý"
-                                                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                                      : "bg-amber-50 text-amber-700 border-amber-200"
-                                                  }`} title={`Nội dung: ${resForDept.resultText} (Cập nhật lúc: ${resForDept.updatedAt})`}>
-                                                    {resForDept.status === "Đã xử lý" ? "✓ Xong" : "⏳ Trì"}
-                                                  </span>
-                                                ) : (
-                                                  <span translate="no" className="notranslate text-[7.5px] text-slate-400 italic">
-                                                    Chưa xử lý
-                                                  </span>
-                                                )}
-                                              </div>
-                                              {resForDept && (
-                                                <div translate="no" className="notranslate text-[8px] text-slate-500 font-medium pl-1 border-l border-slate-200 mt-0.5 max-w-[160px] truncate" title={resForDept.resultText}>
-                                                  {resForDept.resultText}
-                                                </div>
-                                              )}
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    ) : (
-                                      <span translate="no" className="notranslate text-slate-400 text-[10px] italic">Chưa tiếp nhận</span>
-                                    )
-                                  ) : (
-                                    /* DSA replications list */
-                                    r.replications && r.replications.length > 0 ? (
-                                      <div className="flex flex-col gap-1 max-h-24 overflow-y-auto">
-                                        {r.replications.map((rep) => (
-                                          <div key={rep.id} className="flex flex-col gap-0.5 bg-emerald-50/30 p-1.5 rounded border border-emerald-100 text-[9.5px]">
-                                            <div className="flex items-center justify-between gap-1.5">
-                                              <span translate="no" className="notranslate font-bold text-emerald-900 truncate max-w-[120px]" title={`${rep.factoryName} - ${rep.departmentName}`}>
-                                                {rep.factoryName} - {rep.departmentName}
-                                              </span>
-                                              <span translate="no" className={`notranslate text-[8px] font-black px-1 py-0.2 rounded border uppercase scale-90 ${
-                                                rep.status === "Đã hoàn thành"
-                                                  ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                                                  : rep.status === "Đang triển khai"
-                                                  ? "bg-amber-100 text-amber-800 border-amber-300"
-                                                  : "bg-sky-100 text-sky-800 border-sky-300"
-                                              }`} title={`Hiện trạng: ${rep.currentState || rep.notes || ""}\nHỗ trợ: ${rep.supportRequired || ""}\n(Cập nhật lúc: ${rep.updatedAt})`}>
-                                                {rep.status === "Đã hoàn thành" ? "✓ Xong" : rep.status === "Đang triển khai" ? "⏳ Chạy" : "📝 Chuẩn"}
-                                              </span>
-                                            </div>
-                                            {rep.currentState && (
-                                              <div translate="no" className="notranslate text-[8px] text-slate-600 font-medium pl-1 border-l border-emerald-200 mt-0.5 max-w-[160px] truncate" title={`Hiện trạng: ${rep.currentState}`}>
-                                                <strong>1. HT:</strong> {rep.currentState}
-                                              </div>
-                                            )}
-                                            {rep.supportRequired && (
-                                              <div translate="no" className="notranslate text-[8px] text-slate-600 font-medium pl-1 border-l border-amber-300 mt-0.5 max-w-[160px] truncate" title={`Hỗ trợ: ${rep.supportRequired}`}>
-                                                <strong>2. HTợ:</strong> {rep.supportRequired}
-                                              </div>
-                                            )}
-                                            {!rep.currentState && !rep.supportRequired && rep.notes && (
-                                              <div translate="no" className="notranslate text-[8px] text-slate-500 font-medium pl-1 border-l border-emerald-200 mt-0.5 max-w-[160px] truncate" title={rep.notes}>
-                                                {rep.notes}
-                                              </div>
-                                            )}
-                                            <div className="text-[7.5px] text-slate-400 font-mono mt-0.5 flex justify-between select-none">
-                                              <span>{rep.registrantName}</span>
-                                              <span>Hạn: {rep.targetDate}</span>
-                                            </div>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    ) : (
-                                      <span translate="no" className="notranslate text-slate-400 text-[10px] italic">Chưa có nhân rộng</span>
-                                    )
-                                  )}
-                                </td>
                                 <td className="p-4 text-center">
                                   {r.imageUrl ? (
                                     <DesktopThumbnailSlider imageUrls={r.imageUrls} fallbackUrl={r.imageUrl} />
@@ -4436,6 +4360,123 @@ export default function DashboardDesktop({
                                       BÌNH THƯỜNG
                                     </T>
                                   )}
+                                </td>
+                                {/* Merged likes and shares column - placed after TRẠNG THÁI */}
+                                <td className="p-4 space-y-3 min-w-[180px] max-w-[220px]">
+                                  {/* Likes Section */}
+                                  <div>
+                                    <div className="text-[9px] font-extrabold text-rose-600 uppercase mb-1.5 flex items-center gap-1.5 border-b border-rose-100/50 pb-0.5">
+                                      <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />
+                                      <T><span translate="no" className="notranslate">Người Thích</span></T>
+                                    </div>
+                                    {r.likedBy && r.likedBy.length > 0 ? (
+                                      <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto">
+                                        {r.likedBy.map((name, i) => (
+                                          <span key={i} className="bg-rose-50 text-rose-700 text-[9px] px-1.5 py-0.5 rounded border border-rose-100 font-bold whitespace-nowrap">
+                                            <T><span translate="no" className="notranslate">{name}</span></T>
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <span className="text-slate-400 text-[10px] italic"><T><span translate="no" className="notranslate">Chưa có</span></T></span>
+                                    )}
+                                  </div>
+
+                                  {/* Shares/Replications Section */}
+                                  <div className="mt-2.5">
+                                    <div className="text-[9px] font-extrabold text-blue-700 uppercase mb-1.5 flex items-center gap-1.5 border-b border-blue-100/50 pb-0.5">
+                                      <Share2 className="w-3.5 h-3.5 text-blue-500" />
+                                      <span translate="no" className="notranslate">Tiếp nhận / Nhân rộng</span>
+                                    </div>
+                                    {r.reportType === "KPH" || r.isAbnormal ? (
+                                      r.sharedBy && r.sharedBy.length > 0 ? (
+                                        <div className="flex flex-col gap-1 max-h-24 overflow-y-auto">
+                                          {r.sharedBy.map((name, i) => {
+                                            const deptMatch = name.match(/\(([^)]+)\)/);
+                                            const deptName = deptMatch ? deptMatch[1] : name;
+                                            const resForDept = r.resolutions?.find(
+                                              (res) => res.departmentName.trim().toLowerCase() === deptName.trim().toLowerCase()
+                                            );
+
+                                            return (
+                                              <div key={i} className="flex flex-col gap-0.5 bg-slate-50 p-1.5 rounded border border-slate-150 text-[9.5px]">
+                                                <div className="flex items-center justify-between gap-1.5">
+                                                  <span translate="no" className="notranslate font-bold text-slate-700 truncate max-w-[120px]" title={name}>
+                                                    {name}
+                                                  </span>
+                                                  {resForDept ? (
+                                                    <span translate="no" className={`notranslate text-[8px] font-black px-1 py-0.2 rounded border uppercase scale-90 ${
+                                                      resForDept.status === "Đã xử lý"
+                                                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                                        : "bg-amber-50 text-amber-700 border-amber-200"
+                                                    }`} title={`Nội dung: ${resForDept.resultText} (Cập nhật lúc: ${resForDept.updatedAt})`}>
+                                                      {resForDept.status === "Đã xử lý" ? "✓ Xong" : "⏳ Trì"}
+                                                    </span>
+                                                  ) : (
+                                                    <span translate="no" className="notranslate text-[7.5px] text-slate-400 italic">
+                                                      Chưa xử lý
+                                                    </span>
+                                                  )}
+                                                </div>
+                                                {resForDept && (
+                                                  <div translate="no" className="notranslate text-[8px] text-slate-500 font-medium pl-1 border-l border-slate-200 mt-0.5 max-w-[160px] truncate" title={resForDept.resultText}>
+                                                    {resForDept.resultText}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      ) : (
+                                        <span translate="no" className="notranslate text-slate-400 text-[10px] italic">Chưa tiếp nhận</span>
+                                      )
+                                    ) : (
+                                      /* DSA replications list */
+                                      r.replications && r.replications.length > 0 ? (
+                                        <div className="flex flex-col gap-1 max-h-24 overflow-y-auto">
+                                          {r.replications.map((rep) => (
+                                            <div key={rep.id} className="flex flex-col gap-0.5 bg-emerald-50/30 p-1.5 rounded border border-emerald-100 text-[9.5px]">
+                                              <div className="flex items-center justify-between gap-1.5">
+                                                <span translate="no" className="notranslate font-bold text-emerald-900 truncate max-w-[120px]" title={`${rep.factoryName} - ${rep.departmentName}`}>
+                                                  {rep.factoryName} - {rep.departmentName}
+                                                </span>
+                                                <span translate="no" className={`notranslate text-[8px] font-black px-1 py-0.2 rounded border uppercase scale-90 ${
+                                                  rep.status === "Đã hoàn thành"
+                                                    ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                                    : rep.status === "Đang triển khai"
+                                                    ? "bg-amber-100 text-amber-800 border-amber-300"
+                                                    : "bg-sky-100 text-sky-800 border-sky-300"
+                                                }`} title={`Hiện trạng: ${rep.currentState || rep.notes || ""}\nHỗ trợ: ${rep.supportRequired || ""}\n(Cập nhật lúc: ${rep.updatedAt})`}>
+                                                  {rep.status === "Đã hoàn thành" ? "✓ Xong" : rep.status === "Đang triển khai" ? "⏳ Chạy" : "📝 Chuẩn"}
+                                                </span>
+                                              </div>
+                                              {rep.currentState && (
+                                                <div translate="no" className="notranslate text-[8px] text-slate-600 font-medium pl-1 border-l border-emerald-200 mt-0.5 max-w-[160px] truncate" title={`Hiện trạng: ${rep.currentState}`}>
+                                                  <strong>1. HT:</strong> {rep.currentState}
+                                                </div>
+                                              )}
+                                              {rep.supportRequired && (
+                                                <div translate="no" className="notranslate text-[8px] text-slate-600 font-medium pl-1 border-l border-amber-300 mt-0.5 max-w-[160px] truncate" title={`Hỗ trợ: ${rep.supportRequired}`}>
+                                                  <strong>2. HTợ:</strong> {rep.supportRequired}
+                                                </div>
+                                              )}
+                                              {!rep.currentState && !rep.supportRequired && rep.notes && (
+                                                <div translate="no" className="notranslate text-[8px] text-slate-500 font-medium pl-1 border-l border-emerald-200 mt-0.5 max-w-[160px] truncate" title={rep.notes}>
+                                                  {rep.notes}
+                                                </div>
+                                              )}
+                                              <div className="text-[7.5px] text-slate-400 font-mono mt-0.5 flex justify-between select-none">
+                                                <span translate="no" className="notranslate">{rep.registrantName}</span>
+                                                <span translate="no" className="notranslate">Hạn: {rep.targetDate}</span>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <span translate="no" className="notranslate text-slate-400 text-[10px] italic">Chưa có nhân rộng</span>
+                                      )
+                                    )}
+                                  </div>
                                 </td>
                                 <td className="p-4 text-center select-none whitespace-nowrap">
                                   {isDeleteReportAllowed(r) ? (
@@ -4764,6 +4805,8 @@ export default function DashboardDesktop({
                         </div>
                       ) : (
                         combinedBroadcastsAndNotifications.map((item) => {
+                          const isUnread = !item.isBroadcast && !readNotifIds.includes(item.id);
+
                           // Determine custom styles and tags based on type or content
                           let cardBg = "bg-slate-50/70 border-slate-200";
                           let tag1Text = "📢 THÔNG BÁO";
@@ -4776,25 +4819,25 @@ export default function DashboardDesktop({
 
                           if (item.isBroadcast) {
                             if (typeL.includes("phát sóng") || typeL.includes("broadcast")) {
-                              cardBg = "bg-rose-50/50 border-rose-100";
+                              cardBg = "bg-rose-50/50 border-rose-100 hover:bg-rose-50";
                               tag1Text = "📢 PHÁT SÓNG";
                               tag1Class = "text-[#E11D48] bg-[#FFE4E6] border-[#FECDD3]";
                               tag2Text = "BAN QUẢN TRỊ";
                               tag2Class = "text-[#B45309] bg-[#FEF3C7] border-[#FDE68A]";
                             } else if (typeL.includes("biểu dương") || contentL.includes("đại gia đình") || contentL.includes("chúc mừng") || contentL.includes("ngân hàng đề thi")) {
-                              cardBg = "bg-[#F0FDF4] border-[#DCFCE7]";
+                              cardBg = "bg-[#F0FDF4] border-[#DCFCE7] hover:bg-[#E8FDF0]";
                               tag1Text = "📢 BIỂU DƯƠNG";
                               tag1Class = "text-[#16A34A] bg-[#DCFCE7] border-[#BBF7D0]";
                               tag2Text = item.sender === "Hệ thống" ? "Người tạo: Hệ thống" : `Người tạo: ${item.sender}`;
                               tag2Class = "text-slate-700 bg-slate-100 border-slate-200";
                             } else if (typeL.includes("khẩn") || contentL.includes("khẩn") || typeL.includes("chỉ thị")) {
-                              cardBg = "bg-[#FFF5F5] border-red-200";
+                              cardBg = "bg-[#FFF5F5] border-red-200 hover:bg-[#FFEBEB]";
                               tag1Text = "🚨 CHỈ THỊ KHẨN";
                               tag1Class = "text-white bg-[#EF4444] border-[#EF4444] animate-pulse";
                               tag2Text = "BAN QUẢN TRỊ";
                               tag2Class = "text-[#B45309] bg-[#FEF3C7] border-[#FDE68A]";
                             } else if (item.sender === "Hệ thống") {
-                              cardBg = "bg-slate-50/70 border-slate-200";
+                              cardBg = "bg-slate-50/70 border-slate-200 hover:bg-slate-100/40";
                               tag1Text = "⚙️ HỆ THỐNG";
                               tag1Class = "text-slate-700 bg-slate-100 border-slate-200";
                               tag2Text = "Người tạo: Hệ thống";
@@ -4802,31 +4845,53 @@ export default function DashboardDesktop({
                             }
                           } else {
                             // System Notifications (activity/updates)
-                            cardBg = "bg-sky-50/40 border-sky-100";
+                            if (isUnread) {
+                              cardBg = "bg-blue-50/80 border-blue-250 hover:bg-blue-100/70 border-l-4 border-l-blue-600 shadow-sm shadow-blue-100/50";
+                              tag1Class = "text-blue-700 bg-blue-100 border-blue-300 font-extrabold";
+                            } else {
+                              cardBg = "bg-white border-slate-200 hover:bg-slate-50";
+                              tag1Class = "text-slate-500 bg-slate-100 border-slate-200 font-medium";
+                            }
                             tag1Text = "🔔 HỆ THỐNG";
-                            tag1Class = "text-sky-700 bg-sky-100 border-sky-200";
-                            
+
                             if (typeL.includes("chỉ đạo") || typeL.includes("directive")) {
-                              cardBg = "bg-amber-50/50 border-amber-100";
                               tag1Text = "🚨 CHỈ ĐẠO";
-                              tag1Class = "text-amber-800 bg-amber-100 border-amber-200";
+                              tag1Class = isUnread
+                                ? "text-amber-800 bg-amber-100 border-amber-300 font-black"
+                                : "text-amber-700 bg-amber-50 border-amber-100 font-medium";
                             } else if (typeL.includes("cập nhật") || typeL.includes("sửa")) {
-                              cardBg = "bg-indigo-50/40 border-indigo-100";
                               tag1Text = "📝 CẬP NHẬT";
-                              tag1Class = "text-indigo-700 bg-indigo-100 border-indigo-200";
+                              tag1Class = isUnread
+                                ? "text-indigo-800 bg-indigo-100 border-indigo-300 font-black"
+                                : "text-indigo-700 bg-indigo-50 border-indigo-100 font-medium";
                             }
                           }
 
                           return (
                             <div 
                               key={item.id} 
-                              className={`p-4 ${cardBg} border rounded-xl shadow-xs transition-all hover:shadow-md relative group`}
+                              onClick={() => {
+                                if (isUnread) {
+                                  setReadNotifIds((prev) => prev.includes(item.id) ? prev : [...prev, item.id]);
+                                }
+                              }}
+                              className={`p-4 ${cardBg} border rounded-xl shadow-xs transition-all hover:shadow-md relative group ${
+                                isUnread ? "cursor-pointer" : ""
+                              }`}
                             >
+                              {isUnread && (
+                                <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-rose-600 animate-ping"></span>
+                              )}
                               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100/60 pb-2 mb-2.5">
                                 <div className="flex flex-wrap items-center gap-1.5">
                                   <span className={`px-2 py-0.5 rounded text-[9.5px] font-black border uppercase tracking-wider ${tag1Class}`}>
                                     <T>{tag1Text}</T>
                                   </span>
+                                  {isUnread && (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-black border uppercase tracking-wider text-rose-700 bg-rose-100 border-rose-200 animate-pulse">
+                                      <T>MỚI</T>
+                                    </span>
+                                  )}
                                   <span className={`px-2 py-0.5 rounded text-[9.5px] font-bold border ${tag2Class}`}>
                                     <T>{tag2Text}</T>
                                   </span>

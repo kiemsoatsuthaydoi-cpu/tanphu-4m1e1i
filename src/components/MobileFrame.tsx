@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import html2canvas from "html2canvas";
-import { Search, RotateCw, RotateCcw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft } from "lucide-react";
+import { Search, RotateCw, RotateCcw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp } from "lucide-react";
 import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
@@ -187,6 +187,8 @@ interface MobileFrameProps {
   deletedNotifIds?: string[];
   onDeleteNotification?: (id: string) => void;
   systemNotifications?: AppNotification[];
+  readNotifIds?: string[];
+  setReadNotifIds?: React.Dispatch<React.SetStateAction<string[]>>;
 }
 
 function formatTimestampToDMY(tsStr: string): string {
@@ -757,7 +759,9 @@ export default function MobileFrame({
   onDeleteBroadcast,
   deletedNotifIds: deletedNotifIdsProp,
   onDeleteNotification,
-  systemNotifications
+  systemNotifications,
+  readNotifIds: readNotifIdsProp,
+  setReadNotifIds: setReadNotifIdsProp
 }: MobileFrameProps) {
   const isRealMobile = typeof window !== "undefined" && (
     window.innerWidth < 1024 || 
@@ -1143,6 +1147,7 @@ export default function MobileFrame({
   const [notifTab, setNotifTab] = useState<"HOT" | "SYSTEM">("HOT");
   const [newNoticeContent, setNewNoticeContent] = useState("");
   const [noticeType, setNoticeType] = useState("Quản trị viên phát sóng");
+  const [isAdminConfigExpanded, setIsAdminConfigExpanded] = useState(false);
   
   // Ticker states
   const [isEditingTicker, setIsEditingTicker] = useState(false);
@@ -1165,7 +1170,7 @@ export default function MobileFrame({
   const [showOnlineUsersDrawer, setShowOnlineUsersDrawer] = useState(false);
   const [onlineSearchTerm, setOnlineSearchTerm] = useState("");
   const [onlineTabFilter, setOnlineTabFilter] = useState<"ONLINE" | "ALL">("ONLINE");
-  const [readNotifIds, setReadNotifIds] = useState<string[]>(() => {
+  const [localReadNotifIds, setLocalReadNotifIds] = useState<string[]>(() => {
     try {
       const saved = safeGetItem("4m1e1i_read_notifications");
       return saved ? JSON.parse(saved) : [];
@@ -1174,9 +1179,14 @@ export default function MobileFrame({
     }
   });
 
+  const readNotifIds = readNotifIdsProp !== undefined ? readNotifIdsProp : localReadNotifIds;
+  const setReadNotifIds = setReadNotifIdsProp !== undefined ? setReadNotifIdsProp : setLocalReadNotifIds;
+
   useEffect(() => {
-    safeSetItem("4m1e1i_read_notifications", JSON.stringify(readNotifIds));
-  }, [readNotifIds]);
+    if (readNotifIdsProp === undefined) {
+      safeSetItem("4m1e1i_read_notifications", JSON.stringify(localReadNotifIds));
+    }
+  }, [localReadNotifIds, readNotifIdsProp]);
 
   const [localDeletedNotifIds, setLocalDeletedNotifIds] = useState<string[]>(() => {
     try {
@@ -4790,7 +4800,7 @@ App Link: ${window.location.origin}`}
       {/* Dynamic Notifications System Drawer Overlay */}
       {showNotifDrawer && (
         <div className="fixed lg:absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-end justify-center z-50 select-none animate-fadeIn">
-          <div className="bg-white rounded-t-3xl w-full max-h-[85%] overflow-hidden flex flex-col shadow-2xl border-t border-slate-100 animate-slideUp">
+          <div className="bg-white w-full h-full max-h-full overflow-hidden flex flex-col shadow-2xl animate-slideUp">
             {/* Header */}
             {currentUser?.role === UserRole.ADMIN ? (
               <div className="flex justify-between items-center px-4 py-4 border-b border-slate-100 shrink-0 bg-slate-50">
@@ -4846,134 +4856,160 @@ App Link: ${window.location.origin}`}
             <div className="flex-1 overflow-y-auto p-3.5 bg-slate-50/50 space-y-3 pb-8">
               {currentUser?.role === UserRole.ADMIN ? (
                 <>
-                  {/* BOX 1: THÔNG BÁO NỔI BẬT HỆ THỐNG */}
-                  <div className="bg-amber-50/40 border border-amber-250/75 p-4 rounded-2xl space-y-2.5">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[11px] font-extrabold text-amber-900 flex items-center gap-1 uppercase">
-                        📢 <T>THÔNG BÁO NỔI BẬT HỆ THỐNG</T>
-                      </span>
-                      {!isEditingTicker && (
-                        <button
-                          onClick={() => {
-                            setIsEditingTicker(true);
-                            setTickerText(tickerConfig?.text || "");
-                            setTickerSpeed(tickerConfig?.speed || 35);
-                            setTickerSpacing(tickerConfig?.spacing || 50);
-                          }}
-                          className="text-[10px] font-black text-blue-600 flex items-center gap-1 hover:underline cursor-pointer border-none bg-transparent"
-                        >
-                          <Edit className="w-3.5 h-3.5" /> <T>Sửa</T>
-                        </button>
-                      )}
-                    </div>
+                  {/* SINGLE-LINE ACCORDION FOR ADMIN CONFIGURATION */}
+                  <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xs transition-all">
+                    <button
+                      onClick={() => setIsAdminConfigExpanded(!isAdminConfigExpanded)}
+                      className="w-full flex items-center justify-between p-3.5 bg-slate-100 hover:bg-slate-150 text-slate-800 transition-colors select-none cursor-pointer border-none"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Settings className="w-4 h-4 text-[#1e3a8a] animate-spin-slow" />
+                        <span translate="no" className="notranslate text-[11.5px] font-extrabold text-slate-800 uppercase">
+                          <T>CẤU HÌNH & ĐĂNG THÔNG BÁO</T>
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {isAdminConfigExpanded ? (
+                          <ChevronUp className="w-4 h-4 text-slate-500" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-slate-500" />
+                        )}
+                      </div>
+                    </button>
 
-                    {isEditingTicker ? (
-                      <div className="space-y-3">
-                        <div className="space-y-1">
-                          <label className="text-[9px] text-slate-500 block font-extrabold uppercase tracking-wider">
-                            <T>NỘI DUNG CHỮ CHẠY:</T>
-                          </label>
+                    {isAdminConfigExpanded && (
+                      <div className="p-3 bg-slate-50/60 border-t border-slate-150 space-y-3.5 animate-fadeIn">
+                        {/* BOX 1: THÔNG BÁO NỔI BẬT HỆ THỐNG */}
+                        <div className="bg-amber-50/40 border border-amber-250/75 p-3.5 rounded-xl space-y-2.5">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-extrabold text-amber-900 flex items-center gap-1 uppercase">
+                              📢 <T>THÔNG BÁO NỔI BẬT HỆ THỐNG</T>
+                            </span>
+                            {!isEditingTicker && (
+                              <button
+                                onClick={() => {
+                                  setIsEditingTicker(true);
+                                  setTickerText(tickerConfig?.text || "");
+                                  setTickerSpeed(tickerConfig?.speed || 35);
+                                  setTickerSpacing(tickerConfig?.spacing || 50);
+                                }}
+                                className="text-[10px] font-black text-blue-600 flex items-center gap-1 hover:underline cursor-pointer border-none bg-transparent"
+                              >
+                                <Edit className="w-3.5 h-3.5" /> <T>Sửa</T>
+                              </button>
+                            )}
+                          </div>
+
+                          {isEditingTicker ? (
+                            <div className="space-y-3">
+                              <div className="space-y-1">
+                                <label className="text-[9px] text-slate-500 block font-extrabold uppercase tracking-wider">
+                                  <T>NỘI DUNG CHỮ CHẠY:</T>
+                                </label>
+                                <textarea
+                                  value={tickerText}
+                                  onChange={(e) => setTickerText(e.target.value)}
+                                  className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-lg focus:outline-none font-semibold leading-relaxed"
+                                  rows={3}
+                                  placeholder="Nhập nội dung chữ chạy hiển thị trên thanh marquee..."
+                                />
+                              </div>
+                              <div className="grid grid-cols-2 gap-2.5">
+                                <div className="space-y-1">
+                                  <label className="text-[9px] text-slate-500 block font-extrabold uppercase tracking-wider">
+                                    ⏱ <T>THỜI GIAN CHẠY (GIÂY):</T>
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={tickerSpeed}
+                                    onChange={(e) => setTickerSpeed(Number(e.target.value))}
+                                    className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg focus:outline-none font-mono font-black"
+                                    placeholder="Mặc định: 35"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[9px] text-slate-500 block font-extrabold uppercase tracking-wider">
+                                    📐 <T>KHOẢNG CÁCH (PX):</T>
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={tickerSpacing}
+                                    onChange={(e) => setTickerSpacing(Number(e.target.value))}
+                                    className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg focus:outline-none font-mono font-black"
+                                    placeholder="Mặc định: 50"
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex justify-end gap-2 pt-1.5">
+                                <button
+                                  onClick={() => setIsEditingTicker(false)}
+                                  className="py-1.5 px-3 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-[10px] font-black border-none cursor-pointer"
+                                >
+                                  <T>HỦY BỎ</T>
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (onUpdateTickerConfig) {
+                                      onUpdateTickerConfig({
+                                        text: tickerText,
+                                        speed: Number(tickerSpeed) || 35,
+                                        spacing: Number(tickerSpacing) || 50
+                                      });
+                                      setIsEditingTicker(false);
+                                      showToast("Cập nhật thông báo chạy thành công! 🎉");
+                                    }
+                                  }}
+                                  className="py-1.5 px-3 bg-[#1D4ED8] hover:bg-[#1E40AF] text-white rounded-lg text-[10px] font-black border-none cursor-pointer"
+                                >
+                                  <T>LƯU CẤU HÌNH</T>
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              <div className="bg-white p-3 rounded-xl border border-amber-200/60 text-xs text-amber-950 font-bold leading-relaxed break-words whitespace-pre-wrap">
+                                {tickerConfig?.text ? tickerConfig.text : <span className="text-slate-400 italic font-medium"><T>Chưa cấu hình thông báo chạy.</T></span>}
+                              </div>
+                              <div className="flex gap-2.5 items-center text-[9.5px] text-slate-500 font-extrabold">
+                                <span className="flex items-center gap-1 bg-slate-150 px-2 py-0.5 rounded-full">⏱ <T>Chạy: {tickerConfig?.speed || 35} giây/vòng</T></span>
+                                <span className="flex items-center gap-1 bg-slate-150 px-2 py-0.5 rounded-full">📐 <T>Khoảng cách: {tickerConfig?.spacing || 50}px</T></span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* BOX 2: ĐĂNG THÔNG BÁO TỪ BAN QUẢN TRỊ */}
+                        <div className="bg-white border border-slate-200/85 p-3.5 rounded-xl space-y-3 shadow-3xs">
+                          <span className="text-[10px] font-extrabold text-slate-850 flex items-center gap-1 uppercase">
+                            ✨ <T>ĐĂNG THÔNG BÁO TỪ BAN QUẢN TRỊ</T>
+                          </span>
                           <textarea
-                            value={tickerText}
-                            onChange={(e) => setTickerText(e.target.value)}
-                            className="w-full text-xs p-2.5 bg-white border border-slate-200 rounded-lg focus:outline-none font-semibold leading-relaxed"
+                            value={newNoticeContent}
+                            onChange={(e) => setNewNoticeContent(e.target.value)}
+                            className="w-full text-xs p-3 bg-slate-50/70 border border-slate-200 rounded-xl focus:outline-none font-semibold leading-relaxed focus:bg-white placeholder-slate-400"
                             rows={3}
-                            placeholder="Nhập nội dung chữ chạy hiển thị trên thanh marquee..."
+                            placeholder="Ví dụ: Chú ý: Cập nhật tài liệu văn hóa mới hoặc có thay đổi thời gian thi đua..."
                           />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2.5">
-                          <div className="space-y-1">
-                            <label className="text-[9px] text-slate-500 block font-extrabold uppercase tracking-wider">
-                              ⏱ <T>THỜI GIAN CHẠY (GIÂY):</T>
-                            </label>
-                            <input
-                              type="number"
-                              value={tickerSpeed}
-                              onChange={(e) => setTickerSpeed(Number(e.target.value))}
-                              className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg focus:outline-none font-mono font-black"
-                              placeholder="Mặc định: 35"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[9px] text-slate-500 block font-extrabold uppercase tracking-wider">
-                              📐 <T>KHOẢNG CÁCH (PX):</T>
-                            </label>
-                            <input
-                              type="number"
-                              value={tickerSpacing}
-                              onChange={(e) => setTickerSpacing(Number(e.target.value))}
-                              className="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg focus:outline-none font-mono font-black"
-                              placeholder="Mặc định: 50"
-                            />
-                          </div>
-                        </div>
-                        <div className="flex justify-end gap-2 pt-1.5">
-                          <button
-                            onClick={() => setIsEditingTicker(false)}
-                            className="py-1.5 px-3 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-[10px] font-black border-none cursor-pointer"
-                          >
-                            <T>HỦY BỎ</T>
-                          </button>
                           <button
                             onClick={() => {
-                              if (onUpdateTickerConfig) {
-                                onUpdateTickerConfig({
-                                  text: tickerText,
-                                  speed: Number(tickerSpeed) || 35,
-                                  spacing: Number(tickerSpacing) || 50
-                                });
-                                setIsEditingTicker(false);
-                                showToast("Cập nhật thông báo chạy thành công! 🎉");
+                              if (!newNoticeContent.trim()) {
+                                showToast("Vui lòng nhập nội dung thông báo! ⚠️");
+                                        return;
+                              }
+                              if (onAddBroadcast) {
+                                onAddBroadcast(newNoticeContent, "Quản trị viên phát sóng");
+                                setNewNoticeContent("");
+                                showToast("Đăng thông báo lên bảng tin thành công! 🎉");
                               }
                             }}
-                            className="py-1.5 px-3 bg-[#1D4ED8] hover:bg-[#1E40AF] text-white rounded-lg text-[10px] font-black border-none cursor-pointer"
+                            className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-sm active:scale-98 transition-all border-none cursor-pointer uppercase tracking-wider"
                           >
-                            <T>LƯU CẤU HÌNH</T>
+                            <span>✨</span>
+                            <T>Đăng Thông Báo Nóng</T>
                           </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="bg-white p-3 rounded-xl border border-amber-200/60 text-xs text-amber-950 font-bold leading-relaxed break-words whitespace-pre-wrap">
-                          {tickerConfig?.text ? tickerConfig.text : <span className="text-slate-400 italic font-medium"><T>Chưa cấu hình thông báo chạy.</T></span>}
-                        </div>
-                        <div className="flex gap-2.5 items-center text-[9.5px] text-slate-500 font-extrabold">
-                          <span className="flex items-center gap-1 bg-slate-150 px-2 py-0.5 rounded-full">⏱ <T>Chạy: {tickerConfig?.speed || 35} giây/vòng</T></span>
-                          <span className="flex items-center gap-1 bg-slate-150 px-2 py-0.5 rounded-full">📐 <T>Khoảng cách: {tickerConfig?.spacing || 50}px</T></span>
                         </div>
                       </div>
                     )}
-                  </div>
-
-                  {/* BOX 2: ĐĂNG THÔNG BÁO TỪ BAN QUẢN TRỊ */}
-                  <div className="bg-white border border-slate-200/85 p-4 rounded-2xl space-y-3 shadow-3xs">
-                    <span className="text-[11px] font-extrabold text-slate-850 flex items-center gap-1 uppercase">
-                      ✨ <T>ĐĂNG THÔNG BÁO TỪ BAN QUẢN TRỊ</T>
-                    </span>
-                    <textarea
-                      value={newNoticeContent}
-                      onChange={(e) => setNewNoticeContent(e.target.value)}
-                      className="w-full text-xs p-3 bg-slate-50/70 border border-slate-200 rounded-xl focus:outline-none font-semibold leading-relaxed focus:bg-white placeholder-slate-400"
-                      rows={3}
-                      placeholder="Ví dụ: Chú ý: Cập nhật tài liệu văn hóa mới hoặc có thay đổi thời gian thi đua..."
-                    />
-                    <button
-                      onClick={() => {
-                        if (!newNoticeContent.trim()) {
-                          showToast("Vui lòng nhập nội dung thông báo! ⚠️");
-                          return;
-                        }
-                        if (onAddBroadcast) {
-                          onAddBroadcast(newNoticeContent, "Quản trị viên phát sóng");
-                          setNewNoticeContent("");
-                          showToast("Đăng thông báo lên bảng tin thành công! 🎉");
-                        }
-                      }}
-                      className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-sm active:scale-98 transition-all border-none cursor-pointer uppercase tracking-wider"
-                    >
-                      <span>✨</span>
-                      <T>Đăng Thông Báo Nóng</T>
-                    </button>
                   </div>
 
                   {/* SYSTEM NOTIFICATIONS SECTION (Placed below Admin notification input form) */}
