@@ -85,8 +85,10 @@ import {
   CatalogProduct,
   CatalogMold,
   ProductionRequestStatus,
-  ProductionRequestItem
+  ProductionRequestItem,
+  AppNotification
 } from "../types";
+import { parseReportTimestamp } from "../utils/notificationHelper";
 import { STANDARDIZED_QC_DEPT } from "../data";
 import { generateDailyReportPDF } from "../utils/pdfGenerator";
 import { formatNameCapitalized } from "../utils/branchHelpers";
@@ -142,6 +144,8 @@ interface DashboardDesktopProps {
   onDeleteBroadcast?: (id: string) => void;
   tickerConfig?: { text: string; speed: number; spacing: number };
   onUpdateTickerConfig?: (config: { text: string; speed: number; spacing: number }) => void;
+  systemNotifications?: AppNotification[];
+  onDeleteNotification?: (id: string) => void;
 }
 
 interface DesktopThumbnailSliderProps {
@@ -573,11 +577,54 @@ export default function DashboardDesktop({
   onShowToast,
   onDeleteBroadcast,
   tickerConfig,
-  onUpdateTickerConfig
+  onUpdateTickerConfig,
+  systemNotifications = [],
+  onDeleteNotification
 }: DashboardDesktopProps) {
   const [activeTab, setActiveTab] = useState<
     "PHÊ_DUYỆT" | "MÃ_HÓA" | "THỐNG_KÊ" | "DỮ_LIỆU" | "QUY_CHẾ" | "CÁ_NHÂN" | "THÔNG_BÁO" | "TRAO_ĐỔI" | "TRIỂN_KHAI" | "ĐỀ_XUẤT" | "QUOTA_CLOUD"
   >("PHÊ_DUYỆT");
+
+  const combinedBroadcastsAndNotifications = React.useMemo(() => {
+    const list: Array<{
+      id: string;
+      isBroadcast: boolean;
+      type: string;
+      content: string;
+      sender: string;
+      timestamp: string;
+    }> = [];
+
+    broadcasts.forEach((b) => {
+      list.push({
+        id: b.id,
+        isBroadcast: true,
+        type: b.type,
+        content: b.content,
+        sender: b.sender,
+        timestamp: b.timestamp
+      });
+    });
+
+    if (Array.isArray(systemNotifications)) {
+      systemNotifications.forEach((n) => {
+        list.push({
+          id: n.id,
+          isBroadcast: false,
+          type: n.title,
+          content: n.description,
+          sender: n.authorName || "Hệ thống",
+          timestamp: n.timestamp
+        });
+      });
+    }
+
+    return list.sort((a, b) => {
+      const tA = parseReportTimestamp(a.timestamp).getTime();
+      const tB = parseReportTimestamp(b.timestamp).getTime();
+      return tB - tA;
+    });
+  }, [broadcasts, systemNotifications]);
 
   // Helper functions for auto-generating clean, consistent, neat IDs
   const generateAutoCompanyId = (name: string): string => {
@@ -675,6 +722,7 @@ export default function DashboardDesktop({
 
   const [showTrashLogs, setShowTrashLogs] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [notifIdConfirmDlt, setNotifIdConfirmDlt] = useState<string | null>(null);
   const [showDesktopOnlinePopover, setShowDesktopOnlinePopover] = useState(false);
   const [desktopOnlineSearch, setDesktopOnlineSearch] = useState("");
 
@@ -4704,57 +4752,74 @@ export default function DashboardDesktop({
                         <T>NHẬT KÝ BẢNG TIN HIỆN TẠI</T>
                       </h3>
                       <div className="bg-slate-100 px-3 py-1 rounded-full text-slate-600 font-mono text-[10.5px] font-black">
-                        <T>{broadcasts.length} tin tức</T>
+                        <T>{combinedBroadcastsAndNotifications.length} tin tức & thông báo</T>
                       </div>
                     </div>
 
                     <div className="flex-1 overflow-y-auto space-y-3.5 pr-2 custom-scrollbar">
-                      {broadcasts.length === 0 ? (
+                      {combinedBroadcastsAndNotifications.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center text-slate-400 py-12 space-y-2">
                           <Info className="w-8 h-8 opacity-55 text-slate-400" />
                           <T className="text-xs font-semibold"><T>Chưa có thông báo nào được tạo.</T></T>
                         </div>
                       ) : (
-                        broadcasts.map((b) => {
+                        combinedBroadcastsAndNotifications.map((item) => {
                           // Determine custom styles and tags based on type or content
                           let cardBg = "bg-slate-50/70 border-slate-200";
                           let tag1Text = "📢 THÔNG BÁO";
                           let tag1Class = "text-slate-700 bg-slate-100 border-slate-200";
-                          let tag2Text = `Người tạo: ${b.sender}`;
+                          let tag2Text = `Người tạo: ${item.sender}`;
                           let tag2Class = "text-slate-600 bg-slate-100/50 border-slate-200";
 
-                          const typeL = b.type.toLowerCase();
-                          const contentL = b.content.toLowerCase();
+                          const typeL = item.type ? item.type.toLowerCase() : "";
+                          const contentL = item.content ? item.content.toLowerCase() : "";
 
-                          if (typeL.includes("phát sóng") || typeL.includes("broadcast")) {
-                            cardBg = "bg-rose-50/50 border-rose-100";
-                            tag1Text = "📢 PHÁT SÓNG";
-                            tag1Class = "text-[#E11D48] bg-[#FFE4E6] border-[#FECDD3]";
-                            tag2Text = "BAN QUẢN TRỊ";
-                            tag2Class = "text-[#B45309] bg-[#FEF3C7] border-[#FDE68A]";
-                          } else if (typeL.includes("biểu dương") || contentL.includes("đại gia đình") || contentL.includes("chúc mừng") || contentL.includes("ngân hàng đề thi")) {
-                            cardBg = "bg-[#F0FDF4] border-[#DCFCE7]";
-                            tag1Text = "📢 BIỂU DƯƠNG";
-                            tag1Class = "text-[#16A34A] bg-[#DCFCE7] border-[#BBF7D0]";
-                            tag2Text = b.sender === "Hệ thống" ? "Người tạo: Hệ thống" : `Người tạo: ${b.sender}`;
-                            tag2Class = "text-slate-700 bg-slate-100 border-slate-200";
-                          } else if (typeL.includes("khẩn") || contentL.includes("khẩn") || typeL.includes("chỉ thị")) {
-                            cardBg = "bg-[#FFF5F5] border-red-200";
-                            tag1Text = "🚨 CHỈ THỊ KHẨN";
-                            tag1Class = "text-white bg-[#EF4444] border-[#EF4444] animate-pulse";
-                            tag2Text = "BAN QUẢN TRỊ";
-                            tag2Class = "text-[#B45309] bg-[#FEF3C7] border-[#FDE68A]";
-                          } else if (b.sender === "Hệ thống") {
-                            cardBg = "bg-slate-50/70 border-slate-200";
-                            tag1Text = "⚙️ HỆ THỐNG";
-                            tag1Class = "text-slate-700 bg-slate-100 border-slate-200";
-                            tag2Text = "Người tạo: Hệ thống";
-                            tag2Class = "text-slate-600 bg-slate-100/50 border-slate-200";
+                          if (item.isBroadcast) {
+                            if (typeL.includes("phát sóng") || typeL.includes("broadcast")) {
+                              cardBg = "bg-rose-50/50 border-rose-100";
+                              tag1Text = "📢 PHÁT SÓNG";
+                              tag1Class = "text-[#E11D48] bg-[#FFE4E6] border-[#FECDD3]";
+                              tag2Text = "BAN QUẢN TRỊ";
+                              tag2Class = "text-[#B45309] bg-[#FEF3C7] border-[#FDE68A]";
+                            } else if (typeL.includes("biểu dương") || contentL.includes("đại gia đình") || contentL.includes("chúc mừng") || contentL.includes("ngân hàng đề thi")) {
+                              cardBg = "bg-[#F0FDF4] border-[#DCFCE7]";
+                              tag1Text = "📢 BIỂU DƯƠNG";
+                              tag1Class = "text-[#16A34A] bg-[#DCFCE7] border-[#BBF7D0]";
+                              tag2Text = item.sender === "Hệ thống" ? "Người tạo: Hệ thống" : `Người tạo: ${item.sender}`;
+                              tag2Class = "text-slate-700 bg-slate-100 border-slate-200";
+                            } else if (typeL.includes("khẩn") || contentL.includes("khẩn") || typeL.includes("chỉ thị")) {
+                              cardBg = "bg-[#FFF5F5] border-red-200";
+                              tag1Text = "🚨 CHỈ THỊ KHẨN";
+                              tag1Class = "text-white bg-[#EF4444] border-[#EF4444] animate-pulse";
+                              tag2Text = "BAN QUẢN TRỊ";
+                              tag2Class = "text-[#B45309] bg-[#FEF3C7] border-[#FDE68A]";
+                            } else if (item.sender === "Hệ thống") {
+                              cardBg = "bg-slate-50/70 border-slate-200";
+                              tag1Text = "⚙️ HỆ THỐNG";
+                              tag1Class = "text-slate-700 bg-slate-100 border-slate-200";
+                              tag2Text = "Người tạo: Hệ thống";
+                              tag2Class = "text-slate-600 bg-slate-100/50 border-slate-200";
+                            }
+                          } else {
+                            // System Notifications (activity/updates)
+                            cardBg = "bg-sky-50/40 border-sky-100";
+                            tag1Text = "🔔 HỆ THỐNG";
+                            tag1Class = "text-sky-700 bg-sky-100 border-sky-200";
+                            
+                            if (typeL.includes("chỉ đạo") || typeL.includes("directive")) {
+                              cardBg = "bg-amber-50/50 border-amber-100";
+                              tag1Text = "🚨 CHỈ ĐẠO";
+                              tag1Class = "text-amber-800 bg-amber-100 border-amber-200";
+                            } else if (typeL.includes("cập nhật") || typeL.includes("sửa")) {
+                              cardBg = "bg-indigo-50/40 border-indigo-100";
+                              tag1Text = "📝 CẬP NHẬT";
+                              tag1Class = "text-indigo-700 bg-indigo-100 border-indigo-200";
+                            }
                           }
 
                           return (
                             <div 
-                              key={b.id} 
+                              key={item.id} 
                               className={`p-4 ${cardBg} border rounded-xl shadow-xs transition-all hover:shadow-md relative group`}
                             >
                               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100/60 pb-2 mb-2.5">
@@ -4768,26 +4833,52 @@ export default function DashboardDesktop({
                                 </div>
                                 <div className="flex items-center gap-2.5">
                                   <span className="text-[10px] text-slate-400 font-bold font-mono">
-                                    <T>{b.timestamp}</T>
+                                    <T>{item.timestamp}</T>
                                   </span>
-                                  {onDeleteBroadcast && (
-                                    <button
-                                      onClick={() => {
-                                        if (confirm(`Bạn có chắc chắn muốn xóa thông báo này?`)) {
-                                          onDeleteBroadcast(b.id);
-                                          if (onShowToast) onShowToast("Xóa thông báo thành công", "info");
-                                        }
-                                      }}
-                                      className="text-slate-400 hover:text-red-600 transition-colors p-1 rounded-md hover:bg-red-50 cursor-pointer"
-                                      title="Xóa thông báo"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
+                                  {currentUser?.role === UserRole.ADMIN && (
+                                    notifIdConfirmDlt === item.id ? (
+                                      <div className="flex items-center gap-1 animate-fade-in">
+                                        <span translate="no" className="notranslate text-[9px] text-rose-600 font-black uppercase mr-1">Xóa?</span>
+                                        <button
+                                          onClick={() => {
+                                            if (item.isBroadcast) {
+                                              if (onDeleteBroadcast) {
+                                                onDeleteBroadcast(item.id);
+                                                if (onShowToast) onShowToast("Xóa bản tin thành công! 🗑️", "success");
+                                              }
+                                            } else {
+                                              if (onDeleteNotification) {
+                                                onDeleteNotification(item.id);
+                                                if (onShowToast) onShowToast("Xóa thông báo thành công! 🗑️", "success");
+                                              }
+                                            }
+                                            setNotifIdConfirmDlt(null);
+                                          }}
+                                          className="p-1 px-2 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded text-[9px] cursor-pointer transition-colors uppercase leading-none"
+                                        >
+                                          <span translate="no" className="notranslate font-black">Xóa</span>
+                                        </button>
+                                        <button
+                                          onClick={() => setNotifIdConfirmDlt(null)}
+                                          className="p-1 px-1.5 bg-slate-100 hover:bg-slate-200 text-slate-500 font-extrabold border border-slate-300 rounded text-[9px] cursor-pointer transition-colors uppercase leading-none"
+                                        >
+                                          <span translate="no" className="notranslate font-black">Hủy</span>
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        onClick={() => setNotifIdConfirmDlt(item.id)}
+                                        className="text-slate-400 hover:text-red-600 transition-colors p-1 rounded-md hover:bg-red-50 cursor-pointer"
+                                        title="Xóa thông báo"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )
                                   )}
                                 </div>
                               </div>
                               <div className="text-xs text-slate-800 font-medium font-sans leading-relaxed break-words whitespace-pre-wrap">
-                                <T>{b.content}</T>
+                                <T>{item.content}</T>
                               </div>
                             </div>
                           );

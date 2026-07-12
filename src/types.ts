@@ -124,6 +124,17 @@ export interface BroadcastNotice {
   timestamp: string;
 }
 
+export interface AppNotification {
+  id: string;
+  title: string;
+  description: string;
+  timestamp: string;
+  type: "new_report" | "new_directive" | "update_report";
+  targetReportId: string;
+  authorName: string;
+  factoryName: string;
+}
+
 export interface ChatMessage {
   id: string;
   senderName: string;

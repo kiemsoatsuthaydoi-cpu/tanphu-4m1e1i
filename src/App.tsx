@@ -17,8 +17,10 @@ import {
   CatalogProduct,
   CatalogMold,
   ProductionRequestStatus,
-  ProductionRequestItem
+  ProductionRequestItem,
+  AppNotification
 } from "./types";
+import { generateNotifications } from "./utils/notificationHelper";
 import {
   initialUsers,
   initialReports,
@@ -673,6 +675,37 @@ export default function App() {
     });
   }, [dbConnected]);
 
+  const [deletedNotifIds, setDeletedNotifIds] = useState<string[]>(() => {
+    const saved = safeGetItem("4m1e1i_deleted_notifications");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (err) {
+        // ignore
+      }
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    safeSetItem("4m1e1i_deleted_notifications", JSON.stringify(deletedNotifIds));
+  }, [deletedNotifIds]);
+
+  const handleDeleteNotification = useCallback((id: string) => {
+    setDeletedNotifIds((prev) => {
+      if (prev.includes(id)) return prev;
+      const next = [...prev, id];
+      if (dbConnected) {
+        saveDocument("config", "deleted_notifications", { ids: next }).catch(console.error);
+      }
+      return next;
+    });
+  }, [dbConnected]);
+
+  const systemNotifications = React.useMemo(() => {
+    return generateNotifications(reports, deletedNotifIds);
+  }, [reports, deletedNotifIds]);
+
   // Sign up and login screens
   const [authScreen, setAuthScreen] = useState<"LOGIN" | "REGISTER">("LOGIN");
   const [loginId, setLoginId] = useState("");
@@ -1167,6 +1200,11 @@ export default function App() {
               }
               return prev;
             });
+          } else if (doc.id === "deleted_notifications") {
+            const data = doc.data();
+            if (data && Array.isArray(data.ids)) {
+              setDeletedNotifIds(data.ids);
+            }
           }
         });
       },
@@ -3153,6 +3191,8 @@ export default function App() {
             onUpdateTickerConfig={handleUpdateTickerConfig}
             onAddBroadcast={handleAddBroadcast}
             onDeleteBroadcast={handleDeleteBroadcast}
+            deletedNotifIds={deletedNotifIds}
+            onDeleteNotification={handleDeleteNotification}
           />
         )}
 
@@ -3253,6 +3293,8 @@ export default function App() {
             onUpdateTickerConfig={handleUpdateTickerConfig}
             onAddBroadcast={handleAddBroadcast}
             onDeleteBroadcast={handleDeleteBroadcast}
+            deletedNotifIds={deletedNotifIds}
+            onDeleteNotification={handleDeleteNotification}
           />
         )}
 
@@ -3397,6 +3439,8 @@ export default function App() {
             onDeleteBroadcast={handleDeleteBroadcast}
             tickerConfig={tickerConfig}
             onUpdateTickerConfig={handleUpdateTickerConfig}
+            systemNotifications={systemNotifications}
+            onDeleteNotification={handleDeleteNotification}
           />
         </div>
 
@@ -3453,6 +3497,8 @@ export default function App() {
                 onUpdateTickerConfig={handleUpdateTickerConfig}
                 onAddBroadcast={handleAddBroadcast}
                 onDeleteBroadcast={handleDeleteBroadcast}
+                deletedNotifIds={deletedNotifIds}
+                onDeleteNotification={handleDeleteNotification}
               />
             )}
           </div>
@@ -3507,6 +3553,8 @@ export default function App() {
                 onUpdateTickerConfig={handleUpdateTickerConfig}
                 onAddBroadcast={handleAddBroadcast}
                 onDeleteBroadcast={handleDeleteBroadcast}
+                deletedNotifIds={deletedNotifIds}
+                onDeleteNotification={handleDeleteNotification}
               />
             )}
           </div>

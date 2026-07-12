@@ -184,6 +184,8 @@ interface MobileFrameProps {
   onUpdateTickerConfig?: (config: { text: string; speed: number; spacing: number }) => void;
   onAddBroadcast?: (notice: string, type: string) => void;
   onDeleteBroadcast?: (id: string) => void;
+  deletedNotifIds?: string[];
+  onDeleteNotification?: (id: string) => void;
 }
 
 function formatTimestampToDMY(tsStr: string): string {
@@ -751,7 +753,9 @@ export default function MobileFrame({
   tickerConfig,
   onUpdateTickerConfig,
   onAddBroadcast,
-  onDeleteBroadcast
+  onDeleteBroadcast,
+  deletedNotifIds: deletedNotifIdsProp,
+  onDeleteNotification
 }: MobileFrameProps) {
   const isRealMobile = typeof window !== "undefined" && (
     window.innerWidth < 1024 || 
@@ -1172,7 +1176,7 @@ export default function MobileFrame({
     safeSetItem("4m1e1i_read_notifications", JSON.stringify(readNotifIds));
   }, [readNotifIds]);
 
-  const [deletedNotifIds, setDeletedNotifIds] = useState<string[]>(() => {
+  const [localDeletedNotifIds, setLocalDeletedNotifIds] = useState<string[]>(() => {
     try {
       const saved = safeGetItem("4m1e1i_deleted_notifications");
       return saved ? JSON.parse(saved) : [];
@@ -1182,10 +1186,15 @@ export default function MobileFrame({
   });
 
   useEffect(() => {
-    safeSetItem("4m1e1i_deleted_notifications", JSON.stringify(deletedNotifIds));
-  }, [deletedNotifIds]);
+    if (deletedNotifIdsProp === undefined) {
+      safeSetItem("4m1e1i_deleted_notifications", JSON.stringify(localDeletedNotifIds));
+    }
+  }, [localDeletedNotifIds, deletedNotifIdsProp]);
+
+  const resolvedDeletedNotifIds = deletedNotifIdsProp !== undefined ? deletedNotifIdsProp : localDeletedNotifIds;
 
   const [notifIdConfirmDlt, setNotifIdConfirmDlt] = useState<string | null>(null);
+  const [bcastIdConfirmDlt, setBcastIdConfirmDlt] = useState<string | null>(null);
 
   const [likedReports, setLikedReports] = useState<Record<string, boolean>>(() => {
     try {
@@ -1973,7 +1982,7 @@ App Link: ${window.location.origin}`;
     });
 
     // Filter out deleted notifications
-    const activeList = list.filter((n) => !deletedNotifIds.includes(n.id));
+    const activeList = list.filter((n) => !resolvedDeletedNotifIds.includes(n.id));
 
     // Sort notifications chronologically descending (newest first)
     return activeList.sort((a, b) => {
@@ -5047,18 +5056,37 @@ App Link: ${window.location.origin}`}
                                 </button>
                               )}
                               {onDeleteBroadcast && (
-                                <button
-                                  onClick={() => {
-                                    if (confirm("Chủ quản có chắc chắn muốn XÓA thông báo này?")) {
-                                      onDeleteBroadcast(b.id);
-                                      showToast("Xóa thông báo thành công! 🗑️");
-                                    }
-                                  }}
-                                  className="text-slate-400 hover:text-rose-655 p-0.5 cursor-pointer border-none bg-transparent"
-                                  title="Xóa bản tin"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+                                bcastIdConfirmDlt === b.id ? (
+                                  <div className="flex items-center gap-1.5 animate-fade-in">
+                                    <span translate="no" className="notranslate text-[8.5px] text-rose-600 font-extrabold uppercase">Xóa?</span>
+                                    <button
+                                      onClick={() => {
+                                        onDeleteBroadcast(b.id);
+                                        showToast("Xóa thông báo thành công! 🗑️");
+                                        setBcastIdConfirmDlt(null);
+                                      }}
+                                      className="bg-red-600 hover:bg-red-700 text-white font-extrabold text-[8.5px] px-2 py-0.5 rounded cursor-pointer transition-all uppercase leading-none"
+                                    >
+                                      <span translate="no" className="notranslate font-black">Xóa</span>
+                                    </button>
+                                    <button
+                                      onClick={() => setBcastIdConfirmDlt(null)}
+                                      className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold text-[8.5px] px-2 py-0.5 rounded cursor-pointer transition-all uppercase leading-none"
+                                    >
+                                      <span translate="no" className="notranslate">Hủy</span>
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      setBcastIdConfirmDlt(b.id);
+                                    }}
+                                    className="text-slate-400 hover:text-red-600 p-0.5 cursor-pointer border-none bg-transparent"
+                                    title="Xóa bản tin"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )
                               )}
                             </div>
                           </div>
@@ -5192,7 +5220,11 @@ App Link: ${window.location.origin}`}
                               <div className="flex items-center gap-1 shrink-0">
                                 <button
                                   onClick={() => {
-                                    setDeletedNotifIds((prev) => [...prev, notif.id]);
+                                    if (onDeleteNotification) {
+                                      onDeleteNotification(notif.id);
+                                    } else {
+                                      setLocalDeletedNotifIds((prev) => [...prev, notif.id]);
+                                    }
                                     setNotifIdConfirmDlt(null);
                                   }}
                                   className="bg-rose-650 hover:bg-rose-700 text-white font-extrabold text-[9px] px-2.5 py-1 rounded transition-colors cursor-pointer uppercase"
