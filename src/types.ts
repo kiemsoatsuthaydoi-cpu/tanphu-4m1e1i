@@ -25,6 +25,8 @@ export interface User {
   company?: string;
   canSpeciallyEditDelete?: boolean;
   bypassApproval?: boolean;
+  activeLogs?: number[];
+  avatar?: string;
 }
 
 export type Category4M1E1I = 
@@ -129,8 +131,8 @@ export interface AppNotification {
   title: string;
   description: string;
   timestamp: string;
-  type: "new_report" | "new_directive" | "update_report";
-  targetReportId: string;
+  type: "new_report" | "new_directive" | "update_report" | "broadcast";
+  targetReportId?: string;
   authorName: string;
   factoryName: string;
 }
@@ -143,6 +145,9 @@ export interface ChatMessage {
   message: string;
   timestamp: string;
   reportRefId?: string; // Reference to a quality report
+  threadId?: string; // Reference to a forum topic/thread
+  threadTitle?: string; // If thread starter, the title of the topic
+  threadCategory?: string; // Category of the thread (e.g. "Góp ý", "Cải tiến")
 }
 
 export interface OfflineQueueItem {
@@ -253,3 +258,70 @@ export interface OrderImplementation {
   creatorName: string; // uploader từ Khối SCM (TPP-CTY)
   createdAt: string; 
 }
+
+export type IncidentCategory = "mechanical" | "electrical" | "quality" | "material" | "safety";
+export type IncidentSeverity = "low" | "medium" | "high";
+export type IncidentStatus = "active" | "acknowledged" | "resolved";
+
+export interface Incident {
+  id: string;
+  lineId: string;
+  lineName: string;
+  category: IncidentCategory;
+  severity: IncidentSeverity;
+  description: string;
+  reportedBy: string;
+  createdAt: string;
+  status: IncidentStatus;
+  assignedTo?: string;
+  acknowledgedAt?: string;
+  resolvedAt?: string;
+}
+
+export type LineStatus = "normal" | "warning" | "stopped";
+
+export interface ProductionLine {
+  id: string;
+  name: string;
+  manager: string;
+  status: LineStatus;
+  targetOutput: number;
+  actualOutput: number;
+  oee?: number;
+}
+
+export interface FactoryMetrics {
+  oee: number;
+  availability: number;
+  performance: number;
+  quality: number;
+  mttr: number;
+  activeIncidents: number;
+}
+
+export type ForumTopicCategory = "Góp ý chức năng" | "Cải tiến 4M1E" | "Kiến nghị khác";
+export type ForumTopicStatus = "OPEN" | "PROCESSING" | "RESOLVED";
+
+export interface ForumTopic {
+  id: string;
+  title: string;
+  description: string;
+  category: ForumTopicCategory;
+  creatorName: string;
+  creatorPhone: string;
+  creatorRole: string;
+  timestamp: string;
+  status: ForumTopicStatus;
+  isPinned: boolean;
+}
+
+export interface ForumReply {
+  id: string;
+  topicId: string;
+  senderName: string;
+  senderPhone: string;
+  senderRole: string;
+  message: string;
+  timestamp: string;
+}
+

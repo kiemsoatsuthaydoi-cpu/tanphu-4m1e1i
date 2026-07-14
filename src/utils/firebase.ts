@@ -1,5 +1,9 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { 
+  initializeFirestore, 
+  persistentLocalCache, 
+  persistentMultipleTabManager 
+} from "firebase/firestore";
 
 let firebaseApp: any = null;
 let db: any = null;
@@ -65,7 +69,13 @@ try {
   } else {
     firebaseApp = getApp();
   }
-  db = getFirestore(firebaseApp);
+  
+  // Enable offline multiple-tab persistence to prevent connection timeouts and support full offline PWA capabilities
+  db = initializeFirestore(firebaseApp, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager()
+    })
+  });
 } catch (error) {
   console.error("Firebase/Firestore client initialization failed:", error);
 }

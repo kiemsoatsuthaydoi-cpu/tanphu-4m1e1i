@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { getBranchCodeSuffix, formatNameCapitalized } from "./utils/branchHelpers";
 import { AlertCircle, LogIn, Heart, ShieldCheck, Wifi, WifiOff, RefreshCw, Smartphone, Monitor, Lock, Building, ChevronDown, Briefcase, User as UserIcon, Check, CheckCircle, XCircle, AlertTriangle, Info } from "lucide-react";
 import { T } from "./components/TranslateText";
@@ -18,7 +18,11 @@ import {
   CatalogMold,
   ProductionRequestStatus,
   ProductionRequestItem,
-  AppNotification
+  AppNotification,
+  ForumTopic,
+  ForumReply,
+  ForumTopicCategory,
+  ForumTopicStatus
 } from "./types";
 import { generateNotifications } from "./utils/notificationHelper";
 import {
@@ -125,10 +129,22 @@ const parseReportDate = (dateStr: string | undefined): number => {
 const sanitizeAndMigrateBranches = (rawBranches: Branch[]): Branch[] => {
   if (!Array.isArray(rawBranches)) return [];
   
-  // 1. Map ID BBM to DNP-BBM to eradicate the old ID
+  // 1. Map ID BBM to DNP-BBM to eradicate the old ID, and clean up wrong DNP-CTY/other prefixes for TPP
   let list = rawBranches.map(b => {
     if (b.id === "BBM" || b.id.toLowerCase() === "bbm") {
       return { ...b, id: "DNP-BBM", companyId: "DNP" };
+    }
+    if (b.id === "DNP-CTY" || b.id.toLowerCase() === "dnp-cty") {
+      return { ...b, id: "TPP-CTY", name: "Văn Phòng Công Ty (TPP-CTY)", companyId: "TPP", isScoring: true };
+    }
+    if (b.id === "DNP-BNI" || b.id.toLowerCase() === "dnp-bni") {
+      return { ...b, id: "TPP-BNI", name: "Chi Nhánh Bắc Ninh (TPP-BNI)", companyId: "TPP", isScoring: true };
+    }
+    if (b.id === "DNP-LAN" || b.id.toLowerCase() === "dnp-lan") {
+      return { ...b, id: "TPP-LAN", name: "Chi Nhánh Long An (TPP-LAN)", companyId: "TPP", isScoring: true };
+    }
+    if (b.id === "DNP-314" || b.id.toLowerCase() === "dnp-314") {
+      return { ...b, id: "TPP-314", name: "Nhà máy 314 (TPP-314)", companyId: "TPP", isScoring: true };
     }
     return b;
   });
@@ -140,7 +156,7 @@ const sanitizeAndMigrateBranches = (rawBranches: Branch[]): Branch[] => {
   });
   list = Array.from(uniqueMap.values());
 
-  // 3. Force name correctness for DNP-BBM and DNP-BBC
+  // 3. Force name correctness for DNP-BBM, DNP-BBC, and all standard TPP branches
   list = list.map(b => {
     if (b.id === "DNP-BBM") {
       return { ...b, name: "Nhà máy BBM (DNP-BBM)", companyId: "DNP", isScoring: true };
@@ -148,10 +164,34 @@ const sanitizeAndMigrateBranches = (rawBranches: Branch[]): Branch[] => {
     if (b.id === "DNP-BBC") {
       return { ...b, name: "Nhà máy BBC (DNP-BBC)", companyId: "DNP", isScoring: true };
     }
+    if (b.id === "TPP-CTY") {
+      return { ...b, name: "Văn Phòng Công Ty (TPP-CTY)", companyId: "TPP", isScoring: true };
+    }
+    if (b.id === "TPP-BNI") {
+      return { ...b, name: "Chi Nhánh Bắc Ninh (TPP-BNI)", companyId: "TPP", isScoring: true };
+    }
+    if (b.id === "TPP-LAN") {
+      return { ...b, name: "Chi Nhánh Long An (TPP-LAN)", companyId: "TPP", isScoring: true };
+    }
+    if (b.id === "TPP-314") {
+      return { ...b, name: "Nhà máy 314 (TPP-314)", companyId: "TPP", isScoring: true };
+    }
     return b;
   });
 
-  // 4. Ensure DNP-BBM and DNP-BBC exist
+  // 4. Ensure TPP and DNP standard branches exist
+  if (!list.some(b => b.id === "TPP-CTY")) {
+    list.push({ id: "TPP-CTY", name: "Văn Phòng Công Ty (TPP-CTY)", companyId: "TPP", isScoring: true });
+  }
+  if (!list.some(b => b.id === "TPP-BNI")) {
+    list.push({ id: "TPP-BNI", name: "Chi Nhánh Bắc Ninh (TPP-BNI)", companyId: "TPP", isScoring: true });
+  }
+  if (!list.some(b => b.id === "TPP-LAN")) {
+    list.push({ id: "TPP-LAN", name: "Chi Nhánh Long An (TPP-LAN)", companyId: "TPP", isScoring: true });
+  }
+  if (!list.some(b => b.id === "TPP-314")) {
+    list.push({ id: "TPP-314", name: "Nhà máy 314 (TPP-314)", companyId: "TPP", isScoring: true });
+  }
   if (!list.some(b => b.id === "DNP-BBM")) {
     list.push({ id: "DNP-BBM", name: "Nhà máy BBM (DNP-BBM)", companyId: "DNP", isScoring: true });
   }
@@ -159,8 +199,8 @@ const sanitizeAndMigrateBranches = (rawBranches: Branch[]): Branch[] => {
     list.push({ id: "DNP-BBC", name: "Nhà máy BBC (DNP-BBC)", companyId: "DNP", isScoring: true });
   }
 
-  // Remove any remaining old BBM ID branch just in case
-  list = list.filter(b => b.id !== "BBM");
+  // Remove any remaining old BBM ID or wrong DNP-CTY ID branch just in case
+  list = list.filter(b => b.id !== "BBM" && b.id !== "DNP-CTY");
 
   return list;
 };
@@ -285,19 +325,47 @@ const sanitizeUsers = (rawUsers: User[]): User[] => {
     
     if (br === "Nhà máy BBM (DNP)" || br === "Nhà máy BBM" || br.includes("BBM")) {
       br = "Nhà máy BBM (DNP-BBM)";
-    }
-    if (br === "Nhà máy BBC (DNP)" || br === "Nhà máy BBC" || br.includes("BBC")) {
+    } else if (br === "Nhà máy BBC (DNP)" || br === "Nhà máy BBC" || br.includes("BBC")) {
       br = "Nhà máy BBC (DNP-BBC)";
+    } else if (br.includes("Long An") || br.includes("LAN")) {
+      br = "Chi Nhánh Long An (TPP-LAN)";
+    } else if (br.includes("Bắc Ninh") || br.includes("BNI")) {
+      br = "Chi Nhánh Bắc Ninh (TPP-BNI)";
+    } else if (br.includes("314")) {
+      br = "Nhà máy 314 (TPP-314)";
+    } else if (br.includes("CTY") || br.includes("Văn Phòng")) {
+      br = "Văn Phòng Công Ty (TPP-CTY)";
     }
     
-    if (dept.includes("(BBM)")) {
-      dept = dept.replace("(BBM)", "(DNP-BBM)");
-    }
-    if (dept.includes("(BBC)")) {
-      dept = dept.replace("(BBC)", "(DNP-BBC)");
+    // Clean existing suffix from department
+    let cleanDept = dept.replace(/\s\([^)]+\)$/, "").trim();
+    
+    // Auto-correct spelling:
+    cleanDept = cleanDept.replace(/Quản\s+lí/gi, "Quản Lý")
+                         .replace(/quản\s+lí/gi, "Quản Lý")
+                         .replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng")
+                         .replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
+                         
+    let suffix = "";
+    if (br.includes("TPP-CTY") || br.includes("Văn Phòng")) {
+      suffix = " (TPP-CTY)";
+    } else if (br.includes("TPP-BNI") || br.includes("Bắc Ninh")) {
+      suffix = " (TPP-BNI)";
+    } else if (br.includes("TPP-LAN") || br.includes("Long An")) {
+      suffix = " (TPP-LAN)";
+    } else if (br.includes("TPP-314") || br.includes("314")) {
+      suffix = " (TPP-314)";
+    } else if (br.includes("BBM")) {
+      suffix = " (DNP-BBM)";
+    } else if (br.includes("BBC")) {
+      suffix = " (DNP-BBC)";
     }
     
-    return { ...u, branch: br, department: dept };
+    return { 
+      ...u, 
+      branch: br, 
+      department: suffix ? `${cleanDept}${suffix}` : cleanDept 
+    };
   });
 };
 
@@ -306,6 +374,17 @@ const sanitizeReports = (rawReports: QualityReport[]): QualityReport[] => {
   return rawReports.map(r => {
     let fac = r.factory || "";
     let dept = r.uploaderDepartment || "";
+    
+    // Convert any DNP-CTY to TPP-CTY for company TPP
+    if (fac.includes("DNP-CTY") || fac.includes("DNP-CT") || fac.includes("Văn Phòng") || fac.includes("CTY")) {
+      fac = "Văn Phòng Công Ty (TPP-CTY)";
+    } else if (fac.includes("Bắc Ninh") || fac.includes("BNI") || fac.includes("TPP-BNI")) {
+      fac = "Chi Nhánh Bắc Ninh (TPP-BNI)";
+    } else if (fac.includes("Long An") || fac.includes("LAN") || fac.includes("TPP-LAN")) {
+      fac = "Chi Nhánh Long An (TPP-LAN)";
+    } else if (fac.includes("314") || fac.includes("TPP-314")) {
+      fac = "Nhà máy 314 (TPP-314)";
+    }
     
     if (fac === "Nhà máy Đất Đỏ (BBM)" || fac === "Nhà máy BBM (DNP)" || fac === "Nhà máy BBM" || (fac.includes("BBM") && !fac.includes("DNP-BBM"))) {
       fac = "Nhà máy BBM (DNP-BBM)";
@@ -319,6 +398,24 @@ const sanitizeReports = (rawReports: QualityReport[]): QualityReport[] => {
     }
     if (dept.includes("(BBC)")) {
       dept = dept.replace("(BBC)", "(DNP-BBC)");
+    }
+    if (dept.includes("(DNP-CTY)") || dept.includes("(DNP-CT)") || dept.includes("(DNP-CTY)")) {
+      dept = dept.replace(/\(DNP-CTY\)/g, "(TPP-CTY)").replace(/\(DNP-CT\)/g, "(TPP-CTY)");
+    }
+    
+    // Enforce correct parentheses suffixes matching the factory/branch
+    if (fac === "Văn Phòng Công Ty (TPP-CTY)" && !dept.endsWith("(TPP-CTY)")) {
+      dept = dept.replace(/\s*\([^)]+\)$/, "").trim() + " (TPP-CTY)";
+    } else if (fac === "Chi Nhánh Bắc Ninh (TPP-BNI)" && !dept.endsWith("(TPP-BNI)")) {
+      dept = dept.replace(/\s*\([^)]+\)$/, "").trim() + " (TPP-BNI)";
+    } else if (fac === "Chi Nhánh Long An (TPP-LAN)" && !dept.endsWith("(TPP-LAN)")) {
+      dept = dept.replace(/\s*\([^)]+\)$/, "").trim() + " (TPP-LAN)";
+    } else if (fac === "Nhà máy 314 (TPP-314)" && !dept.endsWith("(TPP-314)")) {
+      dept = dept.replace(/\s*\([^)]+\)$/, "").trim() + " (TPP-314)";
+    } else if (fac === "Nhà máy BBM (DNP-BBM)" && !dept.endsWith("(DNP-BBM)")) {
+      dept = dept.replace(/\s*\([^)]+\)$/, "").trim() + " (DNP-BBM)";
+    } else if (fac === "Nhà máy BBC (DNP-BBC)" && !dept.endsWith("(DNP-BBC)")) {
+      dept = dept.replace(/\s*\([^)]+\)$/, "").trim() + " (DNP-BBC)";
     }
     
     return { ...r, factory: fac, uploaderDepartment: dept };
@@ -531,6 +628,16 @@ export default function App() {
     return safeParseJSON(saved, initialChatMessages);
   });
 
+  const [topics, setTopics] = useState<ForumTopic[]>(() => {
+    const saved = safeGetItem("4m1e1i_topics");
+    return safeParseJSON(saved, []);
+  });
+
+  const [replies, setReplies] = useState<ForumReply[]>(() => {
+    const saved = safeGetItem("4m1e1i_replies");
+    return safeParseJSON(saved, []);
+  });
+
   // Offline queue
   const [offlineQueue, setOfflineQueue] = useState<QualityReport[]>(() => {
     const saved = safeGetItem("4m1e1i_offline_queue");
@@ -719,8 +826,134 @@ export default function App() {
   }, [dbConnected]);
 
   const systemNotifications = React.useMemo(() => {
-    return generateNotifications(reports, deletedNotifIds);
-  }, [reports, deletedNotifIds]);
+    return generateNotifications(reports, deletedNotifIds, broadcasts);
+  }, [reports, deletedNotifIds, broadcasts]);
+
+  const prevBroadcastsRef = useRef<BroadcastNotice[]>([]);
+  const isFirstBroadcastsLoadRef = useRef(true);
+  
+  const prevReportsRef = useRef<QualityReport[]>([]);
+  const isFirstReportsLoadRef = useRef(true);
+
+  // Request browser notification permission on mount
+  useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      if (Notification.permission === "default") {
+        Notification.requestPermission().catch(console.error);
+      }
+    }
+  }, []);
+
+  // Listen and notify for broadcasts updates (real-time publish and delete)
+  useEffect(() => {
+    if (!broadcasts) return;
+
+    if (isFirstBroadcastsLoadRef.current) {
+      if (broadcasts.length > 0) {
+        prevBroadcastsRef.current = broadcasts;
+        isFirstBroadcastsLoadRef.current = false;
+      }
+      return;
+    }
+
+    const prev = prevBroadcastsRef.current;
+    
+    // Check for newly added broadcasts
+    const added = broadcasts.filter((b) => !prev.some((p) => p.id === b.id));
+    // Check for deleted broadcasts
+    const deleted = prev.filter((p) => !broadcasts.some((b) => b.id === p.id));
+
+    added.forEach((b) => {
+      // Send a browser HTML5 Notification
+      try {
+        if (typeof window !== "undefined" && "Notification" in window) {
+          if (Notification.permission === "granted") {
+            new Notification(`📢 BẢN TIN MỚI: ${b.type || "Ban quản trị"}`, {
+              body: `${b.sender}: "${b.content}"`,
+              icon: "/logo_meta.jpg"
+            });
+          }
+        }
+      } catch (err) {
+        console.warn("Lỗi thông báo trình duyệt:", err);
+      }
+      
+      // Send a UI Toast notification (only if not sent by current user to avoid duplicate toast)
+      const isMyNotice = currentUser && b.sender && b.sender.trim().toLowerCase() === currentUser.fullName.trim().toLowerCase();
+      if (!isMyNotice) {
+        showToast(`📢 BẢN TIN MỚI (${b.sender}): "${b.content.substring(0, 50)}..."`, "info");
+      }
+    });
+
+    deleted.forEach((b) => {
+      // Send browser notification
+      try {
+        if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+          new Notification("🗑️ ĐÃ GỠ BẢN TIN", {
+            body: `Bản tin của ${b.sender} đã được gỡ khỏi hệ thống.`,
+            icon: "/logo_meta.jpg"
+          });
+        }
+      } catch (err) {
+        console.warn(err);
+      }
+      
+      const isMyNotice = currentUser && b.sender && b.sender.trim().toLowerCase() === currentUser.fullName.trim().toLowerCase();
+      if (!isMyNotice) {
+        showToast(`🗑️ Đã gỡ bỏ bản tin của ${b.sender}!`, "warning");
+      }
+    });
+
+    prevBroadcastsRef.current = broadcasts;
+  }, [broadcasts, currentUser]);
+
+  // Listen and notify for quality reports updates (real-time new reports and deletes)
+  useEffect(() => {
+    if (!reports) return;
+
+    if (isFirstReportsLoadRef.current) {
+      if (reports.length > 0) {
+        prevReportsRef.current = reports;
+        isFirstReportsLoadRef.current = false;
+      }
+      return;
+    }
+
+    const prev = prevReportsRef.current;
+    
+    // Check for newly added reports
+    const added = reports.filter((r) => !prev.some((p) => p.id === r.id));
+    // Check for deleted reports
+    const deleted = prev.filter((p) => !reports.some((r) => r.id === p.id));
+
+    added.forEach((r) => {
+      const isMyReport = currentUser && r.uploaderName && r.uploaderName.trim().toLowerCase() === currentUser.fullName.trim().toLowerCase();
+      if (!isMyReport) {
+        // Send a browser HTML5 Notification
+        try {
+          if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+            new Notification(`📝 BÁO CÁO 4M1E1I MỚI`, {
+              body: `${r.uploaderName} tại ${r.factory}: "${r.content.substring(0, 60)}..."`,
+              icon: "/logo_meta.jpg"
+            });
+          }
+        } catch (err) {
+          console.warn(err);
+        }
+        
+        showToast(`📝 BÁO CÁO MỚI từ ${r.uploaderName} (${r.factory}): "${r.content.substring(0, 45)}..."`, "info");
+      }
+    });
+
+    deleted.forEach((r) => {
+      const isMyReport = currentUser && r.uploaderName && r.uploaderName.trim().toLowerCase() === currentUser.fullName.trim().toLowerCase();
+      if (!isMyReport) {
+        showToast(`🗑️ Báo cáo chất lượng tại ${r.factory} đã được xóa bởi quản lý!`, "warning");
+      }
+    });
+
+    prevReportsRef.current = reports;
+  }, [reports, currentUser]);
 
   // Sign up and login screens
   const [authScreen, setAuthScreen] = useState<"LOGIN" | "REGISTER">("LOGIN");
@@ -923,7 +1156,9 @@ export default function App() {
         fOrderImpls,
         fProducts,
         fMolds,
-        fConfigs
+        fConfigs,
+        fTopics,
+        fReplies
       ] = await Promise.all([
         fetchCollection<User>(COLLECTIONS.USERS),
         fetchCollection<QualityReport>(COLLECTIONS.REPORTS),
@@ -937,7 +1172,9 @@ export default function App() {
         fetchCollection<OrderImplementation>(COLLECTIONS.ORDER_IMPLEMENTATIONS),
         fetchCollection<CatalogProduct>(COLLECTIONS.PRODUCTS_CATALOG),
         fetchCollection<CatalogMold>(COLLECTIONS.MOLDS_CATALOG),
-        fetchCollection<any>("config")
+        fetchCollection<any>("config"),
+        fetchCollection<ForumTopic>(COLLECTIONS.TOPICS),
+        fetchCollection<ForumReply>(COLLECTIONS.TOPIC_REPLIES)
       ]);
 
       let finalUsers = fUsers.length > 0 ? fUsers : [...users];
@@ -967,6 +1204,10 @@ export default function App() {
           suffix = " (TPP-LAN)";
         } else if (branchName.includes("TPP-314") || branchName.includes("314")) {
           suffix = " (TPP-314)";
+        } else if (branchName.includes("BBM")) {
+          suffix = " (DNP-BBM)";
+        } else if (branchName.includes("BBC")) {
+          suffix = " (DNP-BBC)";
         }
         
         return {
@@ -1078,6 +1319,62 @@ export default function App() {
       setChats(fChats);
       setProductionRequests(fProdRequests);
 
+      if (fTopics && fTopics.length > 0) {
+        setTopics(fTopics);
+      } else {
+        setTopics([
+          {
+            id: "TOPIC-1",
+            title: "Góp ý cải tiến chức năng add hình ảnh",
+            description: "Chúng tôi đề xuất chức năng nén hình ảnh tự động trước khi tải lên để tiết kiệm dung lượng 3G/4G và giảm thời gian chờ khi úp hình báo cáo chất lượng.",
+            category: "Góp ý chức năng",
+            creatorName: "Lê Nhật Trường",
+            creatorPhone: "0901234567",
+            creatorRole: "NHÂN VIÊN",
+            timestamp: "14/07/26 10:30:00",
+            status: "OPEN",
+            isPinned: true
+          },
+          {
+            id: "TOPIC-2",
+            title: "Góp ý cải tiến thả tim nhận chỉ đạo",
+            description: "Nên thêm các trạng thái khác như \"Đã tiếp thu\" hoặc \"Đang xử lý\" khi tương tác thả tim để cấp dưới biết Ban Quản Trị đã nhận được thông tin.",
+            category: "Cải tiến 4M1E",
+            creatorName: "Nguyễn Văn A",
+            creatorPhone: "0987654321",
+            creatorRole: "NHÂN VIÊN",
+            timestamp: "14/07/26 09:15:00",
+            status: "PROCESSING",
+            isPinned: false
+          }
+        ]);
+      }
+
+      if (fReplies && fReplies.length > 0) {
+        setReplies(fReplies);
+      } else {
+        setReplies([
+          {
+            id: "REPLY-1-1",
+            topicId: "TOPIC-1",
+            senderName: "BAN QUẢN TRỊ 🛡️",
+            senderPhone: "BQT",
+            senderRole: "CHỦ ADMIN",
+            message: "Cảm ơn ý kiến đóng góp rất thực tế của anh Trường. Chúng tôi đã ghi nhận và đang phối hợp với đội ngũ IT để tích hợp thư viện nén ảnh tự động ngay trên trình duyệt.",
+            timestamp: "14/07/26 11:00:00"
+          },
+          {
+            id: "REPLY-2-1",
+            topicId: "TOPIC-2",
+            senderName: "BAN QUẢN TRỊ 🛡️",
+            senderPhone: "BQT",
+            senderRole: "CHỦ ADMIN",
+            message: "Ý kiến rất hay. Chúng tôi đang thiết kế lại phần tương tác để có nhiều biểu tượng phản hồi trực quan hơn.",
+            timestamp: "14/07/26 09:45:00"
+          }
+        ]);
+      }
+
       if (fRequestItems.length > 0) {
         const itemsMap: Record<string, any[]> = {};
         fRequestItems.forEach((x) => {
@@ -1184,6 +1481,34 @@ export default function App() {
       }
     );
 
+    const unsubscribeTopics = onSnapshot(
+      collection(db, COLLECTIONS.TOPICS),
+      (snapshot) => {
+        const list: ForumTopic[] = [];
+        snapshot.forEach((doc) => {
+          list.push(doc.data() as ForumTopic);
+        });
+        setTopics(list);
+      },
+      (error) => {
+        console.error("Lỗi đồng bộ forum topics thời gian thực:", error);
+      }
+    );
+
+    const unsubscribeReplies = onSnapshot(
+      collection(db, COLLECTIONS.TOPIC_REPLIES),
+      (snapshot) => {
+        const list: ForumReply[] = [];
+        snapshot.forEach((doc) => {
+          list.push(doc.data() as ForumReply);
+        });
+        setReplies(list);
+      },
+      (error) => {
+        console.error("Lỗi đồng bộ forum replies thời gian thực:", error);
+      }
+    );
+
     const unsubscribeConfigs = onSnapshot(
       collection(db, "config"),
       (snapshot) => {
@@ -1233,6 +1558,8 @@ export default function App() {
       unsubscribeReports();
       unsubscribeChats();
       unsubscribeBroadcasts();
+      unsubscribeTopics();
+      unsubscribeReplies();
       unsubscribeConfigs();
     };
   }, [dbConnected, dbLoading]);
@@ -1403,16 +1730,30 @@ export default function App() {
     const updatePresence = async () => {
       try {
         const now = Date.now();
+        let nextLogsToSave: number[] = [];
+
         // Cập nhật local state ngay lập tức để người dùng xem chính xác trạng thái của mình
         setUsers((prev) =>
-          prev.map((u) => (u.id === currentUser.id ? { ...u, lastActive: now } : u))
+          prev.map((u) => {
+            if (u.id === currentUser.id) {
+              const currentLogs = u.activeLogs || [];
+              const lastLog = currentLogs[currentLogs.length - 1];
+              // Ngưỡng 10 phút để ghi nhận một phiên/lượt ra vào mới
+              const shouldAddLog = !lastLog || (now - lastLog >= 10 * 60 * 1000);
+              const nextLogs = shouldAddLog ? [...currentLogs, now] : currentLogs;
+              nextLogsToSave = nextLogs;
+              return { ...u, lastActive: now, activeLogs: nextLogs };
+            }
+            return u;
+          })
         );
 
         if (dbConnected && !dbLoading) {
-          // Lưu TRÚC TIẾP định dạng chỉ cập nhật lastActive lên Firestore để tránh ghi đè làm thay đổi trạng thái phê duyệt (Active/Pending) thực tế của người dùng từ admin
+          // Lưu TRÚC TIẾP định dạng chỉ cập nhật lastActive và activeLogs lên Firestore để tránh ghi đè làm thay đổi trạng thái phê duyệt thực tế của người dùng từ admin
           if (currentUser.fullName && currentUser.phone) {
             await saveDocument(COLLECTIONS.USERS, currentUser.id, {
-              lastActive: now
+              lastActive: now,
+              activeLogs: nextLogsToSave
             });
           }
         }
@@ -1445,10 +1786,11 @@ export default function App() {
         if (typeof document !== "undefined" && document.visibilityState === "visible") {
           const latestUsers = await fetchCollection<User>(COLLECTIONS.USERS);
           if (latestUsers && latestUsers.length > 0) {
+            const sanitizedLatest = sanitizeUsers(latestUsers);
             setUsers((prev) => {
               // Đồng bộ toàn bộ các trường phân quyền (role, status, bypassApproval, canSpeciallyEditDelete) từ server
               return prev.map((u) => {
-                const fetched = latestUsers.find((lu) => lu.id === u.id);
+                const fetched = sanitizedLatest.find((lu) => lu.id === u.id);
                 if (fetched) {
                   return {
                     ...u,
@@ -1710,14 +2052,16 @@ export default function App() {
       company: regCompanyVal
     };
 
-    setUsers((prev) => [...prev, newUser]);
+    const sanitizedNew = sanitizeUsers([newUser])[0];
+
+    setUsers((prev) => [...prev, sanitizedNew]);
     
     if (dbConnected) {
-      saveDocument(COLLECTIONS.USERS, newUser.id, newUser).catch(console.error);
+      saveDocument(COLLECTIONS.USERS, sanitizedNew.id, sanitizedNew).catch(console.error);
     }
 
     // Keep user logged in under pending status, which displays Waiting landing screen with auto-polling
-    setCurrentUser(newUser);
+    setCurrentUser(sanitizedNew);
     setRegisterSuccessMsg("Đăng ký tài khoản thành công! Tài khoản của bạn đang chờ quản trị viên phê duyệt.");
 
     // Clear registration fields
@@ -1761,22 +2105,24 @@ export default function App() {
   };
 
   const handleAddUser = (user: User) => {
+    const sanitized = sanitizeUsers([user])[0];
     setUsers((prev) => {
-      if (prev.some((u) => u.id === user.id)) return prev;
-      return [...prev, user];
+      if (prev.some((u) => u.id === sanitized.id)) return prev;
+      return [...prev, sanitized];
     });
     if (dbConnected) {
-      saveDocument(COLLECTIONS.USERS, user.id, user).catch(console.error);
+      saveDocument(COLLECTIONS.USERS, sanitized.id, sanitized).catch(console.error);
     }
   };
 
   const handleUpdateUser = (updatedUser: User) => {
-    setUsers((prev) => prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)));
-    if (currentUser && currentUser.id === updatedUser.id) {
-      setCurrentUser(updatedUser);
+    const sanitized = sanitizeUsers([updatedUser])[0];
+    setUsers((prev) => prev.map((u) => (u.id === sanitized.id ? sanitized : u)));
+    if (currentUser && currentUser.id === sanitized.id) {
+      setCurrentUser(sanitized);
     }
     if (dbConnected) {
-      saveDocument(COLLECTIONS.USERS, updatedUser.id, updatedUser).catch(console.error);
+      saveDocument(COLLECTIONS.USERS, sanitized.id, sanitized).catch(console.error);
     }
   };
 
@@ -2140,8 +2486,100 @@ export default function App() {
     }
   };
 
+  const getFormattedTimestamp = (): string => {
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const year = String(now.getFullYear()).slice(-2);
+    const hrs = String(now.getHours()).padStart(2, '0');
+    const mns = String(now.getMinutes()).padStart(2, '0');
+    const scs = String(now.getSeconds()).padStart(2, '0');
+    return `${day}/${month}/${year} ${hrs}:${mns}:${scs}`;
+  };
+
+  // Forum Topic & Reply Actions
+  const handleAddForumTopic = (
+    title: string,
+    description: string,
+    category: ForumTopicCategory
+  ) => {
+    if (!currentUser) return;
+    const newTopic: ForumTopic = {
+      id: `TOPIC-${Date.now()}`,
+      title,
+      description,
+      category,
+      creatorName: currentUser.fullName,
+      creatorPhone: currentUser.phone,
+      creatorRole: currentUser.role,
+      timestamp: getFormattedTimestamp(),
+      status: "OPEN",
+      isPinned: false
+    };
+    setTopics((prev) => [...prev, newTopic]);
+    if (dbConnected) {
+      saveDocument(COLLECTIONS.TOPICS, newTopic.id, newTopic).catch((err) => {
+        console.error("Lỗi khi tạo chủ đề lên Firestore:", err);
+      });
+    }
+    showToast("Đã tạo chủ đề trao đổi mới!", "success");
+  };
+
+  const handleAddForumReply = (topicId: string, message: string) => {
+    if (!currentUser) return;
+    const newReply: ForumReply = {
+      id: `REPLY-${Date.now()}`,
+      topicId,
+      senderName: currentUser.fullName,
+      senderPhone: currentUser.phone,
+      senderRole: currentUser.role,
+      message,
+      timestamp: getFormattedTimestamp()
+    };
+    setReplies((prev) => [...prev, newReply]);
+    if (dbConnected) {
+      saveDocument(COLLECTIONS.TOPIC_REPLIES, newReply.id, newReply).catch((err) => {
+        console.error("Lỗi khi gửi phản hồi lên Firestore:", err);
+      });
+    }
+  };
+
+  const handleUpdateForumTopicStatus = (topicId: string, status: ForumTopicStatus) => {
+    setTopics((prev) => prev.map((t) => {
+      if (t.id !== topicId) return t;
+      const updated = { ...t, status };
+      if (dbConnected) {
+        saveDocument(COLLECTIONS.TOPICS, updated.id, updated).catch((err) => {
+          console.error("Lỗi khi cập nhật trạng thái chủ đề:", err);
+        });
+      }
+      return updated;
+    }));
+    showToast("Đã cập nhật trạng thái chủ đề!", "success");
+  };
+
+  const handleToggleForumTopicPin = (topicId: string) => {
+    setTopics((prev) => prev.map((t) => {
+      if (t.id !== topicId) return t;
+      const updated = { ...t, isPinned: !t.isPinned };
+      if (dbConnected) {
+        saveDocument(COLLECTIONS.TOPICS, updated.id, updated).catch((err) => {
+          console.error("Lỗi khi ghim/bỏ ghim chủ đề:", err);
+        });
+      }
+      return updated;
+    }));
+    showToast("Đã cập nhật trạng thái ghim chủ đề!", "success");
+  };
+
   // Forum message
-  const handleAddChatMessage = (msg: string, reportRefId?: string) => {
+  const handleAddChatMessage = (
+    msg: string,
+    reportRefId?: string,
+    threadId?: string,
+    threadTitle?: string,
+    threadCategory?: string
+  ) => {
     if (!currentUser) return;
     const newChat: ChatMessage = {
       id: `CHAT-${Date.now()}`,
@@ -2150,7 +2588,10 @@ export default function App() {
       senderPhone: currentUser.phone,
       message: msg,
       timestamp: new Date().toLocaleString("vi-VN"),
-      ...(reportRefId ? { reportRefId } : {})
+      ...(reportRefId ? { reportRefId } : {}),
+      ...(threadId ? { threadId } : {}),
+      ...(threadTitle ? { threadTitle } : {}),
+      ...(threadCategory ? { threadCategory } : {})
     };
     setChats((prev) => [...prev, newChat]);
     if (dbConnected) {
@@ -3212,6 +3653,12 @@ export default function App() {
             systemNotifications={systemNotifications}
             readNotifIds={readNotifIds}
             setReadNotifIds={setReadNotifIds}
+            topics={topics}
+            replies={replies}
+            onAddForumTopic={handleAddForumTopic}
+            onAddForumReply={handleAddForumReply}
+            onUpdateForumTopicStatus={handleUpdateForumTopicStatus}
+            onToggleForumTopicPin={handleToggleForumTopicPin}
           />
         )}
 
@@ -3317,6 +3764,12 @@ export default function App() {
             systemNotifications={systemNotifications}
             readNotifIds={readNotifIds}
             setReadNotifIds={setReadNotifIds}
+            topics={topics}
+            replies={replies}
+            onAddForumTopic={handleAddForumTopic}
+            onAddForumReply={handleAddForumReply}
+            onUpdateForumTopicStatus={handleUpdateForumTopicStatus}
+            onToggleForumTopicPin={handleToggleForumTopicPin}
           />
         )}
 
@@ -3526,6 +3979,12 @@ export default function App() {
                 systemNotifications={systemNotifications}
                 readNotifIds={readNotifIds}
                 setReadNotifIds={setReadNotifIds}
+                topics={topics}
+                replies={replies}
+                onAddForumTopic={handleAddForumTopic}
+                onAddForumReply={handleAddForumReply}
+                onUpdateForumTopicStatus={handleUpdateForumTopicStatus}
+                onToggleForumTopicPin={handleToggleForumTopicPin}
               />
             )}
           </div>
@@ -3585,6 +4044,12 @@ export default function App() {
                 systemNotifications={systemNotifications}
                 readNotifIds={readNotifIds}
                 setReadNotifIds={setReadNotifIds}
+                topics={topics}
+                replies={replies}
+                onAddForumTopic={handleAddForumTopic}
+                onAddForumReply={handleAddForumReply}
+                onUpdateForumTopicStatus={handleUpdateForumTopicStatus}
+                onToggleForumTopicPin={handleToggleForumTopicPin}
               />
             )}
           </div>

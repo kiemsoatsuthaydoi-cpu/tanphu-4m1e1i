@@ -162,3 +162,53 @@ export async function processImage(
     qualityUsed: bestQuality
   };
 }
+
+/**
+ * Compresses an uploaded avatar image to a maximum dimension of 200x200 pixels
+ * and converts to JPEG at 0.75 quality to achieve extremely small file sizes (~10KB-20KB).
+ */
+export async function compressAvatar(file: File): Promise<string> {
+  const img = await loadImage(file);
+  
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    throw new Error("Không khởi tạo được bộ lọc canvas 2D.");
+  }
+
+  // Create a 200x200 square crop/resize of the avatar
+  const size = 200;
+  canvas.width = size;
+  canvas.height = size;
+
+  const srcWidth = img.naturalWidth || img.width;
+  const srcHeight = img.naturalHeight || img.height;
+
+  // Center crop
+  let startX = 0;
+  let startY = 0;
+  let drawSize = srcWidth;
+
+  if (srcWidth > srcHeight) {
+    startX = (srcWidth - srcHeight) / 2;
+    drawSize = srcHeight;
+  } else {
+    startY = (srcHeight - srcWidth) / 2;
+    drawSize = srcWidth;
+  }
+
+  ctx.drawImage(
+    img,
+    startX,
+    startY,
+    drawSize,
+    drawSize,
+    0,
+    0,
+    size,
+    size
+  );
+
+  return canvas.toDataURL("image/jpeg", 0.75);
+}
+

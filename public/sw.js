@@ -75,3 +75,28 @@ self.addEventListener('message', (event) => {
     }
   }
 });
+
+// Handle notification click to focus application window and clear badge
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  
+  if (self.registration && self.registration.clearBadge) {
+    self.registration.clearBadge().catch((err) => console.error('Error clearing badge on click:', err));
+  } else if (navigator && navigator.clearAppBadge) {
+    navigator.clearAppBadge().catch((err) => console.error('Error clearing badge on click:', err));
+  }
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow('/');
+      }
+    })
+  );
+});
+

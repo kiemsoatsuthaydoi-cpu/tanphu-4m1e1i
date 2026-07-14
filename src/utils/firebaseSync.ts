@@ -29,7 +29,9 @@ export const COLLECTIONS = {
   PRODUCTION_REQUEST_ITEMS: "productionRequestItems",
   ORDER_IMPLEMENTATIONS: "orderImplementations",
   PRODUCTS_CATALOG: "productsCatalog",
-  MOLDS_CATALOG: "moldsCatalog"
+  MOLDS_CATALOG: "moldsCatalog",
+  TOPICS: "forum_topics",
+  TOPIC_REPLIES: "forum_replies"
 };
 
 /**
@@ -155,6 +157,66 @@ export async function seedFirestoreIfNeeded(): Promise<boolean> {
       initialOrderImplementations.forEach((oi) => {
         const docRef = doc(db, COLLECTIONS.ORDER_IMPLEMENTATIONS, oi.id);
         batch.set(docRef, oi);
+      });
+
+      // Seed initial forum topics
+      const initialTopics = [
+        {
+          id: "TOPIC-1",
+          title: "Góp ý cải tiến chức năng add hình ảnh",
+          description: "Chúng tôi đề xuất chức năng nén hình ảnh tự động trước khi tải lên để tiết kiệm dung lượng 3G/4G và giảm thời gian chờ khi úp hình báo cáo chất lượng.",
+          category: "Góp ý chức năng",
+          creatorName: "Lê Nhật Trường",
+          creatorPhone: "0901234567",
+          creatorRole: "NHÂN VIÊN",
+          timestamp: "14/07/26 10:30:00",
+          status: "OPEN",
+          isPinned: true
+        },
+        {
+          id: "TOPIC-2",
+          title: "Góp ý cải tiến thả tim nhận chỉ đạo",
+          description: "Nên thêm các trạng thái khác như \"Đã tiếp thu\" hoặc \"Đang xử lý\" khi tương tác thả tim để cấp dưới biết Ban Quản Trị đã nhận được thông tin.",
+          category: "Cải tiến 4M1E",
+          creatorName: "Nguyễn Văn A",
+          creatorPhone: "0987654321",
+          creatorRole: "NHÂN VIÊN",
+          timestamp: "14/07/26 09:15:00",
+          status: "PROCESSING",
+          isPinned: false
+        }
+      ];
+
+      initialTopics.forEach((t) => {
+        const docRef = doc(db, COLLECTIONS.TOPICS, t.id);
+        batch.set(docRef, t);
+      });
+
+      // Seed initial forum replies
+      const initialReplies = [
+        {
+          id: "REPLY-1-1",
+          topicId: "TOPIC-1",
+          senderName: "BAN QUẢN TRỊ 🛡️",
+          senderPhone: "BQT",
+          senderRole: "CHỦ ADMIN",
+          message: "Cảm ơn ý kiến đóng góp rất thực tế của anh Trường. Chúng tôi đã ghi nhận và đang phối hợp với đội ngũ IT để tích hợp thư viện nén ảnh tự động ngay trên trình duyệt.",
+          timestamp: "14/07/26 11:00:00"
+        },
+        {
+          id: "REPLY-2-1",
+          topicId: "TOPIC-2",
+          senderName: "BAN QUẢN TRỊ 🛡️",
+          senderPhone: "BQT",
+          senderRole: "CHỦ ADMIN",
+          message: "Ý kiến rất hay. Chúng tôi đang thiết kế lại phần tương tác để có nhiều biểu tượng phản hồi trực quan hơn.",
+          timestamp: "14/07/26 09:45:00"
+        }
+      ];
+
+      initialReplies.forEach((r) => {
+        const docRef = doc(db, COLLECTIONS.TOPIC_REPLIES, r.id);
+        batch.set(docRef, r);
       });
 
       await batch.commit();

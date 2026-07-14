@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useRef } from "react";
 import html2canvas from "html2canvas";
 import { Search, RotateCw, RotateCcw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp } from "lucide-react";
-import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice } from "../types";
+import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
 import { QRCodeSVG } from "qrcode.react";
 import { isSameBranchOrFactory, formatNameCapitalized } from "../utils/branchHelpers";
 import { AutoImageSlider } from "./AutoImageSlider";
 import FirebaseQuotaMonitor from "./FirebaseQuotaMonitor";
+import StatisticsDashboard from "./StatisticsDashboard";
+import MobileForumView from "./MobileForumView";
 
 function convertModernColorsToRgb(cssValue: string): string {
   if (!cssValue || typeof cssValue !== "string") return cssValue;
@@ -174,7 +176,13 @@ interface MobileFrameProps {
   companies?: Company[];
   onSwitchToDesktop?: () => void;
   chats?: ChatMessage[];
-  onAddChatMessage?: (msg: string, reportRefId?: string) => void;
+  onAddChatMessage?: (
+    msg: string,
+    reportRefId?: string,
+    threadId?: string,
+    threadTitle?: string,
+    threadCategory?: string
+  ) => void;
   onUpdateUserStatus?: (id: string, status: UserStatus) => void;
   onUpdateUserRole?: (id: string, role: UserRole) => void;
   isNativeScrollActive?: boolean;
@@ -189,6 +197,14 @@ interface MobileFrameProps {
   systemNotifications?: AppNotification[];
   readNotifIds?: string[];
   setReadNotifIds?: React.Dispatch<React.SetStateAction<string[]>>;
+
+  // Forum props
+  topics?: ForumTopic[];
+  replies?: ForumReply[];
+  onAddForumTopic?: (title: string, description: string, category: ForumTopicCategory) => void;
+  onAddForumReply?: (topicId: string, message: string) => void;
+  onUpdateForumTopicStatus?: (topicId: string, status: ForumTopicStatus) => void;
+  onToggleForumTopicPin?: (topicId: string) => void;
 }
 
 function formatTimestampToDMY(tsStr: string): string {
@@ -305,6 +321,10 @@ interface MobileApprovalViewProps {
   onUpdateUserStatus?: (id: string, status: UserStatus) => void;
   onUpdateUserRole?: (id: string, role: UserRole) => void;
   showToast: (msg: string) => void;
+  scrollRef?: React.RefObject<HTMLDivElement>;
+  onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
+  onGoHome?: () => void;
+  scrollTop?: number;
 }
 
 function MobileApprovalView({
@@ -313,7 +333,11 @@ function MobileApprovalView({
   theme,
   onUpdateUserStatus,
   onUpdateUserRole,
-  showToast
+  showToast,
+  scrollRef,
+  onScroll,
+  onGoHome,
+  scrollTop
 }: MobileApprovalViewProps) {
   const [innerSearch, setInnerSearch] = useState("");
   const [subTab, setSubTab] = useState<"CHO_DUYET" | "TAT_CA">("CHO_DUYET");
@@ -375,7 +399,11 @@ function MobileApprovalView({
     });
 
   return (
-    <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-slate-50 relative select-none">
+    <div 
+      ref={scrollRef}
+      onScroll={onScroll}
+      className="flex-1 overflow-y-auto p-3 space-y-3 bg-slate-50 relative select-none pheduyet-scroll-container"
+    >
       <div className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-sm space-y-1">
         <div className="flex items-center gap-2">
           <div className={`p-1.5 rounded-xl text-white ${theme.bg} flex items-center justify-center`}>
@@ -508,9 +536,18 @@ function MobileApprovalView({
                 }`}
               >
                 <div className="flex items-start gap-2.5">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-extrabold text-xs shrink-0 uppercase select-none ${avatarBg}`}>
-                    {u.fullName.substring(0, 1) || "U"}
-                  </div>
+                  {u.avatar ? (
+                    <img 
+                      src={u.avatar} 
+                      alt="User Avatar" 
+                      className="w-8 h-8 rounded-full object-cover shrink-0 select-none border border-slate-200"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-extrabold text-xs shrink-0 uppercase select-none ${avatarBg}`}>
+                      {u.fullName.substring(0, 1) || "U"}
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0 font-sans text-left">
                     <div className="flex items-center gap-1.5">
                       <span translate="no" className="notranslate font-black text-slate-800 text-[11px] block truncate leading-tight">
@@ -641,6 +678,29 @@ function MobileApprovalView({
           })
         )}
       </div>
+
+      {/* Floating HOME Button on Approval Page */}
+      <button
+        id="float-home-approval"
+        type="button"
+        onClick={() => onGoHome && onGoHome()}
+        className="absolute bottom-20 right-5 w-10 h-10 bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-all z-20 cursor-pointer border-none"
+        title="Trở về Trang Home"
+      >
+        <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
+      </button>
+
+      {/* Floating Scroll to Top Button on Approval Page */}
+      {scrollTop !== undefined && scrollTop > 100 && (
+        <button
+          type="button"
+          onClick={() => scrollRef?.current?.scrollTo({ top: 0, behavior: "smooth" })}
+          className="absolute bottom-32 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-20 cursor-pointer"
+          title="Lên đầu trang"
+        >
+          <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />
+        </button>
+      )}
     </div>
   );
 }
@@ -761,7 +821,15 @@ export default function MobileFrame({
   onDeleteNotification,
   systemNotifications,
   readNotifIds: readNotifIdsProp,
-  setReadNotifIds: setReadNotifIdsProp
+  setReadNotifIds: setReadNotifIdsProp,
+
+  // Forum props
+  topics = [],
+  replies = [],
+  onAddForumTopic,
+  onAddForumReply,
+  onUpdateForumTopicStatus,
+  onToggleForumTopicPin
 }: MobileFrameProps) {
   const isRealMobile = typeof window !== "undefined" && (
     window.innerWidth < 1024 || 
@@ -888,7 +956,7 @@ export default function MobileFrame({
   };
 
   // Tính số lượng người online thực tế kết hợp giả lập thành viên hoạt động
-  const getOnlineUsers = () => {
+  const getOnlineUsers = (): (User & { isOnlineSimulated: boolean; lastActiveTime?: number })[] => {
     if (!users || users.length === 0) {
       return [];
     }
@@ -1075,7 +1143,16 @@ export default function MobileFrame({
     return `${weekNo}/${utcDate.getUTCFullYear()}`;
   };
 
-  const [activeBottomTab, setActiveBottomTab] = useState<"BAO_CAO" | "PHAN_TICH" | "PHE_DUYET">("BAO_CAO");
+  const [activeBottomTab, setActiveBottomTab] = useState<"BAO_CAO" | "PHAN_TICH" | "PHE_DUYET" | "TRAO_ĐỔI">("BAO_CAO");
+  const [selectedMobileTopicId, setSelectedMobileTopicId] = useState<string | null>(null);
+  const [isMobileCreatingTopic, setIsMobileCreatingTopic] = useState(false);
+  const [mobileNewTopicTitle, setMobileNewTopicTitle] = useState("");
+  const [mobileNewTopicDesc, setMobileNewTopicDesc] = useState("");
+  const [mobileNewTopicCategory, setMobileNewTopicCategory] = useState<ForumTopicCategory>("Góp ý chức năng");
+  const [mobileForumReplyMessage, setMobileForumReplyMessage] = useState("");
+  const [mobileForumSearchQuery, setMobileForumSearchQuery] = useState("");
+  const [mobileForumCategoryFilter, setMobileForumCategoryFilter] = useState<string>("ALL");
+  const [mobileStatsSubTab, setMobileStatsSubTab] = useState<"NHAN_SU" | "CHAT_LUONG">("NHAN_SU");
   const [mobileFeedSubTab, setMobileFeedSubTab] = useState<"FEED" | "PROPOSAL">("FEED");
   const [showTrash, setShowTrash] = useState(false);
   const [mobileBranchFilter, setMobileBranchFilter] = useState<string>("Tất cả");
@@ -1135,6 +1212,18 @@ export default function MobileFrame({
   const [showAcksListReport, setShowAcksListReport] = useState<QualityReport | null>(null);
   const lastScrollTopRef = useRef(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const phanTichScrollRef = useRef<HTMLDivElement>(null);
+  const approvalScrollRef = useRef<HTMLDivElement>(null);
+  const trashScrollRef = useRef<HTMLDivElement>(null);
+  const notifScrollRef = useRef<HTMLDivElement>(null);
+  const onlineScrollRef = useRef<HTMLDivElement>(null);
+
+  const [phanTichScrollTop, setPhanTichScrollTop] = useState(0);
+  const [approvalScrollTop, setApprovalScrollTop] = useState(0);
+  const [trashScrollTop, setTrashScrollTop] = useState(0);
+  const [notifScrollTop, setNotifScrollTop] = useState(0);
+  const [onlineScrollTop, setOnlineScrollTop] = useState(0);
+
   const viewportRef = useRef<HTMLDivElement>(null);
   const lastTouchTimeRef = useRef(0);
   const secondaryIconsRef = useRef<HTMLDivElement>(null);
@@ -2059,90 +2148,149 @@ App Link: ${window.location.origin}`;
   const unreadNotifications = notifications.filter((n) => !readNotifIds.includes(n.id));
   const unreadCount = unreadNotifications.length;
 
-  // Web Badging API - Sync home screen badge on real device / PWA with unreadCount
-  useEffect(() => {
-    if (typeof navigator !== "undefined") {
-      try {
-        if ("setAppBadge" in navigator) {
-          if (unreadCount > 0) {
-            const p = navigator.setAppBadge(unreadCount);
-            if (p && typeof p.catch === "function") {
-              p.catch((err) => {
-                console.warn("Lỗi đặt App Badge (async):", err);
-              });
-            }
-          } else {
-            const p = navigator.clearAppBadge();
-            if (p && typeof p.catch === "function") {
-              p.catch((err) => {
-                console.warn("Lỗi xóa App Badge (async):", err);
-              });
-            }
-          }
-        }
-      } catch (err) {
-        console.warn("Lỗi gọi Badging API (sync):", err);
-      }
-      
-      try {
-        // Fallback message passing to service worker scope if active
-        if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-          navigator.serviceWorker.controller.postMessage({
-            type: unreadCount > 0 ? "SET_BADGE" : "CLEAR_BADGE",
-            count: unreadCount
-          });
-        }
-      } catch (err) {
-        console.warn("Lỗi gửi tin nhắn cho Service Worker:", err);
-      }
-    }
-  }, [unreadCount]);
-
+  // Web Badging API and System Notification Drawer Sync Hook
   const lastUnreadCountRef = useRef(unreadCount);
 
-  // Play synthesized bell chime when unreadCount increases (new notification) and show real OS notification
   useEffect(() => {
-    if (unreadCount > lastUnreadCountRef.current) {
-      playNotificationSound();
+    if (typeof navigator === "undefined") return;
 
-      // Trigger a real System Notification to place an active icon in the notification drawer (essential for Android Home Screen Badges)
-      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-        try {
-          const newestNotif = unreadNotifications[0]; // unreadNotifications contains unread items, with 0 being the latest
-          if (newestNotif) {
-            const notifTitle = newestNotif.title || "META ANDON";
-            const notifBody = newestNotif.description || "Có bản tin cập nhật mới.";
-            
-            if (navigator.serviceWorker && navigator.serviceWorker.ready) {
-              navigator.serviceWorker.ready.then((registration) => {
-                registration.showNotification(notifTitle, {
-                  body: notifBody,
-                  icon: "/logo_meta.jpg",
-                  badge: "/logo_meta.jpg",
-                  tag: "meta-andon-notif",
-                  renotify: true
-                } as any);
-              }).catch(() => {
-                // Fallback to standard web notification
-                new Notification(notifTitle, {
-                  body: notifBody,
-                  icon: "/logo_meta.jpg",
-                  tag: "meta-andon-notif"
-                });
-              });
-            } else {
-              new Notification(notifTitle, {
-                body: notifBody,
-                icon: "/logo_meta.jpg",
-                tag: "meta-andon-notif"
-              });
-            }
-          }
-        } catch (err) {
-          console.warn("Lỗi kích hoạt hiển thị thông báo hệ thống:", err);
+    // 1. Sync Standard Web Badging API (if supported by OS / browser / PWA launcher)
+    try {
+      if ("setAppBadge" in navigator) {
+        if (unreadCount > 0) {
+          navigator.setAppBadge(unreadCount).catch((err) => {
+            console.warn("Lỗi đặt App Badge:", err);
+          });
+        } else {
+          navigator.clearAppBadge().catch((err) => {
+            console.warn("Lỗi xóa App Badge:", err);
+          });
         }
       }
+    } catch (err) {
+      console.warn("Lỗi gọi Badging API:", err);
     }
+
+    // 2. Post Message fallback to Service Worker context
+    try {
+      if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: unreadCount > 0 ? "SET_BADGE" : "CLEAR_BADGE",
+          count: unreadCount
+        });
+      }
+    } catch (err) {
+      console.warn("Lỗi gửi tin nhắn cho Service Worker:", err);
+    }
+
+    // 3. Android Home Screen Badge Integration: Sync Status Bar Notification Drawer with current unreadCount
+    // On Android, the home screen launcher badge count is directly derived from the number of active notifications 
+    // from the app currently present in the system notification drawer (Notification Tray).
+    // To display a badge number exactly matching unreadCount, we must maintain exactly unreadCount active, individual notifications in the drawer!
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+      try {
+        if (unreadCount === 0) {
+          // Clear active status bar notifications to ensure Android launcher clears icon badge immediately
+          if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+            navigator.serviceWorker.ready.then((registration) => {
+              if (registration.getNotifications) {
+                registration.getNotifications().then((notifications) => {
+                  notifications.forEach((notification) => {
+                    notification.close();
+                  });
+                });
+              }
+            }).catch(console.warn);
+          }
+        } else {
+          // Sync existing active notifications with unread ones
+          if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+            navigator.serviceWorker.ready.then((registration) => {
+              if (registration.getNotifications) {
+                registration.getNotifications().then((activeNotifications) => {
+                  // Keep track of which IDs already have notifications shown
+                  const shownIds = new Set<string>();
+                  
+                  // 1. Close any notification that is no longer in unreadNotifications
+                  activeNotifications.forEach((notification) => {
+                    const tag = notification.tag || "";
+                    if (tag.startsWith("meta-andon-notif-")) {
+                      const notifId = tag.replace("meta-andon-notif-", "");
+                      const isStillUnread = unreadNotifications.some((un) => un.id === notifId);
+                      if (!isStillUnread) {
+                        notification.close();
+                      } else {
+                        shownIds.add(notifId);
+                      }
+                    } else if (tag === "meta-andon-notif") {
+                      // Close legacy single summary notification
+                      notification.close();
+                    }
+                  });
+
+                  // Check if this is an increase in unread notifications to play chime and vibrate
+                  const isIncrease = unreadCount > lastUnreadCountRef.current;
+                  if (isIncrease) {
+                    playNotificationSound();
+                  }
+
+                  // 2. Show notifications for unread items that aren't shown yet
+                  // Maximize limit to 10 to avoid bloating the status bar, while reflecting the badge perfectly
+                  const listToShow = unreadNotifications.slice(0, 10);
+                  listToShow.forEach((notif, index) => {
+                    const notifId = notif.id;
+                    const tag = `meta-andon-notif-${notifId}`;
+                    const isNewest = index === 0; // unreadNotifications is sorted descending by date
+                    
+                    if (!shownIds.has(notifId) || (isNewest && isIncrease)) {
+                      const displayTitle = `🔔 META ANDON - ${notif.title || "Thông báo mới"}`;
+                      const displayBody = notif.description || "Có bản tin cập nhật mới.";
+                      
+                      // For newest item when unreadCount increases: play sound/vibrate, others are silent
+                      const triggerAlert = isNewest && isIncrease;
+
+                      registration.showNotification(displayTitle, {
+                        body: displayBody,
+                        icon: "/logo_meta.jpg",
+                        badge: "/logo_meta.jpg",
+                        tag: tag,
+                        renotify: triggerAlert,
+                        silent: !triggerAlert,
+                        vibrate: triggerAlert ? [200, 100, 200] : undefined
+                      } as any).catch((err) => {
+                        console.warn("Lỗi Service Worker showNotification:", err);
+                        // Fallback to standard Notification API
+                        new Notification(displayTitle, {
+                          body: displayBody,
+                          icon: "/logo_meta.jpg",
+                          tag: tag,
+                          silent: !triggerAlert
+                        } as any);
+                      });
+                    }
+                  });
+                });
+              }
+            }).catch(console.warn);
+          } else {
+            // Service Worker not ready, fallback to traditional Notifications with badge summary
+            const newestNotif = unreadNotifications[0];
+            if (newestNotif) {
+              const displayTitle = `🔔 [${unreadCount}] META ANDON - ${newestNotif.title}`;
+              new Notification(displayTitle, {
+                body: newestNotif.description,
+                icon: "/logo_meta.jpg",
+                tag: "meta-andon-notif-fallback",
+                silent: !(unreadCount > lastUnreadCountRef.current)
+              } as any);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Lỗi đồng bộ thông báo Android:", err);
+      }
+    }
+
     lastUnreadCountRef.current = unreadCount;
   }, [unreadCount, unreadNotifications]);
 
@@ -2753,7 +2901,11 @@ App Link: ${window.location.origin}`;
           />
         </div>
       ) : showTrash ? (
-        <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-slate-50 relative">
+        <div 
+          ref={trashScrollRef}
+          onScroll={(e) => setTrashScrollTop(e.currentTarget.scrollTop)}
+          className="flex-1 overflow-y-auto p-3 space-y-3 bg-slate-50 relative trash-scroll-container"
+        >
           {/* Trash Header Panel */}
           <div className="bg-slate-900 text-white rounded-xl p-3 shadow-md border-b-4 border-rose-500">
             <div className="flex items-center justify-between mb-1.5">
@@ -2853,21 +3005,58 @@ App Link: ${window.location.origin}`;
           )}
         </div>
       ) : activeBottomTab === "PHAN_TICH" ? (
-        <div className="flex-1 p-4 bg-slate-50 space-y-4 select-none overflow-y-auto">
-          {/* Header Analysis info with custom icon */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+        <div 
+          ref={phanTichScrollRef}
+          onScroll={(e) => setPhanTichScrollTop(e.currentTarget.scrollTop)}
+          className="flex-1 p-4 bg-slate-50 space-y-4 select-none overflow-y-auto phantich-scroll-container"
+        >
+          {/* Header Analysis info with custom icon & switcher */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3.5">
             <div className="flex items-center gap-2 mb-1.5 flex-wrap">
               <div className={`p-1.5 rounded-xl text-white ${theme.bg} flex items-center justify-center`}>
                 <BarChart2 className="w-4 h-4 text-white" />
               </div>
               <h2 className={`text-xs font-black tracking-tight ${theme.text}`}>
-                <T><span translate="no" className="notranslate">Phân Tích Chất Lượng 4M1E1I</span></T>
+                <T><span translate="no" className="notranslate">Báo Cáo Thống Kê & Phân Tích</span></T>
               </h2>
             </div>
             <p className="text-[10px] text-slate-500 leading-normal">
-              <T><span translate="no" className="notranslate">Theo dõi trực quan phân bổ lỗi Không Phù Hợp (KPH) & Điểm Sáng chất lượng (DSA) trên toàn bộ hệ thống Tân Phú.</span></T>
+              <T><span translate="no" className="notranslate">Theo dõi trực quan trạng thái hoạt động của nhân sự, biểu đồ chất lượng 4M1E1I, và cảnh báo sai sót.</span></T>
             </p>
+
+            {/* Sub-tab Switcher matching PWA mobile styles */}
+            <div className="flex bg-slate-100 p-1 rounded-xl text-[10px] font-black select-none border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setMobileStatsSubTab("NHAN_SU")}
+                className={`flex-1 py-2.5 rounded-lg transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 border-none ${
+                  mobileStatsSubTab === "NHAN_SU"
+                    ? "bg-[#1d4ed8] text-white shadow-xs font-extrabold"
+                    : "text-slate-600 hover:text-slate-800 bg-transparent"
+                }`}
+              >
+                <span>👥</span>
+                <T><span translate="no" className="notranslate">NHÂN SỰ ONLINE</span></T>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileStatsSubTab("CHAT_LUONG")}
+                className={`flex-1 py-2.5 rounded-lg transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 border-none ${
+                  mobileStatsSubTab === "CHAT_LUONG"
+                    ? "bg-[#1d4ed8] text-white shadow-xs font-extrabold"
+                    : "text-slate-600 hover:text-slate-800 bg-transparent"
+                }`}
+              >
+                <span>📊</span>
+                <T><span translate="no" className="notranslate">BIỂU ĐỒ CHẤT LƯỢNG</span></T>
+              </button>
+            </div>
           </div>
+
+          {mobileStatsSubTab === "NHAN_SU" ? (
+            <StatisticsDashboard users={users} branches={branches} />
+          ) : (
+            <>
 
           {/* Combined Filters Panel for chi nhánh and date ranges */}
           <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-6xs space-y-2.5">
@@ -3120,6 +3309,33 @@ App Link: ${window.location.origin}`;
               </>
             );
           })()}
+            </>
+          )}
+
+          {/* Floating HOME Button on Analytics Page */}
+          <button
+            id="float-home-analytics"
+            type="button"
+            onClick={() => {
+              setActiveBottomTab("BAO_CAO");
+            }}
+            className="absolute bottom-20 right-5 w-10 h-10 bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-all z-20 cursor-pointer border-none"
+            title="Trở về Trang Home"
+          >
+            <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
+          </button>
+
+          {/* Floating Scroll to Top Button on Analytics Page */}
+          {phanTichScrollTop > 100 && (
+            <button
+              type="button"
+              onClick={() => phanTichScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
+              className="absolute bottom-32 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-20 cursor-pointer"
+              title="Lên đầu trang"
+            >
+              <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />
+            </button>
+          )}
         </div>
       ) : activeBottomTab === "PHE_DUYET" ? (
         <MobileApprovalView
@@ -3129,6 +3345,22 @@ App Link: ${window.location.origin}`;
           onUpdateUserStatus={onUpdateUserStatus}
           onUpdateUserRole={onUpdateUserRole}
           showToast={showToast}
+          scrollRef={approvalScrollRef}
+          onScroll={(e) => setApprovalScrollTop(e.currentTarget.scrollTop)}
+          onGoHome={() => setActiveBottomTab("BAO_CAO")}
+          scrollTop={approvalScrollTop}
+        />
+      ) : activeBottomTab === "TRAO_ĐỔI" ? (
+        <MobileForumView
+          topics={topics}
+          replies={replies}
+          currentUser={currentUser}
+          onAddForumTopic={onAddForumTopic}
+          onAddForumReply={onAddForumReply}
+          onUpdateForumTopicStatus={onUpdateForumTopicStatus}
+          onToggleForumTopicPin={onToggleForumTopicPin}
+          theme={theme}
+          onGoHome={() => setActiveBottomTab("BAO_CAO")}
         />
       ) : (
         <>
@@ -4456,8 +4688,20 @@ App Link: ${window.location.origin}`;
         </button>
       )}
 
+      {/* Scroll to Top Floating Button on Trash page */}
+      {showTrash && trashScrollTop > 100 && (
+        <button
+          type="button"
+          onClick={() => trashScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
+          className="absolute bottom-32 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-50 cursor-pointer"
+          title="Lên đầu trang"
+        >
+          <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />
+        </button>
+      )}
+
       {/* Modern bottom navigation tab bar containing Phân Tích & Báo Cáo */}
-      <div id="mobile-bottom-nav" className={`bg-slate-50 border-t border-slate-200 grid ${(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) ? "grid-cols-4" : "grid-cols-3"} py-2 text-center text-[9.3px] font-bold select-none shrink-0 font-sans shadow-inner shrink-0`}>
+      <div id="mobile-bottom-nav" className={`bg-slate-50 border-t border-slate-200 grid ${(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) ? "grid-cols-5" : "grid-cols-4"} py-2 text-center text-[9.3px] font-bold select-none shrink-0 font-sans shadow-inner shrink-0`}>
         <button
           type="button"
           onClick={() => {
@@ -4486,6 +4730,19 @@ App Link: ${window.location.origin}`;
           <T><span translate="no" className="notranslate truncate w-full block text-center">Phân Tích</span></T>
         </button>
         
+        <button
+          type="button"
+          onClick={() => setActiveBottomTab("TRAO_ĐỔI")}
+          className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors min-w-0 overflow-hidden ${
+            activeBottomTab === "TRAO_ĐỔI" ? "text-blue-600 font-extrabold" : "text-slate-400 hover:text-blue-600"
+          }`}
+        >
+          <MessageSquare className={`w-4 h-4 mx-auto mb-0.5 transition-transform hover:scale-110 ${
+            activeBottomTab === "TRAO_ĐỔI" ? "text-blue-600 font-extrabold" : "text-blue-400"
+          }`} />
+          <T><span translate="no" className="notranslate truncate w-full block text-center">Trao Đổi</span></T>
+        </button>
+
         <button
           type="button"
           onClick={() => setActiveBottomTab("BAO_CAO")}
@@ -4962,7 +5219,11 @@ App Link: ${window.location.origin}`}
             )}
 
             {/* Notifications scroll list */}
-            <div className="flex-1 overflow-y-auto p-3.5 bg-slate-50/50 space-y-3 pb-8">
+            <div 
+              ref={notifScrollRef}
+              onScroll={(e) => setNotifScrollTop(e.currentTarget.scrollTop)}
+              className="flex-1 overflow-y-auto p-3.5 bg-slate-50/50 space-y-3 pb-8 notif-scroll-container"
+            >
               {currentUser?.role === UserRole.ADMIN ? (
                 <>
                   {/* SINGLE-LINE ACCORDION FOR ADMIN CONFIGURATION */}
@@ -5513,6 +5774,18 @@ App Link: ${window.location.origin}`}
           >
             <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
           </button>
+
+          {/* Scroll to Top Floating Button on Notifications page */}
+          {notifScrollTop > 100 && (
+            <button
+              type="button"
+              onClick={() => notifScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
+              className="absolute bottom-32 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-50 cursor-pointer"
+              title="Lên đầu trang"
+            >
+              <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />
+            </button>
+          )}
         </div>
       )}
 
@@ -5589,7 +5862,11 @@ App Link: ${window.location.origin}`}
             </div>
 
             {/* List */}
-            <div className="flex-1 overflow-y-auto p-3 bg-slate-50/50 space-y-2 pb-16">
+            <div 
+              ref={onlineScrollRef}
+              onScroll={(e) => setOnlineScrollTop(e.currentTarget.scrollTop)}
+              className="flex-1 overflow-y-auto p-3 bg-slate-50/50 space-y-2 pb-16 online-scroll-container"
+            >
               {(() => {
                 const searchClean = onlineSearchTerm.toLowerCase().trim();
                 const processedUsers = getOnlineUsers().filter((u) => {
@@ -5649,9 +5926,18 @@ App Link: ${window.location.origin}`}
                       <div className="flex items-center gap-3">
                         {/* Avatar */}
                         <div className="relative">
-                          <div className={`w-10 h-10 rounded-full ${avatarBg} text-white flex items-center justify-center font-black text-xs font-sans tracking-tighter`}>
-                            <span translate="no" className="notranslate">{initials}</span>
-                          </div>
+                          {u.avatar ? (
+                            <img 
+                              src={u.avatar} 
+                              alt="User Avatar" 
+                              className="w-10 h-10 rounded-full object-cover shrink-0 select-none border border-slate-200"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <div className={`w-10 h-10 rounded-full ${avatarBg} text-white flex items-center justify-center font-black text-xs font-sans tracking-tighter`}>
+                              <span translate="no" className="notranslate">{initials}</span>
+                            </div>
+                          )}
                           
                           {/* Live Pulse status bubble */}
                           {u.isOnlineSimulated ? (
@@ -5717,6 +6003,18 @@ App Link: ${window.location.origin}`}
           >
             <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
           </button>
+
+          {/* Scroll to Top Floating Button on Online Users page */}
+          {onlineScrollTop > 100 && (
+            <button
+              type="button"
+              onClick={() => onlineScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
+              className="absolute bottom-32 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-50 cursor-pointer"
+              title="Lên đầu trang"
+            >
+              <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />
+            </button>
+          )}
         </div>
       )}
 

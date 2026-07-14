@@ -1,4 +1,4 @@
-import { QualityReport, AppNotification } from "../types";
+import { QualityReport, AppNotification, BroadcastNotice } from "../types";
 
 export function parseReportTimestamp(ts: string): Date {
   try {
@@ -34,8 +34,28 @@ export function parseReportTimestamp(ts: string): Date {
   return new Date();
 }
 
-export function generateNotifications(reports: QualityReport[], deletedNotifIds: string[]): AppNotification[] {
+export function generateNotifications(
+  reports: QualityReport[],
+  deletedNotifIds: string[],
+  broadcasts?: BroadcastNotice[]
+): AppNotification[] {
   const list: AppNotification[] = [];
+
+  // Generate notifications for broadcasts first
+  if (broadcasts && Array.isArray(broadcasts)) {
+    broadcasts.forEach((b) => {
+      list.push({
+        id: `broadcast-${b.id}`,
+        title: b.type || "📢 BẢN TIN",
+        description: b.content,
+        timestamp: b.timestamp,
+        type: "broadcast",
+        targetReportId: undefined,
+        authorName: b.sender,
+        factoryName: "Ban quản trị"
+      });
+    });
+  }
   
   reports.forEach((report) => {
     // Skip deleted reports
