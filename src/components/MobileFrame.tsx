@@ -2789,11 +2789,11 @@ App Link: ${window.location.origin}`;
             <div 
               ref={secondaryIconsRef}
               onMouseDown={handleIconsMouseDown}
-              className="flex items-center gap-[8px] overflow-x-auto flex-nowrap scrollbar-none py-1 select-none cursor-grab active:cursor-grabbing [&::-webkit-scrollbar]:hidden"
+              className="flex items-center gap-[8px] overflow-x-auto flex-nowrap scrollbar-none pl-3 pr-3 py-1 select-none cursor-grab active:cursor-grabbing [&::-webkit-scrollbar]:hidden"
               style={{
                 scrollbarWidth: "none",
                 msOverflowStyle: "none",
-                maxWidth: "108px", // Adjusted to cleanly fit exactly 3 main icons
+                maxWidth: "116px", // Adjusted to cleanly fit exactly 3 main icons with padding
                 WebkitOverflowScrolling: "touch"
               }}
             >
@@ -5518,9 +5518,28 @@ App Link: ${window.location.origin}`}
                   </div>
                 ) : (
                   displayAcks.map((name, i) => {
-                    const deptMatch = name.match(/\(([^)]+)\)/);
-                    const cleanName = name.replace(/\([^)]+\)/g, "").trim();
-                    const deptName = deptMatch ? deptMatch[1] : "";
+                    let cleanName = name;
+                    let deptName = "";
+
+                    const firstParenIndex = name.indexOf(" (");
+                    if (firstParenIndex !== -1) {
+                      cleanName = name.substring(0, firstParenIndex).trim();
+                      let rawDept = name.substring(firstParenIndex + 2).trim();
+                      if (rawDept.endsWith(")")) {
+                        rawDept = rawDept.slice(0, -1).trim();
+                      }
+                      deptName = rawDept;
+                    } else {
+                      const firstParenIndexNoSpace = name.indexOf("(");
+                      if (firstParenIndexNoSpace !== -1) {
+                        cleanName = name.substring(0, firstParenIndexNoSpace).trim();
+                        let rawDept = name.substring(firstParenIndexNoSpace + 1).trim();
+                        if (rawDept.endsWith(")")) {
+                          rawDept = rawDept.slice(0, -1).trim();
+                        }
+                        deptName = rawDept;
+                      }
+                    }
                     
                     return (
                       <div

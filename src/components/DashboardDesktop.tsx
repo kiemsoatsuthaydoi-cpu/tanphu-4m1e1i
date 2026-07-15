@@ -4801,8 +4801,24 @@ export default function DashboardDesktop({
                                       r.sharedBy && r.sharedBy.length > 0 ? (
                                         <div className="flex flex-col gap-1 max-h-24 overflow-y-auto">
                                           {r.sharedBy.map((name, i) => {
-                                            const deptMatch = name.match(/\(([^)]+)\)/);
-                                            const deptName = deptMatch ? deptMatch[1] : name;
+                                            let deptName = name;
+                                            const firstParenIndex = name.indexOf(" (");
+                                            if (firstParenIndex !== -1) {
+                                              let rawDept = name.substring(firstParenIndex + 2).trim();
+                                              if (rawDept.endsWith(")")) {
+                                                rawDept = rawDept.slice(0, -1).trim();
+                                              }
+                                              deptName = rawDept;
+                                            } else {
+                                              const firstParenIndexNoSpace = name.indexOf("(");
+                                              if (firstParenIndexNoSpace !== -1) {
+                                                let rawDept = name.substring(firstParenIndexNoSpace + 1).trim();
+                                                if (rawDept.endsWith(")")) {
+                                                  rawDept = rawDept.slice(0, -1).trim();
+                                                }
+                                                deptName = rawDept;
+                                              }
+                                            }
                                             const resForDept = r.resolutions?.find(
                                               (res) => res.departmentName.trim().toLowerCase() === deptName.trim().toLowerCase()
                                             );

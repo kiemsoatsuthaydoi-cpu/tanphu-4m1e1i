@@ -502,6 +502,7 @@ export default function StatisticsDashboard({
               const percentage = dept.totalCount > 0 ? Math.round((dept.onlineCount / dept.totalCount) * 100) : 0;
               const isExpanded = !!expandedDepts[dept.name];
               const hasMembers = dept.members && dept.members.length > 0;
+              const isCurrentlyOnline = isTodaySelected && dept.members.some(m => m.isOnlineCurrently);
 
               return (
                 <div key={dept.name} className="border-b border-slate-100/60 pb-3 last:border-b-0">
@@ -510,7 +511,7 @@ export default function StatisticsDashboard({
                     className={`flex items-center justify-between gap-4 cursor-pointer hover:bg-slate-50/50 p-2 rounded-xl transition-colors ${hasMembers ? "cursor-pointer" : "cursor-default"}`}
                   >
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className={`w-2 h-2 rounded-full shrink-0 ${dept.onlineCount > 0 ? "bg-[#10b981]" : "bg-slate-300"}`}></span>
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${isCurrentlyOnline ? "bg-[#10b981]" : "bg-slate-300"}`}></span>
                       <h3 className="text-sm font-black text-slate-800 tracking-tight truncate">
                         <T><span translate="no" className="notranslate">{dept.name}</span></T>
                       </h3>
@@ -528,7 +529,7 @@ export default function StatisticsDashboard({
                   {/* Progress bar */}
                   <div className="w-full bg-slate-100 h-2 rounded-full mt-1 overflow-hidden">
                     <div 
-                      className="bg-blue-600 h-full rounded-full transition-all duration-500" 
+                      className={`${isCurrentlyOnline ? "bg-emerald-500" : "bg-blue-600"} h-full rounded-full transition-all duration-500`} 
                       style={{ width: `${percentage}%` }}
                     />
                   </div>
