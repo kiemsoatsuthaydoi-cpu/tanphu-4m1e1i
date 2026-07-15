@@ -54,7 +54,8 @@ import {
   MessageCircle,
   Filter,
   ChevronRight,
-  User as UserIcon
+  User as UserIcon,
+  Award
 } from "lucide-react";
 import {
   BarChart,
@@ -4782,9 +4783,19 @@ export default function DashboardDesktop({
 
                                   {/* Shares/Replications Section */}
                                   <div className="mt-2.5">
-                                    <div className="text-[9px] font-extrabold text-blue-700 uppercase mb-1.5 flex items-center gap-1.5 border-b border-blue-100/50 pb-0.5">
-                                      <Share2 className="w-3.5 h-3.5 text-blue-500" />
-                                      <span translate="no" className="notranslate">Tiếp nhận / Nhân rộng</span>
+                                    <div className={`text-[9px] font-extrabold uppercase mb-1.5 flex items-center gap-1.5 border-b pb-0.5 ${
+                                      r.reportType === "DSA" || r.isSpotlight
+                                        ? "text-emerald-700 border-emerald-100/50"
+                                        : "text-blue-700 border-blue-100/50"
+                                    }`}>
+                                      {r.reportType === "DSA" || r.isSpotlight ? (
+                                        <Award className="w-3.5 h-3.5 text-emerald-500" />
+                                      ) : (
+                                        <Share2 className="w-3.5 h-3.5 text-blue-500" />
+                                      )}
+                                      <span translate="no" className="notranslate">
+                                        {r.reportType === "DSA" || r.isSpotlight ? "Biểu dương / Nhân rộng" : "Tiếp nhận / Nhân rộng"}
+                                      </span>
                                     </div>
                                     {r.reportType === "KPH" || r.isAbnormal ? (
                                       r.sharedBy && r.sharedBy.length > 0 ? (

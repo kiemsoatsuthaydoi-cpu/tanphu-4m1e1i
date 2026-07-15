@@ -712,7 +712,7 @@ function MobileApprovalView({
         <button
           type="button"
           onClick={() => scrollRef?.current?.scrollTo({ top: 0, behavior: "smooth" })}
-          className="absolute bottom-32 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-20 cursor-pointer"
+          className="absolute bottom-36 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-20 cursor-pointer"
           title="Lên đầu trang"
         >
           <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />
@@ -1612,7 +1612,24 @@ export default function MobileFrame({
       onUpdateReport(updatedReport);
     }
 
-    showToast(isNowAcknowledged ? "Đã xác nhận tiếp nhận thông tin! ✅" : "Đã hủy xác nhận tiếp nhận! ↩️");
+    const isDsa = report.reportType === "DSA" || report.isSpotlight;
+
+    if (isNowAcknowledged && isDsa) {
+      if (onAddBroadcast) {
+        const isDnp = report.factory && (report.factory.includes("DNP") || report.factory.includes("BBM") || report.factory.includes("BBC"));
+        const companyLabel = isDnp ? "DNP" : "Tân Phú";
+        onAddBroadcast(
+          `Vinh danh Sáng Kiến Điểm Sáng (DSA): Tại ${report.factory} (Nhóm ${report.category}) đã ghi nhận cải tiến xuất sắc: "${report.content}" góp phần nâng cao hiệu suất, chất lượng sản phẩm ${companyLabel}! ⭐`,
+          "Biểu dương sáng kiến (DSA)"
+        );
+      }
+    }
+
+    if (isDsa) {
+      showToast(isNowAcknowledged ? "Đã ghi nhận & biểu dương sáng kiến! ⭐" : "Đã hủy ghi nhận & biểu dương! ↩️");
+    } else {
+      showToast(isNowAcknowledged ? "Đã xác nhận tiếp nhận thông tin! ✅" : "Đã hủy xác nhận tiếp nhận! ↩️");
+    }
   };
 
   const showToast = (msg: string) => {
@@ -3600,7 +3617,7 @@ App Link: ${window.location.origin}`;
             <button
               type="button"
               onClick={() => phanTichScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
-              className="absolute bottom-32 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-20 cursor-pointer"
+              className="absolute bottom-36 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-20 cursor-pointer"
               title="Lên đầu trang"
             >
               <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />
@@ -4870,13 +4887,16 @@ App Link: ${window.location.origin}`;
                       );
                     })()}
                     {(() => {
+                      const isDsa = report.reportType === "DSA" || report.isSpotlight;
                       const isAcknowledged = report.sharedBy?.some(name => name.startsWith(currentUser?.fullName || "Kiểm soát viên")) || false;
                       const ackCount = report.sharedBy?.length || 0;
                       return (
                         <div className={`flex items-center gap-1.5 rounded-lg py-0.5 px-2 shrink-0 transition-all duration-300 shadow-3xs ${
                           isAcknowledged 
                             ? "bg-emerald-50/90 border border-emerald-200 text-emerald-800" 
-                            : "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 border border-orange-500 text-white shadow-[0_0_8px_rgba(249,115,22,0.35)] hover:scale-105 active:scale-95"
+                            : isDsa
+                              ? "bg-gradient-to-r from-[#1e3a8a] to-[#1a306c] hover:from-[#1a306c] hover:to-[#12224f] border border-[#1e3a8a] text-white shadow-[0_0_8px_rgba(30,58,138,0.35)] hover:scale-105 active:scale-95"
+                              : "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 border border-orange-500 text-white shadow-[0_0_8px_rgba(249,115,22,0.35)] hover:scale-105 active:scale-95"
                         }`}>
                           <button
                             type="button"
@@ -4884,7 +4904,7 @@ App Link: ${window.location.origin}`;
                             className={`flex items-center gap-1.5 p-1 rounded transition-all cursor-pointer bg-transparent whitespace-nowrap shrink-0 border-none ${
                               isAcknowledged ? "text-emerald-700 font-bold" : "text-white font-extrabold"
                             }`}
-                            title={isAcknowledged ? "Đã tiếp nhận" : "Click để tiếp nhận/ xử lý ngay!"}
+                            title={isAcknowledged ? (isDsa ? "Đã ghi nhận & biểu dương" : "Đã tiếp nhận") : (isDsa ? "Click để ghi nhận & biểu dương sáng kiến!" : "Click để tiếp nhận/ xử lý ngay!")}
                           >
                             {isAcknowledged ? (
                               <Check className="w-3.5 h-3.5 shrink-0 stroke-[3px] text-emerald-700" />
@@ -4895,7 +4915,9 @@ App Link: ${window.location.origin}`;
                               </span>
                             )}
                             <span className="text-[10px] font-black font-sans uppercase tracking-tight whitespace-nowrap">
-                              <span translate="no" className="notranslate"><T>Tiếp nhận/ Xử lý</T></span>
+                              <span translate="no" className="notranslate">
+                                <T>{isDsa ? "Ghi nhận & Biểu dương" : "Tiếp nhận/ Xử lý"}</T>
+                              </span>
                             </span>
                           </button>
                           
@@ -4917,7 +4939,7 @@ App Link: ${window.location.origin}`;
                                   ? "text-emerald-400 bg-transparent cursor-default"
                                   : "text-white/50 bg-transparent cursor-default"
                             }`}
-                            title={ackCount > 0 ? "Xem danh sách đã tiếp nhận/ xử lý" : "Chưa có lượt tiếp nhận"}
+                            title={ackCount > 0 ? (isDsa ? "Xem danh sách đã ghi nhận & biểu dương" : "Xem danh sách đã tiếp nhận/ xử lý") : (isDsa ? "Chưa có lượt biểu dương" : "Chưa có lượt tiếp nhận")}
                           >
                             <span translate="no" className="notranslate"><T>{ackCount}</T></span>
                           </button>
@@ -5075,7 +5097,7 @@ App Link: ${window.location.origin}`;
         <button
           type="button"
           onClick={() => trashScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
-          className="absolute bottom-32 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-50 cursor-pointer"
+          className="absolute bottom-36 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-50 cursor-pointer"
           title="Lên đầu trang"
         >
           <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />
@@ -5450,9 +5472,10 @@ App Link: ${window.location.origin}`}
         );
       })()}
 
-      {showAcksListReport && (() => {
+       {showAcksListReport && (() => {
         const activeReport = reports.find(r => r.id === showAcksListReport.id) || showAcksListReport;
         const displayAcks = activeReport.sharedBy || [];
+        const isDsaReport = activeReport.reportType === "DSA" || activeReport.isSpotlight;
         return (
           <div 
             onClick={() => setShowAcksListReport(null)}
@@ -5467,7 +5490,11 @@ App Link: ${window.location.origin}`}
                 <div className="flex items-center gap-1.5 text-sky-700">
                   <Check className="w-4 h-4 text-sky-600 stroke-[3px]" />
                   <span className="font-extrabold text-[12px] uppercase tracking-tight font-sans">
-                    <span translate="no" className="notranslate"><T>DANH SÁCH TIẾP NHẬN & XỬ LÝ ({displayAcks.length})</T></span>
+                    <span translate="no" className="notranslate">
+                      <T>
+                        {isDsaReport ? `DANH SÁCH GHI NHẬN & BIỂU DƯƠNG (${displayAcks.length})` : `DANH SÁCH TIẾP NHẬN & XỬ LÝ (${displayAcks.length})`}
+                      </T>
+                    </span>
                   </span>
                 </div>
                 <button
@@ -5483,7 +5510,11 @@ App Link: ${window.location.origin}`}
               <div className="flex-1 overflow-y-auto p-4 bg-slate-50/30 space-y-2 pb-8">
                 {displayAcks.length === 0 ? (
                   <div className="py-10 text-center text-slate-400 text-xs font-medium">
-                    <span translate="no" className="notranslate"><T>Chưa có ai tiếp nhận/ xử lý nội dung này.</T></span>
+                    <span translate="no" className="notranslate">
+                      <T>
+                        {isDsaReport ? "Chưa có ai ghi nhận/ biểu dương sáng kiến này." : "Chưa có ai tiếp nhận/ xử lý nội dung này."}
+                      </T>
+                    </span>
                   </div>
                 ) : (
                   displayAcks.map((name, i) => {
@@ -5511,8 +5542,12 @@ App Link: ${window.location.origin}`}
                             )}
                           </div>
                         </div>
-                        <span className="text-[9px] bg-sky-50 text-sky-700 font-extrabold px-2.5 py-0.5 rounded-full border border-sky-100 tracking-tight flex items-center gap-0.5">
-                          ✓ <span translate="no" className="notranslate"><T>Tiếp nhận</T></span>
+                        <span className={`text-[9px] font-extrabold px-2.5 py-0.5 rounded-full border tracking-tight flex items-center gap-0.5 ${
+                          isDsaReport 
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-100" 
+                            : "bg-sky-50 text-sky-700 border-sky-100"
+                        }`}>
+                          ✓ <span translate="no" className="notranslate"><T>{isDsaReport ? "Biểu dương" : "Tiếp nhận"}</T></span>
                         </span>
                       </div>
                     );
@@ -6156,7 +6191,7 @@ App Link: ${window.location.origin}`}
             <button
               type="button"
               onClick={() => notifScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
-              className="absolute bottom-32 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-50 cursor-pointer"
+              className="absolute bottom-36 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-50 cursor-pointer"
               title="Lên đầu trang"
             >
               <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />
@@ -6385,7 +6420,7 @@ App Link: ${window.location.origin}`}
             <button
               type="button"
               onClick={() => onlineScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
-              className="absolute bottom-32 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-50 cursor-pointer"
+              className="absolute bottom-36 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-50 cursor-pointer"
               title="Lên đầu trang"
             >
               <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />

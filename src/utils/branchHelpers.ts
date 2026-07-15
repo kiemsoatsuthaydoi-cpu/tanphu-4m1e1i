@@ -64,14 +64,36 @@ export const getBranchCodeSuffix = (brName: string | undefined | null) => {
 
 export const formatNameCapitalized = (str: string | undefined | null): string => {
   if (!str) return "";
+  
+  const isEntirelyUppercase = str === str.toUpperCase();
+  const commonAbbreviations = new Set([
+    "TGĐ", "BGĐ", "BĐH", "CEO", "QC", "QA", "KPH", "5S", "BBM", "BBC", "TPP", "DNP", "BNI", 
+    "LAN", "CTY", "KCS", "ISO", "DSA", "HSSE", "PCCC", "NS", "HR", "IT", "PE", "IE", "CBNV"
+  ]);
+
   return str
     .split(/\s+/)
     .map((word) => {
       if (!word) return "";
+      
+      const cleanWord = word.replace(/[().,;[\]{}]/g, "").toUpperCase();
+      
       // If word is in parentheses or bracketed, keep uppercase
       if (word.startsWith("(") || word.endsWith(")")) {
         return word.toUpperCase();
       }
+      
+      // If the word is a known abbreviation, keep it uppercase
+      if (commonAbbreviations.has(cleanWord)) {
+        return word.toUpperCase();
+      }
+      
+      // If the word is originally all uppercase and <= 4 chars, and the ENTIRE string is NOT uppercase,
+      // it is likely an abbreviation (like "TGĐ" in "Ban TGĐ"). Keep it.
+      if (!isEntirelyUppercase && word === word.toUpperCase() && word.length <= 4) {
+        return word;
+      }
+      
       return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
     })
     .join(" ");
