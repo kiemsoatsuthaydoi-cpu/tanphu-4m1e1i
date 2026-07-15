@@ -1,5 +1,5 @@
 {
-  "name": "META 4M1E1I - Mỗi Nhân Viên Là Một QC",
+  "name": "META ANDON - Mỗi Nhân Viên Là Một QC",
   "description": "Hệ thống quản lý sự thay đổi các yếu tố ảnh hưởng chất lượng sản phẩm (Thiết bị, Nguyên vật liệu, Con người, Phương pháp, Môi trường, Thông tin) thời gian thực dành cho các nhà máy.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

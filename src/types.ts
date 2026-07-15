@@ -42,6 +42,10 @@ export interface QualityReportDirective {
   text: string;
   author: string;
   timestamp: string;
+  isAcknowledged?: boolean;
+  acknowledgedBy?: string;
+  acknowledgedAt?: string;
+  acknowledges?: { by: string; at: string }[];
 }
 
 export interface QualityReportResolution {

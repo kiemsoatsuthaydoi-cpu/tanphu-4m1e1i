@@ -10,6 +10,23 @@ import { AutoImageSlider } from "./AutoImageSlider";
 import FirebaseQuotaMonitor from "./FirebaseQuotaMonitor";
 import StatisticsDashboard from "./StatisticsDashboard";
 import MobileForumView from "./MobileForumView";
+import {
+  ResponsiveContainer,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+  Tooltip,
+  ComposedChart,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Legend,
+  Bar,
+  Line,
+  BarChart
+} from "recharts";
 
 function convertModernColorsToRgb(cssValue: string): string {
   if (!cssValue || typeof cssValue !== "string") return cssValue;
@@ -293,12 +310,12 @@ function MobileDirectiveForm({
               e.currentTarget.form?.requestSubmit();
             }
           }}
-          className="block w-full bg-slate-50 border border-slate-200 text-[11px] rounded-lg px-2.5 py-1.5 text-slate-800 placeholder-slate-400 placeholder:text-[10px] font-medium focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all select-text overflow-y-auto thin-scrollbar leading-normal"
+          className="block w-full bg-slate-50 border border-slate-200 text-[11px] rounded-lg px-2.5 py-1.5 text-slate-800 placeholder-slate-400 placeholder:text-[10px] font-medium focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all select-text overflow-y-auto thin-scrollbar leading-normal"
         />
       </div>
       <button
         type="submit"
-        className="bg-amber-500 hover:bg-amber-600 px-4 text-[10px] text-white font-black flex items-center justify-center rounded-lg shadow-sm transition-all active:scale-95 cursor-pointer uppercase shrink-0 h-[32px]"
+        className="bg-blue-600 hover:bg-blue-700 px-4 text-[10px] text-white font-black flex items-center justify-center rounded-lg shadow-sm transition-all active:scale-95 cursor-pointer uppercase shrink-0 h-[32px]"
       >
         <T>GỬI</T>
       </button>
@@ -1088,6 +1105,8 @@ export default function MobileFrame({
   };
 
   const [searchTerm, setSearchTerm] = useState("");
+  const [showAckDetails, setShowAckDetails] = useState<Record<string, boolean>>({});
+  const [expandedDirectiveIds, setExpandedDirectiveIds] = useState<Record<string, boolean>>({});
   const [showQrCodeView, setShowQrCodeView] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [openChatReportId, setOpenChatReportId] = useState<string | null>(null);
@@ -1106,6 +1125,28 @@ export default function MobileFrame({
       document.removeEventListener("mousedown", handleDocumentClick);
     };
   }, [openChatReportId]);
+
+  useEffect(() => {
+    function handleGlobalClick(e: Event) {
+      const target = e.target as HTMLElement;
+      if (!target) return;
+
+      const hasExpanded = Object.values(expandedDirectiveIds).some(Boolean);
+      if (hasExpanded) {
+        if (!target.closest('[data-directive-container="true"]')) {
+          setExpandedDirectiveIds({});
+          setShowAckDetails({});
+        }
+      }
+    }
+
+    document.addEventListener("mousedown", handleGlobalClick);
+    document.addEventListener("touchstart", handleGlobalClick);
+    return () => {
+      document.removeEventListener("mousedown", handleGlobalClick);
+      document.removeEventListener("touchstart", handleGlobalClick);
+    };
+  }, [expandedDirectiveIds]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedFactoryFilter, setSelectedFactoryFilter] = useState<string | null>(null);
   const [selectedWeekFilter, setSelectedWeekFilter] = useState<string>("ALL");
@@ -1199,6 +1240,94 @@ export default function MobileFrame({
     });
 
     return { total, kph, dsa, safeRate, counts, filteredReports: filtered };
+  };
+
+  const getMobileRadarKphData = (filteredReports: QualityReport[]) => {
+    const counts: Record<Category4M1E1I, number> = {
+      "CON NGƯỜI": 0,
+      "NGUYÊN VẬT LIỆU": 0,
+      "MÁY MÓC": 0,
+      "PHƯƠNG PHÁP": 0,
+      "MÔI TRƯỜNG": 0,
+      "THÔNG TIN": 0
+    };
+    filteredReports.forEach((r) => {
+      const isKph = r.reportType === "KPH" || r.isAbnormal;
+      if (isKph && counts[r.category] !== undefined) {
+        counts[r.category]++;
+      }
+    });
+    return Object.keys(counts).map((key) => ({
+      subject: key,
+      "Không Phù Hợp (KPH)": counts[key as Category4M1E1I],
+      fullMark: 10
+    }));
+  };
+
+  const getMobileParetoData = (filteredReports: QualityReport[]) => {
+    const counts: Record<Category4M1E1I, number> = {
+      "CON NGƯỜI": 0,
+      "NGUYÊN VẬT LIỆU": 0,
+      "MÁY MÓC": 0,
+      "PHƯƠNG PHÁP": 0,
+      "MÔI TRƯỜNG": 0,
+      "THÔNG TIN": 0
+    };
+    let totalKph = 0;
+    filteredReports.forEach((r) => {
+      const isKph = r.reportType === "KPH" || r.isAbnormal;
+      if (isKph && counts[r.category] !== undefined) {
+        counts[r.category]++;
+        totalKph++;
+      }
+    });
+
+    const sorted = Object.keys(counts)
+      .map((key) => ({
+        category: key,
+        frequency: counts[key as Category4M1E1I]
+      }))
+      .sort((a, b) => b.frequency - a.frequency);
+
+    let accum = 0;
+    return sorted.map((item) => {
+      accum += item.frequency;
+      const cumulativePercentage = totalKph > 0 ? Math.round((accum / totalKph) * 100) : 0;
+      return {
+        category: item.category,
+        "Số lỗi (Tần suất)": item.frequency,
+        "Phần trăm lũy kế (%)": cumulativePercentage
+      };
+    });
+  };
+
+  const getMobileBranchComparisonData = () => {
+    const map: Record<string, { kph: number; dsa: number }> = {};
+    branches.forEach((b) => {
+      if (b.isScoring) {
+        map[b.name] = { kph: 0, dsa: 0 };
+      }
+    });
+
+    reports.filter((r) => !r.isDeleted).forEach((r) => {
+      if (map[r.factory]) {
+        if (r.reportType === "KPH" || r.isAbnormal) {
+          map[r.factory].kph++;
+        } else if (r.reportType === "DSA" || r.isSpotlight) {
+          map[r.factory].dsa++;
+        }
+      }
+    });
+
+    return Object.keys(map).map((name) => {
+      const match = name.match(/\(([^)]+)\)/);
+      const shortName = match ? match[1] : name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn phòng ", "VP ");
+      return {
+        name: shortName,
+        "Không Phù Hợp (KPH)": map[name].kph,
+        "Điểm Sáng (DSA)": map[name].dsa
+      };
+    });
   };
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -1420,7 +1549,7 @@ export default function MobileFrame({
 
   useEffect(() => {
     if (activeBottomTab === "PHAN_TICH" && currentUser?.role !== UserRole.ADMIN) {
-      setActiveBottomTab("BAO_CAO");
+      setMobileStatsSubTab("CHAT_LUONG");
     }
   }, [activeBottomTab, currentUser]);
 
@@ -1491,6 +1620,50 @@ export default function MobileFrame({
     setTimeout(() => {
       setToastMessage((current) => current === msg ? null : current);
     }, 2500);
+  };
+
+  const handleAcknowledgeDirective = (report: QualityReport, dirId: string) => {
+    const currentSingaporeTime = new Date();
+    const yy = String(currentSingaporeTime.getFullYear()).slice(-2);
+    const mm = String(currentSingaporeTime.getMonth() + 1).padStart(2, '0');
+    const dd = String(currentSingaporeTime.getDate()).padStart(2, '0');
+    const timeStr = currentSingaporeTime.toTimeString().split(' ')[0];
+    const stamp = `${timeStr} ${dd}/${mm}/${yy}`;
+
+    const userSig = `${currentUser?.department || "Bộ phận"} - ${currentUser?.fullName || "Người nhận"}`;
+
+    const updatedDirectives = (report.directives || []).map((d) => {
+      if (d.id === dirId) {
+        const currentList = d.acknowledges ? [...d.acknowledges] : [];
+        if (currentList.length === 0 && d.isAcknowledged) {
+          currentList.push({
+            by: d.acknowledgedBy || "Người nhận",
+            at: d.acknowledgedAt || d.timestamp
+          });
+        }
+        const isAlreadyAdded = currentList.some(item => item.by === userSig);
+        const newList = isAlreadyAdded 
+          ? currentList 
+          : [...currentList, { by: userSig, at: stamp }];
+
+        return {
+          ...d,
+          isAcknowledged: true,
+          acknowledgedBy: userSig,
+          acknowledgedAt: stamp,
+          acknowledges: newList
+        };
+      }
+      return d;
+    });
+
+    if (onUpdateReport) {
+      onUpdateReport({
+        ...report,
+        directives: updatedDirectives
+      });
+    }
+    showToast("Đã xác nhận tiếp nhận chỉ đạo! 🤝");
   };
 
   const handleShare = async (report: QualityReport) => {
@@ -3021,36 +3194,42 @@ App Link: ${window.location.origin}`;
               </h2>
             </div>
             <p className="text-[10px] text-slate-500 leading-normal">
-              <T><span translate="no" className="notranslate">Theo dõi trực quan trạng thái hoạt động của nhân sự, biểu đồ chất lượng 4M1E1I, và cảnh báo sai sót.</span></T>
+              {currentUser?.role === UserRole.ADMIN ? (
+                <T><span translate="no" className="notranslate">Theo dõi trực quan trạng thái hoạt động của nhân sự, biểu đồ chất lượng 4M1E1I, và cảnh báo sai sót.</span></T>
+              ) : (
+                <T><span translate="no" className="notranslate">Theo dõi trực quan biểu đồ chất lượng 4M1E1I và cảnh báo sai sót của nhà máy.</span></T>
+              )}
             </p>
 
-            {/* Sub-tab Switcher matching PWA mobile styles */}
-            <div className="flex bg-slate-100 p-1 rounded-xl text-[10px] font-black select-none border border-slate-200">
-              <button
-                type="button"
-                onClick={() => setMobileStatsSubTab("NHAN_SU")}
-                className={`flex-1 py-2.5 rounded-lg transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 border-none ${
-                  mobileStatsSubTab === "NHAN_SU"
-                    ? "bg-[#1d4ed8] text-white shadow-xs font-extrabold"
-                    : "text-slate-600 hover:text-slate-800 bg-transparent"
-                }`}
-              >
-                <span>👥</span>
-                <T><span translate="no" className="notranslate">NHÂN SỰ ONLINE</span></T>
-              </button>
-              <button
-                type="button"
-                onClick={() => setMobileStatsSubTab("CHAT_LUONG")}
-                className={`flex-1 py-2.5 rounded-lg transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 border-none ${
-                  mobileStatsSubTab === "CHAT_LUONG"
-                    ? "bg-[#1d4ed8] text-white shadow-xs font-extrabold"
-                    : "text-slate-600 hover:text-slate-800 bg-transparent"
-                }`}
-              >
-                <span>📊</span>
-                <T><span translate="no" className="notranslate">BIỂU ĐỒ CHẤT LƯỢNG</span></T>
-              </button>
-            </div>
+            {/* Sub-tab Switcher matching PWA mobile styles - Only show for Admin */}
+            {currentUser?.role === UserRole.ADMIN && (
+              <div className="flex bg-slate-100 p-1 rounded-xl text-[10px] font-black select-none border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setMobileStatsSubTab("NHAN_SU")}
+                  className={`flex-1 py-2.5 rounded-lg transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 border-none ${
+                    mobileStatsSubTab === "NHAN_SU"
+                      ? "bg-[#1d4ed8] text-white shadow-xs font-extrabold"
+                      : "text-slate-600 hover:text-slate-800 bg-transparent"
+                  }`}
+                >
+                  <span>👥</span>
+                  <T><span translate="no" className="notranslate">NHÂN SỰ ONLINE</span></T>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMobileStatsSubTab("CHAT_LUONG")}
+                  className={`flex-1 py-2.5 rounded-lg transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 border-none ${
+                    mobileStatsSubTab === "CHAT_LUONG"
+                      ? "bg-[#1d4ed8] text-white shadow-xs font-extrabold"
+                      : "text-slate-600 hover:text-slate-800 bg-transparent"
+                  }`}
+                >
+                  <span>📊</span>
+                  <T><span translate="no" className="notranslate">BIỂU ĐỒ CHẤT LƯỢNG</span></T>
+                </button>
+              </div>
+            )}
           </div>
 
           {mobileStatsSubTab === "NHAN_SU" ? (
@@ -3244,6 +3423,97 @@ App Link: ${window.location.origin}`;
                       <T><span translate="no" className="notranslate">Chỉ số an toàn của phân xưởng ghi nhận mức hoàn hảo (100%). Hãy tiếp tục nhân rộng các sáng kiến điểm sáng chất lượng và tuân thủ chặt SOP vận hành mẫu chuẩn.</span></T>
                     )}
                   </p>
+                </div>
+
+
+                {/* 1. BIỂU ĐỒ RADAR: THỐNG KÊ ĐIỂM KHÔNG PHÙ HỢP (KPH) */}
+                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-3xs space-y-2">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-rose-600 block">
+                      <T><span translate="no" className="notranslate">1. Biểu Đồ Radar: Thống Kê Điểm Không Phù Hợp (KPH) theo 4M1E1I</span></T>
+                    </span>
+                    <p className="text-[8px] text-slate-500 leading-normal mt-0.5">
+                      <T><span translate="no" className="notranslate">Xác định phân hệ phân bố lỗi chất lượng để biết yếu tố nào trong 6 trụ cột (Con người, Nguyên vật liệu, Máy móc, Phương pháp, Môi trường, Thông tin) đang suy giảm nặng nề nhất.</span></T>
+                    </p>
+                  </div>
+                  <div className="h-56 mt-2 relative">
+                    {stats.kph > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RadarChart cx="50%" cy="50%" outerRadius="65%" data={getMobileRadarKphData(stats.filteredReports)}>
+                          <PolarGrid stroke="#cbd5e1" />
+                          <PolarAngleAxis dataKey="subject" tick={{ fill: '#334155', fontSize: 7, fontWeight: 700 }} />
+                          <PolarRadiusAxis angle={30} domain={[0, 'auto']} tick={{ fill: '#64748b', fontSize: 7 }} />
+                          <Radar name="Số lỗi KPH" dataKey="Không Phù Hợp (KPH)" stroke="#ef4444" fill="#f87171" fillOpacity={0.35} />
+                          <Tooltip wrapperStyle={{ fontSize: '9px' }} />
+                        </RadarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-full flex items-center justify-center border border-dashed border-slate-200 rounded-lg bg-slate-50">
+                        <p className="text-[9px] text-slate-400 italic">
+                          <T><span translate="no" className="notranslate">Không có dữ liệu lỗi KPH để vẽ giản đồ Radar</span></T>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 2. SƠ ĐỒ PARETO: TẦNG LỖI & PHẦN TRĂM LŨY KẾ 80/20 */}
+                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-3xs space-y-2">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 block">
+                      <T><span translate="no" className="notranslate">2. Sơ Đồ Pareto: Tầng Lỗi & Phần Trăm Lũy Kế 80/20</span></T>
+                    </span>
+                    <p className="text-[8px] text-slate-500 leading-normal mt-0.5">
+                      <T><span translate="no" className="notranslate">Sắp xếp lỗi theo tần suất xuất hiện giảm dần cùng đường tích lũy phần trăm. Giúp nhà quản lý dồn sức xử lý đúng 20% nguyên nhân cốt lõi để loại bỏ 80% phế phẩm chất lượng.</span></T>
+                    </p>
+                  </div>
+                  <div className="h-56 mt-2">
+                    {stats.kph > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={getMobileParetoData(stats.filteredReports)}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                          <XAxis dataKey="category" tick={{ fill: '#475569', fontSize: 7, fontWeight: 700 }} />
+                          <YAxis yAxisId="left" tick={{ fill: '#64748b', fontSize: 7 }} />
+                          <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fill: '#d97706', fontSize: 7 }} />
+                          <Tooltip wrapperStyle={{ fontSize: '9px' }} />
+                          <Legend wrapperStyle={{ fontSize: '8px' }} />
+                          <Bar yAxisId="left" dataKey="Số lỗi (Tần suất)" fill="#3b82f6" barSize={15} radius={[2, 2, 0, 0]} />
+                          <Line yAxisId="right" type="monotone" dataKey="Phần trăm lũy kế (%)" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3, fill: '#f59e0b' }} />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-full flex items-center justify-center border border-dashed border-slate-200 rounded-lg bg-slate-50">
+                        <p className="text-[9px] text-slate-400 italic">
+                          <T><span translate="no" className="notranslate">Không có dữ liệu lỗi sản xuất để vẽ đồ thị Pareto</span></T>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 3. SO SÁNH HIỆU SUẤT CHẤT LƯỢNG GIỮA CÁC CHI NHÁNH */}
+                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-3xs space-y-2">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 block">
+                      <T><span translate="no" className="notranslate">3. So Sánh Hiệu Suất Chất Lượng: Điểm Sáng (DSA) vs Điểm Lỗi (KPH)</span></T>
+                    </span>
+                    <p className="text-[8px] text-slate-500 leading-normal mt-0.5">
+                      <T><span translate="no" className="notranslate">Biểu hiện của tính đối sáng thi đua giữa tất cả xưởng và văn phòng toàn bộ lãnh thổ Tân Phú. Cho thấy đơn vị nào có tỷ lệ cải tiến DSA đột phá và đơn vị nào còn nhiều điểm KPH.</span></T>
+                    </p>
+                  </div>
+                  <div className="h-60 mt-2">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={getMobileBranchComparisonData()}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                        <XAxis dataKey="name" tick={{ fill: '#334155', fontSize: 7, fontWeight: 700 }} />
+                        <YAxis tick={{ fill: '#64748b', fontSize: 7 }} />
+                        <Tooltip wrapperStyle={{ fontSize: '9px' }} />
+                        <Legend wrapperStyle={{ fontSize: '8px' }} />
+                        <Bar dataKey="Điểm Sáng (DSA)" fill="#10b981" barSize={12} radius={[2, 2, 0, 0]} />
+                        <Bar dataKey="Không Phù Hợp (KPH)" fill="#ef4444" barSize={12} radius={[2, 2, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
 
                 {/* Filtered logs */}
@@ -3583,98 +3853,195 @@ App Link: ${window.location.origin}`;
                           <T>CHỈ ĐẠO:</T>
                         </div>
                         <div className="space-y-1.5 block max-h-48 overflow-y-auto pr-1">
-                          {report.directives.map((dir) => (
-                            <div key={dir.id} className="bg-amber-50 border border-amber-100 rounded p-2 block text-[11px] leading-relaxed text-amber-900 shadow-3xs">
-                              <div className="flex justify-between items-center text-[9px] text-slate-400 font-bold mb-1 select-none">
-                                <span className="text-amber-800 font-extrabold flex items-center gap-0.5 animate-shimmer">
-                                  <span>🛡️</span>
-                                  <T>{dir.author}</T>
-                                </span>
-                                <span>{dir.timestamp}</span>
-                              </div>
-                              {editingDirectiveId === dir.id ? (
-                                <div className="mt-1.5 space-y-1">
-                                  <textarea
-                                    value={editingDirectiveText}
-                                    onChange={(e) => setEditingDirectiveText(e.target.value)}
-                                    className="w-full bg-white border border-amber-200 text-[11px] rounded p-1.5 focus:outline-none focus:ring-1 focus:ring-amber-500 font-sans text-slate-800 resize-y"
-                                    rows={2}
-                                  />
-                                  <div className="flex justify-end gap-1.5 select-none">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setEditingDirectiveId(null);
-                                        setEditingDirectiveText("");
-                                      }}
-                                      className="p-1 px-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-[9px] font-sans font-black rounded flex items-center gap-0.5 border-none h-6 cursor-pointer"
-                                    >
-                                      <X className="w-3 h-3" />
-                                      <T>HỦY</T>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const trimmed = editingDirectiveText.trim();
-                                        if (!trimmed) return;
-                                        
-                                        const updatedDirectives = report.directives.map((d) => {
-                                          if (d.id === dir.id) {
-                                            return { ...d, text: trimmed };
-                                          }
-                                          return d;
-                                        });
-                                        
-                                        if (onUpdateReport) {
-                                          onUpdateReport({
-                                            ...report,
-                                            directives: updatedDirectives
-                                          });
-                                        }
-                                        setEditingDirectiveId(null);
-                                        setEditingDirectiveText("");
-                                      }}
-                                      className="p-1 px-1.5 bg-amber-500 hover:bg-amber-600 text-white text-[9px] font-sans font-black rounded flex items-center gap-0.5 border-none h-6 cursor-pointer"
-                                    >
-                                      <Check className="w-3 h-3" />
-                                      <T>LƯU</T>
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="flex justify-between items-start gap-2">
-                                  <T className="block font-medium flex-1 break-words">{dir.text}</T>
-                                  <div className="flex gap-1 shrink-0 select-none items-center mt-0.5">
-                                    {((dir.author === currentUser?.fullName) || currentUser?.role === UserRole.ADMIN) && (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setEditingDirectiveId(dir.id);
-                                          setEditingDirectiveText(dir.text);
-                                        }}
-                                        className="text-slate-400 hover:text-amber-600 transition-colors cursor-pointer border-none bg-transparent p-0.5"
-                                        title="Chỉnh sửa chỉ đạo"
-                                      >
-                                        <Edit className="w-3 h-3" />
-                                      </button>
-                                    )}
-                                    {currentUser?.role === UserRole.ADMIN && (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setDirectiveToDelete({ report, dirId: dir.id });
-                                        }}
-                                        className="text-slate-400 hover:text-rose-600 transition-colors cursor-pointer border-none bg-transparent p-0.5"
-                                        title="Xóa chỉ đạo (Admin)"
-                                      >
-                                        <Trash2 className="w-3 h-3" />
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          ))}
+                           {report.directives.map((dir) => {
+                             const isExpanded = !!expandedDirectiveIds[dir.id];
+                             if (!isExpanded) {
+                               return (
+                                 <div 
+                                   key={dir.id}
+                                   data-directive-container="true"
+                                   onClick={() => setExpandedDirectiveIds(prev => ({ ...prev, [dir.id]: true }))}
+                                   className="bg-amber-50 hover:bg-amber-100/70 border border-amber-100 rounded p-1.5 flex items-center justify-between text-[11px] text-amber-900 cursor-pointer transition-all select-none shadow-3xs active:scale-[0.98]"
+                                 >
+                                   <span className="flex items-center gap-1 font-extrabold text-[10px]">
+                                     <span>🛡️</span>
+                                     <T>Chỉ đạo từ: {dir.author}</T>
+                                   </span>
+                                   <span className="text-[9px] text-slate-400 font-bold flex items-center gap-0.5 select-none shrink-0">
+                                     <T>Xem chỉ đạo</T>
+                                     <span>➔</span>
+                                   </span>
+                                 </div>
+                               );
+                             }
+
+                             const acknowledgesList = dir.acknowledges ? [...dir.acknowledges] : [];
+                             if (acknowledgesList.length === 0 && dir.isAcknowledged) {
+                               acknowledgesList.push({
+                                 by: dir.acknowledgedBy || "Người nhận",
+                                 at: dir.acknowledgedAt || dir.timestamp
+                               });
+                             }
+                             const currentUserSignature = `${currentUser?.department || "Bộ phận"} - ${currentUser?.fullName || "Người nhận"}`;
+                             const hasUserAcknowledged = acknowledgesList.some(item => item.by === currentUserSignature);
+
+                             return (
+                               <div key={dir.id} data-directive-container="true" className="bg-amber-50 border border-amber-100 rounded p-2 block text-[11px] leading-relaxed text-amber-900 shadow-3xs">
+                                 <div className="flex justify-between items-center text-[9px] text-slate-400 font-bold mb-1 select-none border-b border-amber-200/40 pb-1">
+                                   <span className="text-amber-800 font-extrabold flex items-center gap-0.5 animate-shimmer">
+                                     <span>🛡️</span>
+                                     <T>{dir.author}</T>
+                                   </span>
+                                   <div className="flex items-center gap-2">
+                                     <span>{dir.timestamp}</span>
+                                     <button
+                                       type="button"
+                                       onClick={(e) => {
+                                         e.stopPropagation();
+                                         setExpandedDirectiveIds(prev => ({ ...prev, [dir.id]: false }));
+                                       }}
+                                       className="text-[8px] text-amber-800 hover:text-amber-950 bg-amber-100 px-1 py-0.2 rounded border border-amber-200 font-sans cursor-pointer active:scale-95 transition-all"
+                                     >
+                                       <T>Thu gọn</T>
+                                     </button>
+                                   </div>
+                                 </div>
+                                 {editingDirectiveId === dir.id ? (
+                                   <div className="mt-1.5 space-y-1">
+                                     <textarea
+                                       value={editingDirectiveText}
+                                       onChange={(e) => setEditingDirectiveText(e.target.value)}
+                                       className="w-full bg-white border border-amber-200 text-[11px] rounded p-1.5 focus:outline-none focus:ring-1 focus:ring-amber-500 font-sans text-slate-800 resize-y"
+                                       rows={2}
+                                     />
+                                     <div className="flex justify-end gap-1.5 select-none">
+                                       <button
+                                         type="button"
+                                         onClick={() => {
+                                           setEditingDirectiveId(null);
+                                           setEditingDirectiveText("");
+                                         }}
+                                         className="p-1 px-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-[9px] font-sans font-black rounded flex items-center gap-0.5 border-none h-6 cursor-pointer"
+                                       >
+                                         <X className="w-3 h-3" />
+                                         <T>HỦY</T>
+                                       </button>
+                                       <button
+                                         type="button"
+                                         onClick={() => {
+                                           const trimmed = editingDirectiveText.trim();
+                                           if (!trimmed) return;
+                                           
+                                           const updatedDirectives = report.directives.map((d) => {
+                                             if (d.id === dir.id) {
+                                               return { ...d, text: trimmed };
+                                             }
+                                             return d;
+                                           });
+                                           
+                                           if (onUpdateReport) {
+                                             onUpdateReport({
+                                               ...report,
+                                               directives: updatedDirectives
+                                             });
+                                           }
+                                           setEditingDirectiveId(null);
+                                           setEditingDirectiveText("");
+                                         }}
+                                         className="p-1 px-1.5 bg-amber-500 hover:bg-amber-600 text-white text-[9px] font-sans font-black rounded flex items-center gap-0.5 border-none h-6 cursor-pointer"
+                                       >
+                                         <Check className="w-3 h-3" />
+                                         <T>LƯU</T>
+                                       </button>
+                                     </div>
+                                   </div>
+                                 ) : (
+                                   <>
+                                     <div className="flex justify-between items-start gap-2">
+                                       <T className="block font-medium flex-1 break-words">{dir.text}</T>
+                                       <div className="flex gap-1 shrink-0 select-none items-center mt-0.5">
+                                         {((dir.author === currentUser?.fullName) || currentUser?.role === UserRole.ADMIN) && (
+                                           <button
+                                             type="button"
+                                             onClick={() => {
+                                               setEditingDirectiveId(dir.id);
+                                               setEditingDirectiveText(dir.text);
+                                             }}
+                                             className="text-slate-400 hover:text-amber-600 transition-colors cursor-pointer border-none bg-transparent p-0.5"
+                                             title="Chỉnh sửa chỉ đạo"
+                                           >
+                                             <Edit className="w-3 h-3" />
+                                           </button>
+                                         )}
+                                         {currentUser?.role === UserRole.ADMIN && (
+                                           <button
+                                             type="button"
+                                             onClick={() => {
+                                               setDirectiveToDelete({ report, dirId: dir.id });
+                                             }}
+                                             className="text-slate-400 hover:text-rose-600 transition-colors cursor-pointer border-none bg-transparent p-0.5"
+                                             title="Xóa chỉ đạo (Admin)"
+                                           >
+                                             <Trash2 className="w-3 h-3" />
+                                           </button>
+                                         )}
+                                       </div>
+                                     </div>
+
+                                     {/* Modern, clean acknowledgment area */}
+                                     <div className="mt-2 pt-1.5 border-t border-amber-200/50 flex items-center justify-between select-none">
+                                       <button
+                                         type="button"
+                                         onClick={() => handleAcknowledgeDirective(report, dir.id)}
+                                         disabled={hasUserAcknowledged}
+                                         className={`px-1.5 py-0.5 rounded text-[9px] font-sans font-extrabold flex items-center gap-0.5 transition-all ${
+                                           hasUserAcknowledged
+                                             ? "bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-not-allowed opacity-85"
+                                             : "bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 hover:border-emerald-400 active:scale-95 cursor-pointer shadow-3xs"
+                                         }`}
+                                       >
+                                         <span>{hasUserAcknowledged ? "✓ Đã Tiếp Nhận" : "📥 Tiếp Nhận Chỉ Đạo"}</span>
+                                       </button>
+
+                                       {acknowledgesList.length > 0 && (
+                                         <div className="flex items-center gap-1">
+                                           <button
+                                             type="button"
+                                             onClick={() => setShowAckDetails(prev => ({ ...prev, [dir.id]: !prev[dir.id] }))}
+                                             className={`px-1.5 py-0.5 border rounded text-[9px] font-sans font-extrabold flex items-center gap-1 active:scale-95 transition-all cursor-pointer ${
+                                               showAckDetails[dir.id]
+                                                 ? "bg-emerald-600 text-white border-emerald-600 shadow-3xs"
+                                                 : "bg-amber-100/70 hover:bg-amber-200/70 text-amber-900 border-amber-200/60"
+                                             }`}
+                                             title="Xem danh sách tiếp nhận"
+                                           >
+                                             <span>🤝</span>
+                                             <span>{acknowledgesList.length}</span>
+                                           </button>
+                                         </div>
+                                       )}
+                                     </div>
+
+                                     {/* Collapsible list with details of who accepted */}
+                                     {showAckDetails[dir.id] && acknowledgesList.length > 0 && (
+                                       <div className="mt-1.5 p-1.5 bg-white border border-emerald-200/60 rounded text-[9px] text-slate-700 space-y-1 animate-fadeIn max-h-24 overflow-y-auto">
+                                         <div className="font-extrabold text-emerald-800 text-[8px] uppercase tracking-wider pb-0.5 border-b border-slate-100 select-none flex justify-between items-center">
+                                           <T>Danh Sách Tiếp Nhận:</T>
+                                           <span className="text-slate-400 font-normal">({acknowledgesList.length})</span>
+                                         </div>
+                                         {acknowledgesList.map((ack, aIdx) => (
+                                           <div key={aIdx} className="flex justify-between items-center gap-1.5 text-slate-700">
+                                             <span className="font-semibold text-slate-800 truncate max-w-[150px]"><T>{ack.by}</T></span>
+                                             <span className="text-slate-400 shrink-0 font-mono text-[8px] select-none">{ack.at}</span>
+                                           </div>
+                                         ))}
+                                       </div>
+                                     )}
+                                   </>
+                                 )}
+                               </div>
+                             );
+                           })}
                         </div>
                       </div>
                     )}
@@ -4506,17 +4873,28 @@ App Link: ${window.location.origin}`;
                       const isAcknowledged = report.sharedBy?.some(name => name.startsWith(currentUser?.fullName || "Kiểm soát viên")) || false;
                       const ackCount = report.sharedBy?.length || 0;
                       return (
-                        <div className="flex items-center gap-1 bg-slate-50 border border-slate-100 rounded-lg py-0.5 px-1.5 shrink-0">
+                        <div className={`flex items-center gap-1.5 rounded-lg py-0.5 px-2 shrink-0 transition-all duration-300 shadow-3xs ${
+                          isAcknowledged 
+                            ? "bg-emerald-50/90 border border-emerald-200 text-emerald-800" 
+                            : "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 border border-orange-500 text-white shadow-[0_0_8px_rgba(249,115,22,0.35)] hover:scale-105 active:scale-95"
+                        }`}>
                           <button
                             type="button"
                             onClick={() => toggleAcknowledge(report.id)}
-                            className={`flex items-center gap-1 p-1 rounded transition-all hover:scale-110 active:scale-95 cursor-pointer bg-transparent whitespace-nowrap shrink-0 border-none ${
-                              isAcknowledged ? "text-sky-700 font-bold" : "text-slate-400 hover:text-sky-600"
+                            className={`flex items-center gap-1.5 p-1 rounded transition-all cursor-pointer bg-transparent whitespace-nowrap shrink-0 border-none ${
+                              isAcknowledged ? "text-emerald-700 font-bold" : "text-white font-extrabold"
                             }`}
-                            title={isAcknowledged ? "Đã tiếp nhận" : "Tiếp nhận"}
+                            title={isAcknowledged ? "Đã tiếp nhận" : "Click để tiếp nhận/ xử lý ngay!"}
                           >
-                            <Check className={`w-3.5 h-3.5 shrink-0 ${isAcknowledged ? "stroke-[3px] text-sky-700" : "stroke-[2px]"}`} />
-                            <span className="text-[9.5px] font-black font-sans uppercase tracking-tight whitespace-nowrap">
+                            {isAcknowledged ? (
+                              <Check className="w-3.5 h-3.5 shrink-0 stroke-[3px] text-emerald-700" />
+                            ) : (
+                              <span className="relative flex h-2 w-2 mr-0.5 shrink-0">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                              </span>
+                            )}
+                            <span className="text-[10px] font-black font-sans uppercase tracking-tight whitespace-nowrap">
                               <span translate="no" className="notranslate"><T>Tiếp nhận/ Xử lý</T></span>
                             </span>
                           </button>
@@ -4532,10 +4910,14 @@ App Link: ${window.location.origin}`;
                             disabled={ackCount === 0}
                             className={`text-[10px] font-black font-sans px-1.5 py-0.5 rounded cursor-pointer transition-all border-none ${
                               ackCount > 0 
-                                ? "text-sky-700 hover:text-sky-800 bg-sky-50 hover:bg-sky-100 hover:scale-105" 
-                                : "text-slate-400 bg-transparent cursor-default"
+                                ? isAcknowledged 
+                                  ? "text-emerald-700 hover:text-emerald-800 bg-emerald-100 hover:bg-emerald-200" 
+                                  : "text-white hover:text-amber-100 bg-white/20 hover:bg-white/30"
+                                : isAcknowledged
+                                  ? "text-emerald-400 bg-transparent cursor-default"
+                                  : "text-white/50 bg-transparent cursor-default"
                             }`}
-                            title={ackCount > 0 ? "Xem ai đã tiếp nhận/ xử lý" : "Chưa có lượt tiếp nhận"}
+                            title={ackCount > 0 ? "Xem danh sách đã tiếp nhận/ xử lý" : "Chưa có lượt tiếp nhận"}
                           >
                             <span translate="no" className="notranslate"><T>{ackCount}</T></span>
                           </button>
@@ -4705,16 +5087,13 @@ App Link: ${window.location.origin}`;
         <button
           type="button"
           onClick={() => {
-            if (currentUser?.role === UserRole.ADMIN) {
-              setActiveBottomTab("PHAN_TICH");
-            } else {
-              showToast("Tính năng Phân Tích đang tạm khóa, chỉ dành cho Admin! 🔒");
+            if (currentUser?.role !== UserRole.ADMIN) {
+              setMobileStatsSubTab("CHAT_LUONG");
             }
+            setActiveBottomTab("PHAN_TICH");
           }}
           className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors min-w-0 overflow-hidden ${
-            currentUser?.role !== UserRole.ADMIN
-              ? "opacity-50 text-slate-400 cursor-not-allowed"
-              : activeBottomTab === "PHAN_TICH"
+            activeBottomTab === "PHAN_TICH"
               ? "text-violet-600 font-extrabold"
               : "text-slate-400 hover:text-violet-600"
           }`}
@@ -4723,9 +5102,6 @@ App Link: ${window.location.origin}`;
             <BarChart2 className={`w-4 h-4 mx-auto mb-0.5 transition-transform hover:scale-110 ${
               activeBottomTab === "PHAN_TICH" ? "text-violet-600 font-extrabold" : "text-violet-400"
             }`} />
-            {currentUser?.role !== UserRole.ADMIN && (
-              <Lock className="w-2.5 h-2.5 text-rose-500 absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 border border-slate-200" />
-            )}
           </div>
           <T><span translate="no" className="notranslate truncate w-full block text-center">Phân Tích</span></T>
         </button>

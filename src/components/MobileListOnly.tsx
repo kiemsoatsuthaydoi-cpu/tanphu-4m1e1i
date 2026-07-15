@@ -111,6 +111,31 @@ export function MobileListOnly({
   // Filter out deleted reports
   const activeReports = reports.filter(r => !r.isDeleted);
 
+  const [showAckDetailsList, setShowAckDetailsList] = React.useState<Record<string, boolean>>({});
+  const [expandedDirectiveIdsList, setExpandedDirectiveIdsList] = React.useState<Record<string, boolean>>({});
+
+  React.useEffect(() => {
+    function handleGlobalClick(e: Event) {
+      const target = e.target as HTMLElement;
+      if (!target) return;
+
+      const hasExpanded = Object.values(expandedDirectiveIdsList).some(Boolean);
+      if (hasExpanded) {
+        if (!target.closest('[data-directive-container-list="true"]')) {
+          setExpandedDirectiveIdsList({});
+          setShowAckDetailsList({});
+        }
+      }
+    }
+
+    document.addEventListener("mousedown", handleGlobalClick);
+    document.addEventListener("touchstart", handleGlobalClick);
+    return () => {
+      document.removeEventListener("mousedown", handleGlobalClick);
+      document.removeEventListener("touchstart", handleGlobalClick);
+    };
+  }, [expandedDirectiveIdsList]);
+
   // Sort reports chronologically or reverse-chronologically (newest first matches system view)
   const sortedReports = [...activeReports].sort((a, b) => {
     return b.timestamp.localeCompare(a.timestamp);
@@ -239,19 +264,91 @@ export function MobileListOnly({
                         <span>🛡️</span>
                         <span translate="no" className="notranslate">Chỉ đạo từ Ban kiểm soát:</span>
                       </div>
-                      {report.directives.map((dir) => (
-                        <div key={dir.id} className="p-2 bg-amber-50/70 border border-amber-100 rounded">
-                          <div className="flex justify-between text-[8px] text-slate-400 font-bold mb-0.5">
-                            <span className="text-amber-800 font-extrabold">
-                              <span translate="no" className="notranslate">{dir.author}</span>
-                            </span>
-                            <span translate="no" className="notranslate">{dir.timestamp}</span>
+                      {report.directives.map((dir) => {
+                        const isExpanded = !!expandedDirectiveIdsList[dir.id];
+                        if (!isExpanded) {
+                          return (
+                            <div 
+                              key={dir.id}
+                              data-directive-container-list="true"
+                              onClick={() => setExpandedDirectiveIdsList(prev => ({ ...prev, [dir.id]: true }))}
+                              className="bg-amber-50/70 hover:bg-amber-100/70 border border-amber-100/60 rounded p-1 flex items-center justify-between text-[10px] text-amber-900 cursor-pointer transition-all select-none shadow-3xs active:scale-[0.98]"
+                            >
+                              <span className="flex items-center gap-1 font-bold text-[9.5px]">
+                                <span>🛡️</span>
+                                <T>Chỉ đạo từ: {dir.author}</T>
+                              </span>
+                              <span className="text-[8.5px] text-slate-400 font-bold flex items-center gap-0.5 shrink-0">
+                                <T>Xem chỉ đạo</T>
+                                <span>➔</span>
+                              </span>
+                            </div>
+                          );
+                        }
+
+                        const acknowledgesList = dir.acknowledges ? [...dir.acknowledges] : [];
+                        if (acknowledgesList.length === 0 && dir.isAcknowledged) {
+                          acknowledgesList.push({
+                            by: dir.acknowledgedBy || "Người nhận",
+                            at: dir.acknowledgedAt || dir.timestamp
+                          });
+                        }
+
+                        return (
+                          <div key={dir.id} data-directive-container-list="true" className="p-2 bg-amber-50/70 border border-amber-100 rounded">
+                            <div className="flex justify-between text-[8px] text-slate-400 font-bold mb-1 border-b border-amber-200/40 pb-0.5 select-none">
+                              <span className="text-amber-800 font-extrabold flex items-center gap-0.5">
+                                <span>🛡️</span>
+                                <T>{dir.author}</T>
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span>{dir.timestamp}</span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setExpandedDirectiveIdsList(prev => ({ ...prev, [dir.id]: false }));
+                                  }}
+                                  className="text-[8px] text-amber-800 hover:text-amber-950 bg-amber-100 px-1 py-0.1 rounded border border-amber-200 font-sans cursor-pointer active:scale-95 transition-all"
+                                >
+                                  <T>Thu gọn</T>
+                                </button>
+                              </div>
+                            </div>
+                            <p className="text-[10px] text-amber-950 font-medium mb-1.5">
+                              <span translate="no" className="notranslate">{dir.text}</span>
+                            </p>
+
+                            {/* Receipts */}
+                            {acknowledgesList.length > 0 && (
+                              <div className="mt-1 border-t border-amber-200/40 pt-1">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[8px] text-slate-400 font-bold">Tiếp nhận chỉ đạo:</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowAckDetailsList(prev => ({ ...prev, [dir.id]: !prev[dir.id] }))}
+                                    className="px-1.5 py-0.2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-[8px] font-sans font-bold rounded flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
+                                  >
+                                    <span>🤝</span>
+                                    <span>{acknowledgesList.length} tiếp nhận</span>
+                                  </button>
+                                </div>
+
+                                {showAckDetailsList[dir.id] && (
+                                  <div className="mt-1 p-1 bg-white border border-emerald-200/50 rounded text-[8px] text-slate-700 space-y-0.5 max-h-16 overflow-y-auto">
+                                    {acknowledgesList.map((ack, aIdx) => (
+                                      <div key={aIdx} className="flex justify-between items-center gap-1">
+                                        <span className="font-semibold text-slate-800 truncate"><T>{ack.by}</T></span>
+                                        <span className="text-slate-400 shrink-0 font-mono text-[7px]">{ack.at}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          <p className="text-[10px] text-amber-950 font-medium">
-                            <span translate="no" className="notranslate">{dir.text}</span>
-                          </p>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
 

@@ -2115,13 +2115,26 @@ export default function App() {
     }
   };
 
-  const handleUpdateUser = (updatedUser: User) => {
+  const handleUpdateUser = (updatedUser: User, oldId?: string) => {
     const sanitized = sanitizeUsers([updatedUser])[0];
-    setUsers((prev) => prev.map((u) => (u.id === sanitized.id ? sanitized : u)));
-    if (currentUser && currentUser.id === sanitized.id) {
+    const actualOldId = oldId || sanitized.id;
+
+    setUsers((prev) => prev.map((u) => (u.id === actualOldId ? sanitized : u)));
+
+    if (actualOldId !== sanitized.id) {
+      setReports((prev) =>
+        prev.map((r) => (r.uploaderId === actualOldId ? { ...r, uploaderId: sanitized.id } : r))
+      );
+    }
+
+    if (currentUser && (currentUser.id === actualOldId || currentUser.id === sanitized.id)) {
       setCurrentUser(sanitized);
     }
+
     if (dbConnected) {
+      if (actualOldId !== sanitized.id) {
+        deleteDocument(COLLECTIONS.USERS, actualOldId).catch(console.error);
+      }
       saveDocument(COLLECTIONS.USERS, sanitized.id, sanitized).catch(console.error);
     }
   };

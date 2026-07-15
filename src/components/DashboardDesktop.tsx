@@ -159,7 +159,7 @@ interface DashboardDesktopProps {
   moldsCatalog: CatalogMold[];
   setMoldsCatalog: React.Dispatch<React.SetStateAction<CatalogMold[]>>;
   onUpdateReport?: (report: QualityReport) => void;
-  onUpdateUser?: (updatedUser: User) => void;
+  onUpdateUser?: (updatedUser: User, oldId?: string) => void;
   onForceSyncMetadata?: () => Promise<void>;
   onForceSyncUsers?: () => Promise<void>;
   onDeleteReport?: (id: string, forcePermanent?: boolean) => void;
@@ -535,11 +535,11 @@ function DesktopDirectiveForm({
         value={text}
         onChange={setText}
         placeholder="Chỉ đạo (mặc định ghi mờ bên trong ô)..."
-        className="flex-1 bg-slate-50 border border-slate-200 text-[10px] rounded px-2 py-1 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all select-text"
+        className="flex-1 bg-slate-50 border border-slate-200 text-[10px] rounded px-2 py-1 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all select-text"
       />
       <button
         type="submit"
-        className="bg-amber-500 hover:bg-amber-600 px-3.5 py-1 text-[9px] text-white font-black rounded uppercase cursor-pointer shrink-0 flex items-center justify-center"
+        className="bg-blue-600 hover:bg-blue-700 px-3.5 py-1 text-[9px] text-white font-black rounded uppercase cursor-pointer shrink-0 flex items-center justify-center"
       >
         <T>GỬI</T>
       </button>
@@ -628,6 +628,76 @@ export default function DashboardDesktop({
     "PHÊ_DUYỆT" | "MÃ_HÓA" | "THỐNG_KÊ" | "DỮ_LIỆU" | "QUY_CHẾ" | "CÁ_NHÂN" | "THÔNG_BÁO" | "TRAO_ĐỔI" | "TRIỂN_KHAI" | "ĐỀ_XUẤT" | "QUOTA_CLOUD"
   >("PHÊ_DUYỆT");
   const [statsSubTab, setStatsSubTab] = useState<"NHAN_SU" | "CHAT_LUONG">("NHAN_SU");
+  const [showAckDetailsDesktop, setShowAckDetailsDesktop] = useState<Record<string, boolean>>({});
+  const [expandedDirectiveIdsDesktop, setExpandedDirectiveIdsDesktop] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    function handleGlobalClick(e: Event) {
+      const target = e.target as HTMLElement;
+      if (!target) return;
+
+      const hasExpanded = Object.values(expandedDirectiveIdsDesktop).some(Boolean);
+      if (hasExpanded) {
+        if (!target.closest('[data-directive-container-desktop="true"]')) {
+          setExpandedDirectiveIdsDesktop({});
+          setShowAckDetailsDesktop({});
+        }
+      }
+    }
+
+    document.addEventListener("mousedown", handleGlobalClick);
+    document.addEventListener("touchstart", handleGlobalClick);
+    return () => {
+      document.removeEventListener("mousedown", handleGlobalClick);
+      document.removeEventListener("touchstart", handleGlobalClick);
+    };
+  }, [expandedDirectiveIdsDesktop]);
+
+  const handleAcknowledgeDirectiveDesktop = (report: QualityReport, dirId: string) => {
+    const currentSingaporeTime = new Date();
+    const yy = String(currentSingaporeTime.getFullYear()).slice(-2);
+    const mm = String(currentSingaporeTime.getMonth() + 1).padStart(2, '0');
+    const dd = String(currentSingaporeTime.getDate()).padStart(2, '0');
+    const timeStr = currentSingaporeTime.toTimeString().split(' ')[0];
+    const stamp = `${timeStr} ${dd}/${mm}/${yy}`;
+
+    const userSig = `${currentUser?.department || "Bộ phận"} - ${currentUser?.fullName || "Người nhận"}`;
+
+    const updatedDirectives = (report.directives || []).map((d) => {
+      if (d.id === dirId) {
+        const currentList = d.acknowledges ? [...d.acknowledges] : [];
+        if (currentList.length === 0 && d.isAcknowledged) {
+          currentList.push({
+            by: d.acknowledgedBy || "Người nhận",
+            at: d.acknowledgedAt || d.timestamp
+          });
+        }
+        const isAlreadyAdded = currentList.some(item => item.by === userSig);
+        const newList = isAlreadyAdded 
+          ? currentList 
+          : [...currentList, { by: userSig, at: stamp }];
+
+        return {
+          ...d,
+          isAcknowledged: true,
+          acknowledgedBy: userSig,
+          acknowledgedAt: stamp,
+          acknowledges: newList
+        };
+      }
+      return d;
+    });
+
+    if (onUpdateReport) {
+      onUpdateReport({
+        ...report,
+        directives: updatedDirectives
+      });
+    }
+    if (onShowToast) {
+      onShowToast("Đã xác nhận tiếp nhận chỉ đạo! 🤝", "success");
+    }
+  };
 
   // Forum states
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>("TOPIC-1");
@@ -865,6 +935,7 @@ export default function DashboardDesktop({
 
   // Edit User State
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editUserId, setEditUserId] = useState("");
   const [editFullName, setEditFullName] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editDepartment, setEditDepartment] = useState("");
@@ -961,6 +1032,7 @@ export default function DashboardDesktop({
 
   const handleStartEditUser = (u: User) => {
     setEditingUser(u);
+    setEditUserId(u.id);
     setEditFullName(u.fullName);
     setEditPhone(u.phone);
 
@@ -1057,8 +1129,30 @@ export default function DashboardDesktop({
   const handleSaveEditedUser = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
+
+    const trimmedNewId = editUserId.trim();
+    if (!trimmedNewId) {
+      if (onShowToast) {
+        onShowToast("Mã nhân sự không được để trống!", "error");
+      } else {
+        alert("Mã nhân sự không được để trống!");
+      }
+      return;
+    }
+
+    // Check conflict
+    if (trimmedNewId !== editingUser.id && users.some((u) => u.id === trimmedNewId)) {
+      if (onShowToast) {
+        onShowToast("Mã nhân sự này đã tồn tại trong hệ thống!", "error");
+      } else {
+        alert("Mã nhân sự này đã tồn tại trong hệ thống!");
+      }
+      return;
+    }
+
     const updatedUser: User = {
       ...editingUser,
+      id: trimmedNewId,
       fullName: editFullName.trim(),
       phone: editPhone.trim(),
       department: editDepartment,
@@ -1069,7 +1163,7 @@ export default function DashboardDesktop({
       company: editCompany,
     };
     if (onUpdateUser) {
-      onUpdateUser(updatedUser);
+      onUpdateUser(updatedUser, editingUser.id);
     }
     setEditingUser(null);
   };
@@ -2482,9 +2576,10 @@ export default function DashboardDesktop({
                           </label>
                           <input
                             type="text"
-                            disabled
-                            value={editingUser.id}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-400 bg-slate-100 select-none cursor-not-allowed"
+                            required
+                            value={editUserId}
+                            onChange={(e) => setEditUserId(e.target.value.trim())}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all"
                           />
                         </div>
                       </div>
@@ -4505,16 +4600,121 @@ export default function DashboardDesktop({
 
                                   {/* Display directives history in Nhật ký table row */}
                                   {r.directives && r.directives.length > 0 && (
-                                    <div className="mt-2 space-y-1 block border-l-2 border-amber-500 pl-1.5 bg-amber-50/50 p-1.5 rounded">
-                                      <div className="text-[9px] font-extrabold text-[#78350f] uppercase flex items-center gap-1">
+                                    <div className="mt-2 space-y-1.5 block border-l-2 border-amber-500 pl-1.5 bg-amber-50/50 p-1.5 rounded">
+                                      <div className="text-[9px] font-extrabold text-[#78350f] uppercase flex items-center gap-1 mb-1.5">
                                         <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500"></span>
                                         <T>Chỉ đạo / Điều hành:</T>
                                       </div>
-                                      {r.directives.map((dir) => (
-                                        <div key={dir.id} className="text-[10px] text-amber-800 leading-tight">
-                                          <T>• {dir.text}</T> <span className="text-[9px] text-slate-400 font-mono">({dir.author} - {dir.timestamp})</span>
-                                        </div>
-                                      ))}
+                                      {r.directives.map((dir) => {
+                                        const isExpanded = !!expandedDirectiveIdsDesktop[dir.id];
+                                        if (!isExpanded) {
+                                          return (
+                                            <div 
+                                              key={dir.id}
+                                              data-directive-container-desktop="true"
+                                              onClick={() => setExpandedDirectiveIdsDesktop(prev => ({ ...prev, [dir.id]: true }))}
+                                              className="bg-amber-50/70 hover:bg-amber-100/70 border border-amber-100/60 rounded p-1 flex items-center justify-between text-[10px] text-amber-900 cursor-pointer transition-all select-none shadow-3xs active:scale-[0.98]"
+                                            >
+                                              <span className="flex items-center gap-1 font-bold text-[9.5px]">
+                                                <span>🛡️</span>
+                                                <T>Chỉ đạo từ: {dir.author}</T>
+                                              </span>
+                                              <span className="text-[8.5px] text-slate-400 font-bold flex items-center gap-0.5 shrink-0">
+                                                <T>Xem chỉ đạo</T>
+                                                <span>➔</span>
+                                              </span>
+                                            </div>
+                                          );
+                                        }
+
+                                        const acknowledgesList = dir.acknowledges ? [...dir.acknowledges] : [];
+                                        if (acknowledgesList.length === 0 && dir.isAcknowledged) {
+                                          acknowledgesList.push({
+                                            by: dir.acknowledgedBy || "Người nhận",
+                                            at: dir.acknowledgedAt || dir.timestamp
+                                          });
+                                        }
+                                        const currentUserSignature = `${currentUser?.department || "Bộ phận"} - ${currentUser?.fullName || "Người nhận"}`;
+                                        const hasUserAcknowledged = acknowledgesList.some(item => item.by === currentUserSignature);
+
+                                        return (
+                                          <div key={dir.id} data-directive-container-desktop="true" className="text-[10px] text-amber-800 leading-normal border border-amber-150 bg-amber-50/30 p-2 rounded mb-1 last:mb-0">
+                                            <div className="flex justify-between items-center text-[9px] text-slate-400 font-bold mb-1 select-none border-b border-amber-155/40 pb-1">
+                                              <span className="text-amber-800 font-extrabold flex items-center gap-0.5">
+                                                <span>🛡️</span>
+                                                <T>{dir.author}</T>
+                                              </span>
+                                              <div className="flex items-center gap-2">
+                                                <span>{dir.timestamp}</span>
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setExpandedDirectiveIdsDesktop(prev => ({ ...prev, [dir.id]: false }));
+                                                  }}
+                                                  className="text-[8px] text-amber-800 hover:text-amber-950 bg-amber-100 px-1.5 py-0.2 rounded border border-amber-200 font-sans cursor-pointer active:scale-95 transition-all"
+                                                >
+                                                  <T>Thu gọn</T>
+                                                </button>
+                                              </div>
+                                            </div>
+
+                                            <div className="text-[10px] text-amber-900 leading-relaxed font-semibold break-words py-1">
+                                              <T>{dir.text}</T>
+                                            </div>
+
+                                            {/* Receipt Row */}
+                                            <div className="mt-1.5 pt-1.5 border-t border-amber-200/50 flex items-center justify-between select-none">
+                                              <button
+                                                type="button"
+                                                onClick={() => handleAcknowledgeDirectiveDesktop(r, dir.id)}
+                                                disabled={hasUserAcknowledged}
+                                                className={`px-1.5 py-0.5 rounded text-[9px] font-sans font-bold flex items-center gap-0.5 transition-all ${
+                                                  hasUserAcknowledged
+                                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-not-allowed opacity-85"
+                                                    : "bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 hover:border-emerald-400 active:scale-95 cursor-pointer shadow-3xs"
+                                                }`}
+                                              >
+                                                <span>{hasUserAcknowledged ? "✓ Đã Tiếp Nhận" : "📥 Tiếp Nhận Chỉ Đạo"}</span>
+                                              </button>
+
+                                              {acknowledgesList.length > 0 && (
+                                                <div className="flex items-center gap-1">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => setShowAckDetailsDesktop(prev => ({ ...prev, [dir.id]: !prev[dir.id] }))}
+                                                    className={`px-1.5 py-0.5 border rounded text-[9px] font-sans font-extrabold flex items-center gap-1 active:scale-95 transition-all cursor-pointer ${
+                                                      showAckDetailsDesktop[dir.id]
+                                                        ? "bg-emerald-600 text-white border-emerald-600 shadow-3xs"
+                                                        : "bg-amber-100/70 hover:bg-amber-200/70 text-amber-900 border-amber-200/60"
+                                                    }`}
+                                                    title="Xem danh sách tiếp nhận"
+                                                  >
+                                                    <span>🤝</span>
+                                                    <span>{acknowledgesList.length}</span>
+                                                  </button>
+                                                </div>
+                                              )}
+                                            </div>
+
+                                            {/* Details drawer */}
+                                            {showAckDetailsDesktop[dir.id] && acknowledgesList.length > 0 && (
+                                              <div className="mt-1.5 p-1.5 bg-white border border-emerald-200/60 rounded text-[9px] text-slate-700 space-y-1 animate-fadeIn max-h-24 overflow-y-auto">
+                                                <div className="font-extrabold text-emerald-800 text-[8px] uppercase tracking-wider pb-0.5 border-b border-slate-100 select-none flex justify-between items-center">
+                                                  <T>Danh Sách Tiếp Nhận:</T>
+                                                  <span className="text-slate-400 font-normal">({acknowledgesList.length})</span>
+                                                </div>
+                                                {acknowledgesList.map((ack, aIdx) => (
+                                                  <div key={aIdx} className="flex justify-between items-center gap-1.5 text-slate-700">
+                                                    <span className="font-semibold text-slate-800 truncate max-w-[200px]"><T>{ack.by}</T></span>
+                                                    <span className="text-slate-400 shrink-0 font-mono text-[8px] select-none">{ack.at}</span>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                   )}
 
