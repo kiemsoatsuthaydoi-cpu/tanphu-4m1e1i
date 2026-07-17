@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
 import {
   Users,
   Settings,
@@ -28,6 +29,8 @@ import {
   Send,
   Bell,
   Sparkles,
+  Bot,
+  Brain,
   Search,
   Eye,
   EyeOff,
@@ -631,6 +634,42 @@ export default function DashboardDesktop({
   const [statsSubTab, setStatsSubTab] = useState<"NHAN_SU" | "CHAT_LUONG">("NHAN_SU");
   const [showAckDetailsDesktop, setShowAckDetailsDesktop] = useState<Record<string, boolean>>({});
   const [expandedDirectiveIdsDesktop, setExpandedDirectiveIdsDesktop] = useState<Record<string, boolean>>({});
+
+  const [aiAnalysisReport, setAiAnalysisReport] = useState<QualityReport | null>(null);
+  const [aiAnalysisText, setAiAnalysisText] = useState<string>("");
+  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+
+  const handleAIAnalyze = async (report: QualityReport) => {
+    setAiAnalysisReport(report);
+    setAiAnalysisText("");
+    setIsAnalyzing(true);
+    try {
+      const response = await fetch("/api/analyze-kph", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          factory: report.factory,
+          category: report.category,
+          content: report.content,
+          notes: report.notes,
+          directives: report.directives,
+        }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAiAnalysisText(data.analysis);
+      } else {
+        setAiAnalysisText(`### ❌ Có lỗi xảy ra khi phân tích:\n${data.error || "Không rõ nguyên nhân."}`);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setAiAnalysisText(`### ❌ Lỗi kết nối máy chủ:\n${err.message || "Không thể gửi yêu cầu phân tích."}`);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   useEffect(() => {
     function handleGlobalClick(e: Event) {
@@ -3864,7 +3903,7 @@ export default function DashboardDesktop({
                         <ResponsiveContainer width="100%" height="100%">
                           <ComposedChart data={getParetoData()}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                            <XAxis dataKey="category" tick={{ fill: '#475569', fontSize: 8, fontWeight: 700 }} />
+                            <XAxis dataKey="category" interval={0} angle={-15} textAnchor="end" height={45} tick={{ fill: '#475569', fontSize: 7.5, fontWeight: 700 }} />
                             <YAxis yAxisId="left" label={{ value: 'Tần suất lỗi', angle: -90, position: 'insideLeft', style: { fontSize: 8, fill: '#475569' } }} tick={{ fill: '#64748b', fontSize: 9 }} />
                             <YAxis yAxisId="right" orientation="right" label={{ value: 'Lũy kế (%)', angle: 90, position: 'insideRight', style: { fontSize: 8, fill: '#d97706' } }} domain={[0, 100]} tick={{ fill: '#64748b', fontSize: 9 }} />
                             <Tooltip />
@@ -3897,7 +3936,7 @@ export default function DashboardDesktop({
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={getBranchComparisonData()}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                          <XAxis dataKey="name" tick={{ fill: '#334155', fontSize: 9, fontWeight: 700 }} />
+                          <XAxis dataKey="name" interval={0} angle={-15} textAnchor="end" height={45} tick={{ fill: '#334155', fontSize: 8, fontWeight: 700 }} />
                           <YAxis tick={{ fill: '#64748b', fontSize: 9 }} />
                           <Tooltip />
                           <Legend wrapperStyle={{ fontSize: "10px" }} />
@@ -4214,7 +4253,7 @@ export default function DashboardDesktop({
           )}
 
           {/* TAB 4: DỮ LIỆU (Database history & PDF exports) */}
-          {activeTab === "DỮ_LỆU" && (
+          {activeTab === "DỮ_LIỆU" && (
             <div className="space-y-6">
               <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
                 <div>
@@ -4604,6 +4643,16 @@ export default function DashboardDesktop({
                                     <div className="mt-1 text-[10px] text-slate-500 italic block border-l-2 border-emerald-500 pl-1.5">
                                       <T>Ghi chú: {r.notes}</T>
                                     </div>
+                                  )}
+
+                                  {(r.reportType === "KPH" || r.isAbnormal) && (
+                                    <button
+                                      onClick={() => handleAIAnalyze(r)}
+                                      className="mt-2.5 flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-[10px] rounded-lg shadow-sm border border-blue-500/10 cursor-pointer hover:shadow active:scale-95 transition-all select-none uppercase tracking-wide"
+                                    >
+                                      <Bot className="w-3.5 h-3.5 text-blue-100" />
+                                      <span translate="no" className="notranslate">Phân tích AI (5-Why)</span>
+                                    </button>
                                   )}
 
                                   {/* Display directives history in Nhật ký table row */}
@@ -6326,6 +6375,113 @@ export default function DashboardDesktop({
               />
             </div>
           )}
+
+          {aiAnalysisReport && (() => {
+            const isReportDnp = aiAnalysisReport && (
+              aiAnalysisReport.factory?.includes("DNP") || 
+              aiAnalysisReport.factory?.includes("BBM") || 
+              aiAnalysisReport.factory?.includes("BBC")
+            );
+            const aiAssistantTitle = isReportDnp ? "Chuyên gia Trợ lý AI DNP" : "Chuyên gia Trợ lý AI Tân Phú";
+            const companyName = isReportDnp ? "DNP" : "Tân Phú";
+
+            return (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs transition-all animate-fadeIn">
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full flex flex-col max-h-[85vh] overflow-hidden animate-scaleIn select-text">
+                  {/* Header */}
+                  <div className="p-5 border-b border-slate-150 bg-gradient-to-r from-blue-50 to-indigo-50 flex items-center justify-between select-none">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+                        <Bot className="w-5 h-5 animate-pulse" />
+                      </div>
+                      <div>
+                        <h3 className="font-extrabold text-sm text-slate-850 flex items-center gap-2">
+                          <span translate="no" className="notranslate">{aiAssistantTitle}</span>
+                        </h3>
+                        <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">
+                          <span translate="no" className="notranslate">Phân tích Sự cố 4M1E1I (Phương pháp 5-Why)</span>
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setAiAnalysisReport(null);
+                        setAiAnalysisText("");
+                      }}
+                      className="p-1.5 hover:bg-slate-200/60 text-slate-400 hover:text-slate-600 rounded-lg transition-all cursor-pointer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  {/* Content area */}
+                  <div className="p-6 overflow-y-auto space-y-5 flex-1 bg-slate-50/40">
+                    {/* Input report summary card */}
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2.5">
+                      <div className="flex items-center justify-between text-[10px] font-extrabold text-slate-400 uppercase tracking-wider select-none">
+                        <span>Thông tin sự cố phân tích:</span>
+                        <span className="px-2 py-0.5 bg-red-100 text-red-800 border border-red-200 rounded">KPH</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 text-xs">
+                        <div>
+                          <span className="text-slate-400 block select-none">Xưởng/Nhà máy:</span>
+                          <span translate="no" className="notranslate font-bold text-slate-700">{getFactoryDisplayName(aiAnalysisReport.factory)}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-slate-400 block select-none">Phân loại 4M1E1I:</span>
+                          <span translate="no" className="notranslate font-black text-slate-700 uppercase block" style={{ color: colorMap[aiAnalysisReport.category] }}>{aiAnalysisReport.category}</span>
+                        </div>
+                      </div>
+                      <div className="text-xs pt-1.5 border-t border-slate-200/60">
+                        <span className="text-slate-400 block select-none">Nội dung chi tiết:</span>
+                        <p className="text-slate-700 font-medium leading-relaxed">{aiAnalysisReport.content}</p>
+                      </div>
+                    </div>
+
+                    {/* Analysis outcome */}
+                    <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm min-h-[250px] relative">
+                      {isAnalyzing ? (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center p-6 space-y-4 select-none">
+                          <div className="relative">
+                            <div className="w-14 h-14 rounded-full border-4 border-indigo-100 border-t-indigo-600 animate-spin"></div>
+                            <div className="absolute inset-0 flex items-center justify-center text-indigo-600">
+                              <Brain className="w-6 h-6 animate-pulse" />
+                            </div>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-xs font-black text-slate-700 animate-pulse"><span translate="no" className="notranslate">Trí tuệ nhân tạo đang phân tích lỗi...</span></p>
+                            <p className="text-[10px] text-slate-400 mt-1"><span translate="no" className="notranslate">Đang áp dụng mô hình 5-Why và đề xuất giải pháp cho {companyName}</span></p>
+                          </div>
+                        </div>
+                      ) : aiAnalysisText ? (
+                        <div className="prose max-w-none text-xs text-slate-700 leading-relaxed [&_h1]:text-base [&_h1]:font-black [&_h1]:text-slate-850 [&_h1]:mb-3 [&_h1]:mt-5 [&_h2]:text-sm [&_h2]:font-extrabold [&_h2]:text-slate-800 [&_h2]:mb-2 [&_h2]:mt-4 [&_h3]:text-xs [&_h3]:font-bold [&_h3]:text-slate-755 [&_h3]:mb-1.5 [&_h3]:mt-3 [&_p]:mb-2.5 [&_p]:text-justify [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-3 [&_li]:mb-1 [&_strong]:text-slate-900 [&_strong]:font-bold [&_code]:bg-slate-100 [&_code]:p-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-[11px]">
+                          <ReactMarkdown>{aiAnalysisText}</ReactMarkdown>
+                        </div>
+                      ) : (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 select-none">
+                          <Bot className="w-10 h-10 mb-2 opacity-50" />
+                          <p className="text-xs"><span translate="no" className="notranslate">Bấm nút "Phân tích AI (5-Why)" để bắt đầu</span></p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="p-4 border-t border-slate-150 bg-slate-50 flex justify-end">
+                    <button
+                      onClick={() => {
+                        setAiAnalysisReport(null);
+                        setAiAnalysisText("");
+                      }}
+                      className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg cursor-pointer shadow-sm hover:shadow transition-all select-none uppercase tracking-wide"
+                    >
+                      <span translate="no" className="notranslate">Đóng cửa sổ</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </main>
       </div>
     </div>
