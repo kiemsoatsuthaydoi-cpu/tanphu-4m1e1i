@@ -2877,11 +2877,14 @@ App Link: ${window.location.origin}`;
         {/* Row 1: Brand & Icons */}
         <div className="flex items-center justify-between w-full">
           <div className="flex items-center gap-2">
-            {/* TANPHU simulated logo block */}
-            <div className="relative">
-              <div className="bg-white text-[9px] font-black px-1.5 py-0.5 rounded flex items-center justify-center font-sans tracking-tighter" style={{ color: "var(--color-primary, #1e3a8a)" }}>
-                <T>TANPHU</T>
-              </div>
+            {/* META ANDON premium logo block */}
+            <div className="relative shrink-0">
+              <img 
+                src="/logo_meta.jpg" 
+                alt="META ANDON Logo" 
+                className="w-[30px] h-[30px] rounded-lg object-cover border border-white/20 shadow-xs"
+                referrerPolicy="no-referrer"
+              />
             </div>
             <div className="flex flex-col justify-center select-none">
               <T className="font-bold text-[13.2px] tracking-wide whitespace-nowrap leading-none block text-left">META ANDON</T>
