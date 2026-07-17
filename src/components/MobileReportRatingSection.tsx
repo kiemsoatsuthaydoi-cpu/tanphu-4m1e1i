@@ -141,12 +141,14 @@ export function MobileReportRatingSectionContent({
   report,
   currentUser,
   onUpdateReport,
-  isExpanded
+  isExpanded,
+  setIsExpanded
 }: {
   report: QualityReport;
   currentUser: User | null;
   onUpdateReport?: (report: QualityReport) => void;
   isExpanded: boolean;
+  setIsExpanded?: (expanded: boolean) => void;
 }) {
   const eligible = isEligibleEvaluator(currentUser);
   if (!isExpanded) return null;
@@ -157,6 +159,7 @@ export function MobileReportRatingSectionContent({
   const [imagesVal, setImagesVal] = useState(existingRating?.imagesRating || 5);
   const [infoVal, setInfoVal] = useState(existingRating?.infoRating || 5);
   const [timelinessVal, setTimelinessVal] = useState(existingRating?.timelinessRating || 5);
+  const [commentVal, setCommentVal] = useState(existingRating?.comment || "");
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const handleSaveRating = () => {
@@ -175,7 +178,8 @@ export function MobileReportRatingSectionContent({
       imagesRating: imagesVal,
       infoRating: infoVal,
       timelinessRating: timelinessVal,
-      timestamp: dateStr
+      timestamp: dateStr,
+      comment: commentVal
     };
 
     const currentRatings = report.ratings || [];
@@ -184,7 +188,8 @@ export function MobileReportRatingSectionContent({
 
     const overallScore = parseFloat(((imagesVal + infoVal + timelinessVal) / 3).toFixed(1));
     const roleLabel = currentUser.role === UserRole.ADMIN ? "Chủ Admin" : "Quản lý";
-    const logMsg = `Đánh giá bản tin bởi ${currentUser.fullName} (${roleLabel}): ${overallScore}/5 sao (Hình ảnh: ${imagesVal}, Thông tin: ${infoVal}, Kịp thời: ${timelinessVal})`;
+    const commentSuffix = commentVal ? ` - Ghi chú: "${commentVal}"` : "";
+    const logMsg = `Đánh giá bản tin bởi ${currentUser.fullName} (${roleLabel}): ${overallScore}/5 sao (Hình ảnh: ${imagesVal}, Thông tin: ${infoVal}, Kịp thời: ${timelinessVal})${commentSuffix}`;
 
     const logs = report.updateLogs ? [...report.updateLogs] : [];
     logs.push(logMsg);
@@ -199,7 +204,10 @@ export function MobileReportRatingSectionContent({
     setSuccessMsg("Đã lưu đánh giá chất lượng!");
     setTimeout(() => {
       setSuccessMsg(null);
-    }, 3000);
+      if (setIsExpanded) {
+        setIsExpanded(false);
+      }
+    }, 1000);
   };
 
   const renderStarSelector = (
@@ -210,12 +218,12 @@ export function MobileReportRatingSectionContent({
     readOnly: boolean
   ) => {
     return (
-      <div className="bg-white p-2 rounded-lg border border-slate-100 flex flex-col gap-1 shadow-3xs">
+      <div className="bg-white p-1.5 rounded-lg border border-slate-100 flex flex-col gap-0.5 shadow-3xs animate-fadeIn">
         <div>
-          <T className="text-[10.5px] font-black text-slate-700 block leading-tight">{label}</T>
-          <T className="text-[9.5px] text-slate-400 block font-medium mt-0.5 leading-tight">{description}</T>
+          <T className="text-[9.5px] font-black text-slate-700 block leading-tight">{label}</T>
+          <T className="text-[8.5px] text-slate-400 block font-medium mt-0.5 leading-tight">{description}</T>
         </div>
-        <div className="flex items-center gap-1.5 mt-0.5 select-none">
+        <div className="flex items-center gap-1 mt-0.5 select-none">
           {Array.from({ length: 5 }, (_, i) => {
             const starNum = i + 1;
             const isFilled = starNum <= value;
@@ -228,37 +236,37 @@ export function MobileReportRatingSectionContent({
                 className={`transition-all duration-150 p-0.5 ${readOnly ? "cursor-default" : "hover:scale-125 active:scale-90"}`}
               >
                 <Star
-                  className={`w-6 h-6 stroke-[1.5] ${
+                  className={`w-5 h-5 stroke-[1.5] ${
                     isFilled
-                      ? "text-amber-500 fill-amber-500"
+                      ? "text-amber-500 fill-amber-500 animate-pulse"
                       : "text-slate-300 fill-transparent"
                   }`}
                 />
               </button>
             );
           })}
-          <T className="text-[11px] font-bold text-slate-600 font-sans ml-1">{value} / 5</T>
+          <T className="text-[10px] font-bold text-slate-600 font-sans ml-1">{value} / 5</T>
         </div>
       </div>
     );
   };
 
   return (
-    <div className="mt-2.5 p-2.5 bg-slate-50/90 rounded-xl border border-slate-150 space-y-2.5 animate-slideDown select-text block">
-      <div className="flex justify-between items-center pb-1.5 border-b border-slate-200/60 select-none">
-        <div className="flex items-center gap-1.5">
-          <Award className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-          <T className="font-black text-[10.5px] text-slate-700 tracking-wide">ĐÁNH GIÁ CHẤT LƯỢNG BẢN TIN</T>
+    <div className="mt-1.5 p-2 bg-slate-50/95 rounded-xl border border-slate-150 space-y-1.5 animate-slideDown select-text block">
+      <div className="flex justify-between items-center pb-1 border-b border-slate-200/60 select-none">
+        <div className="flex items-center gap-1">
+          <Award className="w-3 h-3 text-amber-600 shrink-0" />
+          <T className="font-black text-[9.5px] text-slate-700 tracking-wide">ĐÁNH GIÁ CHẤT LƯỢNG BẢN TIN</T>
         </div>
         {eligible && (
-          <T className="text-[8px] bg-amber-500/10 text-amber-700 font-extrabold px-1.5 py-0.5 rounded-full select-none">
+          <T className="text-[7.5px] bg-amber-500/10 text-amber-700 font-extrabold px-1 py-0.5 rounded-full select-none">
             Bảng quản lý
           </T>
         )}
       </div>
 
       {/* Criteria Checklists */}
-      <div className="grid grid-cols-1 gap-1.5">
+      <div className="grid grid-cols-1 gap-1">
         {renderStarSelector(
           "1. HÌNH ẢNH SỰ VIỆC",
           "Hình ảnh rõ nét, đúng trọng tâm lỗi hoặc điểm sáng chất lượng không?",
@@ -282,17 +290,31 @@ export function MobileReportRatingSectionContent({
         )}
       </div>
 
+      {/* Note input for manager */}
+      {eligible && (
+        <div className="bg-white p-1.5 rounded-lg border border-slate-100 shadow-3xs flex flex-col gap-0.5">
+          <T className="text-[9px] font-black text-slate-700 block leading-tight">Ý KIẾN / GHI CHÚ ĐÓNG GÓP</T>
+          <input
+            type="text"
+            value={commentVal}
+            onChange={(e) => setCommentVal(e.target.value)}
+            placeholder="Nhập ghi chú hoặc ý kiến đóng góp cho tác giả..."
+            className="w-full text-[9px] p-1 border border-slate-200 rounded focus:outline-none focus:border-indigo-500 font-medium"
+          />
+        </div>
+      )}
+
       {/* Eligible user actions */}
       {eligible && (
-        <div className="pt-1.5 border-t border-slate-200/50 flex items-center justify-between gap-2 select-none">
+        <div className="pt-1 border-t border-slate-200/50 flex items-center justify-between gap-1.5 select-none">
           <div className="flex-1">
             {successMsg ? (
-              <T className="text-[9.5px] text-emerald-600 font-extrabold flex items-center gap-1 animate-pulse">
-                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+              <T className="text-[9px] text-emerald-600 font-extrabold flex items-center gap-0.5 animate-pulse">
+                <Check className="w-3 h-3 stroke-[2.5]" />
                 {successMsg}
               </T>
             ) : (
-              <T className="text-[9px] text-slate-400 font-medium">
+              <T className="text-[8px] text-slate-400 font-medium">
                 {existingRating ? "Bạn đã đánh giá. Có thể chỉnh sửa lại." : "Vui lòng chọn sao và bấm Lưu."}
               </T>
             )}
@@ -300,7 +322,7 @@ export function MobileReportRatingSectionContent({
           <button
             type="button"
             onClick={handleSaveRating}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black px-3 py-1.5 rounded-lg shadow-sm hover:shadow active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
+            className="bg-indigo-600 hover:bg-indigo-700 text-white text-[9.5px] font-black px-2.5 py-1 rounded-lg shadow-sm hover:shadow active:scale-95 transition-all flex items-center gap-0.5 cursor-pointer"
           >
             <T>LƯU ĐÁNH GIÁ</T>
           </button>
@@ -309,8 +331,8 @@ export function MobileReportRatingSectionContent({
 
       {/* List of other managers' ratings */}
       {report.ratings && report.ratings.length > 0 && (
-        <div className="pt-2 border-t border-slate-200/50 space-y-1.5">
-          <T className="text-[9px] text-slate-400 font-extrabold block uppercase tracking-wider select-none">
+        <div className="pt-1.5 border-t border-slate-200/50 space-y-1">
+          <T className="text-[8.5px] text-slate-400 font-extrabold block uppercase tracking-wider select-none">
             Chi tiết đánh giá ({report.ratings.length}):
           </T>
           <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
@@ -319,20 +341,25 @@ export function MobileReportRatingSectionContent({
               return (
                 <div
                   key={idx}
-                  className="bg-white p-1.5 rounded border border-slate-100 flex flex-col gap-0.5 text-[9.5px] leading-tight shadow-3xs"
+                  className="bg-white p-1 rounded border border-slate-100 flex flex-col gap-0.5 text-[9px] leading-tight shadow-3xs"
                 >
                   <div className="flex justify-between items-center font-bold">
                     <span className="text-slate-700">
-                      👤 {rat.evaluatorName} <span className="text-slate-400 font-medium text-[8.5px]">({rat.evaluatorRole})</span>
+                      👤 {rat.evaluatorName} <span className="text-slate-400 font-medium text-[8px]">({rat.evaluatorRole})</span>
                     </span>
                     <span className="text-amber-500 font-sans">{ratingAvg} ★</span>
                   </div>
-                  <div className="text-slate-500 flex justify-between items-center text-[8.5px]">
+                  <div className="text-slate-500 flex justify-between items-center text-[8px]">
                     <span>
                       Ảnh: {rat.imagesRating} • Tin: {rat.infoRating} • Giờ: {rat.timelinessRating}
                     </span>
                     <span className="text-slate-400">{rat.timestamp}</span>
                   </div>
+                  {rat.comment && (
+                    <div className="text-[8px] text-indigo-600 bg-indigo-50/40 p-1 rounded mt-0.5 border border-indigo-100/20 font-medium">
+                      Ghi chú: {rat.comment}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -428,6 +455,7 @@ export function MobileReportRatingContainer({
         currentUser={currentUser}
         onUpdateReport={onUpdateReport}
         isExpanded={isExpanded}
+        setIsExpanded={setIsExpanded}
       />
     </div>
   );

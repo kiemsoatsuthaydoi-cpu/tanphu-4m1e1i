@@ -1701,8 +1701,12 @@ export default function MobileFrame({
       onUpdateReport(updatedReport);
     }
 
-    if (selectedBadgeReport && selectedBadgeReport.id === reportId) {
-      setSelectedBadgeReport(updatedReport);
+    if (existingIndex < 0) {
+      setSelectedBadgeReport(null);
+    } else {
+      if (selectedBadgeReport && selectedBadgeReport.id === reportId) {
+        setSelectedBadgeReport(updatedReport);
+      }
     }
 
     showToast(`${actionLabel} huy hiệu "${badgeName}"! 🏅`);
@@ -4169,10 +4173,11 @@ App Link: ${window.location.origin}`;
                           const isDsa = report.reportType === "DSA" || report.isSpotlight;
                           const isAcknowledged = report.sharedBy?.some(name => name.startsWith(currentUser?.fullName || "Kiểm soát viên")) || false;
                           const ackCount = report.sharedBy?.length || 0;
+                          const hasAcknowledge = ackCount > 0;
                           return (
                             <div className={`flex items-center gap-1.5 rounded-lg py-0.5 px-2 shrink-0 transition-all duration-300 shadow-3xs ${
-                              isAcknowledged 
-                                ? "bg-emerald-50/90 border border-emerald-200 text-emerald-800" 
+                              hasAcknowledge
+                                ? "bg-emerald-600 border border-emerald-700 text-white shadow-[0_0_8px_rgba(16,185,129,0.35)] hover:scale-105 active:scale-95"
                                 : isDsa
                                   ? "bg-gradient-to-r from-[#1e3a8a] to-[#1a306c] hover:from-[#1a306c] hover:to-[#12224f] border border-[#1e3a8a] text-white shadow-[0_0_8px_rgba(30,58,138,0.35)] hover:scale-105 active:scale-95"
                                   : "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 border border-orange-500 text-white shadow-[0_0_8px_rgba(249,115,22,0.35)] hover:scale-105 active:scale-95"
@@ -4180,13 +4185,11 @@ App Link: ${window.location.origin}`;
                               <button
                                 type="button"
                                 onClick={() => toggleAcknowledge(report.id)}
-                                className={`flex items-center gap-1.5 p-1 rounded transition-all cursor-pointer bg-transparent whitespace-nowrap shrink-0 border-none ${
-                                  isAcknowledged ? "text-emerald-700 font-bold" : "text-white font-extrabold"
-                                }`}
+                                className="flex items-center gap-1.5 p-1 rounded transition-all cursor-pointer bg-transparent whitespace-nowrap shrink-0 border-none text-white font-extrabold"
                                 title={isAcknowledged ? (isDsa ? "Đã ghi nhận & biểu dương" : "Đã tiếp nhận") : (isDsa ? "Click để ghi nhận & biểu dương sáng kiến!" : "Click để tiếp nhận/ xử lý ngay!")}
                               >
                                 {isAcknowledged ? (
-                                  <Check className="w-3.5 h-3.5 shrink-0 stroke-[3px] text-emerald-700" />
+                                  <Check className="w-3.5 h-3.5 shrink-0 stroke-[3px] text-white" />
                                 ) : (
                                   <span className="relative flex h-2 w-2 mr-0.5 shrink-0">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
@@ -4211,12 +4214,8 @@ App Link: ${window.location.origin}`;
                                 disabled={ackCount === 0}
                                 className={`text-[10px] font-black font-sans px-1.5 py-0.5 rounded cursor-pointer transition-all border-none ${
                                   ackCount > 0 
-                                    ? isAcknowledged 
-                                      ? "text-emerald-700 hover:text-emerald-800 bg-emerald-100 hover:bg-emerald-200" 
-                                      : "text-white hover:text-amber-100 bg-white/20 hover:bg-white/30"
-                                    : isAcknowledged
-                                      ? "text-emerald-400 bg-transparent cursor-default"
-                                      : "text-white/50 bg-transparent cursor-default"
+                                    ? "text-white hover:text-emerald-100 bg-white/20 hover:bg-white/30"
+                                    : "text-white/50 bg-transparent cursor-default"
                                 }`}
                                 title={ackCount > 0 ? (isDsa ? "Xem danh sách đã ghi nhận & biểu dương" : "Xem danh sách đã tiếp nhận/ xử lý") : (isDsa ? "Chưa có lượt biểu dương" : "Chưa có lượt tiếp nhận")}
                               >

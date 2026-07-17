@@ -124,6 +124,7 @@ export interface QualityReportRating {
   infoRating: number; // 1-5 stars
   timelinessRating: number; // 1-5 stars
   timestamp: string; // dd/mm/yy
+  comment?: string; // Ghi chú thêm
 }
 
 export interface Company {
