@@ -4392,19 +4392,26 @@ export default function DashboardDesktop({
                                     )}
                                   </td>
                                   <td className="p-4 text-center select-none whitespace-nowrap font-mono font-bold text-xs font-black border border-slate-200">
-                                    {r.reportType === "KPH" || r.isAbnormal ? (
-                                      <span className="bg-red-50 text-red-700 border border-red-200 font-extrabold text-[9px] px-2 py-0.5 rounded uppercase block">
-                                        <T><span translate="no" className="notranslate">KPH</span></T>
-                                      </span>
-                                    ) : r.reportType === "DSA" || r.isSpotlight ? (
-                                      <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[9px] px-2 py-0.5 rounded uppercase block">
-                                        <T><span translate="no" className="notranslate">DSA</span></T>
-                                      </span>
-                                    ) : (
-                                      <span className="bg-slate-50 text-slate-605 border border-slate-200 font-bold text-[9px] px-2 py-0.5 rounded uppercase block">
-                                        <T><span translate="no" className="notranslate">NORMAL</span></T>
-                                      </span>
-                                    )}
+                                    <div className="flex flex-col items-center justify-center gap-1">
+                                      {r.reportType === "KPH" || r.isAbnormal ? (
+                                        <span className="bg-red-50 text-red-700 border border-red-200 font-extrabold text-[9px] px-2 py-0.5 rounded uppercase block">
+                                          <T><span translate="no" className="notranslate">KPH</span></T>
+                                        </span>
+                                      ) : r.reportType === "DSA" || r.isSpotlight ? (
+                                        <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[9px] px-2 py-0.5 rounded uppercase block">
+                                          <T><span translate="no" className="notranslate">DSA</span></T>
+                                        </span>
+                                      ) : (
+                                        <span className="bg-slate-50 text-slate-605 border border-slate-200 font-bold text-[9px] px-2 py-0.5 rounded uppercase block">
+                                          <T><span translate="no" className="notranslate">NORMAL</span></T>
+                                        </span>
+                                      )}
+                                      {r.reportCode && (
+                                        <span className="text-[10px] text-slate-500 font-mono tracking-wider font-semibold mt-0.5">
+                                          <T><span translate="no" className="notranslate">{r.reportCode}</span></T>
+                                        </span>
+                                      )}
+                                    </div>
                                   </td>
                                   <td className="p-4 text-center whitespace-nowrap border border-slate-200">
                                     {isDeleteReportAllowed(r) ? (
@@ -4735,19 +4742,26 @@ export default function DashboardDesktop({
                                   )}
                                 </td>
                                 <td className="p-4 text-center select-none whitespace-nowrap font-mono font-bold text-xs font-black border border-slate-200">
-                                  {r.reportType === "KPH" || r.isAbnormal ? (
-                                    <span className="bg-red-100 text-red-800 border border-red-200 font-black text-[10px] px-2.5 py-1 rounded tracking-wider">
-                                      <T>KPH</T>
-                                    </span>
-                                  ) : r.reportType === "DSA" || r.isSpotlight ? (
-                                    <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 font-black text-[10px] px-2.5 py-1 rounded tracking-wider">
-                                      <T>DSA</T>
-                                    </span>
-                                  ) : (
-                                    <span className="bg-slate-100 text-slate-600 border border-slate-205 font-bold text-[10px] px-2.5 py-1 rounded tracking-wide">
-                                      <T>NORMAL</T>
-                                    </span>
-                                  )}
+                                  <div className="flex flex-col items-center justify-center gap-1.5">
+                                    {r.reportType === "KPH" || r.isAbnormal ? (
+                                      <span className="bg-red-100 text-red-800 border border-red-200 font-black text-[10px] px-2.5 py-1 rounded tracking-wider">
+                                        <T>KPH</T>
+                                      </span>
+                                    ) : r.reportType === "DSA" || r.isSpotlight ? (
+                                      <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 font-black text-[10px] px-2.5 py-1 rounded tracking-wider">
+                                        <T>DSA</T>
+                                      </span>
+                                    ) : (
+                                      <span className="bg-slate-100 text-slate-600 border border-slate-205 font-bold text-[10px] px-2.5 py-1 rounded tracking-wide">
+                                        <T>NORMAL</T>
+                                      </span>
+                                    )}
+                                    {r.reportCode && (
+                                      <span className="text-[10px] text-slate-500 font-mono tracking-wider font-semibold">
+                                        <T><span translate="no" className="notranslate">{r.reportCode}</span></T>
+                                      </span>
+                                    )}
+                                  </div>
                                 </td>
                                 <td className="p-4 text-center select-none whitespace-nowrap border border-slate-200">
                                   {r.isAbnormal ? (

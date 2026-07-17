@@ -537,3 +537,122 @@ export const initialOrderImplementations: OrderImplementation[] = [
     createdAt: "18/12/2025"
   }
 ];
+
+export interface BadgeDefinition {
+  id: string;
+  icon: string;
+  name: string;
+  category: "RED" | "GREEN";
+  description: string;
+  target: string;
+}
+
+export const RED_BADGES: BadgeDefinition[] = [
+  {
+    id: "CANH_BAO_KIP_THOI",
+    icon: "🚨",
+    name: "CẢNH BÁO KỊP THỜI",
+    category: "RED",
+    description: "Trao cho bản tin KPH được đăng ngay lập tức khi sự cố vừa xảy ra, giúp ngăn chặn hậu quả dây chuyền.",
+    target: "Mục tiêu: Đánh giá tầm quan trọng của việc phát hiện vấn đề."
+  },
+  {
+    id: "CON_MAT_TINH_TUONG",
+    icon: "🔍",
+    name: "CON MẮT TINH TƯỜNG",
+    category: "RED",
+    description: "Trao cho bản tin mô tả những lỗi cực nhỏ, khó thấy bằng mắt thường hoặc những lỗi tiềm ẩn sâu trong quy trình.",
+    target: "Mục tiêu: Đánh giá tầm quan trọng của việc phát hiện vấn đề."
+  },
+  {
+    id: "CHOT_CHAN_RUI_RO",
+    icon: "🛡️",
+    name: "CHỐT CHẶN RỦI RO",
+    category: "RED",
+    description: "Trao cho bản tin KPH về những lỗi nghiêm trọng có thể gây hỏng lô hàng lớn hoặc ảnh hưởng trực tiếp đến an toàn.",
+    target: "Mục tiêu: Đánh giá tầm quan trọng của việc phát hiện vấn đề."
+  },
+  {
+    id: "THONG_TIN_CHUAN_MUC",
+    icon: "📊",
+    name: "THÔNG TIN CHUẨN MỰC",
+    category: "RED",
+    description: "Trao cho bản tin có mô tả 4M1E1I cực kỳ chi tiết, hình ảnh rõ nét, thông tin chính xác, không cần hỏi lại.",
+    target: "Mục tiêu: Đánh giá tầm quan trọng của việc phát hiện vấn đề."
+  }
+];
+
+export const GREEN_BADGES: BadgeDefinition[] = [
+  {
+    id: "DIEM_SANG_TIEU_BIEU",
+    icon: "🌟",
+    name: "ĐIỂM SÁNG TIÊU BIỂU",
+    category: "GREEN",
+    description: "Huy hiệu mặc định cho các bản tin DSA có giá trị học hỏi cao cho toàn bộ nhà máy.",
+    target: "Mục tiêu: Tôn vinh các thành tựu, sáng kiến và cơ hội kinh doanh."
+  },
+  {
+    id: "CO_HOI_VANG",
+    icon: "🤝",
+    name: "CƠ HỘI VÀNG",
+    category: "GREEN",
+    description: "Trao cho bản tin về tiếp khách, audit, hoặc các thông tin có tiềm năng mang lại hợp đồng/mối quan hệ kinh doanh mới (Dành cho TH WATER).",
+    target: "Mục tiêu: Tôn vinh các thành tựu, sáng kiến và cơ hội kinh doanh."
+  },
+  {
+    id: "SANG_KIEN_LAN_TOA",
+    icon: "🚀",
+    name: "SÁNG KIẾN LAN TỎA",
+    category: "GREEN",
+    description: "Trao cho bản tin DSA mà sau khi đăng, có nhiều đơn vị khác vào nút 'Đăng ký nhân rộng'.",
+    target: "Mục tiêu: Tôn vinh các thành tựu, sáng kiến và cơ hội kinh doanh."
+  },
+  {
+    id: "VUOT_TROI_NANG_SUAT",
+    icon: "💎",
+    name: "VƯỢT TRỘI NĂNG SUẤT",
+    category: "GREEN",
+    description: "Trao cho các bản tin ghi nhận việc phá kỷ lục sản xuất, rút ngắn thời gian làm việc mà vẫn đảm bảo chất lượng.",
+    target: "Mục tiêu: Tôn vinh các thành tựu, sáng kiến và cơ hội kinh doanh."
+  },
+  {
+    id: "CHAT_LUONG_VUOT_TROI",
+    icon: "🛡️",
+    name: "CHẤT LƯỢNG VƯỢT TRỘI",
+    category: "GREEN",
+    description: "Dành cho Cải thiện chất lượng, tượng trưng cho việc bảo vệ uy tín chất lượng của Tân Phú/DNP.",
+    target: "Mục tiêu: Tôn vinh các thành tựu, sáng kiến và cơ hội kinh doanh."
+  },
+  {
+    id: "MOI_TRUONG_5_SAO",
+    icon: "✨",
+    name: "MÔI TRƯỜNG 5 SAO",
+    category: "GREEN",
+    description: "Dành cho Cải tiến môi trường, tượng trưng cho sự sạch sẽ, gọn gàng, an toàn.",
+    target: "Mục tiêu: Tôn vinh các thành tựu, sáng kiến và cơ hội kinh doanh."
+  },
+  {
+    id: "THONG_TIN_RO_RANG",
+    icon: "📜",
+    name: "THÔNG TIN RÕ RÀNG",
+    category: "GREEN",
+    description: "Dành cho Chuẩn hóa thông tin đầu vào/ra.",
+    target: "Mục tiêu: Tôn vinh các thành tựu, sáng kiến và cơ hội kinh doanh."
+  },
+  {
+    id: "VAN_HANH_BEN_BI",
+    icon: "🦾",
+    name: "VẬN HÀNH BỀN BỈ",
+    category: "GREEN",
+    description: "Dành cho Ổn định chất lượng máy móc.",
+    target: "Mục tiêu: Tôn vinh các thành tựu, sáng kiến và cơ hội kinh doanh."
+  },
+  {
+    id: "BAO_CHUNG_HE_THONG",
+    icon: "🔄",
+    name: "BẢO CHỨNG HỆ THỐNG",
+    category: "GREEN",
+    description: "Dành cho Duy trì và cải tiến hệ thống, tượng trưng cho sự cải tiến liên tục không ngừng nghỉ.",
+    target: "Mục tiêu: Tôn vinh các thành tựu, sáng kiến và cơ hội kinh doanh."
+  }
+];

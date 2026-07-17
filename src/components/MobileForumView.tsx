@@ -442,10 +442,14 @@ export default function MobileForumView({
 
       {/* Create Topic Drawer/Modal */}
       {isCreatingTopic && (
-        <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-end justify-center select-none animate-fadeIn">
+        <div 
+          onClick={() => setIsCreatingTopic(false)}
+          className="absolute inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-end justify-center select-none animate-fadeIn cursor-pointer"
+        >
           <form
+            onClick={(e) => e.stopPropagation()}
             onSubmit={handleCreateTopic}
-            className="bg-white rounded-t-xl w-full max-h-[85%] flex flex-col shadow-2xl border-t border-slate-100 animate-slideUp"
+            className="bg-white rounded-t-xl w-full max-h-[85%] flex flex-col shadow-2xl border-t border-slate-100 animate-slideUp cursor-default"
           >
             {/* Header */}
             <div className={`px-4 py-3 text-white flex justify-between items-center shrink-0 rounded-t-xl ${theme.bg}`}>

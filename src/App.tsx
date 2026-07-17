@@ -371,7 +371,7 @@ const sanitizeUsers = (rawUsers: User[]): User[] => {
 
 const sanitizeReports = (rawReports: QualityReport[]): QualityReport[] => {
   if (!Array.isArray(rawReports)) return [];
-  return rawReports.map(r => {
+  const corrected = rawReports.map(r => {
     let fac = r.factory || "";
     let dept = r.uploaderDepartment || "";
     
@@ -420,6 +420,26 @@ const sanitizeReports = (rawReports: QualityReport[]): QualityReport[] => {
     
     return { ...r, factory: fac, uploaderDepartment: dept };
   });
+
+  // Sort chronologically (oldest first) to assign unique, deterministic sequential codes
+  const sorted = [...corrected].sort((a, b) => {
+    const timeA = parseReportDate(a.timestamp);
+    const timeB = parseReportDate(b.timestamp);
+    if (timeA !== timeB) return timeA - timeB;
+    return a.id.localeCompare(b.id);
+  });
+
+  const codeMap = new Map<string, string>();
+  sorted.forEach((r, idx) => {
+    const seq = idx + 1;
+    const code = `B${String(seq).padStart(7, "0")}`;
+    codeMap.set(r.id, code);
+  });
+
+  return corrected.map(r => ({
+    ...r,
+    reportCode: codeMap.get(r.id) || r.reportCode
+  }));
 };
 
 export default function App() {
@@ -764,6 +784,41 @@ export default function App() {
   useEffect(() => {
     safeSetItem("4m1e1i_mobile_ui_config", JSON.stringify(mobileUIConfig));
   }, [mobileUIConfig]);
+
+  const wasPopStateRef = useRef(false);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      wasPopStateRef.current = true;
+      if (isFormOpen) setIsFormOpen(false);
+      if (editingReport) setEditingReport(null);
+      if (isNativeScrollActive) {
+        setIsNativeScrollActive(false);
+        setReportsForPrint(null);
+      }
+      if (confirmDialog) setConfirmDialog(null);
+      setTimeout(() => {
+        wasPopStateRef.current = false;
+      }, 50);
+    };
+
+    const hasActiveOverlay = isFormOpen || !!editingReport || isNativeScrollActive || !!confirmDialog;
+
+    if (hasActiveOverlay) {
+      window.history.pushState({ inAppBackable: true }, "");
+    } else {
+      if (!wasPopStateRef.current) {
+        if (window.history.state?.inAppBackable) {
+          window.history.back();
+        }
+      }
+    }
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [isFormOpen, editingReport, isNativeScrollActive, confirmDialog]);
 
   const handleUpdateTickerConfig = useCallback((newConfig: any) => {
     setTickerConfig(newConfig);
@@ -1446,7 +1501,7 @@ export default function App() {
         snapshot.forEach((doc) => {
           list.push(doc.data() as QualityReport);
         });
-        setReports(list);
+        setReports(sanitizeReports(list));
       },
       (error) => {
         console.error("Lỗi đồng bộ báo cáo thời gian thực:", error);
@@ -2693,12 +2748,15 @@ export default function App() {
           updateLogs: logs
         };
 
-        setReports((prev) =>
-          prev.map((r) => (r.id === editingReport.id ? updatedReport : r))
+        const nextReportsList = sanitizeReports(
+          reports.map((r) => (r.id === editingReport.id ? updatedReport : r))
         );
+        const finalizedUpdatedReport = nextReportsList.find(r => r.id === editingReport.id) || updatedReport;
+
+        setReports(nextReportsList);
 
         if (syncCompleted && dbConnected && !dbLoading) {
-          saveDocument(COLLECTIONS.REPORTS, editingReport.id, updatedReport)
+          saveDocument(COLLECTIONS.REPORTS, editingReport.id, finalizedUpdatedReport)
             .then((success) => {
               if (!success) {
                 showToast("Lỗi máy chủ! Không thể cập nhật báo cáo lên hệ thống đám mây. Vui lòng kiểm tra kết nối 4G/Wifi.", "error");
@@ -2743,10 +2801,14 @@ export default function App() {
           isApproved: !needsApproval,
           googleDrivePath: `My Drive > 4M1E1I Reports > AutoSync > ${payload.timestamp.replace(/[:\/]/g, "")}.pdf`
         };
-        setReports((prev) => [newReport, ...prev]);
+
+        const nextReportsList = sanitizeReports([newReport, ...reports]);
+        const finalizedNewReport = nextReportsList.find(r => r.id === newId) || newReport;
+
+        setReports(nextReportsList);
 
         if (syncCompleted && dbConnected && !dbLoading) {
-          saveDocument(COLLECTIONS.REPORTS, newId, newReport)
+          saveDocument(COLLECTIONS.REPORTS, newId, finalizedNewReport)
             .then((success) => {
               if (!success) {
                 showToast("Lỗi máy chủ! Không thể gửi báo cáo lên đám mây. Vui lòng kiểm tra kết nối 4G/Wifi.", "error");
@@ -2793,7 +2855,7 @@ export default function App() {
         title: "Xóa vĩnh viễn báo cáo?",
         message: "Kiểm soát chất lượng: Bạn có thật sự muốn XÓA VĨNH VIỄN bản báo cáo này? Thao tác này KHÔNG THỂ KHÔI PHỤC!",
         onConfirm: () => {
-          setReports((prev) => prev.filter((r) => r.id !== id));
+          setReports((prev) => sanitizeReports(prev.filter((r) => r.id !== id)));
           if (dbConnected) {
             deleteDocument(COLLECTIONS.REPORTS, id);
           }
@@ -2819,7 +2881,7 @@ export default function App() {
                   console.error("Lỗi khi chuyển báo cáo vào thùng rác Firestore:", err);
                 });
               }
-              return prev.map((r) => r.id === id ? updated : r);
+              return sanitizeReports(prev.map((r) => r.id === id ? updated : r));
             }
             return prev;
           });
@@ -2881,10 +2943,15 @@ export default function App() {
       };
     }
 
-    setReports((prev) => prev.map((r) => r.id === updatedReport.id ? finalReport : r));
+    const nextReportsList = sanitizeReports(
+      reports.map((r) => r.id === updatedReport.id ? finalReport : r)
+    );
+    const finalizedReport = nextReportsList.find(r => r.id === updatedReport.id) || finalReport;
+
+    setReports(nextReportsList);
 
     // Save to Firestore so it is persistent across devices
-    saveDocument(COLLECTIONS.REPORTS, finalReport.id, finalReport).catch((err) => {
+    saveDocument(COLLECTIONS.REPORTS, finalizedReport.id, finalizedReport).catch((err) => {
       console.error("Lỗi khi lưu cập nhật báo cáo lên Firestore:", err);
     });
   };

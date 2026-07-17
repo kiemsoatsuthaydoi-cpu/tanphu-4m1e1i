@@ -101,6 +101,29 @@ export interface QualityReport {
   approvedAt?: string;
   resolutions?: QualityReportResolution[];
   replications?: QualityReportReplication[];
+  reportCode?: string;
+  ratings?: QualityReportRating[];
+  badges?: QualityReportBadge[];
+}
+
+export interface QualityReportBadge {
+  id: string; // unique badge type key
+  name: string; // Display name
+  category: "RED" | "GREEN"; // Red for KPH, Green for DSA
+  giverId: string;
+  giverName: string;
+  giverRole: string;
+  timestamp: string; // dd/mm/yy
+}
+
+export interface QualityReportRating {
+  evaluatorId: string;
+  evaluatorName: string;
+  evaluatorRole: string;
+  imagesRating: number; // 1-5 stars
+  infoRating: number; // 1-5 stars
+  timelinessRating: number; // 1-5 stars
+  timestamp: string; // dd/mm/yy
 }
 
 export interface Company {

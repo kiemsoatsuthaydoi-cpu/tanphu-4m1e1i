@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
 import html2canvas from "html2canvas";
-import { Search, RotateCw, RotateCcw, Plus, Users, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp } from "lucide-react";
-import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus } from "../types";
+import { Search, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp } from "lucide-react";
+import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus, QualityReportBadge } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
 import { QRCodeSVG } from "qrcode.react";
 import { isSameBranchOrFactory, formatNameCapitalized } from "../utils/branchHelpers";
 import { AutoImageSlider } from "./AutoImageSlider";
+import { MobileReportRatingContainer, isEligibleEvaluator } from "./MobileReportRatingSection";
+import { RED_BADGES, GREEN_BADGES } from "../data";
 import FirebaseQuotaMonitor from "./FirebaseQuotaMonitor";
 import StatisticsDashboard from "./StatisticsDashboard";
 import MobileForumView from "./MobileForumView";
@@ -934,18 +936,29 @@ export default function MobileFrame({
     }
   };
 
-  const getContentFontSizeClass = (size: string | undefined) => {
+  const getFactoryFontSizeClass = (size: string | undefined) => {
     switch (size) {
-      case "sm": return "text-xs";
-      case "base": return "text-sm";
+      case "sm": return "text-[14px]";
+      case "base": return "text-[16px]";
       case "xs":
       default:
-        return "text-[11px]";
+        return "text-[12px]";
+    }
+  };
+
+  const getContentFontSizeClass = (size: string | undefined) => {
+    switch (size) {
+      case "sm": return "text-[13.5px]";
+      case "base": return "text-[15.5px]";
+      case "xs":
+      default:
+        return "text-[12.5px]";
     }
   };
 
   const theme = getThemeClasses(config.colorTheme);
   const fontSizeClass = getFontSizeClass(config.fontSize);
+  const factoryFontSizeClass = getFactoryFontSizeClass(config.fontSize);
   const contentFontSizeClass = getContentFontSizeClass(config.fontSize);
 
   const getFactoryDisplayName = (factoryName: string | undefined | null) => {
@@ -1339,6 +1352,8 @@ export default function MobileFrame({
   const [editingDirectiveText, setEditingDirectiveText] = useState("");
   const [showLikesListReport, setShowLikesListReport] = useState<QualityReport | null>(null);
   const [showAcksListReport, setShowAcksListReport] = useState<QualityReport | null>(null);
+  const [selectedBadgeReport, setSelectedBadgeReport] = useState<QualityReport | null>(null);
+  const [showBadgeExplanations, setShowBadgeExplanations] = useState<boolean>(false);
   const lastScrollTopRef = useRef(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const phanTichScrollRef = useRef<HTMLDivElement>(null);
@@ -1630,6 +1645,67 @@ export default function MobileFrame({
     } else {
       showToast(isNowAcknowledged ? "Đã xác nhận tiếp nhận thông tin! ✅" : "Đã hủy xác nhận tiếp nhận! ↩️");
     }
+  };
+
+  const toggleBadge = (reportId: string, badgeId: string, badgeName: string, category: "RED" | "GREEN") => {
+    if (!currentUser) {
+      showToast("Vui lòng đăng nhập để trao huy hiệu! ⚠️");
+      return;
+    }
+
+    if (!isEligibleEvaluator(currentUser)) {
+      showToast("Chỉ các cấp quản lý, ban lãnh đạo mới có quyền trao huy hiệu! ⚠️");
+      return;
+    }
+
+    const report = reports.find((r) => r.id === reportId);
+    if (!report) return;
+
+    const currentBadges = report.badges ? [...report.badges] : [];
+    const existingIndex = currentBadges.findIndex(
+      (b) => b.id === badgeId && b.giverId === currentUser.id
+    );
+
+    const now = new Date();
+    const d = String(now.getDate()).padStart(2, '0');
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const y = String(now.getFullYear()).slice(-2);
+    const dateStr = `${d}/${m}/${y}`; // strict compliance with dd/mm/yy
+
+    let updatedBadges: QualityReportBadge[];
+    let actionLabel = "";
+
+    if (existingIndex >= 0) {
+      updatedBadges = currentBadges.filter((_, idx) => idx !== existingIndex);
+      actionLabel = "Đã thu hồi";
+    } else {
+      const newBadge: QualityReportBadge = {
+        id: badgeId,
+        name: badgeName,
+        category,
+        giverId: currentUser.id,
+        giverName: currentUser.fullName,
+        giverRole: currentUser.role === UserRole.ADMIN ? "Chủ Admin" : (currentUser.department || "Quản lý"),
+        timestamp: dateStr
+      };
+      updatedBadges = [...currentBadges, newBadge];
+      actionLabel = "Đã trao tặng";
+    }
+
+    const updatedReport: QualityReport = {
+      ...report,
+      badges: updatedBadges
+    };
+
+    if (onUpdateReport) {
+      onUpdateReport(updatedReport);
+    }
+
+    if (selectedBadgeReport && selectedBadgeReport.id === reportId) {
+      setSelectedBadgeReport(updatedReport);
+    }
+
+    showToast(`${actionLabel} huy hiệu "${badgeName}"! 🏅`);
   };
 
   const showToast = (msg: string) => {
@@ -3143,7 +3219,7 @@ App Link: ${window.location.origin}`;
                           <span translate="no" className="notranslate">{report.timestamp}</span>
                         </span>
                       </div>
-                      <div>
+                      <div className="flex flex-col items-end gap-1">
                         {report.reportType === "KPH" || report.isAbnormal ? (
                           <span className="text-[8px] font-black bg-red-600 text-white px-2 py-0.5 rounded-md leading-none select-none">
                             <T><span translate="no" className="notranslate">⚠️ ĐIỂM KPH</span></T>
@@ -3155,6 +3231,11 @@ App Link: ${window.location.origin}`;
                         ) : (
                           <span className="text-[8px] font-black bg-slate-400 text-white px-2 py-0.5 rounded-md leading-none select-none">
                             <T><span translate="no" className="notranslate">Chuẩn SOP</span></T>
+                          </span>
+                        )}
+                        {report.reportCode && (
+                          <span className="text-[8px] text-slate-500 font-mono tracking-wider font-semibold">
+                            <span translate="no" className="notranslate">{report.reportCode}</span>
                           </span>
                         )}
                       </div>
@@ -3726,10 +3807,14 @@ App Link: ${window.location.origin}`;
                 {/* Header card info */}
                 <div className="px-3 py-2 bg-slate-50 border-b border-slate-100 flex justify-between items-center gap-2">
                   <div className="flex-1 min-w-0">
-                    <T className={`font-black block leading-tight truncate ${theme.text} ${fontSizeClass}`}>{getFactoryDisplayName(report.factory)}</T>
-                    <T className="text-[9px] text-slate-400 block font-sans font-semibold mt-0.5">{report.timestamp}</T>
+                    <T className={`font-black block leading-tight truncate ${theme.text} ${factoryFontSizeClass}`}>
+                      {getFactoryDisplayName(report.factory)?.toUpperCase()}
+                    </T>
+                    <T className="text-[10px] text-slate-605 block font-extrabold mt-0.5">
+                      <UserIcon className="w-3.5 h-3.5 inline-block mr-0.5 align-text-bottom stroke-[2.5] text-blue-600" /> {formatNameCapitalized(report.uploaderName)} <span className="text-slate-300 mx-1.5 font-normal">|</span> <span className="text-[9px] text-slate-400 font-sans font-semibold">{report.timestamp}</span>
+                    </T>
                   </div>
-                  <div className="shrink-0">
+                  <div className="shrink-0 flex flex-col items-end gap-1">
                     {report.reportType === "KPH" || report.isAbnormal ? (
                       <span className="text-[9px] font-black text-white flex items-center gap-1 bg-red-600 border border-red-700 px-2 py-1 rounded-md leading-none shadow-3xs shrink-0 select-none">
                         <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block" />
@@ -3741,6 +3826,11 @@ App Link: ${window.location.origin}`;
                         <T><span translate="no" className="notranslate">⭐ ĐIỂM SÁNG (DSA)</span></T>
                       </span>
                     ) : null}
+                    {report.reportCode && (
+                      <span className="text-[9px] text-slate-400 font-sans font-semibold">
+                        <span translate="no" className="notranslate">ID: {report.reportCode}</span>
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -3837,17 +3927,14 @@ App Link: ${window.location.origin}`;
 
                 {/* Card Info Section */}
                 <div className="p-3 bg-white">
-                  {/* Category marker with standard styling */}
-                  <div className="pb-2 border-b border-slate-100 flex items-center justify-between">
-                    <div className={`flex items-center font-bold text-xs uppercase select-none ${theme.text}`}>
-                      {getCategoryIcon(report.category)}
-                      <T>{report.category}</T>
-                    </div>
-                    {/* Personnel tags */}
-                    <div className="text-right">
-                      <T className="text-[10px] text-slate-500 font-semibold block">{formatNameCapitalized(report.uploaderName)}</T>
-                    </div>
-                  </div>
+                  {/* Category marker with standard styling & hidden assessment checklists */}
+                  <MobileReportRatingContainer
+                    report={report}
+                    currentUser={currentUser}
+                    onUpdateReport={onUpdateReport}
+                    categoryIcon={getCategoryIcon(report.category)}
+                    theme={theme}
+                  />
 
                   {/* Body description text */}
                   <div className={`pt-2 font-medium leading-relaxed text-slate-705 ${contentFontSizeClass}`}>
@@ -4073,60 +4160,116 @@ App Link: ${window.location.origin}`;
                         showToast={showToast}
                       />
                     )}
-                    {/* BP/ĐV PHẢN HỒI list display */}
+                    {/* BP/ĐV PHẢN HỒI & TIẾP NHẬN/ XỬ LÝ list display */}
                     {(report.isAbnormal || report.reportType === "KPH") && (
                       <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-col gap-1.5" id={`receivers-section-${report.id}`}>
-                      <div className="flex items-center justify-between">
-                        <button
-                          type="button"
-                          onClick={() => toggleResolutionsExpand(report.id)}
-                          className="flex items-center gap-1.5 text-[10px] font-extrabold text-sky-700 uppercase hover:text-sky-900 transition-colors cursor-pointer border-none bg-transparent p-0"
-                          title="Click để ẩn/hiện kết quả xử lý chi tiết"
-                        >
-                          <Check className="w-3.5 h-3.5 stroke-[3px]" />
-                          <span translate="no" className="notranslate">BP/ĐV PHẢN HỒI:</span>
-                          {(() => {
-                            const resCount = report.resolutions?.length || 0;
-                            const isExpanded = !!expandedResolutions[report.id];
-                            return (
-                              <span
-                                className={`text-[10px] font-black font-sans px-1.5 py-0.5 rounded flex items-center gap-0.5 ${
-                                  resCount > 0 
-                                    ? "text-sky-700 bg-sky-50 hover:bg-sky-100" 
-                                    : "text-slate-400 bg-transparent"
+                      <div className="flex items-center justify-between gap-1.5 flex-wrap sm:flex-nowrap">
+                        {/* Left side: TIẾP NHẬN/ XỬ LÝ (or GHI NHẬN & BIỂU DƯƠNG) button */}
+                        {(() => {
+                          const isDsa = report.reportType === "DSA" || report.isSpotlight;
+                          const isAcknowledged = report.sharedBy?.some(name => name.startsWith(currentUser?.fullName || "Kiểm soát viên")) || false;
+                          const ackCount = report.sharedBy?.length || 0;
+                          return (
+                            <div className={`flex items-center gap-1.5 rounded-lg py-0.5 px-2 shrink-0 transition-all duration-300 shadow-3xs ${
+                              isAcknowledged 
+                                ? "bg-emerald-50/90 border border-emerald-200 text-emerald-800" 
+                                : isDsa
+                                  ? "bg-gradient-to-r from-[#1e3a8a] to-[#1a306c] hover:from-[#1a306c] hover:to-[#12224f] border border-[#1e3a8a] text-white shadow-[0_0_8px_rgba(30,58,138,0.35)] hover:scale-105 active:scale-95"
+                                  : "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 border border-orange-500 text-white shadow-[0_0_8px_rgba(249,115,22,0.35)] hover:scale-105 active:scale-95"
+                            }`}>
+                              <button
+                                type="button"
+                                onClick={() => toggleAcknowledge(report.id)}
+                                className={`flex items-center gap-1.5 p-1 rounded transition-all cursor-pointer bg-transparent whitespace-nowrap shrink-0 border-none ${
+                                  isAcknowledged ? "text-emerald-700 font-bold" : "text-white font-extrabold"
                                 }`}
+                                title={isAcknowledged ? (isDsa ? "Đã ghi nhận & biểu dương" : "Đã tiếp nhận") : (isDsa ? "Click để ghi nhận & biểu dương sáng kiến!" : "Click để tiếp nhận/ xử lý ngay!")}
                               >
-                                <span translate="no" className="notranslate"><T>{resCount}</T></span>
-                                {resCount > 0 && (
-                                  isExpanded ? (
-                                    <ChevronDown className="w-3 h-3 text-sky-700 stroke-[2.5px]" />
-                                  ) : (
-                                    <ChevronRight className="w-3 h-3 text-sky-700 stroke-[2.5px]" />
-                                  )
+                                {isAcknowledged ? (
+                                  <Check className="w-3.5 h-3.5 shrink-0 stroke-[3px] text-emerald-700" />
+                                ) : (
+                                  <span className="relative flex h-2 w-2 mr-0.5 shrink-0">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                                  </span>
                                 )}
-                              </span>
-                            );
-                          })()}
-                        </button>
+                                <span className="text-[10px] font-black font-sans uppercase tracking-tight whitespace-nowrap">
+                                  <span translate="no" className="notranslate">
+                                    <T>{isDsa ? "Ghi nhận & Biểu dương" : "Tiếp nhận/ Xử lý"}</T>
+                                  </span>
+                                </span>
+                              </button>
+                              
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (ackCount > 0) {
+                                    setShowAcksListReport(report);
+                                  }
+                                }}
+                                disabled={ackCount === 0}
+                                className={`text-[10px] font-black font-sans px-1.5 py-0.5 rounded cursor-pointer transition-all border-none ${
+                                  ackCount > 0 
+                                    ? isAcknowledged 
+                                      ? "text-emerald-700 hover:text-emerald-800 bg-emerald-100 hover:bg-emerald-200" 
+                                      : "text-white hover:text-amber-100 bg-white/20 hover:bg-white/30"
+                                    : isAcknowledged
+                                      ? "text-emerald-400 bg-transparent cursor-default"
+                                      : "text-white/50 bg-transparent cursor-default"
+                                }`}
+                                title={ackCount > 0 ? (isDsa ? "Xem danh sách đã ghi nhận & biểu dương" : "Xem danh sách đã tiếp nhận/ xử lý") : (isDsa ? "Chưa có lượt biểu dương" : "Chưa có lượt tiếp nhận")}
+                              >
+                                <span translate="no" className="notranslate"><T>{ackCount}</T></span>
+                              </button>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Right side: Ghi nhận kết quả ({resCount}) button (Only for abnormal or KPH reports) */}
                         {(report.isAbnormal || report.reportType === "KPH") && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (editingResolutionReportId === report.id) {
-                                setEditingResolutionReportId(null);
-                                setEditingResolutionId(null);
-                              } else {
-                                setEditingResolutionReportId(report.id);
-                                setEditingResolutionId(null);
-                                setResDeptName(currentUser?.department || "");
-                                setResResultText("");
-                                setResStatus("Đang xử lý");
-                              }
-                            }}
-                            className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-150 cursor-pointer active:scale-95 transition-all"
-                          >
-                            <span translate="no" className="notranslate">✍️ Ghi nhận kết quả</span>
-                          </button>
+                          (() => {
+                            const resCount = report.resolutions?.length || 0;
+                            return (
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (editingResolutionReportId === report.id) {
+                                      setEditingResolutionReportId(null);
+                                      setEditingResolutionId(null);
+                                    } else {
+                                      setEditingResolutionReportId(report.id);
+                                      setEditingResolutionId(null);
+                                      setResDeptName(currentUser?.department || "");
+                                      setResResultText("");
+                                      setResStatus("Đang xử lý");
+                                    }
+                                  }}
+                                  className="text-[10px] font-extrabold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100/70 px-2 py-1.5 rounded-lg border border-indigo-150 cursor-pointer active:scale-95 transition-all flex items-center gap-1.5 shadow-3xs"
+                                >
+                                  <span>✍️</span>
+                                  <span translate="no" className="notranslate">
+                                    <T>Ghi nhận kết quả</T> ({resCount})
+                                  </span>
+                                </button>
+                                {resCount > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleResolutionsExpand(report.id)}
+                                    className="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-150 text-indigo-600 cursor-pointer active:scale-95 transition-all"
+                                    title="Click để ẩn/hiện kết quả xử lý chi tiết"
+                                  >
+                                    {expandedResolutions[report.id] ? (
+                                      <ChevronDown className="w-3.5 h-3.5 stroke-[3px]" />
+                                    ) : (
+                                      <ChevronRight className="w-3.5 h-3.5 stroke-[3px]" />
+                                    )}
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })()
                         )}
                       </div>
 
@@ -4887,61 +5030,33 @@ App Link: ${window.location.origin}`;
                       );
                     })()}
                     {(() => {
-                      const isDsa = report.reportType === "DSA" || report.isSpotlight;
-                      const isAcknowledged = report.sharedBy?.some(name => name.startsWith(currentUser?.fullName || "Kiểm soát viên")) || false;
-                      const ackCount = report.sharedBy?.length || 0;
+                      const badgeCount = report.badges?.length || 0;
                       return (
-                        <div className={`flex items-center gap-1.5 rounded-lg py-0.5 px-2 shrink-0 transition-all duration-300 shadow-3xs ${
-                          isAcknowledged 
-                            ? "bg-emerald-50/90 border border-emerald-200 text-emerald-800" 
-                            : isDsa
-                              ? "bg-gradient-to-r from-[#1e3a8a] to-[#1a306c] hover:from-[#1a306c] hover:to-[#12224f] border border-[#1e3a8a] text-white shadow-[0_0_8px_rgba(30,58,138,0.35)] hover:scale-105 active:scale-95"
-                              : "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 border border-orange-500 text-white shadow-[0_0_8px_rgba(249,115,22,0.35)] hover:scale-105 active:scale-95"
-                        }`}>
+                        <div className="flex items-center gap-1 bg-slate-50 border border-slate-100 rounded-lg py-0.5 px-1.5 shrink-0">
                           <button
                             type="button"
-                            onClick={() => toggleAcknowledge(report.id)}
-                            className={`flex items-center gap-1.5 p-1 rounded transition-all cursor-pointer bg-transparent whitespace-nowrap shrink-0 border-none ${
-                              isAcknowledged ? "text-emerald-700 font-bold" : "text-white font-extrabold"
-                            }`}
-                            title={isAcknowledged ? (isDsa ? "Đã ghi nhận & biểu dương" : "Đã tiếp nhận") : (isDsa ? "Click để ghi nhận & biểu dương sáng kiến!" : "Click để tiếp nhận/ xử lý ngay!")}
+                            onClick={() => {
+                              setSelectedBadgeReport(report);
+                            }}
+                            className="flex items-center justify-center p-1 transition-all hover:scale-115 active:scale-95 cursor-pointer border-none bg-transparent text-slate-400 hover:text-indigo-600"
+                            title="Trao tặng hoặc xem Huy hiệu"
                           >
-                            {isAcknowledged ? (
-                              <Check className="w-3.5 h-3.5 shrink-0 stroke-[3px] text-emerald-700" />
-                            ) : (
-                              <span className="relative flex h-2 w-2 mr-0.5 shrink-0">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
-                              </span>
-                            )}
-                            <span className="text-[10px] font-black font-sans uppercase tracking-tight whitespace-nowrap">
-                              <span translate="no" className="notranslate">
-                                <T>{isDsa ? "Ghi nhận & Biểu dương" : "Tiếp nhận/ Xử lý"}</T>
-                              </span>
-                            </span>
+                            <span className="text-[14px]">🏅</span>
                           </button>
                           
                           <button
                             type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (ackCount > 0) {
-                                setShowAcksListReport(report);
-                              }
+                            onClick={() => {
+                              setSelectedBadgeReport(report);
                             }}
-                            disabled={ackCount === 0}
                             className={`text-[10px] font-black font-sans px-1.5 py-0.5 rounded cursor-pointer transition-all border-none ${
-                              ackCount > 0 
-                                ? isAcknowledged 
-                                  ? "text-emerald-700 hover:text-emerald-800 bg-emerald-100 hover:bg-emerald-200" 
-                                  : "text-white hover:text-amber-100 bg-white/20 hover:bg-white/30"
-                                : isAcknowledged
-                                  ? "text-emerald-400 bg-transparent cursor-default"
-                                  : "text-white/50 bg-transparent cursor-default"
+                              badgeCount > 0 
+                                ? "text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 hover:scale-105" 
+                                : "text-slate-400 bg-transparent cursor-default"
                             }`}
-                            title={ackCount > 0 ? (isDsa ? "Xem danh sách đã ghi nhận & biểu dương" : "Xem danh sách đã tiếp nhận/ xử lý") : (isDsa ? "Chưa có lượt biểu dương" : "Chưa có lượt tiếp nhận")}
+                            title={badgeCount > 0 ? "Xem danh sách huy hiệu được trao" : "Chưa có huy hiệu nào"}
                           >
-                            <span translate="no" className="notranslate"><T>{ackCount}</T></span>
+                            <span translate="no" className="notranslate"><T>{badgeCount}</T></span>
                           </button>
                         </div>
                       );
@@ -5573,6 +5688,343 @@ App Link: ${window.location.origin}`}
                   })
                 )}
               </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {selectedBadgeReport && (() => {
+        const activeReport = reports.find(r => r.id === selectedBadgeReport.id) || selectedBadgeReport;
+        const awardedBadges = activeReport.badges || [];
+        const isDsaReport = activeReport.reportType === "DSA" || activeReport.isSpotlight;
+        const eligible = isEligibleEvaluator(currentUser);
+        const availableBadges = isDsaReport ? GREEN_BADGES : RED_BADGES;
+        
+        return (
+          <div 
+            onClick={() => {
+              setSelectedBadgeReport(null);
+              setShowBadgeExplanations(false);
+            }}
+            className="fixed lg:absolute inset-0 bg-slate-900/65 backdrop-blur-xs flex items-end justify-center z-50 select-none animate-fadeIn cursor-pointer"
+          >
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-t-3xl w-full max-h-[85%] overflow-hidden flex flex-col shadow-2xl border-t border-slate-100 animate-slideUp cursor-default"
+            >
+              {showBadgeExplanations ? (
+                // Explanation View
+                <div className="flex-1 flex flex-col overflow-hidden">
+                  <div className="flex justify-between items-center px-4 py-3.5 border-b border-indigo-100 shrink-0 bg-indigo-50/50">
+                    <button
+                      type="button"
+                      onClick={() => setShowBadgeExplanations(false)}
+                      className="flex items-center gap-1.5 text-indigo-700 font-extrabold text-[12px] uppercase bg-transparent border-none cursor-pointer"
+                    >
+                      <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
+                      <span translate="no" className="notranslate"><T>Quay lại</T></span>
+                    </button>
+                    <span className="font-extrabold text-[12px] uppercase tracking-tight font-sans text-indigo-850">
+                      <span translate="no" className="notranslate"><T>Ý NGHĨA HUY HIỆU</T></span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedBadgeReport(null);
+                        setShowBadgeExplanations(false);
+                      }}
+                      className="w-7 h-7 rounded-full bg-slate-150 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-xs border-none"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-4 bg-slate-50/50 space-y-4 pb-12 select-text text-slate-700">
+                    {/* Nhóm HUY HIỆU ĐỎ */}
+                    <div className="space-y-2.5">
+                      <div className="flex items-center gap-1.5 pb-1 border-b border-rose-150">
+                        <span className="text-base">🔴</span>
+                        <span className="font-black text-[11px] text-rose-700 tracking-wider font-sans uppercase">
+                          <span translate="no" className="notranslate"><T>NHÓM HUY HIỆU ĐỎ (CHO BẢN TIN KPH)</T></span>
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 gap-2.5">
+                        <div className="bg-white p-2.5 rounded-xl border border-rose-100 shadow-3xs flex flex-col gap-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-lg">🚨</span>
+                            <span translate="no" className="notranslate font-extrabold text-[11px] text-rose-800 uppercase font-sans"><T>Cảnh báo kịp thời</T></span>
+                          </div>
+                          <p translate="no" className="notranslate text-[9.5px] text-slate-600 font-medium leading-relaxed">
+                            <T>Trao cho bản tin KPH được đăng ngay lập tức khi sự cố vừa xảy ra, giúp ngăn chặn hậu quả dây chuyền.</T>
+                          </p>
+                        </div>
+
+                        <div className="bg-white p-2.5 rounded-xl border border-rose-100 shadow-3xs flex flex-col gap-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-lg">🔍</span>
+                            <span translate="no" className="notranslate font-extrabold text-[11px] text-rose-800 uppercase font-sans"><T>Con mắt tinh tường</T></span>
+                          </div>
+                          <p translate="no" className="notranslate text-[9.5px] text-slate-600 font-medium leading-relaxed">
+                            <T>Trao cho bản tin mô tả những lỗi cực nhỏ, khó thấy bằng mắt thường hoặc những lỗi tiềm ẩn sâu trong quy trình.</T>
+                          </p>
+                        </div>
+
+                        <div className="bg-white p-2.5 rounded-xl border border-rose-100 shadow-3xs flex flex-col gap-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-lg">🛡️</span>
+                            <span translate="no" className="notranslate font-extrabold text-[11px] text-rose-800 uppercase font-sans"><T>Chốt chặn rủi ro</T></span>
+                          </div>
+                          <p translate="no" className="notranslate text-[9.5px] text-slate-600 font-medium leading-relaxed">
+                            <T>Trao cho bản tin KPH về những lỗi nghiêm trọng có thể gây hỏng lô hàng lớn hoặc ảnh hưởng trực tiếp đến an toàn.</T>
+                          </p>
+                        </div>
+
+                        <div className="bg-white p-2.5 rounded-xl border border-rose-100 shadow-3xs flex flex-col gap-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-lg">📊</span>
+                            <span translate="no" className="notranslate font-extrabold text-[11px] text-rose-800 uppercase font-sans"><T>Thông tin chuẩn mực</T></span>
+                          </div>
+                          <p translate="no" className="notranslate text-[9.5px] text-slate-600 font-medium leading-relaxed">
+                            <T>Trao cho bản tin có mô tả rõ ràng, đầy đủ thông tin, có hình ảnh chụp lỗi rất chi tiết, dễ hiểu, đóng vai trò như một bài học kinh nghiệm chuẩn mẫu cho các bộ phận khác học hỏi.</T>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Nhóm HUY HIỆU XANH */}
+                    <div className="space-y-2.5 pt-2">
+                      <div className="flex items-center gap-1.5 pb-1 border-b border-emerald-150">
+                        <span className="text-base">🟢</span>
+                        <span className="font-black text-[11px] text-emerald-700 tracking-wider font-sans uppercase">
+                          <span translate="no" className="notranslate"><T>NHÓM HUY HIỆU XANH (CHO BẢN TIN DSA)</T></span>
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 gap-2.5">
+                        <div className="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-3xs flex flex-col gap-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-lg">🌟</span>
+                            <span translate="no" className="notranslate font-extrabold text-[11px] text-emerald-800 uppercase font-sans"><T>Điểm sáng tiêu biểu</T></span>
+                          </div>
+                          <p translate="no" className="notranslate text-[9.5px] text-slate-600 font-medium leading-relaxed">
+                            <T>Trao cho bản tin mô tả những cải tiến mang tính đột phá về chất lượng, năng suất hoặc an toàn lao động, có tính áp dụng thực tiễn cao tại một khu vực hoặc dây chuyền sản xuất.</T>
+                          </p>
+                        </div>
+
+                        <div className="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-3xs flex flex-col gap-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-lg">🤝</span>
+                            <span translate="no" className="notranslate font-extrabold text-[11px] text-emerald-800 uppercase font-sans"><T>Cơ hội vàng</T></span>
+                          </div>
+                          <p translate="no" className="notranslate text-[9.5px] text-slate-600 font-medium leading-relaxed">
+                            <T>Huy hiệu đặc biệt dành riêng cho các sáng kiến của TH WATER - ghi nhận nỗ lực tối ưu hóa chi phí hoặc gia tăng giá trị dịch vụ.</T>
+                          </p>
+                        </div>
+
+                        <div className="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-3xs flex flex-col gap-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-lg">🚀</span>
+                            <span translate="no" className="notranslate font-extrabold text-[11px] text-emerald-800 uppercase font-sans"><T>Sáng kiến lan tỏa</T></span>
+                          </div>
+                          <p translate="no" className="notranslate text-[9.5px] text-slate-600 font-medium leading-relaxed">
+                            <T>Trao cho các sáng kiến, điểm sáng có tính ứng dụng cao, khả năng nhân rộng dễ dàng và nhanh chóng sang các dây chuyền, tổ đội hoặc phòng ban khác trong toàn nhà máy.</T>
+                          </p>
+                        </div>
+
+                        <div className="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-3xs flex flex-col gap-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-lg">💎</span>
+                            <span translate="no" className="notranslate font-extrabold text-[11px] text-emerald-800 uppercase font-sans"><T>Vượt trội năng suất</T></span>
+                          </div>
+                          <p translate="no" className="notranslate text-[9.5px] text-slate-600 font-medium leading-relaxed">
+                            <T>Trao cho những sáng kiến cải tiến trực tiếp giúp gia tăng công suất thiết bị, rút ngắn thời gian chuẩn bị sản xuất hoặc tối ưu hóa hao hụt nguyên vật liệu một cách vượt trội.</T>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                // Badge Admin/View List View
+                <div className="flex-1 flex flex-col overflow-hidden">
+                  {/* Header */}
+                  <div className="flex justify-between items-center px-4 py-3.5 border-b border-indigo-100 shrink-0 bg-indigo-50/50">
+                    <div className="flex items-center gap-1.5 text-indigo-700">
+                      <span className="text-base">🏅</span>
+                      <span className="font-extrabold text-[12px] uppercase tracking-tight font-sans">
+                        <span translate="no" className="notranslate"><T>HUY HIỆU DANH GIÁ BẢN TIN</T></span>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setShowBadgeExplanations(true)}
+                        className="bg-indigo-600 text-white font-extrabold text-[9px] px-2 py-1 rounded-lg hover:bg-indigo-700 cursor-pointer active:scale-95 transition-all uppercase border-none"
+                      >
+                        <T>📖 Giải nghĩa</T>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBadgeReport(null)}
+                        className="w-7 h-7 rounded-full bg-slate-150 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-xs border-none"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Body Content */}
+                  <div className="flex-1 overflow-y-auto p-4 bg-slate-50/30 space-y-3 pb-8">
+                    {/* Small Report Info banner */}
+                    <div className="p-2.5 rounded-xl bg-white border border-slate-150 text-slate-700 flex flex-col gap-1 shadow-3xs select-text">
+                      <div className="flex items-center justify-between text-[8px] font-extrabold uppercase text-indigo-600 select-none">
+                        <span>{activeReport.factory} - {activeReport.category}</span>
+                        <span className={isDsaReport ? "text-emerald-600" : "text-rose-600"}>
+                          {isDsaReport ? "ĐIỂM SÁNG (DSA)" : "KHÔNG PHÙ HỢP (KPH)"}
+                        </span>
+                      </div>
+                      <p className="text-[10px] font-bold line-clamp-2 leading-relaxed"><T>{activeReport.content}</T></p>
+                    </div>
+
+                    {/* Awarded Badges Section */}
+                    <div className="space-y-1.5">
+                      <div className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wide flex items-center gap-1 select-none">
+                        <span>🎖️</span>
+                        <span translate="no" className="notranslate"><T>Huy hiệu đã trao ({awardedBadges.length}):</T></span>
+                      </div>
+
+                      {awardedBadges.length === 0 ? (
+                        <div className="py-6 text-center text-slate-400 text-[10px] font-semibold bg-white rounded-xl border border-dashed border-slate-200 select-none">
+                          <T>Bản tin này chưa được trao huy hiệu nào.</T>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {awardedBadges.map((badge, idx) => {
+                            const icon = badge.id === "CANH_BAO_KIP_THOI" ? "🚨" :
+                                         badge.id === "CON_MAT_TINH_TUONG" ? "🔍" :
+                                         badge.id === "CHOT_CHAN_RUI_RO" ? "🛡️" :
+                                         badge.id === "THONG_TIN_CHUAN_MUC" ? "📊" :
+                                         badge.id === "DIEM_SANG_TIEU_BIEU" ? "🌟" :
+                                         badge.id === "CO_HOI_VANG" ? "🤝" :
+                                         badge.id === "SANG_KIEN_LAN_TOA" ? "🚀" :
+                                         badge.id === "VUOT_TROI_NANG_SUAT" ? "💎" :
+                                         badge.id === "CHAT_LUONG_VUOT_TROI" ? "🛡️" :
+                                         badge.id === "MOI_TRUONG_5_SAO" ? "✨" :
+                                         badge.id === "THONG_TIN_RO_RANG" ? "📜" :
+                                         badge.id === "VAN_HANH_BEN_BI" ? "🦾" :
+                                         badge.id === "BAO_CHUNG_HE_THONG" ? "🔄" : "🏅";
+                            
+                            const isMyAward = badge.giverId === currentUser?.id;
+
+                            return (
+                              <div
+                                key={idx}
+                                className="flex items-center justify-between p-2 rounded-xl bg-white border border-slate-150 shadow-3xs"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xl shrink-0">{icon}</span>
+                                  <div className="flex flex-col">
+                                    <span translate="no" className="notranslate text-[10px] font-black text-slate-800 uppercase leading-tight">
+                                      <T>{badge.name}</T>
+                                    </span>
+                                    <span translate="no" className="notranslate text-[8.5px] text-slate-500 font-medium">
+                                      <T>Người trao: {badge.giverName} ({badge.giverRole}) • {badge.timestamp}</T>
+                                    </span>
+                                  </div>
+                                </div>
+                                {isMyAward && eligible && (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleBadge(activeReport.id, badge.id, badge.name, badge.category)}
+                                    className="text-[8.5px] font-extrabold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-100 rounded-md px-2 py-1 shrink-0 cursor-pointer active:scale-95 transition-all uppercase"
+                                  >
+                                    <T>Thu hồi</T>
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Eligible Award Panel */}
+                    <div className="pt-2 border-t border-slate-200/50 space-y-2">
+                      <div className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wide flex items-center gap-1 select-none">
+                        <span>🎖️</span>
+                        <span translate="no" className="notranslate">
+                          <T>{eligible ? "BẢNG ĐIỀU HÀNH TRAO TẶNG HUY HIỆU:" : "QUYỀN TRAO HUY HIỆU:"}</T>
+                        </span>
+                      </div>
+
+                      {eligible ? (
+                        <div className="grid grid-cols-1 gap-1.5 select-none">
+                          {availableBadges.map((def) => {
+                            const isAwardedByMe = awardedBadges.some(b => b.id === def.id && b.giverId === currentUser?.id);
+                            const icon = def.id === "CANH_BAO_KIP_THOI" ? "🚨" :
+                                         def.id === "CON_MAT_TINH_TUONG" ? "🔍" :
+                                         def.id === "CHOT_CHAN_RUI_RO" ? "🛡️" :
+                                         def.id === "THONG_TIN_CHUAN_MUC" ? "📊" :
+                                         def.id === "DIEM_SANG_TIEU_BIEU" ? "🌟" :
+                                         def.id === "CO_HOI_VANG" ? "🤝" :
+                                         def.id === "SANG_KIEN_LAN_TOA" ? "🚀" :
+                                         def.id === "VUOT_TROI_NANG_SUAT" ? "💎" :
+                                         def.id === "CHAT_LUONG_VUOT_TROI" ? "🛡️" :
+                                         def.id === "MOI_TRUONG_5_SAO" ? "✨" :
+                                         def.id === "THONG_TIN_RO_RANG" ? "📜" :
+                                         def.id === "VAN_HANH_BEN_BI" ? "🦾" :
+                                         def.id === "BAO_CHUNG_HE_THONG" ? "🔄" : "🏅";
+
+                            return (
+                              <button
+                                key={def.id}
+                                type="button"
+                                onClick={() => toggleBadge(activeReport.id, def.id, def.name, def.category)}
+                                className={`w-full p-2 rounded-xl border flex items-center justify-between text-left transition-all active:scale-98 cursor-pointer shadow-3xs ${
+                                  isAwardedByMe
+                                    ? isDsaReport
+                                      ? "bg-emerald-50/75 border-emerald-300 ring-1 ring-emerald-200"
+                                      : "bg-rose-50/75 border-rose-300 ring-1 ring-rose-200"
+                                    : "bg-white hover:bg-slate-50 border-slate-200"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 pr-2">
+                                  <span className="text-lg shrink-0">{icon}</span>
+                                  <div className="flex flex-col gap-0.5">
+                                    <span translate="no" className="notranslate text-[10px] font-extrabold text-slate-850 leading-tight uppercase">
+                                      <T>{def.name}</T>
+                                    </span>
+                                    <span translate="no" className="notranslate text-[8.5px] text-slate-500 font-medium leading-normal">
+                                      <T>{def.description}</T>
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="shrink-0">
+                                  {isAwardedByMe ? (
+                                    <span className={`text-[8.5px] font-black uppercase px-2 py-0.5 rounded-full ${
+                                      isDsaReport ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+                                    }`}>
+                                      <T>Đã trao</T>
+                                    </span>
+                                  ) : (
+                                    <span className="text-[8.5px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 hover:bg-indigo-100">
+                                      <T>Trao</T>
+                                    </span>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="p-3 bg-amber-500/5 border border-amber-500/10 rounded-xl text-[9.5px] leading-relaxed text-slate-550 select-none">
+                          <span className="mr-1">⚠️</span>
+                          <T>Chỉ cấp quản lý trực tiếp (Trưởng/Phó đơn vị), Ban Giám đốc, Ban TGĐ và Admin mới có quyền trao tặng Huy hiệu cho bản tin.</T>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         );

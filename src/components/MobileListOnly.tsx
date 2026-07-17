@@ -1,8 +1,9 @@
 import React, { useEffect } from "react";
 import { T } from "./TranslateText";
 import { QualityReport, User, Branch } from "../types";
-import { Users, Cpu, Settings, FileText, Heart, Info } from "lucide-react";
+import { Users, User as UserIcon, Cpu, Settings, FileText, Heart, Info } from "lucide-react";
 import { formatNameCapitalized } from "../utils/branchHelpers";
+import { getReportRatingsStats, renderSummaryStars, isEligibleEvaluator } from "./MobileReportRatingSection";
 
 interface MobileListOnlyProps {
   reports: QualityReport[];
@@ -46,6 +47,18 @@ export function MobileListOnly({
     }
     return factoryName;
   };
+
+  const getContentFontSizeClass = (size: string | undefined) => {
+    switch (size) {
+      case "sm": return "text-[13px]";
+      case "base": return "text-[15px]";
+      case "xs":
+      default:
+        return "text-[12px]";
+    }
+  };
+
+  const contentFontSizeClass = getContentFontSizeClass(mobileUIConfig?.fontSize);
 
   const getCategoryIcon = (cat: string) => {
     switch (cat) {
@@ -187,14 +200,14 @@ export function MobileListOnly({
                 {/* Card header */}
                 <div className="flex justify-between items-start border-b border-slate-100 pb-2">
                   <div>
-                    <h3 className="text-xs font-black text-slate-800 uppercase">
-                      <span translate="no" className="notranslate">{getFactoryDisplayName(report.factory)}</span>
+                    <h3 className="text-[14px] font-black text-slate-800 uppercase">
+                      <span translate="no" className="notranslate">{getFactoryDisplayName(report.factory)?.toUpperCase()}</span>
                     </h3>
-                    <p className="text-[9px] text-slate-400 font-semibold mt-0.5">
-                      <span translate="no" className="notranslate">{report.timestamp}</span>
+                    <p className="text-[10px] text-slate-600 font-extrabold mt-0.5">
+                      <UserIcon className="w-3.5 h-3.5 inline-block mr-0.5 align-text-bottom stroke-[2.5] text-blue-600" /> <span translate="no" className="notranslate">{formatNameCapitalized(report.uploaderName)}</span> <span className="text-slate-300 mx-1.5 font-normal">|</span> <span translate="no" className="notranslate text-[9px] text-slate-400 font-sans font-semibold">{report.timestamp}</span>
                     </p>
                   </div>
-                  <div>
+                  <div className="flex flex-col items-end gap-1">
                     {report.reportType === "KPH" || report.isAbnormal ? (
                       <span className="text-[9px] font-black bg-red-600 text-white px-2 py-0.5 rounded uppercase">
                         <span translate="no" className="notranslate">⚠️ ĐIỂM KPH</span>
@@ -206,6 +219,11 @@ export function MobileListOnly({
                     ) : (
                       <span className="text-[9px] font-black bg-slate-100 text-slate-600 px-2 py-0.5 rounded uppercase">
                         <span translate="no" className="notranslate">TIÊU CHUẨN</span>
+                      </span>
+                    )}
+                    {report.reportCode && (
+                      <span className="text-[9px] text-slate-400 font-sans font-semibold">
+                        <span translate="no" className="notranslate">ID: {report.reportCode}</span>
                       </span>
                     )}
                   </div>
@@ -240,14 +258,26 @@ export function MobileListOnly({
 
                 {/* Details list info */}
                 <div className="text-[11px] text-slate-700 space-y-2 leading-relaxed">
-                  <div className="flex items-center gap-1 font-bold text-[10px] text-slate-500 uppercase">
-                    {getCategoryIcon(report.category)}
-                    <span translate="no" className="notranslate">{report.category}</span>
-                    <span className="text-slate-300">|</span>
-                    <span>Người đăng: {formatNameCapitalized(report.uploaderName)}</span>
+                  <div className="flex items-center justify-between gap-1 pb-1 border-b border-slate-100">
+                    <div className="flex items-center gap-1 font-bold text-[10px] text-slate-500 uppercase">
+                      {getCategoryIcon(report.category)}
+                      <span translate="no" className="notranslate">{report.category}</span>
+                    </div>
+                    {/* Read-only rating stars for scroll screenshot */}
+                    {(() => {
+                      const stats = getReportRatingsStats(report);
+                      const eligible = isEligibleEvaluator(currentUser);
+                      return stats.count > 0 ? (
+                        <div className="flex items-center gap-1 shrink-0 select-none">
+                          {renderSummaryStars(stats.average, eligible)}
+                          <span className="text-[10px] text-slate-600 font-bold font-sans ml-0.5">{stats.average}</span>
+                          <span className="text-[9px] text-slate-400 font-medium font-sans">({stats.count})</span>
+                        </div>
+                      ) : null;
+                    })()}
                   </div>
 
-                  <div className="font-semibold text-slate-800 text-xs">
+                  <div className={`font-semibold text-slate-800 ${contentFontSizeClass}`}>
                     <span translate="no" className="notranslate">{report.content}</span>
                   </div>
 
