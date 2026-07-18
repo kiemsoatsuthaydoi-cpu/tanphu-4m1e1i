@@ -1132,6 +1132,53 @@ export default function MobileFrame({
   const [isAiSendingChat, setIsAiSendingChat] = useState<boolean>(false);
   const [activeAiTab, setActiveAiTab] = useState<'analysis' | 'chat'>('analysis');
 
+  const aiSwipeTouchStartX = useRef<number | null>(null);
+  const aiSwipeTouchStartY = useRef<number | null>(null);
+
+  const handleAiTouchStart = (e: React.TouchEvent) => {
+    const target = e.target as HTMLElement;
+    if (
+      target && 
+      (target.tagName === 'TEXTAREA' || 
+       target.tagName === 'INPUT' || 
+       target.closest('textarea') || 
+       target.closest('input'))
+    ) {
+      aiSwipeTouchStartX.current = null;
+      aiSwipeTouchStartY.current = null;
+      return;
+    }
+    if (e.touches.length === 1) {
+      aiSwipeTouchStartX.current = e.touches[0].clientX;
+      aiSwipeTouchStartY.current = e.touches[0].clientY;
+    }
+  };
+
+  const handleAiTouchEnd = (e: React.TouchEvent) => {
+    if (aiSwipeTouchStartX.current === null || aiSwipeTouchStartY.current === null) return;
+    
+    if (e.changedTouches.length === 1) {
+      const endX = e.changedTouches[0].clientX;
+      const endY = e.changedTouches[0].clientY;
+      const diffX = endX - aiSwipeTouchStartX.current;
+      const diffY = endY - aiSwipeTouchStartY.current;
+      
+      // Swipe threshold is 60px horizontal, with max 40px vertical deviation
+      if (Math.abs(diffX) > 60 && Math.abs(diffY) < 40) {
+        if (diffX > 0) {
+          // Swipe right -> Go to analysis
+          setActiveAiTab('analysis');
+        } else {
+          // Swipe left -> Go to chat
+          setActiveAiTab('chat');
+        }
+      }
+    }
+    
+    aiSwipeTouchStartX.current = null;
+    aiSwipeTouchStartY.current = null;
+  };
+
   const handleAIAnalyze = async (report: QualityReport) => {
     setAiAnalysisReport(report);
     setAiAnalysisText("");
@@ -1481,6 +1528,7 @@ export default function MobileFrame({
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const lastTouchTimeRef = useRef(0);
+  const touchCountRef = useRef(0);
   const secondaryIconsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = secondaryIconsRef.current;
@@ -2154,23 +2202,57 @@ App Link: ${window.location.origin}`;
   
   
 
-  const handleViewportDoubleClick = (e?: React.MouseEvent) => {
-    if (isFullscreen) {
-      e?.stopPropagation();
+  const handleViewportClick = (e?: React.MouseEvent) => {
+    if (isFullscreen && e && e.detail === 3) {
+      // Prevent accidental triggers on interactive elements
+      const target = e.target as HTMLElement;
+      if (
+        target && 
+        (target.tagName === "BUTTON" || 
+         target.tagName === "INPUT" || 
+         target.tagName === "SELECT" || 
+         target.tagName === "TEXTAREA" || 
+         target.closest("button") || 
+         target.closest("a"))
+      ) {
+        return;
+      }
+      e.stopPropagation();
       toggleFullscreen();
     }
   };
 
   const handleViewportTouchStart = (e?: React.TouchEvent) => {
+    if (!isFullscreen) return;
+
+    // Prevent counting if touching an interactive element
+    const target = e?.target as HTMLElement;
+    if (
+      target && 
+      (target.tagName === "BUTTON" || 
+       target.tagName === "INPUT" || 
+       target.tagName === "SELECT" || 
+       target.tagName === "TEXTAREA" || 
+       target.closest("button") || 
+       target.closest("a"))
+    ) {
+      return;
+    }
+
     const now = Date.now();
     const gap = now - lastTouchTimeRef.current;
-    if (gap > 0 && gap < 300) {
-      if (isFullscreen) {
-        e?.stopPropagation();
-        toggleFullscreen();
-      }
+    if (gap > 0 && gap < 350) {
+      touchCountRef.current += 1;
+    } else {
+      touchCountRef.current = 1;
     }
     lastTouchTimeRef.current = now;
+
+    if (touchCountRef.current === 3) {
+      e?.stopPropagation();
+      touchCountRef.current = 0; // reset
+      toggleFullscreen();
+    }
   };
 
   // Helper to match selected factory abbreviation to actual database names
@@ -2813,7 +2895,7 @@ App Link: ${window.location.origin}`;
       <div 
         ref={viewportRef}
         id="mobile-viewport" 
-        onDoubleClick={handleViewportDoubleClick} 
+        onClick={handleViewportClick} 
         onTouchStart={handleViewportTouchStart} 
         className={`w-full flex flex-col relative transition-all duration-300 ${
           isRealMobile 
@@ -2956,7 +3038,7 @@ App Link: ${window.location.origin}`;
     <div 
       ref={viewportRef}
       id="mobile-viewport" 
-      onDoubleClick={handleViewportDoubleClick} 
+      onClick={handleViewportClick} 
       onTouchStart={handleViewportTouchStart} 
       className={`w-full flex flex-col relative transition-all duration-300 ${
         isRealMobile 
@@ -7435,7 +7517,7 @@ App Link: ${window.location.origin}`}
                 <div className="absolute inset-0 rounded-full bg-sky-500/20 animate-ping" />
                 <Smartphone className="w-8 h-8 text-sky-400" />
                 {/* Hand pointer or double click rings */}
-                <span className="absolute -top-1 -right-1 bg-sky-500 text-white font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider animate-bounce">Double Tap</span>
+                <span className="absolute -top-1 -right-1 bg-sky-500 text-white font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider animate-bounce">Triple Tap</span>
               </div>
 
               <div className="bg-white rounded-2xl p-5 shadow-2xl border border-slate-100 max-w-[290px] space-y-3">
@@ -7447,7 +7529,7 @@ App Link: ${window.location.origin}`}
                 </div>
                 
                 <p className="text-[10.5px] text-slate-600 font-semibold leading-relaxed">
-                  <T>Nhấp đúp (Double click) vào bất kỳ vị trí trống nào trên màn hình để Phóng to / Thu nhỏ ứng dụng rộng rãi và dễ nhìn hơn.</T>
+                  <T>Nhấp 3 cái liên tiếp (Triple click/tap) vào bất kỳ vị trí trống nào trên màn hình khi đang ở Toàn màn hình để thu nhỏ ứng dụng trở lại bình thường.</T>
                 </p>
 
                 <div className="pt-2 flex items-center justify-between gap-3 border-t border-slate-100">
@@ -7591,7 +7673,11 @@ App Link: ${window.location.origin}`}
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs transition-all animate-fadeIn">
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full flex flex-col h-[80vh] overflow-hidden animate-scaleIn select-text">
+            <div 
+              onTouchStart={handleAiTouchStart}
+              onTouchEnd={handleAiTouchEnd}
+              className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full flex flex-col h-[80vh] overflow-hidden animate-scaleIn select-text"
+            >
               {/* Header */}
               <div className="p-4 border-b border-slate-150 bg-gradient-to-r from-blue-50 to-indigo-50 flex items-center justify-between select-none">
                 <div className="flex items-center gap-2.5">
