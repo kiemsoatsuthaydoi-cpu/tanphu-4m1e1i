@@ -451,9 +451,15 @@ const attachLocalImages = (rawReports: QualityReport[]): QualityReport[] => {
     return {
       ...r,
       imageUrl: storedImg || r.imageUrl || "",
-      imageUrls: storedImgUrls && storedImgUrls.length > 0 
-        ? storedImgUrls 
-        : (storedImg ? [storedImg] : (r.imageUrl ? [r.imageUrl] : r.imageUrls || []))
+      imageUrls: (storedImgUrls && storedImgUrls.length > 0)
+        ? storedImgUrls
+        : (r.imageUrls && r.imageUrls.length > 0)
+          ? r.imageUrls
+          : storedImg
+            ? [storedImg]
+            : r.imageUrl
+              ? [r.imageUrl]
+              : []
     };
   });
 };

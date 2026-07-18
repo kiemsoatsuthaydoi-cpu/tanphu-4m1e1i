@@ -1,5 +1,5 @@
 // Service Worker for META ANDON PWA support to enable Badging on Home Screen
-const CACHE_NAME = 'meta-andon-v2';
+const CACHE_NAME = 'meta-andon-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
