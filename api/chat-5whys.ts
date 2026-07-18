@@ -85,7 +85,7 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { report, messages } = req.body;
+    const { report, messages, aiKnowledgeText } = req.body;
     if (!report) {
       return res.status(400).json({ success: false, error: "Thiếu thông tin báo cáo (report)" });
     }
@@ -129,6 +129,13 @@ Thông tin báo cáo KPH đang thảo luận:
 - Nội dung ghi nhận lỗi: ${content}
 - Ghi chú thêm: ${notes}
 - Các chỉ đạo hiện tại (nếu có): ${directives}
+
+${aiKnowledgeText ? `
+DƯỚI ĐÂY LÀ KHO TRI THỨC VÀ TIÊU CHUẨN CHẤT LƯỢNG MỚI NHẤT CỦA CÔNG TY (ISO 9001, BRCGS, BSCI, SCAN...):
+${aiKnowledgeText}
+
+Hãy đối chiếu với kho tri thức trên để trả lời người dùng. Nếu người dùng hỏi về nguyên nhân vi phạm, tính nhất quán quy trình, an toàn, an ninh,... hãy trích dẫn chính xác điều khoản, mục nào của tiêu chuẩn tương ứng (ISO 9001, BRCGS, BSCI, SCAN...) đang bị vi phạm hoặc cần lưu ý cải tiến.
+` : ""}
 
 Nhiệm vụ của bạn:
 1. Hãy trả lời câu hỏi mới nhất của người dùng dưới góc nhìn của một chuyên gia chất lượng dày dạn kinh nghiệm tại ${companyName}.

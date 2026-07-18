@@ -370,6 +370,126 @@ export function MobileReportRatingSectionContent({
   );
 }
 
+export const BADGE_PRAISE_MAP: Record<string, { description: string; praises: string[]; icon: string }> = {
+  CANH_BAO_KIP_THOI: {
+    icon: "🚨",
+    description: "Trao cho bản tin KPH được đăng ngay lập tức khi sự cố vừa xảy ra, giúp ngăn chặn hậu quả dây chuyền.",
+    praises: [
+      "Sự nhạy bén và hành động tức thì của bạn đã xuất sắc bảo vệ sự an toàn cho dây chuyền sản xuất!",
+      "Tuyệt vời! Bạn là tấm khiên vững vàng giúp nhà máy phát hiện sớm và dập tắt rủi ro tức thì!",
+      "Tinh thần chủ động cao độ của bạn đã giúp ngăn chặn kịp thời các sự cố dây chuyền nghiêm trọng!"
+    ]
+  },
+  CON_MAT_TINH_TUONG: {
+    icon: "🔍",
+    description: "Trao cho bản tin mô tả những lỗi cực nhỏ, khó thấy bằng mắt thường hoặc những lỗi tiềm ẩn sâu trong quy trình.",
+    praises: [
+      "Sự tỉ mỉ và đôi mắt sắc bén của bạn đã tìm ra điểm bất thường cực nhỏ mà người khác dễ bỏ qua!",
+      "Thật nể phục óc quan sát tinh tường của bạn! Sự kỹ lưỡng này giúp duy trì chất lượng vượt trội.",
+      "Sự cẩn trọng tuyệt vời! Bạn đã giúp hệ thống ngăn ngừa lỗi tiềm ẩn ngay từ những khâu nhỏ nhất!"
+    ]
+  },
+  CHOT_CHAN_RUI_RO: {
+    icon: "🛡️",
+    description: "Trao cho bản tin KPH về những lỗi nghiêm trọng có thể gây hỏng lô hàng lớn hoặc ảnh hưởng trực tiếp đến an toàn.",
+    praises: [
+      "Lá chắn vững chắc bảo vệ chất lượng! Sự can thiệp quả cảm của bạn đã cứu nguy cho cả lô hàng lớn!",
+      "Bản lĩnh tuyệt vời! Bạn đã xuất sắc chặn đứng lỗi nghiêm trọng trước khi nó gây ra thiệt hại!",
+      "Một chốt chặn chất lượng hoàn hảo! Sự cẩn mật của bạn đem lại sự an tâm tuyệt đối cho toàn nhà máy!"
+    ]
+  },
+  THONG_TIN_CHUAN_MUC: {
+    icon: "📊",
+    description: "Trao cho bản tin có mô tả 4M1E1I cực kỳ chi tiết, hình ảnh rõ nét, thông tin chính xác, không cần hỏi lại.",
+    praises: [
+      "Mô tả 4M1E1I vô cùng rõ ràng và chuẩn mực! Đây là bản tin kiểu mẫu cho toàn bộ hệ thống!",
+      "Hình ảnh trực quan, thông tin cực kỳ chi tiết! Bản tin chất lượng cao của bạn giúp tiết kiệm thời gian phối hợp!",
+      "Khen ngợi sự ghi nhận chuẩn mực, đầy đủ và khoa học! Thông tin của bạn có giá trị thực tiễn rất cao!"
+    ]
+  },
+  DIEM_SANG_TIEU_BIEU: {
+    icon: "🌟",
+    description: "Huy hiệu mặc định cho các bản tin DSA có giá trị học hỏi cao cho toàn bộ nhà máy.",
+    praises: [
+      "Sáng kiến/thành tích xuất sắc! Bạn là điểm sáng tiêu biểu truyền cảm hứng mạnh mẽ cho đồng nghiệp!",
+      "Thành quả tuyệt vời đóng góp cho nhà máy! Đây là tấm gương cải tiến mẫu mực để nhân rộng rộng khắp!",
+      "Chúc mừng nỗ lực xuất sắc vượt bậc của bạn! Sự đóng góp này mang giá trị học hỏi rất cao!"
+    ]
+  },
+  CO_HOI_VANG: {
+    icon: "🤝",
+    description: "Trao cho bản tin về tiếp khách, audit, hoặc các thông tin có tiềm năng mang lại hợp đồng/mối quan hệ kinh doanh mới (Dành cho TH WATER).",
+    praises: [
+      "Nhạy bén mở ra cơ hội hợp tác và nâng tầm dịch vụ! Chúc mừng nỗ lực kết nối vô giá của bạn!",
+      "Nỗ lực tối ưu hóa dịch vụ tuyệt vời! Bạn đã giúp mang lại giá trị gia tăng lớn cho các bên liên quan!",
+      "Tinh thần hướng tới khách hàng xuất sắc! Đóng góp của bạn đã nâng tầm uy tín và thương hiệu!"
+    ]
+  },
+  SANG_KIEN_LAN_TOA: {
+    icon: "🚀",
+    description: "Trao cho bản tin DSA mà sau khi đăng, có nhiều đơn vị khác vào nút 'Đăng ký nhân rộng'.",
+    praises: [
+      "Ý tưởng cải tiến có sức hút mạnh mẽ! Sáng kiến của bạn đang lan tỏa năng lượng tích cực khắp nơi!",
+      "Tuyệt vời! Ý tưởng đột phá của bạn đã thúc đẩy tinh thần cải tiến và nhân rộng trên toàn hệ thống!",
+      "Sức lan tỏa phi thường! Sáng kiến của bạn là động lực thúc đẩy mọi người cùng chung tay cải tiến!"
+    ]
+  },
+  VUOT_TROI_NANG_SUAT: {
+    icon: "💎",
+    description: "Trao cho các bản tin ghi nhận việc phá kỷ lục sản xuất, rút ngắn thời gian làm việc mà vẫn đảm bảo chất lượng.",
+    praises: [
+      "Thành tích phá kỷ lục năng suất đáng tự hào! Nỗ lực phi thường của bạn mang lại hiệu suất vượt trội!",
+      "Rút ngắn thời gian mà vẫn đảm bảo chất lượng! Bạn đã thiết lập một tiêu chuẩn năng suất mới!",
+      "Hiệu suất đỉnh cao! Khen ngợi tinh thần tối ưu hóa tuyệt vời giúp tăng tốc vận hành mạnh mẽ!"
+    ]
+  },
+  CHAT_LUONG_VUOT_TROI: {
+    icon: "🛡️",
+    description: "Dành cho Cải thiện chất lượng, tượng trưng cho việc bảo vệ uy tín chất lượng của Tân Phú/DNP.",
+    praises: [
+      "Cam kết chất lượng tuyệt đối của bạn là bệ phóng vững chắc giữ gìn uy tín thương hiệu Tân Phú/DNP!",
+      "Tiêu chuẩn vàng trong vận hành! Sự tận tâm của bạn giúp duy trì chất lượng vượt trội bền vững!",
+      "Sự cẩn trọng tuyệt vời giúp nâng tầm sản phẩm của chúng ta vượt trên sự mong đợi của khách hàng!"
+    ]
+  },
+  MOI_TRUONG_5_SAO: {
+    icon: "✨",
+    description: "Dành cho Cải tiến môi trường, tượng trưng cho sự sạch sẽ, gọn gàng, an toàn.",
+    praises: [
+      "Môi trường làm việc sạch sẽ, ngăn nắp và an toàn hơn nhờ sự đóng góp tích cực từng ngày của bạn!",
+      "Hành động xanh vì một không gian làm việc lý tưởng! Bạn là tấm gương sáng về chuẩn mực 5S!",
+      "Cải tiến không gian an toàn, gọn gàng vượt trội! Chúc mừng góc làm việc kiểu mẫu của bạn!"
+    ]
+  },
+  THONG_TIN_RO_RANG: {
+    icon: "📜",
+    description: "Dành cho Chuẩn hóa thông tin đầu vào/ra.",
+    praises: [
+      "Sự rõ ràng và chuẩn hóa tuyệt vời! Đóng góp của bạn giúp luồng thông tin vận hành luôn thông suốt!",
+      "Thông tin rành mạch, có tính hệ thống cao giúp việc phối hợp giữa các bộ phận trở nên dễ dàng!",
+      "Sự tỉ mỉ trong chuẩn hóa dữ liệu của bạn đã giúp toàn đội ngũ ra quyết định nhanh chóng và chính xác!"
+    ]
+  },
+  VAN_HANH_BEN_BI: {
+    icon: "🦾",
+    description: "Dành cho Ổn định chất lượng máy móc.",
+    praises: [
+      "Sự chăm sóc chu đáo giữ cho máy móc luôn ổn định bền bỉ! Bạn là xương sống của sự vận hành!",
+      "Vận hành êm ái, trơn tru tuyệt đối! Cảm ơn sự tận tụy không ngừng nghỉ của bạn!",
+      "Giữ máy ổn định, duy trì nhịp sản xuất bền vững! Đóng góp của bạn vô cùng đáng trân trọng!"
+    ]
+  },
+  BAO_CHUNG_HE_THONG: {
+    icon: "🔄",
+    description: "Dành cho Duy trì và cải tiến hệ thống, tượng trưng cho sự cải tiến liên tục không ngừng nghỉ.",
+    praises: [
+      "Tinh thần cải tiến liên tục không ngừng nghỉ! Bạn là nhân tố cốt lõi thúc đẩy hệ thống hoàn thiện!",
+      "Bảo chứng vững chắc cho sự phát triển dài lâu! Nỗ lực tối ưu hóa của bạn thật đáng khen ngợi!",
+      "Kiên trì cải tiến bền bỉ mỗi ngày, mang lại sự bền vững và chuẩn mực cho toàn hệ thống!"
+    ]
+  }
+};
+
 export function MobileReportRatingContainer({
   report,
   currentUser,
@@ -384,6 +504,7 @@ export function MobileReportRatingContainer({
   theme: any;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [selectedInfoBadge, setSelectedInfoBadge] = useState<any | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -437,8 +558,15 @@ export function MobileReportRatingContainer({
                 return (
                   <span 
                     key={idx} 
-                    className="text-[16.5px] leading-none filter drop-shadow-3xs flex items-center justify-center" 
+                    className="text-[16.5px] leading-none filter drop-shadow-3xs flex items-center justify-center cursor-pointer hover:scale-125 active:scale-95 transition-all duration-200" 
                     title={`${badge.name} - Trao bởi: ${badge.giverName} (${badge.timestamp})`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const badgeMapItem = BADGE_PRAISE_MAP[badge.id] || { praises: ["Xin nhiệt liệt biểu dương đóng góp xuất sắc của bạn!"] };
+                      const praisesList = badgeMapItem.praises;
+                      const selectedPraise = praisesList[Math.floor(Math.random() * praisesList.length)];
+                      setSelectedInfoBadge({ ...badge, icon, praise: selectedPraise });
+                    }}
                   >
                     {icon}
                   </span>
@@ -457,6 +585,77 @@ export function MobileReportRatingContainer({
         isExpanded={isExpanded}
         setIsExpanded={setIsExpanded}
       />
+
+      {/* Elegant Praise Modal Dialog */}
+      {selectedInfoBadge && (
+        <div 
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-[9999] select-none pointer-events-auto"
+          onClick={(e) => {
+            e.stopPropagation();
+            setSelectedInfoBadge(null);
+          }}
+        >
+          <div 
+            className="bg-white rounded-lg w-full max-w-[224px] overflow-hidden shadow-2xl border border-amber-100 flex flex-col relative pointer-events-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Thân thiện, nhỏ gọn với nút đóng X chắc chắn */}
+            <div className="absolute top-2 right-2 z-[10000]">
+              <button 
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedInfoBadge(null);
+                }}
+                className="w-5.5 h-5.5 rounded-full bg-black/15 hover:bg-black/25 text-white font-bold flex items-center justify-center cursor-pointer transition-colors text-[9px] border-none outline-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Header with decorative borders - Thinner design */}
+            <div className="bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 p-2.5 pb-3 text-center text-white relative">
+              <div className="text-2xl filter drop-shadow-md mb-1">{selectedInfoBadge.icon}</div>
+              <h3 className="text-[8px] font-black tracking-wider uppercase font-sans mb-0.5 text-amber-100">
+                <span translate="no" className="notranslate"><T>HUY HIỆU DANH GIÁ</T></span>
+              </h3>
+              <h2 className="text-[12px] font-extrabold font-sans tracking-wide px-1">
+                <span translate="no" className="notranslate"><T>{selectedInfoBadge.name}</T></span>
+              </h2>
+            </div>
+
+            {/* Content Body */}
+            <div className="px-4 pt-5 pb-7 flex flex-col gap-4 text-center text-slate-700 bg-amber-50/10">
+              <div className="flex flex-col gap-1.5 bg-gradient-to-br from-amber-50 to-orange-50/50 p-3.5 rounded-md border border-amber-100 shadow-3xs">
+                <div className="text-[8.5px] uppercase font-extrabold tracking-wider text-orange-700 font-sans flex items-center justify-center gap-1">
+                  <span>🌟</span>
+                  <span translate="no" className="notranslate"><T>LỜI BIỂU DƯƠNG</T></span>
+                  <span>🌟</span>
+                </div>
+                <p className="text-[9.5px] text-amber-950 font-bold leading-normal">
+                  <span translate="no" className="notranslate">
+                    <T>{selectedInfoBadge.praise || "Xin nhiệt liệt biểu dương tinh thần trách nhiệm cao và sự đóng góp xuất sắc của bạn!"}</T>
+                  </span>
+                </p>
+              </div>
+
+              {/* Giver info */}
+              <div className="text-[8px] text-slate-500 font-semibold bg-slate-50 border border-slate-100 py-2.5 px-2.5 rounded-md flex flex-col gap-0.5">
+                <div>
+                  <span translate="no" className="notranslate">
+                    <T>Người trao: {selectedInfoBadge.giverName} ({selectedInfoBadge.giverRole})</T>
+                  </span>
+                </div>
+                <div>
+                  <span translate="no" className="notranslate">
+                    <T>Thời gian: {selectedInfoBadge.timestamp}</T>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

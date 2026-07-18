@@ -172,6 +172,8 @@ interface DashboardDesktopProps {
   onDeleteBroadcast?: (id: string) => void;
   tickerConfig?: { text: string; speed: number; spacing: number };
   onUpdateTickerConfig?: (config: { text: string; speed: number; spacing: number }) => void;
+  aiKnowledgeText?: string;
+  onUpdateAiKnowledge?: (newText: string) => void;
   systemNotifications?: AppNotification[];
   onDeleteNotification?: (id: string) => void;
   readNotifIds?: string[];
@@ -618,6 +620,8 @@ export default function DashboardDesktop({
   onDeleteBroadcast,
   tickerConfig,
   onUpdateTickerConfig,
+  aiKnowledgeText,
+  onUpdateAiKnowledge,
   systemNotifications = [],
   onDeleteNotification,
   readNotifIds: readNotifIdsProp,
@@ -890,6 +894,7 @@ export default function DashboardDesktop({
           content: report.content,
           notes: report.notes,
           directives: report.directives,
+          aiKnowledgeText: aiKnowledgeText || "",
         }),
       });
       const data = await response.json();
@@ -933,6 +938,7 @@ export default function DashboardDesktop({
             directives: aiAnalysisReport.directives,
           },
           messages: updatedMessages,
+          aiKnowledgeText: aiKnowledgeText || "",
         }),
       });
       const data = await response.json();
@@ -1181,6 +1187,24 @@ export default function DashboardDesktop({
   const [editTickerText, setEditTickerText] = useState("");
   const [editTickerSpeed, setEditTickerSpeed] = useState(35);
   const [editTickerSpacing, setEditTickerSpacing] = useState(50);
+
+  const [isEditingKnowledge, setIsEditingKnowledge] = useState(false);
+  const [editKnowledgeText, setEditKnowledgeText] = useState("");
+
+  const handleStartEditKnowledge = () => {
+    setEditKnowledgeText(aiKnowledgeText || "");
+    setIsEditingKnowledge(true);
+  };
+
+  const handleSaveKnowledgeConfig = () => {
+    if (onUpdateAiKnowledge) {
+      onUpdateAiKnowledge(editKnowledgeText);
+      if (onShowToast) {
+        onShowToast("Đã cập nhật kho tri thức tiêu chuẩn AI thành công!", "success");
+      }
+    }
+    setIsEditingKnowledge(false);
+  };
 
   const handleStartEditTicker = () => {
     setEditTickerText(tickerConfig?.text !== undefined ? tickerConfig.text : "");
@@ -6181,6 +6205,61 @@ export default function DashboardDesktop({
                       >
                         <Pencil className="w-3.5 h-3.5 text-amber-700 shrink-0" />
                         <T>Chỉnh Sửa Thông Báo Chữ Chạy</T>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Card 1B: KHO TRI THỨC TIÊU CHUẨN AI */}
+                  <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm space-y-4">
+                    <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2 border-b border-slate-100 pb-3">
+                      <Brain className="w-5 h-5 text-[#8B5CF6] animate-pulse" />
+                      <T>🧠 KHO TRI THỨC TIÊU CHUẨN AI</T>
+                    </h3>
+
+                    <div className="bg-[#F3E8FF] border border-[#E9D5FF] rounded-xl p-4 space-y-3">
+                      <T className="text-[#6B21A8] text-[10px] font-black block uppercase tracking-wider">TRI THỨC TIÊU CHUẨN HIỆN TẠI:</T>
+                      <div className="text-xs text-slate-750 leading-relaxed font-sans font-medium whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+                        <T>{aiKnowledgeText && aiKnowledgeText.trim() !== "" ? aiKnowledgeText : "CHƯA CUNG CẤP TRI THỨC TIÊU CHUẨN (AI SẼ DÙNG TRI THỨC CHUNG CHẤT LƯỢNG)"}</T>
+                      </div>
+                    </div>
+
+                    {isEditingKnowledge ? (
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 animate-fadeIn">
+                        <T className="text-slate-700 text-xs font-black uppercase tracking-wide block">CẬP NHẬT KHO TRI THỨC AI</T>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] text-slate-500 block font-bold uppercase"><T>Nội dung thông tin / Tiêu chuẩn mới:</T></label>
+                          <textarea
+                            value={editKnowledgeText}
+                            onChange={(e) => setEditKnowledgeText(e.target.value)}
+                            rows={8}
+                            className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 focus:ring-2 focus:ring-[#8B5CF6] focus:outline-none"
+                            placeholder="Ví dụ:&#10;- Công ty vừa chứng nhận ISO 9001:2015, BRCGS, BSCI, SCAN.&#10;- Lỗi không nhất quán phiếu kiểm tra vi phạm điều khoản 7.5 của ISO 9001.&#10;- Mất an ninh nhà xưởng vi phạm tiêu chuẩn SCAN mục an ninh vật lý."
+                          />
+                        </div>
+                        <div className="flex gap-2 pt-2">
+                          <button
+                            onClick={handleSaveKnowledgeConfig}
+                            className="flex-1 py-2 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white font-extrabold rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <T>LƯU TRI THỨC</T>
+                          </button>
+                          <button
+                            onClick={() => setIsEditingKnowledge(false)}
+                            className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                            <T>HỦY</T>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={handleStartEditKnowledge}
+                        className="w-full py-2.5 bg-[#F3E8FF] hover:bg-[#E9D5FF] border border-[#D8B4FE] text-slate-800 font-extrabold rounded-lg text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                      >
+                        <Pencil className="w-3.5 h-3.5 text-[#7C3AED] shrink-0" />
+                        <T>Cập Nhật Kho Tri Thức AI</T>
                       </button>
                     )}
                   </div>

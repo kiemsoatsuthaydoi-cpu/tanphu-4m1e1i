@@ -85,7 +85,7 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { factory, category, content, notes, directives } = req.body;
+    const { factory, category, content, notes, directives, aiKnowledgeText } = req.body;
     
     const ai = getAIInstance();
 
@@ -109,6 +109,13 @@ Thông tin báo cáo:
 - Nội dung ghi nhận lỗi: ${content || "Trống"}
 - Ghi chú thêm: ${notes || "Không có"}
 - Các chỉ đạo hiện tại (nếu có): ${directives && directives.length > 0 ? directives.map((d: any) => d.text).join("; ") : "Chưa có"}
+
+${aiKnowledgeText ? `
+DƯỚI ĐÂY LÀ KHO TRI THỨC VÀ TIÊU CHUẨN CHẤT LƯỢNG MỚI NHẤT CỦA CÔNG TY (ISO 9001, BRCGS, BSCI, SCAN...):
+${aiKnowledgeText}
+
+Hãy áp dụng kho tri thức trên để đối chiếu. Nếu lỗi này liên quan đến sự không nhất quán, vi phạm quy trình, vấn đề an toàn/an ninh,... hãy chỉ rõ sự cố đang vi phạm cụ thể vào điều khoản, mục nào của các tiêu chuẩn này (ví dụ: ISO 9001 điều khoản mấy, BRCGS mục mấy, BSCI hay SCAN điều khoản mấy).
+` : ""}
 
 Yêu cầu phân tích:
 1. Phân tích nguyên nhân gốc rễ theo phương pháp 5-Why (Đặt câu hỏi Tại sao 5 lần để tìm ra nguyên nhân sâu xa dựa trên thông tin được cung cấp, hãy suy luận logic, thực tế với bối cảnh sản xuất của ${companyName}).

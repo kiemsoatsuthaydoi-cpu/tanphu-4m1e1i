@@ -799,9 +799,17 @@ export default function App() {
     };
   });
 
+  const [aiKnowledgeText, setAiKnowledgeText] = useState(() => {
+    return safeGetItem("4m1e1i_ai_knowledge_text") || "";
+  });
+
   useEffect(() => {
     safeSetItem("4m1e1i_ticker_config", JSON.stringify(tickerConfig));
   }, [tickerConfig]);
+
+  useEffect(() => {
+    safeSetItem("4m1e1i_ai_knowledge_text", aiKnowledgeText);
+  }, [aiKnowledgeText]);
 
   useEffect(() => {
     safeSetItem("4m1e1i_mobile_ui_config", JSON.stringify(mobileUIConfig));
@@ -846,6 +854,13 @@ export default function App() {
     setTickerConfig(newConfig);
     if (dbConnected) {
       saveDocument("config", "ticker", newConfig).catch(console.error);
+    }
+  }, [dbConnected]);
+
+  const handleUpdateAiKnowledge = useCallback((newText: string) => {
+    setAiKnowledgeText(newText);
+    if (dbConnected) {
+      saveDocument("config", "ai_knowledge", { text: newText }).catch(console.error);
     }
   }, [dbConnected]);
 
@@ -1490,6 +1505,11 @@ export default function App() {
         }));
       }
 
+      const remoteAiKnowledge = fConfigs.find((c: any) => c.id === "ai_knowledge");
+      if (remoteAiKnowledge && typeof remoteAiKnowledge.text === "string") {
+        setAiKnowledgeText(remoteAiKnowledge.text);
+      }
+
       setDbConnected(true);
       setSyncCompleted(true);
       setDbStatus("Đồng bộ liên kết với server thành công!");
@@ -1623,6 +1643,11 @@ export default function App() {
               }
               return prev;
             });
+          } else if (doc.id === "ai_knowledge") {
+            const data = doc.data();
+            if (data && typeof data.text === "string") {
+              setAiKnowledgeText(data.text);
+            }
           } else if (doc.id === "deleted_notifications") {
             const data = doc.data();
             if (data && Array.isArray(data.ids)) {
@@ -1977,35 +2002,48 @@ export default function App() {
     const isMobileDevice = window.innerWidth < 1024 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     let lastTap = 0;
 
-    const toggleFullscreenOnInteraction = () => {
+    let clickCount = 0;
+    let clickTimer: any = null;
+    let tapCount = 0;
+    let tapTimer: any = null;
+    let lastTouchTime = 0;
+
+    const toggleFullscreenOnInteraction = (action?: "enter" | "exit") => {
       const doc = document as any;
       const docEl = document.documentElement as any;
       const isCurrentlyFs = !!(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement);
       
-      if (!isCurrentlyFs) {
-        if (docEl.requestFullscreen) {
-          docEl.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
-        } else if (docEl.webkitRequestFullscreen) {
-          docEl.webkitRequestFullscreen({ navigationUI: "hide" });
-        } else if (docEl.mozRequestFullScreen) {
-          docEl.mozRequestFullScreen();
-        } else if (docEl.msRequestFullscreen) {
-          docEl.msRequestFullscreen();
+      if (action === "enter" || (!action && !isCurrentlyFs)) {
+        if (!isCurrentlyFs) {
+          if (docEl.requestFullscreen) {
+            docEl.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
+          } else if (docEl.webkitRequestFullscreen) {
+            docEl.webkitRequestFullscreen({ navigationUI: "hide" });
+          } else if (docEl.mozRequestFullScreen) {
+            docEl.mozRequestFullScreen();
+          } else if (docEl.msRequestFullscreen) {
+            docEl.msRequestFullscreen();
+          }
         }
-      } else {
-        if (doc.exitFullscreen) {
-          doc.exitFullscreen().catch(() => {});
-        } else if (doc.webkitExitFullscreen) {
-          doc.webkitExitFullscreen();
-        } else if (doc.mozCancelFullScreen) {
-          doc.mozCancelFullScreen();
-        } else if (doc.msExitFullscreen) {
-          doc.msExitFullscreen();
+      } else if (action === "exit" || (!action && isCurrentlyFs)) {
+        if (isCurrentlyFs) {
+          if (doc.exitFullscreen) {
+            doc.exitFullscreen().catch(() => {});
+          } else if (doc.webkitExitFullscreen) {
+            doc.webkitExitFullscreen();
+          } else if (doc.mozCancelFullScreen) {
+            doc.mozCancelFullScreen();
+          } else if (doc.msExitFullscreen) {
+            doc.msExitFullscreen();
+          }
         }
       }
     };
 
-    const handleDblClick = (e: MouseEvent) => {
+    const handleMouseClick = (e: MouseEvent) => {
+      if (Date.now() - lastTouchTime < 600) {
+        return;
+      }
       const target = e.target as HTMLElement;
       if (target) {
         if (
@@ -2015,15 +2053,32 @@ export default function App() {
           target.tagName === "A" ||
           target.closest(".cursor-zoom-in") || 
           target.closest(".cursor-move") ||
-          target.closest("button")
+          target.closest("button") ||
+          target.closest("a") ||
+          target.closest("input") ||
+          target.closest("textarea")
         ) {
           return;
         }
       }
-      toggleFullscreenOnInteraction();
+
+      clickCount++;
+      if (clickTimer) {
+        clearTimeout(clickTimer);
+      }
+
+      clickTimer = setTimeout(() => {
+        if (clickCount === 2) {
+          toggleFullscreenOnInteraction("enter");
+        } else if (clickCount >= 3) {
+          toggleFullscreenOnInteraction("exit");
+        }
+        clickCount = 0;
+      }, 350);
     };
 
     const handleTouchStart = (e: TouchEvent) => {
+      lastTouchTime = Date.now();
       const target = e.target as HTMLElement;
       if (target) {
         if (
@@ -2033,21 +2088,32 @@ export default function App() {
           target.tagName === "A" ||
           target.closest(".cursor-zoom-in") || 
           target.closest(".cursor-move") ||
-          target.closest("button")
+          target.closest("button") ||
+          target.closest("a") ||
+          target.closest("input") ||
+          target.closest("textarea")
         ) {
           return;
         }
       }
 
-      const now = Date.now();
-      const DOUBLE_TAP_DELAY = 300;
-      if (now - lastTap < DOUBLE_TAP_DELAY) {
-        if (e.cancelable) {
-          e.preventDefault();
-        }
-        toggleFullscreenOnInteraction();
+      tapCount++;
+      if (tapTimer) {
+        clearTimeout(tapTimer);
       }
-      lastTap = now;
+
+      if (tapCount > 1 && e.cancelable) {
+        e.preventDefault();
+      }
+
+      tapTimer = setTimeout(() => {
+        if (tapCount === 2) {
+          toggleFullscreenOnInteraction("enter");
+        } else if (tapCount >= 3) {
+          toggleFullscreenOnInteraction("exit");
+        }
+        tapCount = 0;
+      }, 350);
     };
 
     // Auto trigger on first touch or click
@@ -2071,15 +2137,17 @@ export default function App() {
       window.addEventListener("click", handleFirstInteraction);
     }
 
-    // Always support double click and double tap for toggling fullscreen
-    window.addEventListener("dblclick", handleDblClick);
+    // Always support click/double click and double tap/triple tap for toggling fullscreen
+    window.addEventListener("click", handleMouseClick);
     window.addEventListener("touchstart", handleTouchStart, { passive: false });
 
     return () => {
       window.removeEventListener("touchstart", handleFirstInteraction);
       window.removeEventListener("click", handleFirstInteraction);
-      window.removeEventListener("dblclick", handleDblClick);
+      window.removeEventListener("click", handleMouseClick);
       window.removeEventListener("touchstart", handleTouchStart);
+      if (clickTimer) clearTimeout(clickTimer);
+      if (tapTimer) clearTimeout(tapTimer);
     };
   }, []);
 
@@ -3901,6 +3969,8 @@ export default function App() {
             tickerConfig={tickerConfig}
             broadcasts={broadcasts}
             onUpdateTickerConfig={handleUpdateTickerConfig}
+            aiKnowledgeText={aiKnowledgeText}
+            onUpdateAiKnowledge={handleUpdateAiKnowledge}
             onAddBroadcast={handleAddBroadcast}
             onDeleteBroadcast={handleDeleteBroadcast}
             deletedNotifIds={deletedNotifIds}
@@ -4014,6 +4084,8 @@ export default function App() {
             tickerConfig={tickerConfig}
             broadcasts={broadcasts}
             onUpdateTickerConfig={handleUpdateTickerConfig}
+            aiKnowledgeText={aiKnowledgeText}
+            onUpdateAiKnowledge={handleUpdateAiKnowledge}
             onAddBroadcast={handleAddBroadcast}
             onDeleteBroadcast={handleDeleteBroadcast}
             deletedNotifIds={deletedNotifIds}
@@ -4173,6 +4245,8 @@ export default function App() {
             onDeleteBroadcast={handleDeleteBroadcast}
             tickerConfig={tickerConfig}
             onUpdateTickerConfig={handleUpdateTickerConfig}
+            aiKnowledgeText={aiKnowledgeText}
+            onUpdateAiKnowledge={handleUpdateAiKnowledge}
             systemNotifications={systemNotifications}
             onDeleteNotification={handleDeleteNotification}
             readNotifIds={readNotifIds}
@@ -4224,6 +4298,8 @@ export default function App() {
                 users={users}
                 companies={companies}
                 onSwitchToDesktop={() => setShowMobilePreview(false)}
+                aiKnowledgeText={aiKnowledgeText}
+                onUpdateAiKnowledge={handleUpdateAiKnowledge}
                 chats={chats}
                 onAddChatMessage={handleAddChatMessage}
                 onUpdateUserStatus={handleUpdateStatus}
@@ -4291,6 +4367,8 @@ export default function App() {
                 users={users}
                 companies={companies}
                 onSwitchToDesktop={() => setShowMobilePreview(false)}
+                aiKnowledgeText={aiKnowledgeText}
+                onUpdateAiKnowledge={handleUpdateAiKnowledge}
                 chats={chats}
                 onAddChatMessage={handleAddChatMessage}
                 onUpdateUserStatus={handleUpdateStatus}
