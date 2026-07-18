@@ -73,7 +73,7 @@ const safeSetItem = (key: string, value: string): void => {
         localStorage.setItem(key, value);
         console.log(`[localStorage] Retry writing key "${key}" succeeded after clearing caches!`);
       } catch (retryError) {
-        console.error(`[localStorage] Retry failed for key "${key}":`, retryError);
+        console.warn(`[localStorage] Retry failed for key "${key}":`, retryError);
       }
     }
   }
@@ -442,6 +442,22 @@ const sanitizeReports = (rawReports: QualityReport[]): QualityReport[] => {
   }));
 };
 
+const attachLocalImages = (rawReports: QualityReport[]): QualityReport[] => {
+  if (!Array.isArray(rawReports)) return [];
+  return rawReports.map((r: QualityReport) => {
+    const storedImg = safeGetItem(`4m1e1i_img_${r.id}`);
+    const storedImgUrls = safeParseJSON(safeGetItem(`4m1e1i_img_urls_${r.id}`), []);
+    
+    return {
+      ...r,
+      imageUrl: storedImg || r.imageUrl || "",
+      imageUrls: storedImgUrls && storedImgUrls.length > 0 
+        ? storedImgUrls 
+        : (storedImg ? [storedImg] : (r.imageUrl ? [r.imageUrl] : r.imageUrls || []))
+    };
+  });
+};
+
 export default function App() {
   // Firebase configurations & connection indicators
   const [dbLoading, setDbLoading] = useState(true);
@@ -532,7 +548,7 @@ export default function App() {
         uploaderDepartment: dept
       };
     });
-    return sanitizeReports(mapped);
+    return sanitizeReports(attachLocalImages(mapped));
   });
 
   const [companies, setCompanies] = useState<Company[]>(() => {
@@ -1273,7 +1289,7 @@ export default function App() {
       }));
       setUsers(finalUsers);
 
-      const finalReports = sanitizeReports(fReports.length > 0 ? fReports : [...reports]);
+      const finalReports = sanitizeReports(attachLocalImages(fReports.length > 0 ? fReports : [...reports]));
       setReports(finalReports);
 
       let latestCompanies = fCompanies.length > 0 ? fCompanies : [...companies];
@@ -1474,8 +1490,13 @@ export default function App() {
       if (isManual) {
         showToast("Đã tải lại và đồng bộ dữ liệu mới nhất thành công!", "success");
       }
-    } catch (error) {
-      console.error("Firestore loading error:", error);
+    } catch (error: any) {
+      const isPermissionError = error?.code === "permission-denied" || error?.message?.toLowerCase().includes("permission") || error?.message?.toLowerCase().includes("insufficient");
+      if (isPermissionError) {
+        console.log("[Firestore] Firestore loading offline (permission denied/declined). Running smoothly in Local/Offline fallback mode.");
+      } else {
+        console.warn("[Firestore] Firestore loading error:", error);
+      }
       setDbStatus("Đồng bộ thất bại, chuyển chế độ ngoại tuyến");
       if (isManual) {
         showToast("Lỗi khi tải lại dữ liệu từ server!", "error");
@@ -1501,7 +1522,7 @@ export default function App() {
         snapshot.forEach((doc) => {
           list.push(doc.data() as QualityReport);
         });
-        setReports(sanitizeReports(list));
+        setReports(sanitizeReports(attachLocalImages(list)));
       },
       (error) => {
         console.error("Lỗi đồng bộ báo cáo thời gian thực:", error);
@@ -1609,6 +1630,54 @@ export default function App() {
       }
     );
 
+    const unsubscribeUsers = onSnapshot(
+      collection(db, COLLECTIONS.USERS),
+      (snapshot) => {
+        const list: User[] = [];
+        snapshot.forEach((doc) => {
+          const data = { ...doc.data() } as any;
+          const appUser: any = {
+            ...data,
+            id: doc.id || data.id,
+            phone: data.phone || data.phoneNumber || "",
+            fullName: data.fullName || data.name || "",
+            createdAt: data.createdAt || new Date().toISOString()
+          };
+          
+          if (data.role === "admin") appUser.role = UserRole.ADMIN;
+          else if (data.role === "approver") appUser.role = UserRole.REVIEWER;
+          else if (data.role === "employee") appUser.role = UserRole.STAFF;
+          else if (data.role) appUser.role = data.role;
+          
+          if (data.status === "pending") appUser.status = UserStatus.PENDING;
+          else if (data.status === "approved" || data.status === "active") appUser.status = UserStatus.ACTIVE;
+          else if (data.status === "rejected") appUser.status = UserStatus.REJECTED;
+          else if (data.status === "locked") appUser.status = UserStatus.LOCKED;
+          else if (data.status) appUser.status = data.status;
+          
+          list.push(appUser as User);
+        });
+        
+        const sanitizedLatest = sanitizeUsers(list);
+        setUsers((prev) => {
+          return prev.map((u) => {
+            const fetched = sanitizedLatest.find((lu) => lu.id === u.id);
+            if (fetched) {
+              return {
+                ...u,
+                ...fetched,
+                password: fetched.password || u.password
+              };
+            }
+            return u;
+          });
+        });
+      },
+      (error) => {
+        console.error("Lỗi đồng bộ người dùng thời gian thực:", error);
+      }
+    );
+
     return () => {
       unsubscribeReports();
       unsubscribeChats();
@@ -1616,6 +1685,7 @@ export default function App() {
       unsubscribeTopics();
       unsubscribeReplies();
       unsubscribeConfigs();
+      unsubscribeUsers();
     };
   }, [dbConnected, dbLoading]);
 
@@ -1625,19 +1695,48 @@ export default function App() {
   }, [users]);
 
   useEffect(() => {
-    // Sắp xếp và chỉ giữ hình ảnh (Base64) cho 10 báo cáo mới nhất trong localStorage để tránh lỗi QuotaExceededError (giới hạn bộ nhớ đệm 5MB của trình duyệt)
-    const sorted = [...reports].sort((a, b) => parseReportDate(b.timestamp) - parseReportDate(a.timestamp));
-    const pruned = sorted.map((report, idx) => {
-      if (idx < 10) {
-        return report;
-      }
-      return {
-        ...report,
-        imageUrl: "",
-        imageUrls: []
-      };
+    // Tách riêng hình ảnh nặng ra khỏi danh sách báo cáo chính khi lưu vào localStorage để giữ danh sách văn bản nhẹ nhất có thể, tránh lỗi QuotaExceededError
+    const lightweightReports = reports.map((r) => {
+      const { imageUrl, imageUrls, ...rest } = r;
+      return rest;
     });
-    safeSetItem("4m1e1i_reports", JSON.stringify(pruned));
+    safeSetItem("4m1e1i_reports", JSON.stringify(lightweightReports));
+
+    // Sắp xếp và lưu hình ảnh (Base64) riêng biệt cho tối đa 10 báo cáo mới nhất để tối ưu hóa bộ nhớ
+    const sorted = [...reports].sort((a, b) => parseReportDate(b.timestamp) - parseReportDate(a.timestamp));
+    sorted.forEach((r, idx) => {
+      const imgKey = `4m1e1i_img_${r.id}`;
+      const imgUrlsKey = `4m1e1i_img_urls_${r.id}`;
+
+      // Giữ hình ảnh cho tối đa 10 báo cáo mới nhất, xóa các ảnh cũ hơn để giải phóng bộ nhớ
+      if (idx < 10 && !r.isDeleted) {
+        if (r.imageUrl && r.imageUrl.startsWith("data:")) {
+          safeSetItem(imgKey, r.imageUrl);
+        }
+        if (r.imageUrls && r.imageUrls.length > 0) {
+          safeSetItem(imgUrlsKey, JSON.stringify(r.imageUrls));
+        }
+      } else {
+        safeRemoveItem(imgKey);
+        safeRemoveItem(imgUrlsKey);
+      }
+    });
+
+    // Dọn dẹp các khóa ảnh rác của các báo cáo đã bị xóa hoàn toàn khỏi danh sách
+    try {
+      const reportIds = new Set(reports.map(r => r.id));
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith("4m1e1i_img_")) {
+          const id = key.replace("4m1e1i_img_urls_", "").replace("4m1e1i_img_", "");
+          if (!reportIds.has(id)) {
+            safeRemoveItem(key);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Lỗi dọn dẹp các khóa ảnh rác:", e);
+    }
   }, [reports]);
 
   useEffect(() => {
@@ -1783,6 +1882,7 @@ export default function App() {
     if (!currentUser?.id) return;
 
     const updatePresence = async () => {
+      if (!syncCompleted) return; // Chỉ cập nhật khi đã đồng bộ xong dữ liệu từ server để tránh ghi đè trắng lịch sử hoạt động
       try {
         const now = Date.now();
         let nextLogsToSave: number[] = [];
@@ -1828,7 +1928,7 @@ export default function App() {
     }, 45000);
 
     return () => clearInterval(interval);
-  }, [currentUser?.id, dbConnected, dbLoading]);
+  }, [currentUser?.id, dbConnected, dbLoading, syncCompleted]);
 
   // Định kỳ tải lại danh sách user để cập nhật trạng thái online của mọi người (60 giây một lần)
   useEffect(() => {
@@ -2956,6 +3056,75 @@ export default function App() {
     });
   };
 
+  // Export full reports backup (including image Base64 strings)
+  const handleExportBackup = useCallback(() => {
+    try {
+      const dataStr = JSON.stringify(reports, null, 2);
+      const blob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const today = new Date();
+      const dd = String(today.getDate()).padStart(2, '0');
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const yy = String(today.getFullYear()).slice(-2);
+      const dateStr = `${dd}_${mm}_${yy}`;
+      link.href = url;
+      link.download = `Saoluu_Daydu_4M1E1I_${dateStr}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showToast("Đã xuất file sao lưu đầy đủ kèm hình ảnh thành công! 💾", "success");
+    } catch (err) {
+      console.error("Lỗi xuất file sao lưu:", err);
+      showToast("Lỗi khi xuất file sao lưu dữ liệu!", "error");
+    }
+  }, [reports]);
+
+  // Import reports backup from JSON file, merge with existing, save to local and sync to Firestore
+  const handleImportBackup = useCallback(async (jsonData: string): Promise<boolean> => {
+    try {
+      const parsed = JSON.parse(jsonData);
+      if (!Array.isArray(parsed)) {
+        showToast("Định dạng file không chính xác! File phải là một mảng dữ liệu báo cáo.", "error");
+        return false;
+      }
+
+      const validReports = parsed.filter((r: any) => r && typeof r === "object" && r.id && r.factory && r.timestamp);
+      if (validReports.length === 0) {
+        showToast("Không tìm thấy dữ liệu báo cáo hợp lệ trong file sao lưu!", "error");
+        return false;
+      }
+
+      setReports((prev) => {
+        const mergedMap = new Map<string, QualityReport>();
+        prev.forEach((r) => mergedMap.set(r.id, r));
+        validReports.forEach((r) => {
+          mergedMap.set(r.id, r);
+        });
+        const mergedList = Array.from(mergedMap.values());
+        
+        // Push merged list to Firestore if connected
+        if (dbConnected) {
+          validReports.forEach((r) => {
+            saveDocument(COLLECTIONS.REPORTS, r.id, r).catch((err) => {
+              console.error(`Lỗi khi tải báo cáo ${r.id} lên Firestore:`, err);
+            });
+          });
+        }
+        
+        return sanitizeReports(mergedList);
+      });
+
+      showToast(`Đã khôi phục thành công ${validReports.length} bản tin từ file sao lưu!`, "success");
+      return true;
+    } catch (err) {
+      console.error("Lỗi nhập dữ liệu sao lưu:", err);
+      showToast("File JSON không hợp lệ hoặc bị lỗi phân tích!", "error");
+      return false;
+    }
+  }, [dbConnected]);
+
   // Render Authentication Section (Login / registration cards)
   if (!currentUser) {
     const isRegIdValid = /^\d{4}\.\d{5}$/.test(regId);
@@ -3739,6 +3908,8 @@ export default function App() {
             onAddForumReply={handleAddForumReply}
             onUpdateForumTopicStatus={handleUpdateForumTopicStatus}
             onToggleForumTopicPin={handleToggleForumTopicPin}
+            onExportBackup={handleExportBackup}
+            onImportBackup={handleImportBackup}
           />
         )}
 
@@ -3850,6 +4021,8 @@ export default function App() {
             onAddForumReply={handleAddForumReply}
             onUpdateForumTopicStatus={handleUpdateForumTopicStatus}
             onToggleForumTopicPin={handleToggleForumTopicPin}
+            onExportBackup={handleExportBackup}
+            onImportBackup={handleImportBackup}
           />
         )}
 
@@ -3998,6 +4171,8 @@ export default function App() {
             onDeleteNotification={handleDeleteNotification}
             readNotifIds={readNotifIds}
             setReadNotifIds={setReadNotifIds}
+            onExportBackup={handleExportBackup}
+            onImportBackup={handleImportBackup}
           />
         </div>
 
@@ -4065,6 +4240,8 @@ export default function App() {
                 onAddForumReply={handleAddForumReply}
                 onUpdateForumTopicStatus={handleUpdateForumTopicStatus}
                 onToggleForumTopicPin={handleToggleForumTopicPin}
+                onExportBackup={handleExportBackup}
+                onImportBackup={handleImportBackup}
               />
             )}
           </div>
@@ -4130,6 +4307,8 @@ export default function App() {
                 onAddForumReply={handleAddForumReply}
                 onUpdateForumTopicStatus={handleUpdateForumTopicStatus}
                 onToggleForumTopicPin={handleToggleForumTopicPin}
+                onExportBackup={handleExportBackup}
+                onImportBackup={handleImportBackup}
               />
             )}
           </div>

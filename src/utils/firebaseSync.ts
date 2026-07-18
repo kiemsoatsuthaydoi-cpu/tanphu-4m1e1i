@@ -269,9 +269,14 @@ export async function fetchCollection<T>(collectionName: string): Promise<T[]> {
       }
     });
     return items;
-  } catch (error) {
-    console.error(`Error fetching collection ${collectionName}:`, error);
-    return [];
+  } catch (error: any) {
+    const isPermissionError = error?.code === "permission-denied" || error?.message?.toLowerCase().includes("permission") || error?.message?.toLowerCase().includes("insufficient");
+    if (isPermissionError) {
+      console.log(`[Firestore] Collection ${collectionName} is offline or restricted (permission denied). Falling back to local data.`);
+    } else {
+      console.warn(`[Firestore] Error fetching collection ${collectionName}:`, error);
+    }
+    throw error;
   }
 }
 

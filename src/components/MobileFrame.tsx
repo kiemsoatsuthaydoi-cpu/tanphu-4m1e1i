@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
+import ReactMarkdown from "react-markdown";
 import html2canvas from "html2canvas";
-import { Search, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp } from "lucide-react";
-import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus, QualityReportBadge } from "../types";
+import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload } from "lucide-react";
+import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus, QualityReportBadge, AppNotification } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
 import { QRCodeSVG } from "qrcode.react";
 import { isSameBranchOrFactory, formatNameCapitalized } from "../utils/branchHelpers";
 import { AutoImageSlider } from "./AutoImageSlider";
+import { getCategoryFallbackImage } from "../utils/imageProcessor";
 import { MobileReportRatingContainer, isEligibleEvaluator } from "./MobileReportRatingSection";
 import { RED_BADGES, GREEN_BADGES } from "../data";
 import FirebaseQuotaMonitor from "./FirebaseQuotaMonitor";
@@ -159,17 +161,6 @@ function convertModernColorsToRgb(cssValue: string): string {
   return result;
 }
 
-interface AppNotification {
-  id: string;
-  title: string;
-  description: string;
-  timestamp: string;
-  type: "new_report" | "new_directive" | "update_report";
-  targetReportId: string;
-  authorName: string;
-  factoryName: string;
-}
-
 interface MobileFrameProps {
   reports: QualityReport[];
   currentUserId: string;
@@ -216,6 +207,8 @@ interface MobileFrameProps {
   systemNotifications?: AppNotification[];
   readNotifIds?: string[];
   setReadNotifIds?: React.Dispatch<React.SetStateAction<string[]>>;
+  onExportBackup?: () => void;
+  onImportBackup?: (jsonData: string) => Promise<boolean>;
 
   // Forum props
   topics?: ForumTopic[];
@@ -841,6 +834,8 @@ export default function MobileFrame({
   systemNotifications,
   readNotifIds: readNotifIdsProp,
   setReadNotifIds: setReadNotifIdsProp,
+  onExportBackup,
+  onImportBackup,
 
   // Forum props
   topics = [],
@@ -1123,6 +1118,42 @@ export default function MobileFrame({
   const [showQrCodeView, setShowQrCodeView] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [openChatReportId, setOpenChatReportId] = useState<string | null>(null);
+
+  const [aiAnalysisReport, setAiAnalysisReport] = useState<QualityReport | null>(null);
+  const [aiAnalysisText, setAiAnalysisText] = useState<string>("");
+  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+
+  const handleAIAnalyze = async (report: QualityReport) => {
+    setAiAnalysisReport(report);
+    setAiAnalysisText("");
+    setIsAnalyzing(true);
+    try {
+      const response = await fetch("/api/analyze-kph", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          factory: report.factory,
+          category: report.category,
+          content: report.content,
+          notes: report.notes,
+          directives: report.directives,
+        }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAiAnalysisText(data.analysis);
+      } else {
+        setAiAnalysisText(`### ❌ Có lỗi xảy ra khi phân tích:\n${data.error || "Không rõ nguyên nhân."}`);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setAiAnalysisText(`### ❌ Lỗi kết nối máy chủ:\n${err.message || "Không thể gửi yêu cầu phân tích."}`);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   useEffect(() => {
     function handleDocumentClick(e: MouseEvent) {
@@ -2895,17 +2926,17 @@ App Link: ${window.location.origin}`;
                 </button>
               )}
 
-              {/* --- 2. CLOUD QUOTA (Secondary) --- */}
-              {currentUser?.role === UserRole.ADMIN && (
+              {/* --- 2. SAO LƯU & ĐỒNG BỘ (Secondary) --- */}
+              {currentUser && (
                 <button
                   onClick={() => {
                     setShowMobileCloudQuota(true);
                     setShowTrash(false);
                   }}
                   className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer shrink-0"
-                  title="Giám sát Cloud Quota"
+                  title="Sao lưu & Đồng bộ dữ liệu"
                 >
-                  <Cloud className="w-[19px] h-[19px] text-sky-300 hover:text-sky-100" />
+                  <Database className="w-[18px] h-[18px] text-sky-300 hover:text-sky-100" />
                 </button>
               )}
 
@@ -3158,17 +3189,71 @@ App Link: ${window.location.origin}`;
               <ArrowLeft className="w-3.5 h-3.5 mr-1" />
               <T><span translate="no" className="notranslate">Quay Lại</span></T>
             </button>
-            <span className="bg-blue-100 text-blue-800 text-[8px] font-black px-2 py-0.5 rounded-full uppercase select-none">
-              <span translate="no" className="notranslate">Firebase Quota</span>
+            <span className="bg-blue-100 text-blue-800 text-[8px] font-black px-2 py-0.5 rounded-full uppercase select-none font-mono">
+              <span translate="no" className="notranslate">SAO LƯU & ĐỒNG BỘ</span>
             </span>
           </div>
 
-          <FirebaseQuotaMonitor
-            reports={reports}
-            users={users}
-            chats={chats}
-            onShowToast={(msg) => showToast(msg)}
-          />
+          {/* SAO LƯU & KHÔI PHỤC (Dành cho đồng bộ điện thoại <-> máy tính) */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+            <h3 className="text-xs font-black text-slate-800 uppercase flex items-center gap-1.5 border-b border-slate-100 pb-2">
+              <Database className="w-4 h-4 text-blue-600 animate-pulse" />
+              <T>Sao lưu & Đồng bộ di động</T>
+            </h3>
+            <p className="text-[10px] text-slate-500 leading-relaxed font-sans font-medium">
+              <T>Đồng bộ 100% hình ảnh thực tế từ Điện thoại lên Máy tính thông qua tệp JSON đầy đủ.</T>
+            </p>
+            
+            <div className="grid grid-cols-2 gap-2.5 pt-1">
+              <button
+                onClick={onExportBackup}
+                className="flex items-center justify-center gap-1 px-2.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-[10px] font-extrabold border-none cursor-pointer transition-all active:scale-95 shadow-sm"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <T>XUẤT SAO LƯU</T>
+              </button>
+
+              <label className="flex items-center justify-center gap-1 px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[10px] font-extrabold border-none cursor-pointer transition-all active:scale-95 shadow-xs text-center">
+                <Upload className="w-3.5 h-3.5 text-slate-500" />
+                <T>NHẬP SAO LƯU</T>
+                <input
+                  type="file"
+                  accept=".json"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = async (event) => {
+                      const content = event.target?.result as string;
+                      if (onImportBackup) {
+                        const ok = await onImportBackup(content);
+                        if (ok && onManualRefresh) {
+                          onManualRefresh(true);
+                        }
+                      }
+                    };
+                    reader.readAsText(file);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            </div>
+          </div>
+
+          {currentUser?.role === UserRole.ADMIN && (
+            <div className="space-y-3 pt-2">
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                <T>Giám sát hạn mức (Admin Only)</T>
+              </h4>
+              <FirebaseQuotaMonitor
+                reports={reports}
+                users={users}
+                chats={chats}
+                onShowToast={(msg) => showToast(msg)}
+              />
+            </div>
+          )}
         </div>
       ) : showTrash ? (
         <div 
@@ -3919,15 +4004,13 @@ App Link: ${window.location.origin}`;
                 */}
 
                 {/* Report Image */}
-                {report.imageUrl && (
-                  <AutoImageSlider
-                    imageUrls={report.imageUrls}
-                    fallbackUrl={report.imageUrl}
-                    isAbnormal={report.isAbnormal}
-                    isSpotlight={report.isSpotlight}
-                    reportType={report.reportType}
-                  />
-                )}
+                <AutoImageSlider
+                  imageUrls={report.imageUrls && report.imageUrls.length > 0 ? report.imageUrls : [report.imageUrl || getCategoryFallbackImage(report.category)]}
+                  fallbackUrl={report.imageUrl || getCategoryFallbackImage(report.category)}
+                  isAbnormal={report.isAbnormal}
+                  isSpotlight={report.isSpotlight}
+                  reportType={report.reportType}
+                />
 
                 {/* Card Info Section */}
                 <div className="p-3 bg-white">
@@ -3949,6 +4032,16 @@ App Link: ${window.location.origin}`;
                     <div className="mt-2 bg-slate-50 rounded p-2 text-[10px] text-slate-500 italic border-l-2 border-blue-400">
                       <T>Ghi chú: {report.notes}</T>
                     </div>
+                  )}
+
+                  {(report.reportType === "KPH" || report.isAbnormal) && (
+                    <button
+                      onClick={() => handleAIAnalyze(report)}
+                      className="mt-3 w-full flex items-center justify-center gap-1.5 px-3 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-[11px] rounded-lg shadow-sm cursor-pointer hover:shadow active:scale-98 transition-all select-none uppercase tracking-wider"
+                    >
+                      <Bot className="w-4 h-4 text-blue-100" />
+                      <span translate="no" className="notranslate">Phân tích AI (5-Why)</span>
+                    </button>
                   )}
 
                   {/* Dynamic manager instructions/directives */}
@@ -7264,6 +7357,112 @@ App Link: ${window.location.origin}`}
           )}
         </div>
       )}
+
+      {aiAnalysisReport && (() => {
+        const isReportDnp = aiAnalysisReport && (
+          aiAnalysisReport.factory?.includes("DNP") || 
+          aiAnalysisReport.factory?.includes("BBM") || 
+          aiAnalysisReport.factory?.includes("BBC")
+        );
+        const aiAssistantTitle = isReportDnp ? "Trợ lý AI DNP" : "Trợ lý AI Tân Phú";
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs transition-all animate-fadeIn">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full flex flex-col max-h-[80vh] overflow-hidden animate-scaleIn select-text">
+              {/* Header */}
+              <div className="p-4 border-b border-slate-150 bg-gradient-to-r from-blue-50 to-indigo-50 flex items-center justify-between select-none">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+                    <Bot className="w-4 h-4 animate-pulse" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-[12px] text-slate-850">
+                      <span translate="no" className="notranslate">{aiAssistantTitle}</span>
+                    </h3>
+                    <p className="text-[9px] font-bold text-indigo-600 uppercase tracking-wider">
+                      <span translate="no" className="notranslate">Phân tích 5-Why 4M1E1I</span>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setAiAnalysisReport(null);
+                    setAiAnalysisText("");
+                  }}
+                  className="p-1.5 hover:bg-slate-200/60 text-slate-400 hover:text-slate-600 rounded-lg transition-all cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Content area */}
+              <div className="p-4 overflow-y-auto space-y-4 flex-1 bg-slate-50/40">
+                {/* Input report summary card */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+                  <div className="flex items-center justify-between text-[9px] font-extrabold text-slate-400 uppercase tracking-wider select-none">
+                    <span>Thông tin sự cố:</span>
+                    <span className="px-1.5 py-0.2 bg-red-100 text-red-800 border border-red-200 rounded text-[8px]">KPH</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div>
+                      <span className="text-slate-400 block select-none">Xưởng:</span>
+                      <span translate="no" className="notranslate font-bold text-slate-700 truncate block">{getFactoryDisplayName(aiAnalysisReport.factory)}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-slate-400 block select-none">Phân loại:</span>
+                      <span translate="no" className="notranslate font-black text-slate-700 uppercase block truncate">{aiAnalysisReport.category}</span>
+                    </div>
+                  </div>
+                  <div className="text-[11px] pt-1.5 border-t border-slate-200/60">
+                    <span className="text-slate-400 block select-none">Nội dung lỗi:</span>
+                    <p className="text-slate-700 font-medium leading-relaxed line-clamp-3">{aiAnalysisReport.content}</p>
+                  </div>
+                </div>
+
+                {/* Analysis outcome */}
+                <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm min-h-[200px] relative">
+                  {isAnalyzing ? (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center p-4 space-y-3 select-none">
+                      <div className="relative">
+                        <div className="w-12 h-12 rounded-full border-4 border-indigo-100 border-t-indigo-600 animate-spin"></div>
+                        <div className="absolute inset-0 flex items-center justify-center text-indigo-600">
+                          <Brain className="w-5 h-5 animate-pulse" />
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-[11px] font-black text-slate-700 animate-pulse"><span translate="no" className="notranslate">AI đang phân tích lỗi...</span></p>
+                        <p className="text-[9px] text-slate-400 mt-0.5"><span translate="no" className="notranslate">Đang áp dụng mô hình 5-Why chất lượng Tân Phú</span></p>
+                      </div>
+                    </div>
+                  ) : aiAnalysisText ? (
+                    <div className="prose max-w-none text-[11px] text-slate-700 leading-relaxed [&_h1]:text-[13px] [&_h1]:font-black [&_h1]:text-slate-850 [&_h1]:mb-2 [&_h1]:mt-4 [&_h2]:text-[12px] [&_h2]:font-extrabold [&_h2]:text-slate-800 [&_h2]:mb-1.5 [&_h2]:mt-3 [&_h3]:text-[11px] [&_h3]:font-bold [&_h3]:text-slate-755 [&_h3]:mb-1 [&_h3]:mt-2.5 [&_p]:mb-2 [&_p]:text-justify [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:mb-2 [&_li]:mb-0.5 [&_strong]:text-slate-900 [&_strong]:font-bold [&_code]:bg-slate-100 [&_code]:p-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-[10px]">
+                      <ReactMarkdown>{aiAnalysisText}</ReactMarkdown>
+                    </div>
+                  ) : (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 select-none">
+                      <Bot className="w-8 h-8 mb-2 opacity-50" />
+                      <p className="text-[11px]"><span translate="no" className="notranslate">Bấm nút "Phân tích AI" để bắt đầu</span></p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="p-3 border-t border-slate-150 bg-slate-50 flex justify-end">
+                <button
+                  onClick={() => {
+                    setAiAnalysisReport(null);
+                    setAiAnalysisText("");
+                  }}
+                  className="w-full py-2 bg-slate-800 hover:bg-slate-900 text-white text-[11px] font-bold rounded-lg cursor-pointer shadow-sm hover:shadow transition-all select-none uppercase tracking-wide"
+                >
+                  <span translate="no" className="notranslate">Đóng cửa sổ</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );

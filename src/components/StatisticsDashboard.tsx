@@ -13,6 +13,46 @@ import { User, UserStatus, Branch, Department } from "../types";
 import { T } from "./TranslateText";
 import { initialBranches, initialDepartments } from "../data";
 
+// Helper to extract date components strictly in Vietnam timezone (ICT, GMT+7)
+const getVietnamTimeParts = (ts: number) => {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+      second: "numeric",
+      hour12: false
+    });
+    const parts = formatter.formatToParts(new Date(ts));
+    const partMap: Record<string, string> = {};
+    parts.forEach(p => {
+      partMap[p.type] = p.value;
+    });
+    return {
+      day: parseInt(partMap.day, 10),
+      month: parseInt(partMap.month, 10),
+      year: parseInt(partMap.year, 10),
+      hours: parseInt(partMap.hour, 10),
+      minutes: parseInt(partMap.minute, 10),
+      seconds: parseInt(partMap.second, 10)
+    };
+  } catch (err) {
+    // Fallback if Intl fails
+    const d = new Date(ts);
+    return {
+      day: d.getDate(),
+      month: d.getMonth() + 1,
+      year: d.getFullYear(),
+      hours: d.getHours(),
+      minutes: d.getMinutes(),
+      seconds: d.getSeconds()
+    };
+  }
+};
+
 interface StatisticsDashboardProps {
   users: User[];
   branches?: Branch[];
@@ -37,12 +77,16 @@ export default function StatisticsDashboard({
     }));
   };
 
-  // Date and month filter states
-  const currentDate = useMemo(() => new Date(Date.now()), []);
-  const currentDay = currentDate.getDate();
-  const currentMonth = currentDate.getMonth() + 1;
-  const currentYear = currentDate.getFullYear();
-  const displayYear = (currentYear % 100).toString().padStart(2, "0");
+  // Date and month filter states in Vietnam Timezone (GMT+7)
+  const { currentDay, currentMonth, currentYear, displayYear } = useMemo(() => {
+    const parts = getVietnamTimeParts(Date.now());
+    return {
+      currentDay: parts.day,
+      currentMonth: parts.month,
+      currentYear: parts.year,
+      displayYear: (parts.year % 100).toString().padStart(2, "0")
+    };
+  }, []);
 
   const [selectedDay, setSelectedDay] = useState<number>(currentDay);
   const [selectedMonth, setSelectedMonth] = useState<number>(currentMonth);
@@ -171,19 +215,19 @@ export default function StatisticsDashboard({
       const dept = deptMap.get(deptName)!;
       dept.totalCount += 1;
 
-      // Extract all active session timestamps matching selected day and month
+      // Extract all active session timestamps matching selected day and month (strictly in Vietnam Timezone)
       const dayLogs = (u.activeLogs || []).filter(ts => {
-        const d = new Date(ts);
-        return d.getDate() === selectedDay && (d.getMonth() + 1) === selectedMonth;
+        const parts = getVietnamTimeParts(ts);
+        return parts.day === selectedDay && parts.month === selectedMonth;
       });
 
       const formattedTimes: string[] = [];
       const seenMinutes = new Set<string>();
 
       dayLogs.forEach(ts => {
-        const dateObj = new Date(ts);
-        const hrs = dateObj.getHours().toString().padStart(2, "0");
-        const mins = dateObj.getMinutes().toString().padStart(2, "0");
+        const parts = getVietnamTimeParts(ts);
+        const hrs = parts.hours.toString().padStart(2, "0");
+        const mins = parts.minutes.toString().padStart(2, "0");
         const timeStr = `${hrs}:${mins}`;
         if (!seenMinutes.has(timeStr)) {
           seenMinutes.add(timeStr);
@@ -191,12 +235,12 @@ export default function StatisticsDashboard({
         }
       });
 
-      // Ensure lastActive is appended if it falls on the selected day and is not already listed
+      // Ensure lastActive is appended if it falls on the selected day and is not already listed (strictly in Vietnam Timezone)
       if (u.lastActive) {
-        const activeDate = new Date(u.lastActive);
-        if (activeDate.getDate() === selectedDay && (activeDate.getMonth() + 1) === selectedMonth) {
-          const hrs = activeDate.getHours().toString().padStart(2, "0");
-          const mins = activeDate.getMinutes().toString().padStart(2, "0");
+        const parts = getVietnamTimeParts(u.lastActive);
+        if (parts.day === selectedDay && parts.month === selectedMonth) {
+          const hrs = parts.hours.toString().padStart(2, "0");
+          const mins = parts.minutes.toString().padStart(2, "0");
           const timeStr = `${hrs}:${mins}`;
           if (!seenMinutes.has(timeStr)) {
             seenMinutes.add(timeStr);
@@ -219,12 +263,12 @@ export default function StatisticsDashboard({
       if (isUserOnlineOnSelectedDay) {
         dept.onlineCount += 1;
 
-        // If today is selected but no logs were found, add fallback
+        // If today is selected but no logs were found, add fallback (strictly in Vietnam Timezone)
         if (formattedTimes.length === 0) {
           if (u.lastActive) {
-            const activeDate = new Date(u.lastActive);
-            const hrs = activeDate.getHours().toString().padStart(2, "0");
-            const mins = activeDate.getMinutes().toString().padStart(2, "0");
+            const parts = getVietnamTimeParts(u.lastActive);
+            const hrs = parts.hours.toString().padStart(2, "0");
+            const mins = parts.minutes.toString().padStart(2, "0");
             formattedTimes.push(`${hrs}:${mins}`);
           } else {
             formattedTimes.push("Vừa hoạt động");

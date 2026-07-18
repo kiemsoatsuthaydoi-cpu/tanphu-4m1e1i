@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from "react";
+import ExcelJS from "exceljs";
+import ReactMarkdown from "react-markdown";
 import {
   Users,
   Settings,
@@ -28,6 +30,8 @@ import {
   Send,
   Bell,
   Sparkles,
+  Bot,
+  Brain,
   Search,
   Eye,
   EyeOff,
@@ -111,7 +115,7 @@ import OrderPipeline from "./OrderPipeline";
 import { MentionInput, MentionTextArea } from "./MentionTextArea";
 import FirebaseQuotaMonitor from "./FirebaseQuotaMonitor";
 import StatisticsDashboard from "./StatisticsDashboard";
-import { compressAvatar } from "../utils/imageProcessor";
+import { compressAvatar, getCategoryFallbackImage } from "../utils/imageProcessor";
 
 
 interface DashboardDesktopProps {
@@ -172,6 +176,8 @@ interface DashboardDesktopProps {
   onDeleteNotification?: (id: string) => void;
   readNotifIds?: string[];
   setReadNotifIds?: React.Dispatch<React.SetStateAction<string[]>>;
+  onExportBackup?: () => void;
+  onImportBackup?: (jsonData: string) => Promise<boolean>;
 
   // Forum properties
   topics?: ForumTopic[];
@@ -616,6 +622,8 @@ export default function DashboardDesktop({
   onDeleteNotification,
   readNotifIds: readNotifIdsProp,
   setReadNotifIds: setReadNotifIdsProp,
+  onExportBackup,
+  onImportBackup,
 
   // Forum props
   topics = [],
@@ -631,6 +639,251 @@ export default function DashboardDesktop({
   const [statsSubTab, setStatsSubTab] = useState<"NHAN_SU" | "CHAT_LUONG">("NHAN_SU");
   const [showAckDetailsDesktop, setShowAckDetailsDesktop] = useState<Record<string, boolean>>({});
   const [expandedDirectiveIdsDesktop, setExpandedDirectiveIdsDesktop] = useState<Record<string, boolean>>({});
+
+  const handleExportExcelWithImages = async () => {
+    // Helper function to fetch external image URLs and convert them to Base64
+    const urlToBase64 = async (url: string): Promise<{ base64: string; ext: string } | null> => {
+      try {
+        const res = await fetch(url);
+        const blob = await res.blob();
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64data = reader.result as string;
+            const match = base64data.match(/^data:image\/(png|jpeg|jpg|gif|webp);base64,(.+)$/);
+            if (match) {
+              resolve({ ext: match[1] === "jpg" ? "jpeg" : match[1], base64: match[2] });
+            } else {
+              resolve(null);
+            }
+          };
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(blob);
+        });
+      } catch (err) {
+        console.error("Lỗi chuyển đổi URL sang Base64:", err);
+        return null;
+      }
+    };
+
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Báo cáo 4M1E1I");
+
+      worksheet.columns = [
+        { header: "Mã báo cáo", key: "reportCode", width: 15 },
+        { header: "Thời gian", key: "timestamp", width: 20 },
+        { header: "Chi nhánh/Nhà máy", key: "factory", width: 22 },
+        { header: "Yếu tố 4M1E1I", key: "category", width: 18 },
+        { header: "Nội dung ghi nhận", key: "content", width: 35 },
+        { header: "Ghi chú bổ sung", key: "notes", width: 25 },
+        { header: "Phân loại", key: "reportType", width: 12 },
+        { header: "Người báo cáo", key: "uploaderName", width: 20 },
+        { header: "Số điện thoại", key: "uploaderPhone", width: 15 },
+        { header: "Bộ phận", key: "uploaderDepartment", width: 18 },
+        { header: "Trạng thái duyệt", key: "status", width: 16 },
+        { header: "Chỉ đạo từ cấp trên", key: "directives", width: 35 },
+        { header: "Ảnh đính kèm", key: "image", width: 25 }
+      ];
+
+      const headerRow = worksheet.getRow(1);
+      headerRow.height = 28;
+      headerRow.eachCell((cell) => {
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FF4F46E5" }
+        };
+        cell.font = {
+          name: "Arial",
+          size: 11,
+          bold: true,
+          color: { argb: "FFFFFFFF" }
+        };
+        cell.alignment = {
+          vertical: "middle",
+          horizontal: "center",
+          wrapText: true
+        };
+        cell.border = {
+          top: { style: "thin", color: { argb: "FFD1D5DB" } },
+          left: { style: "thin", color: { argb: "FFD1D5DB" } },
+          bottom: { style: "medium", color: { argb: "FF111827" } },
+          right: { style: "thin", color: { argb: "FFD1D5DB" } }
+        };
+      });
+
+      const activeReports = reports.filter(r => !r.isDeleted);
+
+      for (let i = 0; i < activeReports.length; i++) {
+        const r = activeReports[i];
+        const rowIndex = i + 2;
+        const row = worksheet.getRow(rowIndex);
+
+        // Tìm ảnh chụp thật từ mảng imageUrls hoặc trường imageUrl
+        let targetImg: string | undefined = undefined;
+        if (r.imageUrls && r.imageUrls.length > 0) {
+          const realImg = r.imageUrls.find(url => url && (url.startsWith("data:image/") && !url.includes("svg") || url.startsWith("http")));
+          targetImg = realImg || r.imageUrls[0];
+        }
+        if (!targetImg && r.imageUrl) {
+          targetImg = r.imageUrl;
+        }
+
+        const isSvgStatic = targetImg && targetImg.startsWith("data:image/svg+xml");
+        const hasImage = targetImg && !isSvgStatic;
+        row.height = hasImage ? 110 : 22;
+
+        const directiveTexts = (r.directives || []).map(d => `[${d.author}]: ${d.text}`).join("; ");
+
+        // Giải quyết nhầm Bộ phận bằng cách tra cứu thông tin người dùng mới nhất từ props
+        const userObj = users.find(u => u.id === r.uploaderId || u.phone === r.uploaderPhone || u.fullName === r.uploaderName);
+        const resolvedDept = userObj ? userObj.department : (r.uploaderDepartment || "");
+
+        // Đồng bộ trạng thái duyệt: chỉ có r.isApproved === false mới hiển thị Chờ duyệt, còn lại (true hoặc undefined) là Đã duyệt
+        const isApproved = r.isApproved !== false;
+
+        row.values = {
+          reportCode: r.reportCode || r.id,
+          timestamp: r.timestamp,
+          factory: r.factory,
+          category: r.category,
+          content: r.content,
+          notes: r.notes || "",
+          reportType: r.reportType || (r.isAbnormal ? "KPH" : "NORMAL"),
+          uploaderName: r.uploaderName,
+          uploaderPhone: r.uploaderPhone,
+          uploaderDepartment: resolvedDept,
+          status: isApproved ? "Đã duyệt" : "Chờ duyệt",
+          directives: directiveTexts,
+          image: ""
+        };
+
+        row.eachCell((cell, colNumber) => {
+          cell.font = { name: "Arial", size: 10 };
+          cell.alignment = {
+            vertical: "middle",
+            horizontal: colNumber === 1 || colNumber === 2 || colNumber === 7 || colNumber === 9 || colNumber === 11 ? "center" : "left",
+            wrapText: true
+          };
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFE5E7EB" } },
+            left: { style: "thin", color: { argb: "FFE5E7EB" } },
+            bottom: { style: "thin", color: { argb: "FFE5E7EB" } },
+            right: { style: "thin", color: { argb: "FFE5E7EB" } }
+          };
+
+          if (colNumber === 11) {
+            cell.font = {
+              name: "Arial",
+              size: 10,
+              bold: true,
+              color: { argb: isApproved ? "FF047857" : "FFB45309" }
+            };
+          }
+        });
+
+        if (hasImage && targetImg) {
+          try {
+            let base64Data: string | null = null;
+            let ext = "jpeg";
+
+            if (targetImg.startsWith("data:")) {
+              const match = targetImg.match(/^data:image\/(png|jpeg|jpg|gif|webp);base64,(.+)$/);
+              if (match) {
+                ext = match[1] === "jpg" ? "jpeg" : match[1];
+                base64Data = match[2];
+              }
+            } else if (targetImg.startsWith("http")) {
+              const imgData = await urlToBase64(targetImg);
+              if (imgData) {
+                ext = imgData.ext;
+                base64Data = imgData.base64;
+              }
+            }
+
+            if (base64Data) {
+              const imageId = workbook.addImage({
+                base64: base64Data,
+                extension: ext as any
+              });
+
+              worksheet.addImage(imageId, {
+                tl: { col: 12, row: rowIndex - 1 } as any,
+                br: { col: 13, row: rowIndex } as any,
+                editAs: "oneCell"
+              });
+            }
+          } catch (imgErr) {
+            console.error("Lỗi khi chèn ảnh vào Excel:", imgErr);
+          }
+        }
+      }
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+
+      const today = new Date();
+      const dd = String(today.getDate()).padStart(2, "0");
+      const mm = String(today.getMonth() + 1).padStart(2, "0");
+      const yy = String(today.getFullYear()).slice(-2);
+      const dateStr = `${dd}_${mm}_${yy}`;
+
+      link.download = `Bantin_4M1E1I_KemAnh_${dateStr}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      if (onShowToast) {
+        onShowToast("Đã xuất Excel đính kèm hình ảnh thành công! 📸📊", "success");
+      }
+    } catch (err) {
+      console.error("Lỗi xuất file Excel đính kèm ảnh:", err);
+      if (onShowToast) {
+        onShowToast("Có lỗi xảy ra khi xuất file Excel kèm ảnh!", "error");
+      }
+    }
+  };
+
+  const [aiAnalysisReport, setAiAnalysisReport] = useState<QualityReport | null>(null);
+  const [aiAnalysisText, setAiAnalysisText] = useState<string>("");
+  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+
+  const handleAIAnalyze = async (report: QualityReport) => {
+    setAiAnalysisReport(report);
+    setAiAnalysisText("");
+    setIsAnalyzing(true);
+    try {
+      const response = await fetch("/api/analyze-kph", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          factory: report.factory,
+          category: report.category,
+          content: report.content,
+          notes: report.notes,
+          directives: report.directives,
+        }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAiAnalysisText(data.analysis);
+      } else {
+        setAiAnalysisText(`### ❌ Có lỗi xảy ra khi phân tích:\n${data.error || "Không rõ nguyên nhân."}`);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setAiAnalysisText(`### ❌ Lỗi kết nối máy chủ:\n${err.message || "Không thể gửi yêu cầu phân tích."}`);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   useEffect(() => {
     function handleGlobalClick(e: Event) {
@@ -1902,13 +2155,13 @@ export default function DashboardDesktop({
             ...(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.REVIEWER
               ? [{ id: "ĐỀ_XUẤT", label: "Đề xuất chờ duyệt", icon: CheckSquare, count: pendingReportsCount, color: "text-sky-400" }]
               : []),
-            { id: "DỮ_LỆU", label: "Nhật ký dữ liệu & PDF", icon: Database, color: "text-blue-450" },
+            { id: "DỮ_LIỆU", label: "Nhật ký dữ liệu & PDF", icon: Database, color: "text-blue-450" },
             { id: "THÔNG_BÁO", label: "Phát sóng & Ticker", icon: Bell, count: unreadCount, color: "text-yellow-400" },
             { id: "TRAO_ĐỔI", label: "Trao đổi diễn đàn", icon: MessageSquare, color: "text-pink-400" },
             { id: "QUY_CHẾ", label: "Quy chế & Quy trình", icon: FileSpreadsheet, color: "text-teal-400" },
             { id: "CÁ_NHÂN", label: "Trang cá nhân", icon: Users, color: "text-slate-300" }
           ].map((item) => {
-            const isSel = activeTab === item.id || (item.id === "DỮ_LỆU" && activeTab === "DỮ_LIỆU");
+            const isSel = activeTab === item.id;
             return (
               <button
                 key={item.id}
@@ -4143,11 +4396,10 @@ export default function DashboardDesktop({
                               )}
                             </td>
                             <td className="p-4 text-center border border-slate-200">
-                              {r.imageUrl ? (
-                                <DesktopThumbnailSlider imageUrls={r.imageUrls} fallbackUrl={r.imageUrl} />
-                              ) : (
-                                <T className="text-slate-400 text-[10px]"><span translate="no" className="notranslate">Trống</span></T>
-                              )}
+                              <DesktopThumbnailSlider 
+                                imageUrls={r.imageUrls && r.imageUrls.length > 0 ? r.imageUrls : [r.imageUrl || getCategoryFallbackImage(r.category)]} 
+                                fallbackUrl={r.imageUrl || getCategoryFallbackImage(r.category)} 
+                              />
                             </td>
                             <td className="p-4 text-center select-none whitespace-nowrap border border-slate-200">
                               <span className="bg-amber-100 text-amber-800 border border-amber-200 font-extrabold text-[10px] px-2.5 py-1 rounded tracking-wider animate-pulse inline-flex items-center gap-1">
@@ -4214,7 +4466,7 @@ export default function DashboardDesktop({
           )}
 
           {/* TAB 4: DỮ LIỆU (Database history & PDF exports) */}
-          {activeTab === "DỮ_LỆU" && (
+          {activeTab === "DỮ_LIỆU" && (
             <div className="space-y-6">
               <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
                 <div>
@@ -4289,6 +4541,249 @@ export default function DashboardDesktop({
                     <Download className="w-3.5 h-3.5" />
                     <T>XUẤT REPORT NGAY & DRIVE</T>
                   </button>
+                </div>
+              </div>
+
+              {/* QUẢN LÝ SAO LƯU & XUẤT DỮ LIỆU */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4 animate-fadeIn">
+                <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+                  <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+                    <Database className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-wide">
+                      <span translate="no" className="notranslate">QUẢN LÝ SAO LƯU & XUẤT DỮ LIỆU</span>
+                    </h3>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      <span translate="no" className="notranslate">Trích xuất báo cáo thay đổi 4M1E1I và bản tin phát sóng dưới dạng JSON hoặc Excel (CSV) để lưu trữ ngoại tuyến.</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* CỘT 1: BÁO CÁO BIẾN ĐỘNG 4M1E1I */}
+                  <div className="p-4 bg-slate-50/60 rounded-xl border border-slate-150 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
+                        <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
+                          <span translate="no" className="notranslate">Bản tin Biến động 4M1E1I</span>
+                        </h4>
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-relaxed mb-4">
+                        <span translate="no" className="notranslate">Xuất toàn bộ danh sách {reports.filter(r => !r.isDeleted).length} báo cáo 4M1E1I (bao gồm thông tin chi tiết người viết, phân loại, ghi chú và lịch sử chỉ đạo từ cấp quản lý).</span>
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-200/40">
+                      <button
+                        onClick={onExportBackup}
+                        className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 shadow-3xs cursor-pointer active:scale-95"
+                      >
+                        <Download className="w-3.5 h-3.5 text-blue-100" />
+                        <span translate="no" className="notranslate">Sao lưu toàn bộ (Kèm ảnh)</span>
+                      </button>
+
+                      <label className="px-3 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 shadow-3xs cursor-pointer active:scale-95">
+                        <Upload className="w-3.5 h-3.5 text-slate-500" />
+                        <span translate="no" className="notranslate">Khôi phục dữ liệu (Import)</span>
+                        <input
+                          type="file"
+                          accept=".json"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = async (event) => {
+                              const content = event.target?.result as string;
+                              if (onImportBackup) {
+                                await onImportBackup(content);
+                              }
+                            };
+                            reader.readAsText(file);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
+
+                      <button
+                        onClick={() => {
+                          const headers = [
+                            "Mã báo cáo",
+                            "Thời gian",
+                            "Chi nhánh/Nhà máy",
+                            "Yếu tố 4M1E1I",
+                            "Nội dung ghi nhận",
+                            "Ghi chú bổ sung",
+                            "Phân loại",
+                            "Người báo cáo",
+                            "Số điện thoại",
+                            "Bộ phận",
+                            "Trạng thái duyệt",
+                            "Chỉ đạo từ cấp trên"
+                          ];
+
+                          const escapeCSV = (val: any) => {
+                            if (val === undefined || val === null) return "";
+                            let str = String(val);
+                            if (str.includes(",") || str.includes("\n") || str.includes('"') || str.includes(";")) {
+                              str = '"' + str.replace(/"/g, '""') + '"';
+                            }
+                            return str;
+                          };
+
+                          const rows = reports.filter(r => !r.isDeleted).map(r => {
+                            const directiveTexts = (r.directives || []).map(d => `[${d.author}]: ${d.text}`).join("; ");
+                            const userObj = users.find(u => u.id === r.uploaderId || u.phone === r.uploaderPhone || u.fullName === r.uploaderName);
+                            const resolvedDept = userObj ? userObj.department : (r.uploaderDepartment || "");
+                            const isApproved = r.isApproved !== false;
+                            return [
+                              r.reportCode || r.id,
+                              r.timestamp,
+                              r.factory,
+                              r.category,
+                              r.content,
+                              r.notes || "",
+                              r.reportType || (r.isAbnormal ? "KPH" : "NORMAL"),
+                              r.uploaderName,
+                              r.uploaderPhone,
+                              resolvedDept,
+                              isApproved ? "Đã duyệt" : "Chờ duyệt",
+                              directiveTexts
+                            ];
+                          });
+
+                          const csvContent = "\uFEFF" + [headers.map(escapeCSV).join(","), ...rows.map(row => row.map(escapeCSV).join(","))].join("\n");
+                          const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                          const url = URL.createObjectURL(blob);
+                          const link = document.createElement("a");
+                          link.href = url;
+                          const today = new Date();
+                          const dd = String(today.getDate()).padStart(2, '0');
+                          const mm = String(today.getMonth() + 1).padStart(2, '0');
+                          const yy = String(today.getFullYear()).slice(-2);
+                          const dateStr = `${dd}_${mm}_${yy}`;
+                          link.download = `Bantin_4M1E1I_${dateStr}.csv`;
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                          URL.revokeObjectURL(url);
+                          if (onShowToast) {
+                            onShowToast("Đã xuất bản tin 4M1E1I ra file Excel (CSV) thành công! 📊", "success");
+                          }
+                        }}
+                        className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 shadow-3xs cursor-pointer active:scale-95"
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-100" />
+                        <span translate="no" className="notranslate">Xuất Excel (CSV)</span>
+                      </button>
+
+                      <button
+                        onClick={handleExportExcelWithImages}
+                        className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 shadow-3xs cursor-pointer active:scale-95"
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-100" />
+                        <span translate="no" className="notranslate">Xuất Excel (.xlsx Kèm Ảnh)</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* CỘT 2: BẢN TIN PHÁT SÓNG & TICKER */}
+                  <div className="p-4 bg-slate-50/60 rounded-xl border border-slate-150 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Megaphone className="w-4 h-4 text-amber-600" />
+                        <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
+                          <span translate="no" className="notranslate">Bản tin Phát sóng & Ticker</span>
+                        </h4>
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-relaxed mb-4">
+                        <span translate="no" className="notranslate">Xuất toàn bộ danh sách {broadcasts.length} bản tin phát sóng, tin đỏ và thông báo khẩn từ quản trị viên gửi đến toàn hệ thống.</span>
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-200/40">
+                      <button
+                        onClick={() => {
+                          const jsonStr = JSON.stringify(broadcasts, null, 2);
+                          const blob = new Blob([jsonStr], { type: "application/json" });
+                          const url = URL.createObjectURL(blob);
+                          const link = document.createElement("a");
+                          link.href = url;
+                          const today = new Date();
+                          const dd = String(today.getDate()).padStart(2, '0');
+                          const mm = String(today.getMonth() + 1).padStart(2, '0');
+                          const yy = String(today.getFullYear()).slice(-2);
+                          const dateStr = `${dd}_${mm}_${yy}`;
+                          link.download = `Saoluu_Bantin_Phatsong_${dateStr}.json`;
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                          URL.revokeObjectURL(url);
+                          if (onShowToast) {
+                            onShowToast("Đã sao lưu bản tin phát sóng ra file JSON thành công! 💾", "success");
+                          }
+                        }}
+                        className="px-3 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 shadow-3xs cursor-pointer active:scale-95"
+                      >
+                        <Download className="w-3.5 h-3.5 text-slate-500" />
+                        <span translate="no" className="notranslate">Sao lưu JSON</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          const headers = [
+                            "Mã ID",
+                            "Người phát sóng",
+                            "Phân loại tin",
+                            "Nội dung thông báo",
+                            "Thời gian gửi"
+                          ];
+
+                          const escapeCSV = (val: any) => {
+                            if (val === undefined || val === null) return "";
+                            let str = String(val);
+                            if (str.includes(",") || str.includes("\n") || str.includes('"') || str.includes(";")) {
+                              str = '"' + str.replace(/"/g, '""') + '"';
+                            }
+                            return str;
+                          };
+
+                          const rows = broadcasts.map(b => [
+                            b.id,
+                            b.sender,
+                            b.type,
+                            b.content,
+                            b.timestamp
+                          ]);
+
+                          const csvContent = "\uFEFF" + [headers.map(escapeCSV).join(","), ...rows.map(row => row.map(escapeCSV).join(","))].join("\n");
+                          const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                          const url = URL.createObjectURL(blob);
+                          const link = document.createElement("a");
+                          link.href = url;
+                          const today = new Date();
+                          const dd = String(today.getDate()).padStart(2, '0');
+                          const mm = String(today.getMonth() + 1).padStart(2, '0');
+                          const yy = String(today.getFullYear()).slice(-2);
+                          const dateStr = `${dd}_${mm}_${yy}`;
+                          link.download = `Bantin_Phatsong_${dateStr}.csv`;
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                          URL.revokeObjectURL(url);
+                          if (onShowToast) {
+                            onShowToast("Đã xuất bản tin phát sóng ra file Excel (CSV) thành công! 📊", "success");
+                          }
+                        }}
+                        className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 shadow-3xs cursor-pointer active:scale-95"
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5 text-amber-100" />
+                        <span translate="no" className="notranslate">Xuất Excel (CSV)</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -4606,6 +5101,16 @@ export default function DashboardDesktop({
                                     </div>
                                   )}
 
+                                  {(r.reportType === "KPH" || r.isAbnormal) && (
+                                    <button
+                                      onClick={() => handleAIAnalyze(r)}
+                                      className="mt-2.5 flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-[10px] rounded-lg shadow-sm border border-blue-500/10 cursor-pointer hover:shadow active:scale-95 transition-all select-none uppercase tracking-wide"
+                                    >
+                                      <Bot className="w-3.5 h-3.5 text-blue-100" />
+                                      <span translate="no" className="notranslate">Phân tích AI (5-Why)</span>
+                                    </button>
+                                  )}
+
                                   {/* Display directives history in Nhật ký table row */}
                                   {r.directives && r.directives.length > 0 && (
                                     <div className="mt-2 space-y-1.5 block border-l-2 border-amber-500 pl-1.5 bg-amber-50/50 p-1.5 rounded">
@@ -4735,11 +5240,10 @@ export default function DashboardDesktop({
                                   />
                                 </td>
                                 <td className="p-4 text-center border border-slate-200">
-                                  {r.imageUrl ? (
-                                    <DesktopThumbnailSlider imageUrls={r.imageUrls} fallbackUrl={r.imageUrl} />
-                                  ) : (
-                                    <T className="text-slate-400 text-[10px]">Trống</T>
-                                  )}
+                                  <DesktopThumbnailSlider 
+                                    imageUrls={r.imageUrls && r.imageUrls.length > 0 ? r.imageUrls : [r.imageUrl || getCategoryFallbackImage(r.category)]} 
+                                    fallbackUrl={r.imageUrl || getCategoryFallbackImage(r.category)} 
+                                  />
                                 </td>
                                 <td className="p-4 text-center select-none whitespace-nowrap font-mono font-bold text-xs font-black border border-slate-200">
                                   <div className="flex flex-col items-center justify-center gap-1.5">
@@ -6326,6 +6830,113 @@ export default function DashboardDesktop({
               />
             </div>
           )}
+
+          {aiAnalysisReport && (() => {
+            const isReportDnp = aiAnalysisReport && (
+              aiAnalysisReport.factory?.includes("DNP") || 
+              aiAnalysisReport.factory?.includes("BBM") || 
+              aiAnalysisReport.factory?.includes("BBC")
+            );
+            const aiAssistantTitle = isReportDnp ? "Chuyên gia Trợ lý AI DNP" : "Chuyên gia Trợ lý AI Tân Phú";
+            const companyName = isReportDnp ? "DNP" : "Tân Phú";
+
+            return (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs transition-all animate-fadeIn">
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full flex flex-col max-h-[85vh] overflow-hidden animate-scaleIn select-text">
+                  {/* Header */}
+                  <div className="p-5 border-b border-slate-150 bg-gradient-to-r from-blue-50 to-indigo-50 flex items-center justify-between select-none">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+                        <Bot className="w-5 h-5 animate-pulse" />
+                      </div>
+                      <div>
+                        <h3 className="font-extrabold text-sm text-slate-850 flex items-center gap-2">
+                          <span translate="no" className="notranslate">{aiAssistantTitle}</span>
+                        </h3>
+                        <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">
+                          <span translate="no" className="notranslate">Phân tích Sự cố 4M1E1I (Phương pháp 5-Why)</span>
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setAiAnalysisReport(null);
+                        setAiAnalysisText("");
+                      }}
+                      className="p-1.5 hover:bg-slate-200/60 text-slate-400 hover:text-slate-600 rounded-lg transition-all cursor-pointer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  {/* Content area */}
+                  <div className="p-6 overflow-y-auto space-y-5 flex-1 bg-slate-50/40">
+                    {/* Input report summary card */}
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2.5">
+                      <div className="flex items-center justify-between text-[10px] font-extrabold text-slate-400 uppercase tracking-wider select-none">
+                        <span>Thông tin sự cố phân tích:</span>
+                        <span className="px-2 py-0.5 bg-red-100 text-red-800 border border-red-200 rounded">KPH</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 text-xs">
+                        <div>
+                          <span className="text-slate-400 block select-none">Xưởng/Nhà máy:</span>
+                          <span translate="no" className="notranslate font-bold text-slate-700">{getFactoryDisplayName(aiAnalysisReport.factory)}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-slate-400 block select-none">Phân loại 4M1E1I:</span>
+                          <span translate="no" className="notranslate font-black text-slate-700 uppercase block" style={{ color: colorMap[aiAnalysisReport.category] }}>{aiAnalysisReport.category}</span>
+                        </div>
+                      </div>
+                      <div className="text-xs pt-1.5 border-t border-slate-200/60">
+                        <span className="text-slate-400 block select-none">Nội dung chi tiết:</span>
+                        <p className="text-slate-700 font-medium leading-relaxed">{aiAnalysisReport.content}</p>
+                      </div>
+                    </div>
+
+                    {/* Analysis outcome */}
+                    <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm min-h-[250px] relative">
+                      {isAnalyzing ? (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center p-6 space-y-4 select-none">
+                          <div className="relative">
+                            <div className="w-14 h-14 rounded-full border-4 border-indigo-100 border-t-indigo-600 animate-spin"></div>
+                            <div className="absolute inset-0 flex items-center justify-center text-indigo-600">
+                              <Brain className="w-6 h-6 animate-pulse" />
+                            </div>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-xs font-black text-slate-700 animate-pulse"><span translate="no" className="notranslate">Trí tuệ nhân tạo đang phân tích lỗi...</span></p>
+                            <p className="text-[10px] text-slate-400 mt-1"><span translate="no" className="notranslate">Đang áp dụng mô hình 5-Why và đề xuất giải pháp cho {companyName}</span></p>
+                          </div>
+                        </div>
+                      ) : aiAnalysisText ? (
+                        <div className="prose max-w-none text-xs text-slate-700 leading-relaxed [&_h1]:text-base [&_h1]:font-black [&_h1]:text-slate-850 [&_h1]:mb-3 [&_h1]:mt-5 [&_h2]:text-sm [&_h2]:font-extrabold [&_h2]:text-slate-800 [&_h2]:mb-2 [&_h2]:mt-4 [&_h3]:text-xs [&_h3]:font-bold [&_h3]:text-slate-755 [&_h3]:mb-1.5 [&_h3]:mt-3 [&_p]:mb-2.5 [&_p]:text-justify [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-3 [&_li]:mb-1 [&_strong]:text-slate-900 [&_strong]:font-bold [&_code]:bg-slate-100 [&_code]:p-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-[11px]">
+                          <ReactMarkdown>{aiAnalysisText}</ReactMarkdown>
+                        </div>
+                      ) : (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 select-none">
+                          <Bot className="w-10 h-10 mb-2 opacity-50" />
+                          <p className="text-xs"><span translate="no" className="notranslate">Bấm nút "Phân tích AI (5-Why)" để bắt đầu</span></p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="p-4 border-t border-slate-150 bg-slate-50 flex justify-end">
+                    <button
+                      onClick={() => {
+                        setAiAnalysisReport(null);
+                        setAiAnalysisText("");
+                      }}
+                      className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg cursor-pointer shadow-sm hover:shadow transition-all select-none uppercase tracking-wide"
+                    >
+                      <span translate="no" className="notranslate">Đóng cửa sổ</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </main>
       </div>
     </div>

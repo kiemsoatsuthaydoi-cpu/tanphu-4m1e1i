@@ -63,21 +63,29 @@ if (!parsedConfig) {
   };
 }
 
-try {
-  if (getApps().length === 0) {
-    firebaseApp = initializeApp(parsedConfig);
-  } else {
-    firebaseApp = getApp();
+const isDummy = !rawConf || parsedConfig.apiKey === "AIzaSyDummyKeyForViteDevServerOnly";
+
+if (!isDummy) {
+  try {
+    if (getApps().length === 0) {
+      firebaseApp = initializeApp(parsedConfig);
+    } else {
+      firebaseApp = getApp();
+    }
+    
+    // Enable offline multiple-tab persistence to prevent connection timeouts and support full offline PWA capabilities
+    db = initializeFirestore(firebaseApp, {
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager()
+      })
+    });
+  } catch (error) {
+    console.warn("Firebase/Firestore client initialization failed:", error);
+    db = null;
   }
-  
-  // Enable offline multiple-tab persistence to prevent connection timeouts and support full offline PWA capabilities
-  db = initializeFirestore(firebaseApp, {
-    localCache: persistentLocalCache({
-      tabManager: persistentMultipleTabManager()
-    })
-  });
-} catch (error) {
-  console.error("Firebase/Firestore client initialization failed:", error);
+} else {
+  console.log("Firebase is not configured or setup was declined. Running in Local/Offline fallback mode.");
+  db = null;
 }
 
 export { firebaseApp, db, parsedConfig as config };

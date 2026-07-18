@@ -1,15 +1,4 @@
-import express from "express";
-import path from "path";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
-import dotenv from "dotenv";
-
-dotenv.config();
-
-const app = express();
-const PORT = 3000;
-
-app.use(express.json());
 
 let aiInstance: any = null;
 function getAIInstance() {
@@ -30,7 +19,6 @@ function getAIInstance() {
   return aiInstance;
 }
 
-// Hàm gọi Gemini có khả năng tự phục hồi bằng cách thử lại và đổi mô hình dự phòng khi quá tải hoặc lỗi 503/429
 async function generateContentWithFallback(ai: any, prompt: string): Promise<string> {
   const models = [
     "gemini-3.1-flash-lite",
@@ -58,7 +46,6 @@ async function generateContentWithFallback(ai: any, prompt: string): Promise<str
         const errMsg = err.message || "";
         console.warn(`[AI Auto-Recovery] Mô hình ${model} gặp lỗi ở lần thử ${attempt}:`, errMsg);
 
-        // Nếu lỗi 404 (Không tìm thấy mô hình) thì bỏ qua ngay để chuyển sang mô hình tiếp theo
         if (
           errMsg.includes("404") ||
           errMsg.includes("NOT_FOUND") ||
@@ -68,7 +55,6 @@ async function generateContentWithFallback(ai: any, prompt: string): Promise<str
           break; 
         }
 
-        // Chờ ngắn (Backoff) trước khi thử lại lần tiếp theo
         if (attempt < 2) {
           await new Promise((resolve) => setTimeout(resolve, 600 * attempt));
         }
@@ -79,12 +65,25 @@ async function generateContentWithFallback(ai: any, prompt: string): Promise<str
   throw lastError || new Error("Không thể kết nối tới bất kỳ mô hình Gemini nào vào lúc này.");
 }
 
-// API Routes
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok" });
-});
+export default async function handler(req: any, res: any) {
+  // Hỗ trợ CORS cho Vercel
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS,PATCH,DELETE,POST,PUT");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version"
+  );
 
-app.post("/api/analyze-kph", async (req, res) => {
+  if (req.method === "OPTIONS") {
+    res.status(200).end();
+    return;
+  }
+
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Phương thức không được hỗ trợ" });
+  }
+
   try {
     const { factory, category, content, notes, directives } = req.body;
     
@@ -125,32 +124,9 @@ Hãy viết phản hồi bằng tiếng Việt, định dạng Markdown đẹp, 
 `;
 
     const aiText = await generateContentWithFallback(ai, prompt);
-    res.json({ success: true, analysis: aiText });
+    res.status(200).json({ success: true, analysis: aiText });
   } catch (error: any) {
-    console.error("AI Analysis Error:", error);
+    console.error("Vercel Serverless AI Analysis Error:", error);
     res.status(500).json({ success: false, error: error.message });
   }
-});
-
-async function startServer() {
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
-  }
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
 }
-
-startServer();
