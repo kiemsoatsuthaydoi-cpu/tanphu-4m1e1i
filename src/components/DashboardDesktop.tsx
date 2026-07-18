@@ -852,11 +852,32 @@ export default function DashboardDesktop({
   const [aiAnalysisReport, setAiAnalysisReport] = useState<QualityReport | null>(null);
   const [aiAnalysisText, setAiAnalysisText] = useState<string>("");
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  
+  const [aiChatMessages, setAiChatMessages] = useState<{ role: 'user' | 'model'; content: string }[]>([]);
+  const [aiChatInput, setAiChatInput] = useState<string>("");
+  const [isAiSendingChat, setIsAiSendingChat] = useState<boolean>(false);
+  const [activeAiTab, setActiveAiTab] = useState<'analysis' | 'chat'>('analysis');
 
   const handleAIAnalyze = async (report: QualityReport) => {
     setAiAnalysisReport(report);
     setAiAnalysisText("");
     setIsAnalyzing(true);
+    setActiveAiTab('analysis');
+    
+    const isReportDnp = report && (
+      report.factory?.includes("DNP") || 
+      report.factory?.includes("BBM") || 
+      report.factory?.includes("BBC")
+    );
+    const companyLabel = isReportDnp ? "DNP" : "Tân Phú";
+    
+    setAiChatMessages([
+      {
+        role: 'model',
+        content: `Chào bạn! Tôi là Chuyên gia Trợ lý AI của **${companyLabel}**. Tôi đang tiến hành phân tích sự cố này bằng phương pháp 5-Why và đề xuất các giải pháp cải tiến tối ưu. Sau khi xem kết quả phân tích 5-Why bên tab kế bên, bạn có thể gửi tin nhắn đặt câu hỏi, phân tích thêm, hoặc thảo luận chi tiết với tôi ngay tại khung chat này!`
+      }
+    ]);
+
     try {
       const response = await fetch("/api/analyze-kph", {
         method: "POST",
@@ -882,6 +903,58 @@ export default function DashboardDesktop({
       setAiAnalysisText(`### ❌ Lỗi kết nối máy chủ:\n${err.message || "Không thể gửi yêu cầu phân tích."}`);
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const handleSendAiChatMessage = async () => {
+    if (!aiChatInput.trim() || isAiSendingChat || !aiAnalysisReport) return;
+    const userText = aiChatInput.trim();
+    setAiChatInput("");
+    
+    const updatedMessages = [
+      ...aiChatMessages,
+      { role: 'user' as const, content: userText }
+    ];
+    setAiChatMessages(updatedMessages);
+    setIsAiSendingChat(true);
+
+    try {
+      const response = await fetch("/api/chat-5whys", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          report: {
+            factory: aiAnalysisReport.factory,
+            category: aiAnalysisReport.category,
+            content: aiAnalysisReport.content,
+            notes: aiAnalysisReport.notes,
+            directives: aiAnalysisReport.directives,
+          },
+          messages: updatedMessages,
+        }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAiChatMessages([
+          ...updatedMessages,
+          { role: 'model' as const, content: data.reply }
+        ]);
+      } else {
+        setAiChatMessages([
+          ...updatedMessages,
+          { role: 'model' as const, content: `❌ Lỗi từ máy chủ: ${data.error || "Không thể phản hồi."}` }
+        ]);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setAiChatMessages([
+        ...updatedMessages,
+        { role: 'model' as const, content: `❌ Lỗi kết nối: ${err.message || "Không thể gửi tin nhắn."}` }
+      ]);
+    } finally {
+      setIsAiSendingChat(false);
     }
   };
 
@@ -6842,7 +6915,7 @@ export default function DashboardDesktop({
 
             return (
               <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs transition-all animate-fadeIn">
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full flex flex-col max-h-[85vh] overflow-hidden animate-scaleIn select-text">
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-3xl w-full flex flex-col h-[85vh] overflow-hidden animate-scaleIn select-text">
                   {/* Header */}
                   <div className="p-5 border-b border-slate-150 bg-gradient-to-r from-blue-50 to-indigo-50 flex items-center justify-between select-none">
                     <div className="flex items-center gap-3">
@@ -6869,60 +6942,184 @@ export default function DashboardDesktop({
                     </button>
                   </div>
 
-                  {/* Content area */}
-                  <div className="p-6 overflow-y-auto space-y-5 flex-1 bg-slate-50/40">
-                    {/* Input report summary card */}
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2.5">
-                      <div className="flex items-center justify-between text-[10px] font-extrabold text-slate-400 uppercase tracking-wider select-none">
-                        <span>Thông tin sự cố phân tích:</span>
-                        <span className="px-2 py-0.5 bg-red-100 text-red-800 border border-red-200 rounded">KPH</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4 text-xs">
-                        <div>
-                          <span className="text-slate-400 block select-none">Xưởng/Nhà máy:</span>
-                          <span translate="no" className="notranslate font-bold text-slate-700">{getFactoryDisplayName(aiAnalysisReport.factory)}</span>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-slate-400 block select-none">Phân loại 4M1E1I:</span>
-                          <span translate="no" className="notranslate font-black text-slate-700 uppercase block" style={{ color: colorMap[aiAnalysisReport.category] }}>{aiAnalysisReport.category}</span>
-                        </div>
-                      </div>
-                      <div className="text-xs pt-1.5 border-t border-slate-200/60">
-                        <span className="text-slate-400 block select-none">Nội dung chi tiết:</span>
-                        <p className="text-slate-700 font-medium leading-relaxed">{aiAnalysisReport.content}</p>
-                      </div>
-                    </div>
-
-                    {/* Analysis outcome */}
-                    <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm min-h-[250px] relative">
-                      {isAnalyzing ? (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center p-6 space-y-4 select-none">
-                          <div className="relative">
-                            <div className="w-14 h-14 rounded-full border-4 border-indigo-100 border-t-indigo-600 animate-spin"></div>
-                            <div className="absolute inset-0 flex items-center justify-center text-indigo-600">
-                              <Brain className="w-6 h-6 animate-pulse" />
-                            </div>
-                          </div>
-                          <div className="text-center">
-                            <p className="text-xs font-black text-slate-700 animate-pulse"><span translate="no" className="notranslate">Trí tuệ nhân tạo đang phân tích lỗi...</span></p>
-                            <p className="text-[10px] text-slate-400 mt-1"><span translate="no" className="notranslate">Đang áp dụng mô hình 5-Why và đề xuất giải pháp cho {companyName}</span></p>
-                          </div>
-                        </div>
-                      ) : aiAnalysisText ? (
-                        <div className="prose max-w-none text-xs text-slate-700 leading-relaxed [&_h1]:text-base [&_h1]:font-black [&_h1]:text-slate-850 [&_h1]:mb-3 [&_h1]:mt-5 [&_h2]:text-sm [&_h2]:font-extrabold [&_h2]:text-slate-800 [&_h2]:mb-2 [&_h2]:mt-4 [&_h3]:text-xs [&_h3]:font-bold [&_h3]:text-slate-755 [&_h3]:mb-1.5 [&_h3]:mt-3 [&_p]:mb-2.5 [&_p]:text-justify [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-3 [&_li]:mb-1 [&_strong]:text-slate-900 [&_strong]:font-bold [&_code]:bg-slate-100 [&_code]:p-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-[11px]">
-                          <ReactMarkdown>{aiAnalysisText}</ReactMarkdown>
-                        </div>
-                      ) : (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 select-none">
-                          <Bot className="w-10 h-10 mb-2 opacity-50" />
-                          <p className="text-xs"><span translate="no" className="notranslate">Bấm nút "Phân tích AI (5-Why)" để bắt đầu</span></p>
-                        </div>
+                  {/* Tabs bar */}
+                  <div className="flex border-b border-slate-200 bg-white px-5 select-none">
+                    <button
+                      onClick={() => setActiveAiTab('analysis')}
+                      className={`py-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+                        activeAiTab === 'analysis'
+                          ? 'border-indigo-600 text-indigo-600'
+                          : 'border-transparent text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      <Brain className="w-4 h-4" />
+                      <span translate="no" className="notranslate">Kết quả Phân tích (5-Why)</span>
+                    </button>
+                    <button
+                      onClick={() => setActiveAiTab('chat')}
+                      className={`py-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
+                        activeAiTab === 'chat'
+                          ? 'border-indigo-600 text-indigo-600'
+                          : 'border-transparent text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      <span translate="no" className="notranslate">Hỏi đáp & Thảo luận AI</span>
+                      {aiChatMessages.length > 1 && (
+                        <span className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 text-[9px] font-bold flex items-center justify-center">
+                          {aiChatMessages.length - 1}
+                        </span>
                       )}
-                    </div>
+                    </button>
                   </div>
 
+                  {activeAiTab === 'analysis' ? (
+                    /* Content area */
+                    <div className="p-6 overflow-y-auto space-y-5 flex-1 bg-slate-50/40">
+                      {/* Input report summary card */}
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2.5">
+                        <div className="flex items-center justify-between text-[10px] font-extrabold text-slate-400 uppercase tracking-wider select-none">
+                          <span translate="no" className="notranslate">Thông tin sự cố phân tích:</span>
+                          <span className="px-2 py-0.5 bg-red-100 text-red-800 border border-red-200 rounded">KPH</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 text-xs">
+                          <div>
+                            <span className="text-slate-400 block select-none">
+                              <span translate="no" className="notranslate">Xưởng/Nhà máy:</span>
+                            </span>
+                            <span translate="no" className="notranslate font-bold text-slate-700">{getFactoryDisplayName(aiAnalysisReport.factory)}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-slate-400 block select-none">
+                              <span translate="no" className="notranslate">Phân loại 4M1E1I:</span>
+                            </span>
+                            <span translate="no" className="notranslate font-black text-slate-700 uppercase block" style={{ color: colorMap[aiAnalysisReport.category] }}>{aiAnalysisReport.category}</span>
+                          </div>
+                        </div>
+                        <div className="text-xs pt-1.5 border-t border-slate-200/60">
+                          <span className="text-slate-400 block select-none">
+                            <span translate="no" className="notranslate">Nội dung chi tiết:</span>
+                          </span>
+                          <p className="text-slate-700 font-medium leading-relaxed">{aiAnalysisReport.content}</p>
+                        </div>
+                      </div>
+
+                      {/* Analysis outcome */}
+                      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm min-h-[250px] relative">
+                        {isAnalyzing ? (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center p-6 space-y-4 select-none">
+                            <div className="relative">
+                              <div className="w-14 h-14 rounded-full border-4 border-indigo-100 border-t-indigo-600 animate-spin"></div>
+                              <div className="absolute inset-0 flex items-center justify-center text-indigo-600">
+                                <Brain className="w-6 h-6 animate-pulse" />
+                              </div>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs font-black text-slate-700 animate-pulse"><span translate="no" className="notranslate">Trí tuệ nhân tạo đang phân tích lỗi...</span></p>
+                              <p className="text-[10px] text-slate-400 mt-1"><span translate="no" className="notranslate">Đang áp dụng mô hình 5-Why và đề xuất giải pháp cho {companyName}</span></p>
+                            </div>
+                          </div>
+                        ) : aiAnalysisText ? (
+                          <div className="prose max-w-none text-xs text-slate-700 leading-relaxed [&_h1]:text-base [&_h1]:font-black [&_h1]:text-slate-850 [&_h1]:mb-3 [&_h1]:mt-5 [&_h2]:text-sm [&_h2]:font-extrabold [&_h2]:text-slate-800 [&_h2]:mb-2 [&_h2]:mt-4 [&_h3]:text-xs [&_h3]:font-bold [&_h3]:text-slate-755 [&_h3]:mb-1.5 [&_h3]:mt-3 [&_p]:mb-2.5 [&_p]:text-justify [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-3 [&_li]:mb-1 [&_strong]:text-slate-900 [&_strong]:font-bold [&_code]:bg-slate-100 [&_code]:p-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-[11px]">
+                            <ReactMarkdown>{aiAnalysisText}</ReactMarkdown>
+                          </div>
+                        ) : (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 select-none">
+                            <Bot className="w-10 h-10 mb-2 opacity-50" />
+                            <p className="text-xs"><span translate="no" className="notranslate">Bấm nút "Phân tích AI (5-Why)" để bắt đầu</span></p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    /* Chat Tab content */
+                    <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/40">
+                      {/* Top banner */}
+                      <div className="p-3 bg-indigo-50 border-b border-indigo-100 flex items-center gap-2 select-none flex-shrink-0">
+                        <Sparkles className="w-4 h-4 text-indigo-600 animate-bounce" />
+                        <span className="text-[11px] font-bold text-indigo-700">
+                          <span translate="no" className="notranslate">Khung thảo luận AI chuyên sâu: Bạn có thể đặt câu hỏi về nguyên nhân 4M1E1I hoặc cải tiến sự cố này.</span>
+                        </span>
+                      </div>
+
+                      {/* Message list */}
+                      <div className="flex-1 p-5 overflow-y-auto space-y-4">
+                        {aiChatMessages.map((msg, idx) => (
+                          <div
+                            key={idx}
+                            className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                          >
+                            {msg.role !== 'user' && (
+                              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white flex-shrink-0 shadow">
+                                <Bot className="w-4 h-4" />
+                              </div>
+                            )}
+                            <div
+                              className={`max-w-[85%] rounded-xl px-4 py-3 text-xs leading-relaxed shadow-xs ${
+                                msg.role === 'user'
+                                  ? 'bg-indigo-600 text-white rounded-tr-none'
+                                  : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none prose max-w-none [&_p]:mb-2 [&_p]:last:mb-0 [&_ul]:list-disc [&_ul]:pl-4 [&_li]:mb-0.5'
+                              }`}
+                            >
+                              {msg.role === 'user' ? (
+                                <p className="whitespace-pre-wrap">{msg.content}</p>
+                              ) : (
+                                <ReactMarkdown>{msg.content}</ReactMarkdown>
+                              )}
+                            </div>
+                            {msg.role === 'user' && (
+                              <div className="w-8 h-8 rounded-lg bg-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-600 flex-shrink-0 shadow-xs">
+                                <span translate="no" className="notranslate font-extrabold text-[10px]">USER</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        {isAiSendingChat && (
+                          <div className="flex gap-3 justify-start items-center">
+                            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white flex-shrink-0 shadow">
+                              <Bot className="w-4 h-4 animate-spin" />
+                            </div>
+                            <div className="bg-white border border-slate-200 text-slate-500 rounded-xl px-4 py-3 text-xs rounded-tl-none shadow-xs flex items-center gap-1.5 select-none">
+                              <span translate="no" className="notranslate font-medium">Trợ lý AI đang suy nghĩ</span>
+                              <span className="flex gap-0.5 items-center">
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Chat input form */}
+                      <div className="p-4 border-t border-slate-200 bg-white flex items-center gap-2 flex-shrink-0">
+                        <textarea
+                          value={aiChatInput}
+                          onChange={(e) => setAiChatInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              handleSendAiChatMessage();
+                            }
+                          }}
+                          placeholder="Nhập câu hỏi của bạn cho Chuyên gia AI tại đây..."
+                          rows={1}
+                          disabled={isAiSendingChat}
+                          className="flex-1 bg-slate-50 hover:bg-slate-100/80 focus:bg-white border border-slate-250 hover:border-slate-350 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all resize-none max-h-24 min-h-[38px] leading-relaxed"
+                        />
+                        <button
+                          onClick={handleSendAiChatMessage}
+                          disabled={isAiSendingChat || !aiChatInput.trim()}
+                          className="p-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white disabled:text-slate-400 rounded-xl shadow-md disabled:shadow-none hover:shadow-lg transition-all cursor-pointer flex-shrink-0"
+                        >
+                          <Send className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Footer */}
-                  <div className="p-4 border-t border-slate-150 bg-slate-50 flex justify-end">
+                  <div className="p-4 border-t border-slate-150 bg-slate-50 flex justify-end select-none flex-shrink-0">
                     <button
                       onClick={() => {
                         setAiAnalysisReport(null);

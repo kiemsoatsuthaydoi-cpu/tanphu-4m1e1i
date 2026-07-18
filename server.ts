@@ -132,6 +132,71 @@ Hãy viết phản hồi bằng tiếng Việt, định dạng Markdown đẹp, 
   }
 });
 
+app.post("/api/chat-5whys", async (req, res) => {
+  try {
+    const { report, messages } = req.body;
+    if (!report) {
+      return res.status(400).json({ success: false, error: "Thiếu thông tin báo cáo (report)" });
+    }
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ success: false, error: "Thiếu danh sách tin nhắn (messages)" });
+    }
+
+    const ai = getAIInstance();
+
+    const factory = report.factory || "Không xác định";
+    const category = report.category || "Không xác định";
+    const content = report.content || "Trống";
+    const notes = report.notes || "Không có";
+    const directives = report.directives && report.directives.length > 0 
+      ? report.directives.map((d: any) => d.text).join("; ") 
+      : "Chưa có";
+
+    const isDnp = factory && (
+      factory.includes("DNP") || 
+      factory.includes("BBM") || 
+      factory.includes("BBC")
+    );
+    const companyName = isDnp ? "DNP" : "Công Ty Cổ Phần Tân Phú Việt Nam";
+    const expertRole = isDnp 
+      ? "chuyên gia trợ lý AI quản lý chất lượng 4M1E1I của Công ty DNP" 
+      : "chuyên gia trợ lý AI quản lý chất lượng 4M1E1I của Công Ty Cổ Phần Tân Phú Việt Nam";
+
+    let chatHistoryText = "";
+    messages.forEach((msg: any) => {
+      const roleName = msg.role === "user" ? "Người dùng" : "Trợ lý AI";
+      chatHistoryText += `${roleName}: ${msg.content}\n\n`;
+    });
+
+    const prompt = `
+Bạn là ${expertRole}. Bạn đang hỗ trợ người dùng phân tích chuyên sâu báo cáo "Không Phù Hợp (KPH)" này thông qua một cuộc hội thoại chat trực tiếp trong bảng phân tích 5-Why.
+
+Thông tin báo cáo KPH đang thảo luận:
+- Nhà máy/Xưởng: ${factory}
+- Nhóm yếu tố (4M1E1I): ${category}
+- Nội dung ghi nhận lỗi: ${content}
+- Ghi chú thêm: ${notes}
+- Các chỉ đạo hiện tại (nếu có): ${directives}
+
+Nhiệm vụ của bạn:
+1. Hãy trả lời câu hỏi mới nhất của người dùng dưới góc nhìn của một chuyên gia chất lượng dày dạn kinh nghiệm tại ${companyName}.
+2. Trả lời một cách thực tế, tập trung vào cải tiến hiện trường sản xuất, giải thích các khái niệm 5-Why hoặc đề xuất hành động cụ thể cho nhóm yếu tố 4M1E1I (${category}).
+3. Hãy phản hồi ngắn gọn, súc tích, dễ hiểu và chuyên nghiệp.
+
+Lịch sử cuộc thảo luận:
+${chatHistoryText}
+
+Hãy viết câu trả lời tiếp theo dưới dạng Markdown thông thường (bằng tiếng Việt), rõ ràng, có phân cấp. Do không có thẻ chống dịch trong văn bản trả về của AI, hãy trả về văn bản Markdown thông thường.
+`;
+
+    const replyText = await generateContentWithFallback(ai, prompt);
+    res.json({ success: true, reply: replyText });
+  } catch (error: any) {
+    console.error("Local Chat Error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 async function startServer() {
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
