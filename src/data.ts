@@ -1,4 +1,4 @@
-import { User, UserRole, UserStatus, QualityReport, Company, Branch, Department, BroadcastNotice, ChatMessage, CatalogProduct, CatalogMold, ProductionRequest, OrderImplementation, ProductionRequestStatus } from "./types";
+import { User, UserRole, UserStatus, QualityReport, Company, Branch, Department, BroadcastNotice, ChatMessage, CatalogProduct, CatalogMold, ProductionRequest, OrderImplementation, ProductionRequestStatus, ErrorCatalogItem } from "./types";
 
 // Standardize the term "Phòng Quản Lý Chất Lượng"
 export const STANDARDIZED_QC_DEPT = "Phòng Quản Lý Chất Lượng";
@@ -211,6 +211,65 @@ export const initialUsers: User[] = [
     role: UserRole.REVIEWER,
     status: UserStatus.ACTIVE,
     password: "123456"
+  }
+];
+
+export const initialErrorCatalog: ErrorCatalogItem[] = [
+  {
+    code: "ERM0001",
+    category: "BBM",
+    name: "Lỗi xước màng",
+    description: "Màng ghép bị cào xước vật lý, xước cơ học dọc theo hướng cuộn hoặc ngang cuộn do ma sát với thành máy, lô dẫn hoặc do thiết lập sức căng màng sai lệch.",
+    createdAt: "18/07/26"
+  },
+  {
+    code: "ERM0002",
+    category: "BBM",
+    name: "Lỗi bong tách lớp màng",
+    description: "Hiện tượng hai hoặc nhiều lớp màng ghép bị bong rộp hoặc tách rời hoàn toàn do lực ghép keo không đủ, sấy không khô, hoặc thành phần hóa học của keo không tương thích với màng.",
+    createdAt: "18/07/26"
+  },
+  {
+    code: "ERM0003",
+    category: "BBM",
+    name: "Lỗi rò rỉ mối hàn nhiệt",
+    description: "Đường hàn nhiệt ở đáy, lưng hoặc biên túi bị hở, rò khí do nhiệt độ hàn quá thấp, áp lực hàn yếu, hoặc thời gian hàn không đủ dài.",
+    createdAt: "18/07/26"
+  },
+  {
+    code: "ERM0004",
+    category: "BBM",
+    name: "Lỗi nhăn màng cuộn",
+    description: "Màng ghép xuất hiện các vết nhăn lồi lõm không đều do lực căng màng không cân đối giữa các trục xả hoặc do chênh lệch nhiệt độ lô sấy/trục ép.",
+    createdAt: "18/07/26"
+  },
+  {
+    code: "ERC0001",
+    category: "BBC",
+    name: "Lỗi bavia nhựa",
+    description: "Phần nhựa thừa bám ở mép phân khuôn, chân sản phẩm nhựa cứng do lực kẹp khuôn yếu, khe hở khuôn quá lớn hoặc do áp suất phun nhựa quá cao.",
+    createdAt: "18/07/26"
+  },
+  {
+    code: "ERC0002",
+    category: "BBC",
+    name: "Lỗi thiếu liệu",
+    description: "Sản phẩm nhựa cứng bị khuyết góc, khuyết cạnh do nhựa nóng chảy điền đầy lòng khuôn không đủ, áp suất phun yếu hoặc thời gian phun quá ngắn.",
+    createdAt: "18/07/26"
+  },
+  {
+    code: "ERC0003",
+    category: "BBC",
+    name: "Lỗi biến dạng/cong vênh",
+    description: "Sản phẩm bị biến dạng hình học, cong vênh, co ngót không đều sau khi ra khỏi khuôn do làm mát không đủ hoặc phân bố độ dày thành sản phẩm không đều.",
+    createdAt: "18/07/26"
+  },
+  {
+    code: "ERC0004",
+    category: "BBC",
+    name: "Lỗi vết cháy khét",
+    description: "Xuất hiện các đốm đen hoặc dải màu vàng sẫm trên bề mặt sản phẩm do nhiệt độ xy lanh quá cao hoặc nhựa bị kẹt phân hủy trong đầu đùn.",
+    createdAt: "18/07/26"
   }
 ];
 

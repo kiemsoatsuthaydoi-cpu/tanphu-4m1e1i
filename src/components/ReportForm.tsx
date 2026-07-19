@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { ArrowLeft, Camera, RotateCw, Check, Scissors, AlertTriangle, RefreshCw, ChevronDown, X } from "lucide-react";
 import { T } from "./TranslateText";
-import { Category4M1E1I, QualityReport, User, Branch, UserRole } from "../types";
+import { Category4M1E1I, QualityReport, User, Branch, UserRole, UserStatus, ErrorCatalogItem } from "../types";
 import { initialBranches, STANDARDIZED_QC_DEPT } from "../data";
 import { loadImage, processImage, CompressingResult } from "../utils/imageProcessor";
 import { formatNameCapitalized } from "../utils/branchHelpers";
@@ -24,6 +24,7 @@ interface ReportFormProps {
     customAliases?: Record<string, string>;
   };
   onShowToast?: (message: string, type: "success" | "error" | "warning" | "info") => void;
+  errorCatalog?: ErrorCatalogItem[];
 }
 
 export default function ReportForm({
@@ -35,7 +36,8 @@ export default function ReportForm({
   offlineMode,
   branches = initialBranches,
   mobileUIConfig,
-  onShowToast
+  onShowToast,
+  errorCatalog = []
 }: ReportFormProps) {
   const isRealMobile = typeof window !== "undefined" && (
     window.innerWidth < 1024 || 
@@ -235,6 +237,11 @@ export default function ReportForm({
   const [notes, setNotes] = useState(editingReport?.notes || "");
   const [isAbnormal, setIsAbnormal] = useState(editingReport?.isAbnormal || editingReport?.reportType === "KPH" || false);
   const [isSpotlight, setIsSpotlight] = useState(editingReport?.isSpotlight || editingReport?.reportType === "DSA" || false);
+  const [errorCode, setErrorCode] = useState(editingReport?.errorCode || "");
+
+  const [assignedPersonId, setAssignedPersonId] = useState(editingReport?.assignedPersonId || "");
+  const [assignedPersonName, setAssignedPersonName] = useState(editingReport?.assignedPersonName || "");
+  const [assignedPersonRole, setAssignedPersonRole] = useState(editingReport?.assignedPersonRole || "");
 
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
@@ -477,7 +484,11 @@ export default function ReportForm({
       notes: notes.trim() ? notes : undefined,
       isAbnormal,
       isSpotlight,
-      reportType: isAbnormal ? "KPH" : (isSpotlight ? "DSA" : "NORMAL")
+      reportType: isAbnormal ? "KPH" : (isSpotlight ? "DSA" : "NORMAL"),
+      assignedPersonId: isAbnormal ? assignedPersonId : undefined,
+      assignedPersonName: isAbnormal ? assignedPersonName : undefined,
+      assignedPersonRole: isAbnormal ? assignedPersonRole : undefined,
+      errorCode: isAbnormal ? (errorCode || undefined) : undefined
     };
 
     onSubmitReport(reportPayload);
@@ -847,6 +858,120 @@ export default function ReportForm({
             <span className="text-[9px] text-slate-500 block leading-tight font-bold mt-auto"><T>Điểm Sáng (Tin tốt)</T></span>
           </button>
         </div>
+
+        {isAbnormal && (
+          <div className="bg-red-50/50 p-3.5 rounded-xl border border-red-100 space-y-2.5 animate-fadeIn">
+            <label className="text-[10px] font-black uppercase tracking-wider text-red-800 flex items-center gap-1.5">
+              <span>👤</span>
+              <span translate="no" className="notranslate"><T>Giao Người Phụ Trách Liên Quan (Trưởng BP/ĐV)*</T></span>
+            </label>
+            <div className="relative">
+              <select
+                value={assignedPersonId}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setAssignedPersonId(val);
+                  if (val === "") {
+                    setAssignedPersonName("");
+                    setAssignedPersonRole("");
+                  } else {
+                    const u = (users || []).find(user => user.id === val);
+                    if (u) {
+                      setAssignedPersonName(u.fullName);
+                      setAssignedPersonRole(u.department);
+                    }
+                  }
+                }}
+                className="w-full bg-white border border-red-200 rounded-lg px-2.5 py-1.5 text-[10px] font-bold focus:outline-none focus:ring-1 focus:ring-red-500 shadow-3xs text-slate-800 cursor-pointer appearance-none"
+              >
+                <option value="" translate="no" className="notranslate">
+                  -- Chưa phân công / Giao phụ trách --
+                </option>
+                {(users || [])
+                  .filter(u => u.status === UserStatus.ACTIVE)
+                  .map((u) => (
+                    <option key={u.id} value={u.id} translate="no" className="notranslate">
+                      {u.fullName} ({u.department || "BP"} - {u.branch || "Chi nhánh"})
+                    </option>
+                  ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-red-400">
+                <span className="text-[8px]">▼</span>
+              </div>
+            </div>
+            {assignedPersonName && (
+              <div className="text-[9px] text-red-900 font-bold flex items-center gap-1.5 bg-red-100/50 px-2 py-1.5 rounded-md border border-red-100">
+                <span>🎯</span>
+                <span translate="no" className="notranslate">
+                  Đã chỉ định: {assignedPersonName} - Trưởng {assignedPersonRole || "BP/ĐV"}
+                </span>
+              </div>
+            )}
+            <p className="text-[8.5px] text-slate-500 leading-normal">
+              <span translate="no" className="notranslate">
+                * Người phụ trách này sẽ nhận thông báo để "Tiếp nhận / Xử lý" bản tin KPH và khắc phục lỗi sớm nhất.
+              </span>
+            </p>
+
+            {/* Error Code Catalog Selection */}
+            <div className="space-y-1.5 pt-1.5 border-t border-red-100/50">
+              <label className="text-[10px] font-black uppercase tracking-wider text-red-800 flex items-center gap-1.5">
+                <span>⚠️</span>
+                <span translate="no" className="notranslate">Mã Lỗi Hệ Thống (Phân Loại Mã Lỗi)*</span>
+              </label>
+              <div className="relative">
+                <select
+                  value={errorCode}
+                  onChange={(e) => {
+                    const code = e.target.value;
+                    setErrorCode(code);
+                    if (code) {
+                      const matchedErr = errorCatalog.find(x => x.code === code);
+                      if (matchedErr && !content.trim()) {
+                        setContent(`Lặp lại: ${matchedErr.name}. Diễn giải: ${matchedErr.description}`);
+                      }
+                    }
+                  }}
+                  className="w-full bg-white border border-red-200 rounded-lg px-2.5 py-1.5 text-[10px] font-bold focus:outline-none focus:ring-1 focus:ring-red-500 shadow-3xs text-slate-800 cursor-pointer appearance-none"
+                >
+                  <option value="" translate="no" className="notranslate">
+                    -- Chưa chọn / Báo lỗi chung --
+                  </option>
+                  <optgroup label="Bao Bì Mềm (BBM)" translate="no" className="notranslate">
+                    {errorCatalog.filter(x => x.category === "BBM").map(x => (
+                      <option key={x.code} value={x.code} translate="no" className="notranslate">
+                        [{x.code}] {x.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Bao Bì Cứng (BBC)" translate="no" className="notranslate">
+                    {errorCatalog.filter(x => x.category === "BBC").map(x => (
+                      <option key={x.code} value={x.code} translate="no" className="notranslate">
+                        [{x.code}] {x.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-red-400">
+                  <span className="text-[8px]">▼</span>
+                </div>
+              </div>
+              {errorCode && (
+                <div className="text-[8.5px] text-red-800 bg-red-100/30 p-2 rounded-lg border border-red-100 leading-relaxed font-sans">
+                  {(() => {
+                    const found = errorCatalog.find(x => x.code === errorCode);
+                    return found ? (
+                      <>
+                        <span className="font-bold uppercase block text-[9px] text-red-950 mb-0.5">🔍 Diễn Giải Lỗi ({found.code}):</span>
+                        {found.description}
+                      </>
+                    ) : null;
+                  })()}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* 6. Content statement description (Nội dung thay đổi*) */}
         <div>

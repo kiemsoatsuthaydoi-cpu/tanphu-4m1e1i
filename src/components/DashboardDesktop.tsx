@@ -58,6 +58,7 @@ import {
   MessageCircle,
   Filter,
   ChevronRight,
+  ChevronDown,
   User as UserIcon,
   Award
 } from "lucide-react";
@@ -105,7 +106,8 @@ import {
   ForumTopic,
   ForumReply,
   ForumTopicCategory,
-  ForumTopicStatus
+  ForumTopicStatus,
+  ErrorCatalogItem
 } from "../types";
 import { parseReportTimestamp } from "../utils/notificationHelper";
 import { STANDARDIZED_QC_DEPT } from "../data";
@@ -115,6 +117,7 @@ import OrderPipeline from "./OrderPipeline";
 import { MentionInput, MentionTextArea } from "./MentionTextArea";
 import FirebaseQuotaMonitor from "./FirebaseQuotaMonitor";
 import StatisticsDashboard from "./StatisticsDashboard";
+import ProgressTrackingDashboard from "./ProgressTrackingDashboard";
 import { compressAvatar, getCategoryFallbackImage } from "../utils/imageProcessor";
 
 
@@ -188,6 +191,15 @@ interface DashboardDesktopProps {
   onAddForumReply?: (topicId: string, message: string) => void;
   onUpdateForumTopicStatus?: (topicId: string, status: ForumTopicStatus) => void;
   onToggleForumTopicPin?: (topicId: string) => void;
+
+  // Error Catalog properties
+  errorCatalog?: ErrorCatalogItem[];
+  onAddErrorCatalogItem?: (item: ErrorCatalogItem) => void;
+  onUpdateErrorCatalogItem?: (code: string, updated: ErrorCatalogItem) => void;
+  onDeleteErrorCatalogItem?: (code: string) => void;
+
+  isQcFeatureEnabled?: boolean;
+  onToggleQcFeature?: (enabled: boolean) => void;
 }
 
 interface DesktopThumbnailSliderProps {
@@ -556,6 +568,474 @@ function DesktopDirectiveForm({
   );
 }
 
+function DesktopQCConfirmation({
+  r,
+  reports = [],
+  currentUser,
+  errorCatalog,
+  onUpdateReport,
+  onAddErrorCatalogItem
+}: {
+  r: QualityReport;
+  reports?: QualityReport[];
+  currentUser: User;
+  errorCatalog: ErrorCatalogItem[];
+  onUpdateReport?: (report: QualityReport) => void;
+  onAddErrorCatalogItem?: (item: ErrorCatalogItem) => void;
+}) {
+  // Check if current user is authorized to confirm.
+  // "Trưởng bộ phận/ đơn vị Phòng Quản lý chất lượng của chi nhánh đó xác nhận."
+  const isAuthorized = currentUser.role === UserRole.ADMIN ||
+    currentUser.department?.toUpperCase().includes("QUẢN LÝ CHẤT LƯỢNG") ||
+    currentUser.department?.toUpperCase().includes("QC") ||
+    currentUser.role === UserRole.REVIEWER;
+
+  const [selectedCode, setSelectedCode] = useState(r.errorCode || "");
+  const [isOpen, setIsOpen] = useState(false);
+
+  // States for adding a new error code
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newErrorCode, setNewErrorCode] = useState("");
+  const [newErrorName, setNewErrorName] = useState("");
+  const [newErrorDesc, setNewErrorDesc] = useState("");
+
+  const isRepeated = React.useMemo(() => {
+    const codeToCheck = selectedCode || r.errorCode;
+    if (!codeToCheck) return false;
+    const sameCodeReports = (reports || []).filter(item => !item.isDeleted && item.errorCode === codeToCheck);
+    if (r.errorCode === codeToCheck) {
+      return sameCodeReports.length > 1;
+    } else {
+      return sameCodeReports.length > 0;
+    }
+  }, [selectedCode, r.errorCode, reports]);
+
+  const repeatCount = React.useMemo(() => {
+    const codeToCheck = selectedCode || r.errorCode;
+    if (!codeToCheck) return 0;
+    return (reports || []).filter(item => !item.isDeleted && item.errorCode === codeToCheck).length;
+  }, [selectedCode, r.errorCode, reports]);
+
+
+
+  const handleConfirm = () => {
+    if (!selectedCode) {
+      alert("Vui lòng chọn một mã lỗi để xác nhận.");
+      return;
+    }
+
+    const dateObj = new Date();
+    const hrs = String(dateObj.getHours()).padStart(2, '0');
+    const mns = String(dateObj.getMinutes()).padStart(2, '0');
+    const scs = String(dateObj.getSeconds()).padStart(2, '0');
+    const dd = String(dateObj.getDate()).padStart(2, '0');
+    const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const yy = String(dateObj.getFullYear()).slice(-2);
+    const stamp = `${hrs}:${mns}:${scs} ${dd}/${mm}/${yy}`;
+
+    const updated = {
+      ...r,
+      errorCode: selectedCode,
+      qcConfirmed: true,
+      qcConfirmedBy: currentUser.fullName,
+      qcConfirmedAt: stamp
+    };
+
+    if (onUpdateReport) {
+      onUpdateReport(updated);
+    }
+  };
+
+  const handleCancelConfirm = () => {
+    const updated = {
+      ...r,
+      qcConfirmed: false,
+      qcConfirmedBy: undefined,
+      qcConfirmedAt: undefined
+    };
+    if (onUpdateReport) {
+      onUpdateReport(updated);
+    }
+  };
+
+  const { detectedIsBBM, detectedIsBBC } = React.useMemo(() => {
+    let isBBM = r.factory?.toUpperCase().includes("BBM") || r.uploaderDepartment?.toUpperCase().includes("BBM");
+    let isBBC = r.factory?.toUpperCase().includes("BBC") || r.uploaderDepartment?.toUpperCase().includes("BBC");
+
+    if (!isBBM && !isBBC) {
+      const textToSearch = `${r.content || ""} ${r.notes || ""} ${r.directives?.map(d => d.text).join(" ") || ""}`.toLowerCase();
+      
+      const bbmKeywords = [
+        "màng", "túi", "cuộn", "ghép", "chia", "cắt", "mềm", "film", "opp", "cpp", "laminat", "quai", "đế túi", "hàn nhiệt", "nhăn màng", "xước màng", "bong tách", "lỗi in"
+      ];
+      const bbcKeywords = [
+        "cứng", "nhựa", "hộp", "chai", "nắp", "bavia", "phôi", "thổi", "ép", "biến dạng", "cong vênh", "cháy khét", "vết cháy", "thiếu liệu", "nhựa bavia"
+      ];
+
+      const bbmScore = bbmKeywords.filter(kw => textToSearch.includes(kw)).length;
+      const bbcScore = bbcKeywords.filter(kw => textToSearch.includes(kw)).length;
+
+      if (bbmScore > bbcScore) {
+        isBBM = true;
+      } else if (bbcScore > bbmScore) {
+        isBBC = true;
+      }
+    }
+
+    return { detectedIsBBM: !!isBBM, detectedIsBBC: !!isBBC };
+  }, [r]);
+
+  const [qcCategoryFilter, setQcCategoryFilter] = useState<"BBM" | "BBC" | "ALL" | "AUTO">("AUTO");
+  const [descExpanded, setDescExpanded] = useState(false);
+
+  const actualCategoryFilter = React.useMemo(() => {
+    if (qcCategoryFilter !== "AUTO") return qcCategoryFilter;
+    if (detectedIsBBM && !detectedIsBBC) return "BBM";
+    if (detectedIsBBC && !detectedIsBBM) return "BBC";
+    return "ALL";
+  }, [qcCategoryFilter, detectedIsBBM, detectedIsBBC]);
+
+  const [newErrorCategory, setNewErrorCategory] = useState<"BBM" | "BBC">(() => {
+    if (detectedIsBBC && !detectedIsBBM) return "BBC";
+    return "BBM";
+  });
+
+  const filteredErrors = errorCatalog.filter(x => {
+    if (actualCategoryFilter === "BBM") return x.category === "BBM";
+    if (actualCategoryFilter === "BBC") return x.category === "BBC";
+    return true;
+  });
+
+  const matchedErr = errorCatalog.find(x => x.code === (r.errorCode || selectedCode));
+
+  const showPulse = isAuthorized && !r.qcConfirmed && !selectedCode;
+  const showConfirmPulse = isAuthorized && !r.qcConfirmed && selectedCode;
+
+  return (
+    <div className="mt-2 text-xs">
+      {r.qcConfirmed ? (
+        <div className="p-1 bg-slate-50 border border-slate-200 rounded-lg">
+          <div className="space-y-0.5 bg-white p-1.5 rounded border border-slate-100 relative pr-12">
+            <div className="text-[10px] text-slate-750 leading-normal font-semibold flex items-center justify-between">
+              <div className="flex items-center gap-1 flex-wrap">
+                <span className="text-emerald-600 mr-0.5">🛡️</span>
+                <span translate="no" className="notranslate">QC xác nhận: </span>
+                <span className="font-black text-rose-700">[{r.errorCode}]</span> - {matchedErr?.name || <span translate="no" className="notranslate">Lỗi chung</span>}
+                {isRepeated && (
+                  <span className="text-[8.5px] font-black bg-rose-600 text-white px-1.5 py-0.5 rounded flex items-center gap-0.5 leading-none select-none uppercase shadow-3xs scale-95">
+                    <AlertTriangle className="w-2 h-2 drop-shadow-[0_0_6px_rgba(255,229,0,1)] animate-[pulse_0.4s_infinite] shrink-0 scale-110" fill="#FFE500" stroke="#000000" strokeWidth={2.5} />
+                    <T><span translate="no" className="notranslate">LẶP LẠI ({repeatCount})</span></T>
+                  </span>
+                )}
+              </div>
+              {isAuthorized && (
+                <button
+                  type="button"
+                  onClick={handleCancelConfirm}
+                  className="absolute top-1 right-1 text-[8.5px] text-rose-600 hover:text-rose-800 font-bold bg-rose-50 hover:bg-rose-100 border border-rose-200 px-1 py-0.5 rounded transition-all cursor-pointer shadow-3xs"
+                >
+                  <span translate="no" className="notranslate">Hủy</span>
+                </button>
+              )}
+            </div>
+            {matchedErr?.description && (
+              <div 
+                onClick={() => setDescExpanded(!descExpanded)}
+                className={`text-[9.5px] text-slate-500 italic cursor-pointer hover:text-slate-700 transition-colors ${descExpanded ? "" : "line-clamp-1"}`}
+                title="Bấm để xem đầy đủ / thu gọn diễn giải"
+              >
+                <span translate="no" className="notranslate">Diễn giải: </span>{matchedErr.description}
+                {!descExpanded && matchedErr.description.length > 50 && (
+                  <span className="text-[8.5px] text-blue-600 ml-1 select-none font-bold notranslate" translate="no"> (xem thêm)</span>
+                )}
+                {descExpanded && (
+                  <span className="text-[8.5px] text-blue-600 ml-1 select-none font-bold notranslate" translate="no"> (thu gọn)</span>
+                )}
+              </div>
+            )}
+            <div className="text-[8.5px] text-slate-400 font-medium select-none border-t border-slate-100 pt-0.5 mt-0.5 flex justify-between items-center">
+              <span translate="no" className="notranslate">Duyệt: {r.qcConfirmedBy} ({r.qcConfirmedAt})</span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-1">
+          {isAuthorized ? (
+            <div className="space-y-1.5">
+              {/* Segmented control to let QC switch categories or override auto detection */}
+              <div className="flex items-center justify-between gap-1 w-full flex-wrap">
+                <div className="flex items-center gap-1">
+                  <span className="text-[8px] text-slate-400 font-extrabold uppercase select-none"><T>Danh mục:</T></span>
+                  <div className="flex rounded bg-slate-100 p-0.5 border border-slate-200/60">
+                    <button
+                      type="button"
+                      onClick={() => setQcCategoryFilter("AUTO")}
+                      className={`px-1 rounded text-[8px] py-0.5 font-black cursor-pointer transition-all ${
+                        qcCategoryFilter === "AUTO"
+                          ? "bg-emerald-600 text-white shadow-3xs"
+                          : "text-slate-500 hover:text-slate-800"
+                      }`}
+                      title="Hệ thống tự động phân tích và lọc lỗi tương thích với nội dung báo cáo"
+                    >
+                      <span className="notranslate" translate="no">Tự động ({actualCategoryFilter})</span>
+                    </button>
+                    {(["BBM", "BBC", "ALL"] as const).map((cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setQcCategoryFilter(cat)}
+                        className={`px-1.5 py-0.5 rounded text-[8px] font-black cursor-pointer transition-all ${
+                          qcCategoryFilter === cat
+                            ? "bg-blue-600 text-white shadow-3xs"
+                            : "text-slate-500 hover:text-slate-800"
+                        }`}
+                      >
+                        <span className="notranslate" translate="no">
+                          {cat === "ALL" ? "Tất cả" : cat}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {isRepeated && (
+                  <span className="text-[9px] font-black bg-rose-600 text-white px-2 py-1 rounded flex items-center gap-1 leading-none select-none uppercase animate-[pulse_2s_infinite] shadow-[0_0_10px_rgba(225,29,72,0.35)] shrink-0">
+                    <AlertTriangle className="w-2.5 h-2.5 drop-shadow-[0_0_6px_rgba(255,229,0,1)] animate-[pulse_0.4s_infinite] shrink-0 scale-110" fill="#FFE500" stroke="#000000" strokeWidth={2.5} />
+                    <T><span translate="no" className="notranslate">LẶP LẠI ({repeatCount})</span></T>
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1.5 relative w-full">
+                <div className="relative flex-1 min-w-0 h-[32px]">
+                  {/* Visual design layer representing the chosen state or placeholder */}
+                  <div
+                    className={`absolute inset-0 bg-white border rounded text-[8.5px] font-bold p-1 flex items-center justify-between gap-1 leading-tight pointer-events-none transition-all ${
+                      selectedCode 
+                        ? "text-slate-900 font-extrabold" 
+                        : "text-slate-600 font-semibold italic"
+                    } ${
+                      showPulse 
+                        ? 'border-emerald-500 ring-2 ring-emerald-400/40 bg-emerald-50/25 shadow-[0_0_10px_rgba(16,185,129,0.35)] animate-[pulse_2s_infinite]' 
+                        : 'border-slate-300'
+                    }`}
+                  >
+                    <span className="line-clamp-2 notranslate flex-1 pr-3" translate="no">
+                      {selectedCode ? `[${selectedCode}] ${matchedErr?.name || ""}` : "Phụ trách P.QLCL Chi Nhánh chọn mã lỗi"}
+                    </span>
+                    <ChevronDown className="w-3 h-3 shrink-0 text-slate-500 absolute right-1" />
+                  </div>
+
+                  {/* Completely transparent select laid on top */}
+                  <select
+                    value={selectedCode}
+                    onChange={(e) => setSelectedCode(e.target.value)}
+                    translate="no"
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer notranslate"
+                  >
+                    <option value="" translate="no" className="notranslate font-semibold italic text-slate-500">
+                      Phụ trách P.QLCL Chi Nhánh chọn mã lỗi
+                    </option>
+                    {filteredErrors.map(x => (
+                      <option key={x.code} value={x.code} translate="no" className="notranslate font-bold text-slate-800">
+                        [{x.code}] {x.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+              <button
+                type="button"
+                onClick={() => setShowAddModal(true)}
+                className="p-1 h-[32px] w-[32px] bg-slate-50 hover:bg-slate-100 text-slate-600 rounded border border-slate-300 cursor-pointer flex items-center justify-center shrink-0 hover:text-blue-600 hover:border-blue-300 transition-colors"
+                title="Khai báo thêm mã lỗi mới trực tiếp"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConfirm}
+                className={`px-2 h-[32px] text-white font-extrabold text-[9.5px] rounded border cursor-pointer uppercase transition-all shadow-3xs flex items-center justify-center gap-0.5 shrink-0 ${showConfirmPulse ? 'bg-emerald-500 border-emerald-400 hover:bg-emerald-600 animate-[pulse_1.5s_infinite] shadow-[0_0_12px_rgba(16,185,129,0.55)] font-black' : 'bg-emerald-600 hover:bg-emerald-700 border-emerald-700'}`}
+              >
+                <span translate="no" className="notranslate">Xác nhận</span>
+              </button>
+            </div>
+          </div>
+          ) : (
+            <div className="p-1.5 bg-slate-50 border border-slate-200 rounded text-[9px] text-slate-500 italic flex items-center gap-1.5">
+              <span>⏳</span>
+              <span translate="no" className="notranslate">Chờ Trưởng phòng QC chọn và xác nhận mã lỗi này...</span>
+            </div>
+          )}
+          {selectedCode && !r.qcConfirmed && matchedErr && (
+            <div className="text-[9px] text-slate-650 bg-white p-1.5 rounded border border-slate-200 leading-normal">
+              <span className="font-bold text-slate-700 block notranslate" translate="no">Diễn giải:</span>
+              {matchedErr.description}
+            </div>
+          )}
+        </div>
+      )}
+
+      {showAddModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-[2px] z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-sm overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="px-4 py-3 bg-slate-50 border-b border-slate-150 flex items-center justify-between">
+              <span className="font-bold text-slate-800 text-[11px] uppercase tracking-wider notranslate" translate="no">Thêm mã lỗi mới</span>
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            {/* Form content */}
+            <div className="p-4 space-y-3 overflow-y-auto text-left">
+              {/* Category */}
+              <div>
+                <label className="block text-[9.5px] font-black text-slate-500 uppercase mb-1 notranslate" translate="no">Phân loại ngành</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewErrorCategory("BBM");
+                      if (!newErrorCode || newErrorCode.startsWith("ERM") || newErrorCode.startsWith("ERC")) {
+                        const num = String(errorCatalog.filter(x => x.category === "BBM").length + 1).padStart(4, "0");
+                        setNewErrorCode(`ERM${num}`);
+                      }
+                    }}
+                    className={`py-1.5 px-2 rounded border text-[10px] font-bold text-center cursor-pointer transition-all ${newErrorCategory === "BBM" ? "bg-blue-50 border-blue-400 text-blue-700" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+                  >
+                    <span className="notranslate" translate="no">Bao bì mềm (BBM)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewErrorCategory("BBC");
+                      if (!newErrorCode || newErrorCode.startsWith("ERM") || newErrorCode.startsWith("ERC")) {
+                        const num = String(errorCatalog.filter(x => x.category === "BBC").length + 1).padStart(4, "0");
+                        setNewErrorCode(`ERC${num}`);
+                      }
+                    }}
+                    className={`py-1.5 px-2 rounded border text-[10px] font-bold text-center cursor-pointer transition-all ${newErrorCategory === "BBC" ? "bg-blue-50 border-blue-400 text-blue-700" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+                  >
+                    <span className="notranslate" translate="no">Bao bì cứng (BBC)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Code */}
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-[9.5px] font-black text-slate-500 uppercase notranslate" translate="no">Mã lỗi</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const prefix = newErrorCategory === "BBM" ? "ERM" : "ERC";
+                      const num = String(errorCatalog.filter(x => x.category === newErrorCategory).length + 1).padStart(4, "0");
+                      setNewErrorCode(`${prefix}${num}`);
+                    }}
+                    className="text-[9px] font-bold text-blue-600 hover:underline cursor-pointer"
+                  >
+                    <span className="notranslate" translate="no">Gợi ý mã</span>
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={newErrorCode}
+                  onChange={(e) => setNewErrorCode(e.target.value.toUpperCase())}
+                  placeholder="Ví dụ: ERM0105"
+                  className="w-full border border-slate-200 rounded p-1.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-blue-500 font-bold text-slate-800"
+                />
+              </div>
+
+              {/* Name */}
+              <div>
+                <label className="block text-[9.5px] font-black text-slate-500 uppercase mb-1 notranslate" translate="no">Tên lỗi</label>
+                <input
+                  type="text"
+                  value={newErrorName}
+                  onChange={(e) => setNewErrorName(e.target.value)}
+                  placeholder="Ví dụ: Co màng, Bavia, Trầy xước"
+                  className="w-full border border-slate-200 rounded p-1.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-800 font-medium"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-[9.5px] font-black text-slate-500 uppercase mb-1 notranslate" translate="no">Diễn giải chi tiết</label>
+                <textarea
+                  value={newErrorDesc}
+                  onChange={(e) => setNewErrorDesc(e.target.value)}
+                  placeholder="Mô tả cụ thể về biểu hiện lỗi hoặc cách nhận biết..."
+                  rows={3}
+                  className="w-full border border-slate-200 rounded p-1.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-800 leading-normal"
+                />
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="px-4 py-3 bg-slate-50 border-t border-slate-150 flex items-center justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="px-3 py-1.5 border border-slate-200 text-slate-500 hover:bg-slate-100 rounded text-[10px] font-bold transition-all cursor-pointer"
+              >
+                <span className="notranslate" translate="no">Hủy</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!newErrorCode.trim()) {
+                    alert("Vui lòng điền mã lỗi!");
+                    return;
+                  }
+                  if (!newErrorName.trim()) {
+                    alert("Vui lòng điền tên lỗi!");
+                    return;
+                  }
+                  if (errorCatalog.some(x => x.code.toUpperCase() === newErrorCode.trim().toUpperCase())) {
+                    alert(`Mã lỗi [${newErrorCode.trim().toUpperCase()}] đã tồn tại trong danh mục!`);
+                    return;
+                  }
+
+                  const dateObj = new Date();
+                  const dd = String(dateObj.getDate()).padStart(2, '0');
+                  const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+                  const yy = String(dateObj.getFullYear()).slice(-2);
+                  const createdAtStr = `${dd}/${mm}/${yy}`;
+
+                  const newItem: ErrorCatalogItem = {
+                    code: newErrorCode.trim().toUpperCase(),
+                    category: newErrorCategory,
+                    name: newErrorName.trim(),
+                    description: newErrorDesc.trim() || `Lỗi ${newErrorName.trim()} ngành ${newErrorCategory}`,
+                    createdAt: createdAtStr
+                  };
+
+                  if (onAddErrorCatalogItem) {
+                    onAddErrorCatalogItem(newItem);
+                    setSelectedCode(newItem.code);
+                  }
+                  setShowAddModal(false);
+                  setNewErrorCode("");
+                  setNewErrorName("");
+                  setNewErrorDesc("");
+                }}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white border border-blue-700 rounded text-[10px] font-bold transition-all shadow-sm cursor-pointer"
+              >
+                <span className="notranslate" translate="no">Thêm mới</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const safeSetItem = (key: string, value: string): void => {
   try {
     localStorage.setItem(key, value);
@@ -635,12 +1115,50 @@ export default function DashboardDesktop({
   onAddForumTopic,
   onAddForumReply,
   onUpdateForumTopicStatus,
-  onToggleForumTopicPin
+  onToggleForumTopicPin,
+
+  // Error Catalog props
+  errorCatalog = [],
+  onAddErrorCatalogItem,
+  onUpdateErrorCatalogItem,
+  onDeleteErrorCatalogItem,
+
+  isQcFeatureEnabled = true,
+  onToggleQcFeature
 }: DashboardDesktopProps) {
   const [activeTab, setActiveTab] = useState<
     "PHÊ_DUYỆT" | "MÃ_HÓA" | "THỐNG_KÊ" | "DỮ_LIỆU" | "QUY_CHẾ" | "CÁ_NHÂN" | "THÔNG_BÁO" | "TRAO_ĐỔI" | "TRIỂN_KHAI" | "ĐỀ_XUẤT" | "QUOTA_CLOUD"
   >("PHÊ_DUYỆT");
-  const [statsSubTab, setStatsSubTab] = useState<"NHAN_SU" | "CHAT_LUONG">("NHAN_SU");
+  const [statsSubTab, setStatsSubTab] = useState<"NHAN_SU" | "CHAT_LUONG" | "TIEN_DO">("NHAN_SU");
+  const [maHoaSubTab, setMaHoaSubTab] = useState<"SO_DO" | "MA_LOI">("SO_DO");
+  
+  // Error Catalog UI States
+  const [errorCodeFilter, setErrorCodeFilter] = useState("");
+  const [errorCategoryFilter, setErrorCategoryFilter] = useState<"ALL" | "BBM" | "BBC">("ALL");
+  const [editingErrorItem, setEditingErrorItem] = useState<ErrorCatalogItem | null>(null);
+  
+  // States for new/edit form
+  const [errorFormCode, setErrorFormCode] = useState("");
+  const [errorFormCategory, setErrorFormCategory] = useState<"BBM" | "BBC">("BBM");
+  const [errorFormName, setErrorFormName] = useState("");
+  const [errorFormDescription, setErrorFormDescription] = useState("");
+
+  // Helper to auto-suggest next error code
+  const getNextErrorCode = (cat: "BBM" | "BBC") => {
+    const list = errorCatalog || [];
+    const prefix = cat === "BBM" ? "ERM" : "ERC";
+    const codes = list
+      .filter((x) => x.category === cat && x.code.toUpperCase().startsWith(prefix))
+      .map((x) => {
+        const numPart = x.code.substring(3);
+        const parsed = parseInt(numPart, 10);
+        return isNaN(parsed) ? 0 : parsed;
+      });
+    const maxNum = codes.length > 0 ? Math.max(...codes) : 0;
+    const nextNum = maxNum + 1;
+    return `${prefix}${String(nextNum).padStart(4, "0")}`;
+  };
+
   const [showAckDetailsDesktop, setShowAckDetailsDesktop] = useState<Record<string, boolean>>({});
   const [expandedDirectiveIdsDesktop, setExpandedDirectiveIdsDesktop] = useState<Record<string, boolean>>({});
 
@@ -911,6 +1429,54 @@ export default function DashboardDesktop({
     }
   };
 
+  const handleAIDsaAnalyze = async (report: QualityReport) => {
+    setAiAnalysisReport(report);
+    setAiAnalysisText("");
+    setIsAnalyzing(true);
+    setActiveAiTab('analysis');
+    
+    const isReportDnp = report && (
+      report.factory?.includes("DNP") || 
+      report.factory?.includes("BBM") || 
+      report.factory?.includes("BBC")
+    );
+    const companyLabel = isReportDnp ? "DNP" : "Tân Phú";
+    
+    setAiChatMessages([
+      {
+        role: 'model',
+        content: `Chào bạn! Tôi là Chuyên gia Trợ lý AI của **${companyLabel}**. Tôi đang tiến hành rà soát các RỦI RO TIỀM ẨN liên quan tới Điểm Sáng này (chẳng hạn như sai lệch kích thước khi chế tạo khuôn mới, rủi ro khách hàng phản đối và quy tắc nghiêm ngặt **TUÂN THỦ TIÊU CHUẨN và YÊU CẦU KHÁCH HÀNG** khi có sự thay đổi). Sau khi đọc kết quả đánh giá rủi ro bên tab kế bên, bạn có thể gửi tin nhắn để hỏi đáp hoặc thảo luận thêm với tôi!`
+      }
+    ]);
+
+    try {
+      const response = await fetch("/api/analyze-dsa", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          factory: report.factory,
+          category: report.category,
+          content: report.content,
+          notes: report.notes,
+          directives: report.directives,
+        }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAiAnalysisText(data.analysis);
+      } else {
+        setAiAnalysisText(`### ❌ Có lỗi xảy ra khi phân tích:\n${data.error || "Không rõ nguyên nhân."}`);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setAiAnalysisText(`### ❌ Lỗi kết nối máy chủ:\n${err.message || "Không thể gửi yêu cầu phân tích."}`);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   const handleSendAiChatMessage = async () => {
     if (!aiChatInput.trim() || isAiSendingChat || !aiAnalysisReport) return;
     const userText = aiChatInput.trim();
@@ -936,6 +1502,8 @@ export default function DashboardDesktop({
             content: aiAnalysisReport.content,
             notes: aiAnalysisReport.notes,
             directives: aiAnalysisReport.directives,
+            reportType: aiAnalysisReport.reportType,
+            isSpotlight: aiAnalysisReport.isSpotlight,
           },
           messages: updatedMessages,
           aiKnowledgeText: aiKnowledgeText || "",
@@ -3352,7 +3920,40 @@ export default function DashboardDesktop({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Sub-tabs selector for MA_HOA */}
+              <div className="flex border-b border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setMaHoaSubTab("SO_DO")}
+                  className={`px-5 py-3 text-xs font-black select-none uppercase tracking-wider transition-all border-b-2 flex items-center gap-2 border-none outline-none ${
+                    maHoaSubTab === "SO_DO"
+                      ? "border-b-2 border-purple-600 text-purple-700 font-extrabold"
+                      : "text-slate-500 hover:text-slate-850"
+                  }`}
+                >
+                  <Building className="w-4 h-4" />
+                  <span translate="no" className="notranslate">1. Sơ đồ cơ cấu tổ chức</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMaHoaSubTab("MA_LOI");
+                    // Pre-populate code suggestion
+                    setErrorFormCode(getNextErrorCode("BBM"));
+                  }}
+                  className={`px-5 py-3 text-xs font-black select-none uppercase tracking-wider transition-all border-b-2 flex items-center gap-2 border-none outline-none ${
+                    maHoaSubTab === "MA_LOI"
+                      ? "border-b-2 border-purple-600 text-purple-700 font-extrabold"
+                      : "text-slate-500 hover:text-slate-850"
+                  }`}
+                >
+                  <AlertOctagon className="w-4 h-4" />
+                  <span translate="no" className="notranslate">2. Danh mục mã lỗi 4M1E (ERM / ERC)</span>
+                </button>
+              </div>
+
+              {maHoaSubTab === "SO_DO" ? (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* 1. CÔNG TY THÀNH VIÊN CARD BOARD */}
                 <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col min-h-[400px]">
                   <div className="flex items-center justify-between pb-3 border-b border-slate-100 select-none">
@@ -4008,6 +4609,427 @@ export default function DashboardDesktop({
                   </div>
                 </div>
               </div>
+            ) : (
+              /* ERROR CATALOG VIEW */
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Left Column: List & Filters */}
+                <div className="lg:col-span-2 bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col min-h-[450px]">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-4">
+                    <div className="flex items-center gap-2">
+                      <AlertOctagon className="w-5 h-5 text-purple-600" />
+                      <div>
+                        <h3 className="font-bold text-sm text-slate-850 uppercase tracking-wider">
+                          <span translate="no" className="notranslate">Danh sách mã lỗi hiện hành</span>
+                        </h3>
+                        <p className="text-[10px] text-slate-500 font-medium">
+                          <span translate="no" className="notranslate">Phân loại lỗi chuẩn hóa cho Bao Bì Mềm (BBM) và Bao Bì Cứng (BBC)</span>
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-xs bg-purple-50 text-purple-700 px-2.5 py-1 rounded-full font-black font-mono self-start sm:self-center">
+                      <span translate="no" className="notranslate">Tổng: {errorCatalog?.length || 0}</span>
+                    </span>
+                  </div>
+
+                  {/* Search & Filters */}
+                  <div className="mt-4 flex flex-col sm:flex-row gap-3">
+                    {/* Search Input */}
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Tìm kiếm mã lỗi, tên hoặc diễn giải..."
+                        value={errorCodeFilter}
+                        onChange={(e) => setErrorCodeFilter(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all shadow-sm"
+                      />
+                      {errorCodeFilter && (
+                        <button
+                          onClick={() => setErrorCodeFilter("")}
+                          className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 font-bold text-xs border-none bg-transparent cursor-pointer"
+                        >
+                          <span translate="no" className="notranslate">Xóa</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Category Pills */}
+                    <div className="flex bg-slate-100 p-1 rounded-xl text-[10px] font-black select-none border border-slate-200 shadow-inner">
+                      {(["ALL", "BBM", "BBC"] as const).map((cat) => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => setErrorCategoryFilter(cat)}
+                          className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer border-none outline-none ${
+                            errorCategoryFilter === cat
+                              ? "bg-purple-600 text-white shadow-md font-extrabold"
+                              : "text-slate-600 hover:text-slate-800 bg-transparent"
+                          }`}
+                        >
+                          <span translate="no" className="notranslate">
+                            {cat === "ALL" ? "TẤT CẢ" : cat === "BBM" ? "BBM (MỀM)" : "BBC (CỨNG)"}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Catalog List */}
+                  <div className="mt-4 flex-1 overflow-y-auto max-h-[500px] pr-1 space-y-3">
+                    {(() => {
+                      const filtered = (errorCatalog || []).filter((item) => {
+                        const matchSearch =
+                          item.code.toLowerCase().includes(errorCodeFilter.toLowerCase()) ||
+                          item.name.toLowerCase().includes(errorCodeFilter.toLowerCase()) ||
+                          (item.description && item.description.toLowerCase().includes(errorCodeFilter.toLowerCase()));
+                        const matchCat = errorCategoryFilter === "ALL" || item.category === errorCategoryFilter;
+                        return matchSearch && matchCat;
+                      });
+
+                      if (filtered.length === 0) {
+                        return (
+                          <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
+                            <AlertTriangle className="w-12 h-12 text-slate-300 animate-pulse mb-3" />
+                            <p className="text-xs font-bold text-slate-500">
+                              <span translate="no" className="notranslate">Không tìm thấy mã lỗi nào phù hợp</span>
+                            </p>
+                            <p className="text-[10px] text-slate-400 mt-1">
+                              <span translate="no" className="notranslate">Thử thay đổi bộ lọc hoặc thêm một mã lỗi mới ở bảng bên phải</span>
+                            </p>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="border border-slate-100 rounded-xl overflow-hidden divide-y divide-slate-100">
+                          {filtered.map((item) => {
+                            const isBBM = item.category === "BBM";
+                            return (
+                              <div key={item.code} className="p-3 bg-white hover:bg-slate-50/55 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div className="flex items-start gap-3">
+                                  {/* Error Code Badge */}
+                                  <div className={`px-2.5 py-1.5 rounded-lg text-center shrink-0 shadow-sm ${
+                                    isBBM
+                                      ? "bg-emerald-50 border border-emerald-200 text-emerald-700"
+                                      : "bg-blue-50 border border-blue-200 text-blue-700"
+                                  }`}>
+                                    <p className="font-mono text-xs font-black tracking-wider uppercase">
+                                      <span translate="no" className="notranslate">{item.code}</span>
+                                    </p>
+                                    <p className="text-[8px] font-bold uppercase mt-0.5 opacity-80">
+                                      <span translate="no" className="notranslate">{item.category}</span>
+                                    </p>
+                                  </div>
+
+                                  {/* Text Info */}
+                                  <div className="space-y-0.5">
+                                    <h4 className="text-xs font-bold text-slate-850">
+                                      <span translate="no" className="notranslate">{item.name}</span>
+                                    </h4>
+                                    <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
+                                      <span translate="no" className="notranslate">{item.description}</span>
+                                    </p>
+                                    <p className="text-[8px] text-slate-400 font-semibold font-mono">
+                                      <span translate="no" className="notranslate">Khai báo: {item.createdAt}</span>
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* Actions (Only Admin or Reviewer) */}
+                                {(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.REVIEWER) && (
+                                  <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingErrorItem(item);
+                                        setErrorFormCode(item.code);
+                                        setErrorFormCategory(item.category);
+                                        setErrorFormName(item.name);
+                                        setErrorFormDescription(item.description || "");
+                                      }}
+                                      className="p-1.5 bg-slate-50 hover:bg-amber-50 hover:text-amber-700 text-slate-500 rounded-lg border border-slate-200 hover:border-amber-200 transition-all cursor-pointer"
+                                      title="Sửa mã lỗi"
+                                    >
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (confirm(`Bạn có chắc chắn muốn xóa mã lỗi ${item.code}?`)) {
+                                          if (onDeleteErrorCatalogItem) {
+                                            onDeleteErrorCatalogItem(item.code);
+                                          }
+                                          if (editingErrorItem?.code === item.code) {
+                                            setEditingErrorItem(null);
+                                            setErrorFormName("");
+                                            setErrorFormDescription("");
+                                            setErrorFormCode(getNextErrorCode(errorFormCategory));
+                                          }
+                                        }
+                                      }}
+                                      className="p-1.5 bg-slate-50 hover:bg-rose-50 hover:text-rose-700 text-slate-500 rounded-lg border border-slate-200 hover:border-rose-200 transition-all cursor-pointer"
+                                      title="Xóa mã lỗi"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* Right Column: Add / Edit Form */}
+                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                    {(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.REVIEWER) ? (
+                      <div className="space-y-4">
+                        <div className="pb-3 border-b border-slate-100 flex items-center justify-between">
+                          <h3 className="font-bold text-xs uppercase tracking-wider text-purple-700 flex items-center gap-1.5">
+                            {editingErrorItem ? (
+                              <>
+                                <Pencil className="w-4 h-4 text-amber-500" />
+                                <span translate="no" className="notranslate">Cập nhật mã lỗi</span>
+                              </>
+                            ) : (
+                              <>
+                                <Plus className="w-4 h-4 text-purple-500" />
+                                <span translate="no" className="notranslate">Khai báo mã lỗi mới</span>
+                              </>
+                            )}
+                          </h3>
+                          {editingErrorItem && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingErrorItem(null);
+                                setErrorFormName("");
+                                setErrorFormDescription("");
+                                setErrorFormCode(getNextErrorCode(errorFormCategory));
+                              }}
+                              className="text-[10px] text-slate-400 hover:text-slate-600 font-bold border-none bg-transparent cursor-pointer"
+                            >
+                              <span translate="no" className="notranslate">Hủy bỏ sửa</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Category Selector */}
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                            <span translate="no" className="notranslate">Mảng Sản phẩm</span>
+                          </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!editingErrorItem) {
+                                  setErrorFormCategory("BBM");
+                                  setErrorFormCode(getNextErrorCode("BBM"));
+                                }
+                              }}
+                              disabled={!!editingErrorItem}
+                              className={`py-2 px-3 text-xs font-bold rounded-lg border transition-all flex items-center justify-center gap-1.5 border-none outline-none cursor-pointer ${
+                                errorFormCategory === "BBM"
+                                  ? "bg-emerald-50 border-emerald-300 text-emerald-800 font-black shadow-sm"
+                                  : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-50"
+                              }`}
+                            >
+                              <span translate="no" className="notranslate">Bao Bì Mềm (BBM)</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!editingErrorItem) {
+                                  setErrorFormCategory("BBC");
+                                  setErrorFormCode(getNextErrorCode("BBC"));
+                                }
+                              }}
+                              disabled={!!editingErrorItem}
+                              className={`py-2 px-3 text-xs font-bold rounded-lg border transition-all flex items-center justify-center gap-1.5 border-none outline-none cursor-pointer ${
+                                errorFormCategory === "BBC"
+                                  ? "bg-blue-50 border-blue-300 text-blue-800 font-black shadow-sm"
+                                  : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-50"
+                              }`}
+                            >
+                              <span translate="no" className="notranslate">Bao Bì Cứng (BBC)</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Error Code */}
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                            <span translate="no" className="notranslate">Mã Lỗi (Định dạng: {errorFormCategory === "BBM" ? "ERMXXXX" : "ERCXXXX"})</span>
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="text"
+                              maxLength={7}
+                              placeholder={errorFormCategory === "BBM" ? "ERM0001" : "ERC0001"}
+                              value={errorFormCode}
+                              onChange={(e) => setErrorFormCode(e.target.value.toUpperCase().replace(/\s+/g, ""))}
+                              disabled={!!editingErrorItem}
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold font-mono text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:bg-slate-100 disabled:text-slate-400 shadow-sm"
+                            />
+                            {!editingErrorItem && (
+                              <button
+                                type="button"
+                                onClick={() => setErrorFormCode(getNextErrorCode(errorFormCategory))}
+                                className="absolute right-2.5 top-1.5 px-2 py-1 bg-purple-50 border border-purple-200 rounded-md text-[9px] font-extrabold text-purple-700 hover:bg-purple-100 transition-colors cursor-pointer"
+                                title="Khôi phục mã đề xuất"
+                              >
+                                <span translate="no" className="notranslate">Gợi ý mã</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Error Name */}
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                            <span translate="no" className="notranslate">Tên Lỗi kỹ thuật</span>
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Ví dụ: Lỗi xước màng..."
+                            value={errorFormName}
+                            onChange={(e) => setErrorFormName(e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-purple-500 shadow-sm font-medium"
+                          />
+                        </div>
+
+                        {/* Description */}
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                            <span translate="no" className="notranslate">Diễn giải chi tiết / Biện pháp phòng ngừa</span>
+                          </label>
+                          <textarea
+                            rows={4}
+                            placeholder="Nhập diễn giải chi tiết lỗi, hiện tượng và tác hại nếu kéo dài..."
+                            value={errorFormDescription}
+                            onChange={(e) => setErrorFormDescription(e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-purple-500 shadow-sm font-medium leading-relaxed"
+                          />
+                        </div>
+
+                        {/* Action Submit */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!errorFormCode.trim()) {
+                              alert("Vui lòng điền Mã Lỗi!");
+                              return;
+                            }
+                            if (errorFormCode.trim().length !== 7) {
+                              alert("Mã lỗi phải dài đúng 7 ký tự (Ví dụ: ERM0001, ERC0001) theo đúng quy chuẩn!");
+                              return;
+                            }
+                            if (!errorFormName.trim()) {
+                              alert("Vui lòng điền Tên Lỗi!");
+                              return;
+                            }
+
+                            const today = new Date();
+                            const dd = String(today.getDate()).padStart(2, "0");
+                            const mm = String(today.getMonth() + 1).padStart(2, "0");
+                            const yy = String(today.getFullYear()).slice(-2);
+                            const dateStr = `${dd}/${mm}/${yy}`;
+
+                            if (editingErrorItem) {
+                              const updated: ErrorCatalogItem = {
+                                ...editingErrorItem,
+                                name: errorFormName.trim(),
+                                description: errorFormDescription.trim()
+                              };
+                              if (onUpdateErrorCatalogItem) {
+                                onUpdateErrorCatalogItem(editingErrorItem.code, updated);
+                              }
+                              setEditingErrorItem(null);
+                            } else {
+                              if ((errorCatalog || []).some((x) => x.code.toUpperCase() === errorFormCode.toUpperCase())) {
+                                alert(`Mã lỗi ${errorFormCode} đã tồn tại trong hệ thống! Vui lòng chọn mã khác.`);
+                                return;
+                              }
+                              const newItem: ErrorCatalogItem = {
+                                code: errorFormCode.toUpperCase().trim(),
+                                category: errorFormCategory,
+                                name: errorFormName.trim(),
+                                description: errorFormDescription.trim(),
+                                createdAt: dateStr
+                              };
+                              if (onAddErrorCatalogItem) {
+                                onAddErrorCatalogItem(newItem);
+                              }
+                            }
+
+                            setErrorFormName("");
+                            setErrorFormDescription("");
+                            setErrorFormCode(getNextErrorCode(errorFormCategory));
+                          }}
+                          className={`w-full py-2.5 rounded-xl text-xs font-black text-white cursor-pointer select-none transition-all uppercase tracking-wider flex items-center justify-center gap-2 shadow-md hover:shadow-lg transform active:scale-95 border-none outline-none ${
+                            editingErrorItem ? "bg-amber-600 hover:bg-amber-700" : "bg-purple-600 hover:bg-purple-700"
+                          }`}
+                        >
+                          {editingErrorItem ? (
+                            <>
+                              <CheckCircle className="w-4 h-4" />
+                              <span translate="no" className="notranslate">Cập nhật mã lỗi</span>
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="w-4 h-4" />
+                              <span translate="no" className="notranslate">Thêm vào Danh mục</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    ) : (
+                      /* Non-admin read-only summary card */
+                      <div className="space-y-4 select-none">
+                        <div className="pb-3 border-b border-slate-100">
+                          <h3 className="font-bold text-xs uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                            <Info className="w-4 h-4 text-blue-500" />
+                            <span translate="no" className="notranslate">Thông tin quy chuẩn mã lỗi</span>
+                          </h3>
+                        </div>
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-150 space-y-3">
+                          <div className="text-[11px] text-slate-600 font-medium leading-relaxed">
+                            <span translate="no" className="notranslate">
+                              Hệ thống quản trị chất lượng 4M1E1I áp dụng quy định chuẩn hóa danh mục mã lỗi phục vụ việc truy xuất tự động và chạy phân tích AI phòng ngừa rủi ro lặp lại:
+                            </span>
+                          </div>
+                          <ul className="text-[10px] text-slate-500 space-y-2 font-medium list-disc pl-4 leading-relaxed font-sans">
+                            <li>
+                              <span translate="no" className="notranslate">
+                                <b>ER</b>: Ký tự định danh sự cố (ERROR).
+                              </span>
+                            </li>
+                            <li>
+                              <span translate="no" className="notranslate">
+                                <b>M / C</b>: M đại diện cho Bao Bì Mềm (BBM), C đại diện cho Bao Bì Cứng (BBC).
+                              </span>
+                            </li>
+                            <li>
+                              <span translate="no" className="notranslate">
+                                <b>XXXX</b>: Số thứ tự tăng dần từ 0001 (Ví dụ: ERM0001, ERC0001).
+                              </span>
+                            </li>
+                          </ul>
+                          <div className="bg-blue-50 border border-blue-100 rounded-lg p-2.5 text-[10px] text-blue-700 leading-relaxed font-semibold">
+                            <span translate="no" className="notranslate">
+                              💡 Chỉ Quản lý chất lượng (Reviewer) hoặc Quản trị viên (Admin) mới có quyền tạo mới, chỉnh sửa thông tin hoặc xóa các danh mục lỗi kỹ thuật.
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -4073,11 +5095,32 @@ export default function DashboardDesktop({
                       <span>📊</span>
                       <T><span translate="no" className="notranslate">PHÂN TÍCH CHẤT LƯỢNG 4M</span></T>
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setStatsSubTab("TIEN_DO")}
+                      className={`px-4 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 border-none outline-none ${
+                        statsSubTab === "TIEN_DO"
+                          ? "bg-blue-600 text-white shadow-md font-extrabold"
+                          : "text-slate-600 hover:text-slate-800 bg-transparent"
+                      }`}
+                    >
+                      <span>🎯</span>
+                      <T><span translate="no" className="notranslate">TIẾN ĐỘ CẢI TIẾN</span></T>
+                    </button>
                   </div>
                 </div>
 
                 {statsSubTab === "NHAN_SU" ? (
                   <StatisticsDashboard users={users} branches={branches} departments={departments} />
+                ) : statsSubTab === "TIEN_DO" ? (
+                  <ProgressTrackingDashboard
+                    reports={reports}
+                    users={users}
+                    currentUser={currentUser}
+                    onUpdateReport={onUpdateReport}
+                    onAddBroadcast={onAddBroadcast}
+                    showToast={onShowToast}
+                  />
                 ) : (
                   <div className="space-y-6">
                     {/* Branch / VP segment selector */}
@@ -5198,6 +6241,16 @@ export default function DashboardDesktop({
                                     </div>
                                   )}
 
+                                  {(r.reportType === "KPH" || r.isAbnormal) && isQcFeatureEnabled && (
+                                    <DesktopQCConfirmation
+                                      r={r}
+                                      currentUser={currentUser}
+                                      errorCatalog={errorCatalog}
+                                      onUpdateReport={onUpdateReport}
+                                      onAddErrorCatalogItem={onAddErrorCatalogItem}
+                                    />
+                                  )}
+
                                   {(r.reportType === "KPH" || r.isAbnormal) && (
                                     <button
                                       onClick={() => handleAIAnalyze(r)}
@@ -5205,6 +6258,16 @@ export default function DashboardDesktop({
                                     >
                                       <Bot className="w-3.5 h-3.5 text-blue-100" />
                                       <span translate="no" className="notranslate">Phân tích AI (5-Why)</span>
+                                    </button>
+                                  )}
+
+                                  {(r.reportType === "DSA" || r.isSpotlight) && (
+                                    <button
+                                      onClick={() => handleAIDsaAnalyze(r)}
+                                      className="mt-2.5 flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-[10px] rounded-lg shadow-sm border border-emerald-500/10 cursor-pointer hover:shadow active:scale-95 transition-all select-none uppercase tracking-wide"
+                                    >
+                                      <Bot className="w-3.5 h-3.5 text-emerald-100" />
+                                      <span translate="no" className="notranslate">AI Phân tích rủi ro</span>
                                     </button>
                                   )}
 
@@ -5413,7 +6476,8 @@ export default function DashboardDesktop({
                                       </span>
                                     </div>
                                     {r.reportType === "KPH" || r.isAbnormal ? (
-                                      r.sharedBy && r.sharedBy.length > 0 ? (
+                                      <div className="space-y-1.5">
+                                        {r.sharedBy && r.sharedBy.length > 0 ? (
                                         <div className="flex flex-col gap-1 max-h-24 overflow-y-auto">
                                           {r.sharedBy.map((name, i) => {
                                             let deptName = name;
@@ -5469,8 +6533,41 @@ export default function DashboardDesktop({
                                         </div>
                                       ) : (
                                         <span translate="no" className="notranslate text-slate-400 text-[10px] italic">Chưa tiếp nhận</span>
-                                      )
-                                    ) : (
+                                      )}
+
+                                      {/* KPH replications list (if has replications) */}
+                                      {r.replications && r.replications.length > 0 && (
+                                        <div className="pt-1.5 border-t border-slate-100 space-y-1">
+                                          <div className="text-[8px] font-extrabold text-emerald-700 uppercase tracking-wider select-none">
+                                            Nhân rộng biện pháp:
+                                          </div>
+                                          <div className="flex flex-col gap-1 max-h-24 overflow-y-auto">
+                                            {r.replications.map((rep) => (
+                                              <div key={rep.id} className="flex flex-col gap-0.5 bg-emerald-50/30 p-1.5 rounded border border-emerald-100 text-[9.5px]">
+                                                <div className="flex items-center justify-between gap-1.5">
+                                                  <span translate="no" className="notranslate font-bold text-emerald-900 truncate max-w-[120px]" title={`${rep.factoryName} - ${rep.departmentName}`}>
+                                                    {rep.factoryName} - {rep.departmentName}
+                                                  </span>
+                                                  <span translate="no" className={`notranslate text-[8px] font-black px-1 py-0.2 rounded border uppercase scale-90 ${
+                                                    rep.status === "Đã hoàn thành"
+                                                      ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                                      : rep.status === "Đang triển khai"
+                                                      ? "bg-amber-100 text-amber-800 border-amber-300"
+                                                      : "bg-sky-100 text-sky-800 border-sky-300"
+                                                  }`} title={`Hiện trạng: ${rep.currentState || rep.notes || ""}\nHỗ trợ: ${rep.supportRequired || ""}\n(Cập nhật lúc: ${rep.updatedAt})`}>
+                                                    {rep.status === "Đã hoàn thành" ? "✓ Xong" : rep.status === "Đang triển khai" ? "⏳ Chạy" : "📝 Chuẩn"}
+                                                  </span>
+                                                </div>
+                                                <div className="text-[7.5px] text-slate-400 font-mono mt-0.5 flex justify-between select-none">
+                                                  <span translate="no" className="notranslate">{rep.registrantName}</span>
+                                                  <span translate="no" className="notranslate">Hạn: {rep.targetDate}</span>
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>) : (
                                       /* DSA replications list */
                                       r.replications && r.replications.length > 0 ? (
                                         <div className="flex flex-col gap-1 max-h-24 overflow-y-auto">
@@ -6264,6 +7361,50 @@ export default function DashboardDesktop({
                     )}
                   </div>
 
+                  {/* Card 1C: CẤU HÌNH HỆ THỐNG PHÊ DUYỆT QC */}
+                  <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm space-y-4">
+                    <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2 border-b border-slate-100 pb-3">
+                      <Sliders className="w-5 h-5 text-emerald-500" />
+                      <span translate="no" className="notranslate font-bold text-slate-800">Cấu hình chức năng Phê duyệt QC</span>
+                    </h3>
+
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex-1">
+                          <span translate="no" className="notranslate font-extrabold text-slate-800 text-xs block">Phê duyệt mã lỗi QC</span>
+                          <span translate="no" className="notranslate text-[10px] text-slate-500 block mt-1 leading-normal">Bật hoặc tạm ẩn tính năng xác nhận mã lỗi QC và cảnh báo lỗi lặp lại đối với các báo cáo Không Phù Hợp (KPH).</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onToggleQcFeature) {
+                              onToggleQcFeature(!isQcFeatureEnabled);
+                              onShowToast?.(
+                                !isQcFeatureEnabled 
+                                  ? "Đã kích hoạt chức năng Phê duyệt mã lỗi QC! 🛡️" 
+                                  : "Đã tạm ẩn chức năng Phê duyệt mã lỗi QC! 👁️‍🗨️",
+                                "info"
+                              );
+                            }
+                          }}
+                          className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300 shrink-0 ${isQcFeatureEnabled ? "bg-emerald-500" : "bg-slate-300"}`}
+                        >
+                          <div
+                            className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ${isQcFeatureEnabled ? "translate-x-6" : "translate-x-0"}`}
+                          />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-2 text-[10px] pt-1.5 border-t border-slate-200/50">
+                        {isQcFeatureEnabled ? (
+                          <span translate="no" className="notranslate flex items-center gap-1 text-emerald-600 font-bold">🟢 Đang hoạt động bình thường</span>
+                        ) : (
+                          <span translate="no" className="notranslate flex items-center gap-1 text-amber-600 font-bold">🟡 Đang tạm thời ẩn khỏi màn hình</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Card 2: ĐĂNG TIN THÔNG BÁO MỚI */}
                   <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm space-y-4">
                     <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2 border-b border-slate-100 pb-3">
@@ -6996,17 +8137,33 @@ export default function DashboardDesktop({
               <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs transition-all animate-fadeIn">
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-3xl w-full flex flex-col h-[85vh] overflow-hidden animate-scaleIn select-text">
                   {/* Header */}
-                  <div className="p-5 border-b border-slate-150 bg-gradient-to-r from-blue-50 to-indigo-50 flex items-center justify-between select-none">
+                  <div className={`p-5 border-b border-slate-150 ${
+                    aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                      ? "bg-gradient-to-r from-emerald-50 to-teal-50"
+                      : "bg-gradient-to-r from-blue-50 to-indigo-50"
+                  } flex items-center justify-between select-none`}>
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr ${
+                        aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                          ? "from-emerald-600 to-teal-600 shadow-emerald-500/20"
+                          : "from-blue-600 to-indigo-600 shadow-blue-500/20"
+                      } flex items-center justify-center text-white shadow-md`}>
                         <Bot className="w-5 h-5 animate-pulse" />
                       </div>
                       <div>
                         <h3 className="font-extrabold text-sm text-slate-850 flex items-center gap-2">
                           <span translate="no" className="notranslate">{aiAssistantTitle}</span>
                         </h3>
-                        <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">
-                          <span translate="no" className="notranslate">Phân tích Sự cố 4M1E1I (Phương pháp 5-Why)</span>
+                        <p className={`text-[10px] font-bold ${
+                          aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                            ? "text-emerald-600"
+                            : "text-indigo-600"
+                        } uppercase tracking-wider`}>
+                          <span translate="no" className="notranslate">
+                            {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                              ? "Phân tích Rủi ro 4M1E1I"
+                              : "Phân tích Sự cố 4M1E1I (Phương pháp 5-Why)"}
+                          </span>
                         </p>
                       </div>
                     </div>
@@ -7032,7 +8189,11 @@ export default function DashboardDesktop({
                       }`}
                     >
                       <Brain className="w-4 h-4" />
-                      <span translate="no" className="notranslate">Kết quả Phân tích (5-Why)</span>
+                      <span translate="no" className="notranslate">
+                        {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                          ? "Bảng Phân tích Rủi ro"
+                          : "Kết quả Phân tích (5-Why)"}
+                      </span>
                     </button>
                     <button
                       onClick={() => setActiveAiTab('chat')}
@@ -7058,8 +8219,14 @@ export default function DashboardDesktop({
                       {/* Input report summary card */}
                       <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2.5">
                         <div className="flex items-center justify-between text-[10px] font-extrabold text-slate-400 uppercase tracking-wider select-none">
-                          <span translate="no" className="notranslate">Thông tin sự cố phân tích:</span>
-                          <span className="px-2 py-0.5 bg-red-100 text-red-800 border border-red-200 rounded">KPH</span>
+                          <span translate="no" className="notranslate">
+                            {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight ? "Thông tin điểm sáng phân tích:" : "Thông tin sự cố phân tích:"}
+                          </span>
+                          {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight ? (
+                            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded">DSA</span>
+                          ) : (
+                            <span className="px-2 py-0.5 bg-red-100 text-red-800 border border-red-200 rounded">KPH</span>
+                          )}
                         </div>
                         <div className="grid grid-cols-2 gap-4 text-xs">
                           <div>
@@ -7077,7 +8244,9 @@ export default function DashboardDesktop({
                         </div>
                         <div className="text-xs pt-1.5 border-t border-slate-200/60">
                           <span className="text-slate-400 block select-none">
-                            <span translate="no" className="notranslate">Nội dung chi tiết:</span>
+                            <span translate="no" className="notranslate">
+                              {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight ? "Nội dung sáng kiến:" : "Nội dung chi tiết lỗi:"}
+                            </span>
                           </span>
                           <p className="text-slate-700 font-medium leading-relaxed">{aiAnalysisReport.content}</p>
                         </div>
@@ -7088,14 +8257,34 @@ export default function DashboardDesktop({
                         {isAnalyzing ? (
                           <div className="absolute inset-0 flex flex-col items-center justify-center p-6 space-y-4 select-none">
                             <div className="relative">
-                              <div className="w-14 h-14 rounded-full border-4 border-indigo-100 border-t-indigo-600 animate-spin"></div>
-                              <div className="absolute inset-0 flex items-center justify-center text-indigo-600">
+                              <div className={`w-14 h-14 rounded-full border-4 ${
+                                aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                                  ? "border-emerald-100 border-t-emerald-600"
+                                  : "border-indigo-100 border-t-indigo-600"
+                              } animate-spin`}></div>
+                              <div className={`absolute inset-0 flex items-center justify-center ${
+                                aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                                  ? "text-emerald-600"
+                                  : "text-indigo-600"
+                              }`}>
                                 <Brain className="w-6 h-6 animate-pulse" />
                               </div>
                             </div>
                             <div className="text-center">
-                              <p className="text-xs font-black text-slate-700 animate-pulse"><span translate="no" className="notranslate">Trí tuệ nhân tạo đang phân tích lỗi...</span></p>
-                              <p className="text-[10px] text-slate-400 mt-1"><span translate="no" className="notranslate">Đang áp dụng mô hình 5-Why và đề xuất giải pháp cho {companyName}</span></p>
+                              <p className="text-xs font-black text-slate-750 animate-pulse">
+                                <span translate="no" className="notranslate">
+                                  {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                                    ? "Trí tuệ nhân tạo đang phân tích rủi ro..."
+                                    : "Trí tuệ nhân tạo đang phân tích lỗi..."}
+                                </span>
+                              </p>
+                              <p className="text-[10px] text-slate-400 mt-1">
+                                <span translate="no" className="notranslate">
+                                  {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                                    ? "Đang rà soát rủi ro và đánh giá quy tắc nghiêm ngặt 4M1E1I"
+                                    : `Đang áp dụng mô hình 5-Why và đề xuất giải pháp cho ${companyName}`}
+                                </span>
+                              </p>
                             </div>
                           </div>
                         ) : aiAnalysisText ? (
@@ -7105,7 +8294,13 @@ export default function DashboardDesktop({
                         ) : (
                           <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 select-none">
                             <Bot className="w-10 h-10 mb-2 opacity-50" />
-                            <p className="text-xs"><span translate="no" className="notranslate">Bấm nút "Phân tích AI (5-Why)" để bắt đầu</span></p>
+                            <p className="text-xs">
+                              <span translate="no" className="notranslate">
+                                {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                                  ? "Bấm nút \"AI Phân tích rủi ro\" để bắt đầu"
+                                  : "Bấm nút \"Phân tích AI (5-Why)\" để bắt đầu"}
+                              </span>
+                            </p>
                           </div>
                         )}
                       </div>
@@ -7114,10 +8309,20 @@ export default function DashboardDesktop({
                     /* Chat Tab content */
                     <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/40">
                       {/* Top banner */}
-                      <div className="p-3 bg-indigo-50 border-b border-indigo-100 flex items-center gap-2 select-none flex-shrink-0">
-                        <Sparkles className="w-4 h-4 text-indigo-600 animate-bounce" />
-                        <span className="text-[11px] font-bold text-indigo-700">
-                          <span translate="no" className="notranslate">Khung thảo luận AI chuyên sâu: Bạn có thể đặt câu hỏi về nguyên nhân 4M1E1I hoặc cải tiến sự cố này.</span>
+                      <div className={`p-3 border-b flex items-center gap-2 select-none flex-shrink-0 ${
+                        aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                          ? "bg-emerald-50 border-emerald-100 text-emerald-700"
+                          : "bg-indigo-50 border-indigo-100 text-indigo-700"
+                      }`}>
+                        <Sparkles className={`w-4 h-4 animate-bounce ${
+                          aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight ? "text-emerald-600" : "text-indigo-600"
+                        }`} />
+                        <span className="text-[11px] font-bold">
+                          <span translate="no" className="notranslate">
+                            {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                              ? "Khung thảo luận AI chuyên sâu: Bạn có thể đặt câu hỏi hoặc phân tích thêm về các rủi ro của Điểm Sáng này."
+                              : "Khung thảo luận AI chuyên sâu: Bạn có thể đặt câu hỏi về nguyên nhân 4M1E1I hoặc cải tiến sự cố này."}
+                          </span>
                         </span>
                       </div>
 
@@ -7129,7 +8334,11 @@ export default function DashboardDesktop({
                             className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                           >
                             {msg.role !== 'user' && (
-                              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white flex-shrink-0 shadow">
+                              <div className={`w-8 h-8 rounded-lg bg-gradient-to-tr ${
+                                aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                                  ? "from-emerald-600 to-teal-600 shadow-emerald-500/10"
+                                  : "from-blue-600 to-indigo-600 shadow-blue-500/10"
+                              } flex items-center justify-center text-white flex-shrink-0 shadow`}>
                                 <Bot className="w-4 h-4" />
                               </div>
                             )}
@@ -7155,7 +8364,11 @@ export default function DashboardDesktop({
                         ))}
                         {isAiSendingChat && (
                           <div className="flex gap-3 justify-start items-center">
-                            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white flex-shrink-0 shadow">
+                            <div className={`w-8 h-8 rounded-lg bg-gradient-to-tr ${
+                              aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                                ? "from-emerald-600 to-teal-600 shadow-emerald-500/10"
+                                : "from-blue-600 to-indigo-600 shadow-blue-500/10"
+                            } flex items-center justify-center text-white flex-shrink-0 shadow`}>
                               <Bot className="w-4 h-4 animate-spin" />
                             </div>
                             <div className="bg-white border border-slate-200 text-slate-500 rounded-xl px-4 py-3 text-xs rounded-tl-none shadow-xs flex items-center gap-1.5 select-none">

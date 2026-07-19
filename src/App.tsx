@@ -22,7 +22,8 @@ import {
   ForumTopic,
   ForumReply,
   ForumTopicCategory,
-  ForumTopicStatus
+  ForumTopicStatus,
+  ErrorCatalogItem
 } from "./types";
 import { generateNotifications } from "./utils/notificationHelper";
 import {
@@ -38,7 +39,8 @@ import {
   initialMoldsCatalog,
   initialProductionRequests,
   initialProductionRequestItemsMap,
-  initialOrderImplementations
+  initialOrderImplementations,
+  initialErrorCatalog
 } from "./data";
 import MobileFrame from "./components/MobileFrame";
 import { MobileListOnly } from "./components/MobileListOnly";
@@ -557,6 +559,11 @@ export default function App() {
     return sanitizeReports(attachLocalImages(mapped));
   });
 
+  const [errorCatalog, setErrorCatalog] = useState<ErrorCatalogItem[]>(() => {
+    const saved = safeGetItem("4m1e1i_error_catalog");
+    return safeParseJSON(saved, initialErrorCatalog);
+  });
+
   const [companies, setCompanies] = useState<Company[]>(() => {
     const saved = safeGetItem("4m1e1i_companies");
     return safeParseJSON(saved, initialCompanies);
@@ -799,9 +806,18 @@ export default function App() {
     };
   });
 
+  const [isQcFeatureEnabled, setIsQcFeatureEnabled] = useState(() => {
+    const saved = safeGetItem("4m1e1i_qc_feature_enabled");
+    return saved !== "false"; // Default to true
+  });
+
   const [aiKnowledgeText, setAiKnowledgeText] = useState(() => {
     return safeGetItem("4m1e1i_ai_knowledge_text") || "";
   });
+
+  useEffect(() => {
+    safeSetItem("4m1e1i_qc_feature_enabled", String(isQcFeatureEnabled));
+  }, [isQcFeatureEnabled]);
 
   useEffect(() => {
     safeSetItem("4m1e1i_ticker_config", JSON.stringify(tickerConfig));
@@ -1017,6 +1033,75 @@ export default function App() {
     const added = reports.filter((r) => !prev.some((p) => p.id === r.id));
     // Check for deleted reports
     const deleted = prev.filter((p) => !reports.some((r) => r.id === p.id));
+
+    // Check for updated reports with new updateLogs
+    reports.forEach((r) => {
+      const p = prev.find((x) => x.id === r.id);
+      if (p) {
+        const prevLogs = p.updateLogs || [];
+        const currentLogs = r.updateLogs || [];
+        if (currentLogs.length > prevLogs.length) {
+          const newLogs = currentLogs.slice(prevLogs.length);
+          newLogs.forEach((log) => {
+            const cleanLog = log.replace(/\s*\(\d{2}:\d{2}:\d{2} \d{2}\/\d{2}\/\d{2}\)\s*$/, "").trim();
+            
+            // Check if action was made by the current user to prevent self-notification
+            let isMyAction = false;
+            if (currentUser) {
+              const myNameClean = currentUser.fullName.trim().toLowerCase();
+              if (cleanLog.toLowerCase().includes(myNameClean)) {
+                isMyAction = true;
+              }
+            }
+
+            if (!isMyAction) {
+              let toastText = "";
+              const title = "🔄 BẢN TIN CẬP NHẬT";
+              
+              const likeMatch = cleanLog.match(/^Lượt thích mới \((.*)\)$/);
+              const shareMatch = cleanLog.match(/^Chia sẻ mới \((.*)\)$/) || cleanLog.match(/^Tiếp nhận mới \((.*)\)$/);
+              const chatMatch = cleanLog.match(/^Tương tác bình luận mới từ (.*?)$/);
+              const dirMatch = cleanLog.match(/^Chỉ đạo mới \((.*?): "(.*)"\)$/);
+              const ratingMatch = cleanLog.match(/^Đánh giá mới \((.*?): (\d+) sao\)$/);
+              const badgeMatch = cleanLog.match(/^Trao huy hiệu mới \((.*?): "(.*?)"\)$/);
+              const revokeBadgeMatch = cleanLog.match(/^Thu hồi huy hiệu \((.*?): "(.*?)"\)$/);
+
+              if (likeMatch) {
+                toastText = `❤️ ${likeMatch[1]} đã thích bản tin của ${r.uploaderName}`;
+              } else if (shareMatch) {
+                toastText = `✅ ${shareMatch[1]} đã xác nhận tiếp nhận bản tin của ${r.uploaderName}`;
+              } else if (chatMatch) {
+                toastText = `💬 ${chatMatch[1]} đã bình luận trên bản tin của ${r.uploaderName}`;
+              } else if (dirMatch) {
+                toastText = `🛡️ ${dirMatch[1]} chỉ đạo: "${dirMatch[2].substring(0, 30)}..."`;
+              } else if (ratingMatch) {
+                toastText = `⭐ ${ratingMatch[1]} đã đánh giá chất lượng ${ratingMatch[2]} sao bản tin của ${r.uploaderName}`;
+              } else if (badgeMatch) {
+                toastText = `🏅 ${badgeMatch[1]} đã trao huy hiệu "${badgeMatch[2]}" cho bản tin của ${r.uploaderName}`;
+              } else if (revokeBadgeMatch) {
+                toastText = `↩️ ${revokeBadgeMatch[1]} đã thu hồi huy hiệu "${revokeBadgeMatch[2]}"`;
+              } else if (cleanLog.includes("Sửa chi tiết") || cleanLog.includes("Sửa chi nhánh") || cleanLog.includes("Sửa hạng mục 4M1E1I") || cleanLog.includes("Sửa ghi chú") || cleanLog.includes("Thay đổi mức cảnh báo") || cleanLog.includes("Sửa ảnh")) {
+                toastText = `✏️ Bản tin của ${r.uploaderName} vừa được cập nhật: ${cleanLog}`;
+              }
+
+              if (toastText) {
+                try {
+                  if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+                    new Notification(title, {
+                      body: toastText,
+                      icon: "/logo_meta.jpg"
+                    });
+                  }
+                } catch (err) {
+                  console.warn(err);
+                }
+                showToast(toastText, "info");
+              }
+            }
+          });
+        }
+      }
+    });
 
     added.forEach((r) => {
       const isMyReport = currentUser && r.uploaderName && r.uploaderName.trim().toLowerCase() === currentUser.fullName.trim().toLowerCase();
@@ -1724,6 +1809,10 @@ export default function App() {
   useEffect(() => {
     safeSetItem("4m1e1i_users", JSON.stringify(users));
   }, [users]);
+
+  useEffect(() => {
+    safeSetItem("4m1e1i_error_catalog", JSON.stringify(errorCatalog));
+  }, [errorCatalog]);
 
   useEffect(() => {
     // Tách riêng hình ảnh nặng ra khỏi danh sách báo cáo chính khi lưu vào localStorage để giữ danh sách văn bản nhẹ nhất có thể, tránh lỗi QuotaExceededError
@@ -3106,6 +3195,41 @@ export default function App() {
       changes.push(`Chỉ đạo mới (${addedDir.author}: "${addedDir.text.substring(0, 15)}...")`);
     }
 
+    const oldRatings = existing.ratings || [];
+    const newRatings = updatedReport.ratings || [];
+    if (newRatings.length > oldRatings.length) {
+      const addedRating = newRatings.find(nr => !oldRatings.some(or => or.evaluatorId === nr.evaluatorId));
+      if (addedRating) {
+        const avgStars = Math.round((addedRating.imagesRating + addedRating.infoRating + addedRating.timelinessRating) / 3);
+        changes.push(`Đánh giá mới (${addedRating.evaluatorName}: ${avgStars} sao)`);
+      }
+    } else if (newRatings.length === oldRatings.length) {
+      newRatings.forEach((nr) => {
+        const or = oldRatings.find(o => o.evaluatorId === nr.evaluatorId);
+        if (or) {
+          const oldAvg = Math.round((or.imagesRating + or.infoRating + or.timelinessRating) / 3);
+          const newAvg = Math.round((nr.imagesRating + nr.infoRating + nr.timelinessRating) / 3);
+          if (oldAvg !== newAvg) {
+            changes.push(`Đánh giá mới (${nr.evaluatorName}: ${newAvg} sao)`);
+          }
+        }
+      });
+    }
+
+    const oldBadges = existing.badges || [];
+    const newBadges = updatedReport.badges || [];
+    if (newBadges.length > oldBadges.length) {
+      const addedBadge = newBadges.find(nb => !oldBadges.some(ob => ob.id === nb.id && ob.giverId === nb.giverId));
+      if (addedBadge) {
+        changes.push(`Trao huy hiệu mới (${addedBadge.giverName}: "${addedBadge.name}")`);
+      }
+    } else if (newBadges.length < oldBadges.length) {
+      const removedBadge = oldBadges.find(ob => !newBadges.some(nb => nb.id === ob.id && nb.giverId === ob.giverId));
+      if (removedBadge) {
+        changes.push(`Thu hồi huy hiệu (${removedBadge.giverName}: "${removedBadge.name}")`);
+      }
+    }
+
     let finalReport = updatedReport;
     if (changes.length > 0) {
       const logMsg = `${changes.join(", ")} (${updateTimeStr})`;
@@ -3129,6 +3253,26 @@ export default function App() {
       console.error("Lỗi khi lưu cập nhật báo cáo lên Firestore:", err);
     });
   };
+
+  const handleAddErrorCatalogItem = useCallback((item: ErrorCatalogItem) => {
+    setErrorCatalog((prev) => {
+      if (prev.some((x) => x.code === item.code)) {
+        return prev;
+      }
+      return [...prev, item];
+    });
+    showToast("Đã thêm mã lỗi mới vào danh mục! 📝", "success");
+  }, []);
+
+  const handleUpdateErrorCatalogItem = useCallback((code: string, updated: ErrorCatalogItem) => {
+    setErrorCatalog((prev) => prev.map((item) => (item.code === code ? updated : item)));
+    showToast("Đã cập nhật thông tin mã lỗi thành công! 💾", "success");
+  }, []);
+
+  const handleDeleteErrorCatalogItem = useCallback((code: string) => {
+    setErrorCatalog((prev) => prev.filter((item) => item.code !== code));
+    showToast("Đã xóa mã lỗi khỏi danh mục! 🗑️", "success");
+  }, []);
 
   // Export full reports backup (including image Base64 strings)
   const handleExportBackup = useCallback(() => {
@@ -3944,6 +4088,10 @@ export default function App() {
           />
         ) : (
           <MobileFrame
+            errorCatalog={errorCatalog}
+            onAddErrorCatalogItem={handleAddErrorCatalogItem}
+            isQcFeatureEnabled={isQcFeatureEnabled}
+            onToggleQcFeature={setIsQcFeatureEnabled}
             reports={reports}
             currentUserId={currentUser.id}
             onOpenReportForm={() => setIsFormOpen(true)}
@@ -4059,6 +4207,10 @@ export default function App() {
           />
         ) : (
           <MobileFrame
+            errorCatalog={errorCatalog}
+            onAddErrorCatalogItem={handleAddErrorCatalogItem}
+            isQcFeatureEnabled={isQcFeatureEnabled}
+            onToggleQcFeature={setIsQcFeatureEnabled}
             reports={reports}
             currentUserId={currentUser.id}
             onOpenReportForm={() => setIsFormOpen(true)}
@@ -4253,6 +4405,12 @@ export default function App() {
             setReadNotifIds={setReadNotifIds}
             onExportBackup={handleExportBackup}
             onImportBackup={handleImportBackup}
+            errorCatalog={errorCatalog}
+            onAddErrorCatalogItem={handleAddErrorCatalogItem}
+            onUpdateErrorCatalogItem={handleUpdateErrorCatalogItem}
+            onDeleteErrorCatalogItem={handleDeleteErrorCatalogItem}
+            isQcFeatureEnabled={isQcFeatureEnabled}
+            onToggleQcFeature={setIsQcFeatureEnabled}
           />
         </div>
 
@@ -4279,9 +4437,14 @@ export default function App() {
                 branches={branches}
                 mobileUIConfig={mobileUIConfig}
                 onShowToast={showToast}
+                errorCatalog={errorCatalog}
               />
             ) : (
               <MobileFrame
+                errorCatalog={errorCatalog}
+                onAddErrorCatalogItem={handleAddErrorCatalogItem}
+                isQcFeatureEnabled={isQcFeatureEnabled}
+                onToggleQcFeature={setIsQcFeatureEnabled}
                 reports={reports}
                 currentUserId={currentUser.id}
                 onOpenReportForm={() => setIsFormOpen(true)}
@@ -4348,9 +4511,14 @@ export default function App() {
                 branches={branches}
                 mobileUIConfig={mobileUIConfig}
                 onShowToast={showToast}
+                errorCatalog={errorCatalog}
               />
             ) : (
               <MobileFrame
+                errorCatalog={errorCatalog}
+                onAddErrorCatalogItem={handleAddErrorCatalogItem}
+                isQcFeatureEnabled={isQcFeatureEnabled}
+                onToggleQcFeature={setIsQcFeatureEnabled}
                 reports={reports}
                 currentUserId={currentUser.id}
                 onOpenReportForm={() => setIsFormOpen(true)}

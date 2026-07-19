@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import html2canvas from "html2canvas";
 import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send } from "lucide-react";
-import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus, QualityReportBadge, AppNotification } from "../types";
+import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus, QualityReportBadge, AppNotification, ErrorCatalogItem } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
 import { QRCodeSVG } from "qrcode.react";
@@ -13,6 +13,7 @@ import { MobileReportRatingContainer, isEligibleEvaluator, BADGE_PRAISE_MAP } fr
 import { RED_BADGES, GREEN_BADGES } from "../data";
 import FirebaseQuotaMonitor from "./FirebaseQuotaMonitor";
 import StatisticsDashboard from "./StatisticsDashboard";
+import ProgressTrackingDashboard from "./ProgressTrackingDashboard";
 import MobileForumView from "./MobileForumView";
 import {
   ResponsiveContainer,
@@ -219,6 +220,10 @@ interface MobileFrameProps {
   onAddForumReply?: (topicId: string, message: string) => void;
   onUpdateForumTopicStatus?: (topicId: string, status: ForumTopicStatus) => void;
   onToggleForumTopicPin?: (topicId: string) => void;
+  errorCatalog?: ErrorCatalogItem[];
+  onAddErrorCatalogItem?: (item: ErrorCatalogItem) => void;
+  isQcFeatureEnabled?: boolean;
+  onToggleQcFeature?: (enabled: boolean) => void;
 }
 
 function formatTimestampToDMY(tsStr: string): string {
@@ -317,6 +322,475 @@ function MobileDirectiveForm({
         <T>GỬI</T>
       </button>
     </form>
+  );
+}
+
+function MobileQCConfirmation({
+  report,
+  reports = [],
+  currentUser,
+  errorCatalog,
+  onUpdateReport,
+  showToast,
+  onAddErrorCatalogItem
+}: {
+  report: QualityReport;
+  reports?: QualityReport[];
+  currentUser: User | null | undefined;
+  errorCatalog: ErrorCatalogItem[];
+  onUpdateReport?: (report: QualityReport) => void;
+  showToast: (msg: string) => void;
+  onAddErrorCatalogItem?: (item: ErrorCatalogItem) => void;
+}) {
+  const isAuthorized = currentUser?.role === UserRole.ADMIN ||
+    currentUser?.department?.toUpperCase().includes("QUẢN LÝ CHẤT LƯỢNG") ||
+    currentUser?.department?.toUpperCase().includes("QC") ||
+    currentUser?.role === UserRole.REVIEWER;
+
+  const [selectedCode, setSelectedCode] = useState(report.errorCode || "");
+  const [isOpen, setIsOpen] = useState(false);
+
+  // States for adding a new error code on mobile
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newErrorCode, setNewErrorCode] = useState("");
+  const [newErrorName, setNewErrorName] = useState("");
+  const [newErrorDesc, setNewErrorDesc] = useState("");
+
+  const isRepeated = React.useMemo(() => {
+    const codeToCheck = selectedCode || report.errorCode;
+    if (!codeToCheck) return false;
+    const sameCodeReports = (reports || []).filter(item => !item.isDeleted && item.errorCode === codeToCheck);
+    if (report.errorCode === codeToCheck) {
+      return sameCodeReports.length > 1;
+    } else {
+      return sameCodeReports.length > 0;
+    }
+  }, [selectedCode, report.errorCode, reports]);
+
+  const repeatCount = React.useMemo(() => {
+    const codeToCheck = selectedCode || report.errorCode;
+    if (!codeToCheck) return 0;
+    return (reports || []).filter(item => !item.isDeleted && item.errorCode === codeToCheck).length;
+  }, [selectedCode, report.errorCode, reports]);
+
+
+
+  const handleConfirm = () => {
+    if (!selectedCode) {
+      showToast("Vui lòng chọn một mã lỗi để xác nhận.");
+      return;
+    }
+
+    const dateObj = new Date();
+    const hrs = String(dateObj.getHours()).padStart(2, '0');
+    const mns = String(dateObj.getMinutes()).padStart(2, '0');
+    const scs = String(dateObj.getSeconds()).padStart(2, '0');
+    const dd = String(dateObj.getDate()).padStart(2, '0');
+    const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const yy = String(dateObj.getFullYear()).slice(-2);
+    const stamp = `${hrs}:${mns}:${scs} ${dd}/${mm}/${yy}`;
+
+    const updated = {
+      ...report,
+      errorCode: selectedCode,
+      qcConfirmed: true,
+      qcConfirmedBy: currentUser?.fullName || "QC Chi Nhánh",
+      qcConfirmedAt: stamp
+    };
+
+    if (onUpdateReport) {
+      onUpdateReport(updated);
+    }
+    showToast("Đã xác nhận mã lỗi QC thành công! 🛡️");
+  };
+
+  const handleCancelConfirm = () => {
+    const updated = {
+      ...report,
+      qcConfirmed: false,
+      qcConfirmedBy: undefined,
+      qcConfirmedAt: undefined
+    };
+    if (onUpdateReport) {
+      onUpdateReport(updated);
+    }
+    showToast("Đã hủy xác nhận mã lỗi.");
+  };
+
+  const { detectedIsBBM, detectedIsBBC } = React.useMemo(() => {
+    let isBBM = report.factory?.toUpperCase().includes("BBM") || report.uploaderDepartment?.toUpperCase().includes("BBM");
+    let isBBC = report.factory?.toUpperCase().includes("BBC") || report.uploaderDepartment?.toUpperCase().includes("BBC");
+
+    if (!isBBM && !isBBC) {
+      const textToSearch = `${report.content || ""} ${report.notes || ""} ${report.directives?.map(d => d.text).join(" ") || ""}`.toLowerCase();
+      
+      const bbmKeywords = [
+        "màng", "túi", "cuộn", "ghép", "chia", "cắt", "mềm", "film", "opp", "cpp", "laminat", "quai", "đế túi", "hàn nhiệt", "nhăn màng", "xước màng", "bong tách", "lỗi in"
+      ];
+      const bbcKeywords = [
+        "cứng", "nhựa", "hộp", "chai", "nắp", "bavia", "phôi", "thổi", "ép", "biến dạng", "cong vênh", "cháy khét", "vết cháy", "thiếu liệu", "nhựa bavia"
+      ];
+
+      const bbmScore = bbmKeywords.filter(kw => textToSearch.includes(kw)).length;
+      const bbcScore = bbcKeywords.filter(kw => textToSearch.includes(kw)).length;
+
+      if (bbmScore > bbcScore) {
+        isBBM = true;
+      } else if (bbcScore > bbmScore) {
+        isBBC = true;
+      }
+    }
+
+    return { detectedIsBBM: !!isBBM, detectedIsBBC: !!isBBC };
+  }, [report]);
+
+  const [qcCategoryFilter, setQcCategoryFilter] = useState<"BBM" | "BBC" | "ALL" | "AUTO">("AUTO");
+  const [descExpanded, setDescExpanded] = useState(false);
+
+  const actualCategoryFilter = React.useMemo(() => {
+    if (qcCategoryFilter !== "AUTO") return qcCategoryFilter;
+    if (detectedIsBBM && !detectedIsBBC) return "BBM";
+    if (detectedIsBBC && !detectedIsBBM) return "BBC";
+    return "ALL";
+  }, [qcCategoryFilter, detectedIsBBM, detectedIsBBC]);
+
+  const [newErrorCategory, setNewErrorCategory] = useState<"BBM" | "BBC">(() => {
+    if (detectedIsBBC && !detectedIsBBM) return "BBC";
+    return "BBM";
+  });
+
+  const filteredErrors = errorCatalog.filter(x => {
+    if (actualCategoryFilter === "BBM") return x.category === "BBM";
+    if (actualCategoryFilter === "BBC") return x.category === "BBC";
+    return true;
+  });
+
+  const matchedErr = errorCatalog.find(x => x.code === (report.errorCode || selectedCode));
+
+  const showPulse = isAuthorized && !report.qcConfirmed && !selectedCode;
+  const showConfirmPulse = isAuthorized && !report.qcConfirmed && selectedCode;
+
+  return (
+    <div className="mt-2 text-xs">
+      {report.qcConfirmed ? (
+        <div className="p-1 bg-slate-50 border border-slate-200 rounded-lg">
+          <div className="space-y-0.5 bg-white p-1.5 rounded-lg border border-slate-100 relative pr-12">
+            <div className="text-[10.5px] text-slate-750 leading-normal font-bold flex items-center justify-between">
+              <div className="flex items-center gap-1 flex-wrap">
+                <span className="text-emerald-600 mr-0.5">🛡️</span>
+                <span translate="no" className="notranslate">QC xác nhận: </span>
+                <span className="font-black text-rose-700">[{report.errorCode}]</span> - {matchedErr?.name || <span translate="no" className="notranslate">Lỗi chung</span>}
+                {isRepeated && (
+                  <span className="text-[8.5px] font-black bg-rose-600 text-white px-1.5 py-0.5 rounded flex items-center gap-0.5 leading-none select-none uppercase shadow-3xs scale-95">
+                    <AlertTriangle className="w-2 h-2 drop-shadow-[0_0_6px_rgba(255,229,0,1)] animate-[pulse_0.4s_infinite] shrink-0 scale-110" fill="#FFE500" stroke="#000000" strokeWidth={2.5} />
+                    <T><span translate="no" className="notranslate">LẶP LẠI ({repeatCount})</span></T>
+                  </span>
+                )}
+              </div>
+              {isAuthorized && (
+                <button
+                  type="button"
+                  onClick={handleCancelConfirm}
+                  className="absolute top-1 right-1 text-[8.5px] text-rose-600 hover:text-rose-800 font-black bg-rose-50 hover:bg-rose-100 border border-rose-200 px-1.5 py-0.5 rounded-lg transition-all cursor-pointer shadow-3xs"
+                >
+                  <span translate="no" className="notranslate">Hủy</span>
+                </button>
+              )}
+            </div>
+            {matchedErr?.description && (
+              <div 
+                onClick={() => setDescExpanded(!descExpanded)}
+                className={`text-[9.5px] text-slate-500 italic cursor-pointer hover:text-slate-700 transition-colors ${descExpanded ? "" : "line-clamp-1"}`}
+                title="Bấm để xem đầy đủ / thu gọn diễn giải"
+              >
+                <span translate="no" className="notranslate">Diễn giải: </span>{matchedErr.description}
+                {!descExpanded && matchedErr.description.length > 50 && (
+                  <span className="text-[8.5px] text-blue-600 ml-1 select-none font-bold notranslate" translate="no"> (xem thêm)</span>
+                )}
+                {descExpanded && (
+                  <span className="text-[8.5px] text-blue-600 ml-1 select-none font-bold notranslate" translate="no"> (thu gọn)</span>
+                )}
+              </div>
+            )}
+            <div className="text-[8.5px] text-slate-400 font-semibold select-none border-t border-slate-100 pt-0.5 mt-0.5 flex flex-col gap-1 sm:flex-row sm:justify-between sm:items-center">
+              <span translate="no" className="notranslate">Duyệt: {report.qcConfirmedBy} ({report.qcConfirmedAt})</span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-1">
+          {isAuthorized ? (
+            <div className="space-y-1.5">
+              {/* Segmented control to let QC switch categories or override auto detection */}
+              <div className="flex items-center justify-between gap-1 w-full flex-wrap">
+                <div className="flex items-center gap-1">
+                  <span className="text-[8.5px] text-slate-400 font-extrabold uppercase select-none">Danh mục:</span>
+                  <div className="flex rounded bg-slate-100 p-0.5 border border-slate-200/60">
+                    <button
+                      type="button"
+                      onClick={() => setQcCategoryFilter("AUTO")}
+                      className={`px-1.5 rounded text-[8.5px] py-0.5 font-black cursor-pointer transition-all ${
+                        qcCategoryFilter === "AUTO"
+                          ? "bg-emerald-600 text-white shadow-3xs"
+                          : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      <span className="notranslate" translate="no">Tự động ({actualCategoryFilter})</span>
+                    </button>
+                    {(["BBM", "BBC", "ALL"] as const).map((cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setQcCategoryFilter(cat)}
+                        className={`px-1.5 py-0.5 rounded text-[8.5px] font-black cursor-pointer transition-all ${
+                          qcCategoryFilter === cat
+                            ? "bg-blue-600 text-white shadow-3xs"
+                            : "text-slate-500 hover:text-slate-800"
+                        }`}
+                      >
+                        <span className="notranslate" translate="no">
+                          {cat === "ALL" ? "Tất cả" : cat}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {isRepeated && (
+                  <span className="text-[9.5px] font-black bg-rose-600 text-white px-2.5 py-1.5 rounded-md flex items-center gap-1 leading-none select-none uppercase animate-[pulse_2s_infinite] shadow-[0_0_10px_rgba(225,29,72,0.35)] shrink-0">
+                    <AlertTriangle className="w-2.5 h-2.5 drop-shadow-[0_0_6px_rgba(255,229,0,1)] animate-[pulse_0.4s_infinite] shrink-0 scale-110" fill="#FFE500" stroke="#000000" strokeWidth={2.5} />
+                    <T><span translate="no" className="notranslate">LẶP LẠI ({repeatCount})</span></T>
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1.5 relative w-full">
+                <div className="relative flex-1 min-w-0 h-[34px]">
+                  {/* Visual design layer representing the chosen state or placeholder */}
+                  <div
+                    className={`absolute inset-0 bg-white border rounded-lg text-[9.5px] font-bold px-2 py-1 flex items-center justify-between gap-1 leading-tight pointer-events-none transition-all ${
+                      selectedCode 
+                        ? "text-slate-900 font-extrabold" 
+                        : "text-slate-600 font-semibold italic"
+                    } ${
+                      showPulse 
+                        ? 'border-emerald-500 ring-2 ring-emerald-400/40 bg-emerald-50/25 shadow-[0_0_10px_rgba(16,185,129,0.35)] animate-[pulse_2s_infinite]' 
+                        : 'border-slate-300'
+                    }`}
+                  >
+                    <span className="line-clamp-2 notranslate flex-1 pr-4" translate="no">
+                      {selectedCode ? `[${selectedCode}] ${matchedErr?.name || ""}` : "Phụ trách P.QLCL Chi Nhánh chọn mã lỗi"}
+                    </span>
+                    <ChevronDown className="w-3.5 h-3.5 shrink-0 text-slate-500 absolute right-2" />
+                  </div>
+
+                  {/* Completely transparent select laid on top */}
+                  <select
+                    value={selectedCode}
+                    onChange={(e) => setSelectedCode(e.target.value)}
+                    translate="no"
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer notranslate"
+                  >
+                    <option value="" translate="no" className="notranslate font-semibold italic text-slate-500">
+                      Phụ trách P.QLCL Chi Nhánh chọn mã lỗi
+                    </option>
+                    {filteredErrors.map(x => (
+                      <option key={x.code} value={x.code} translate="no" className="notranslate font-bold text-slate-800">
+                        [{x.code}] {x.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+              <button
+                type="button"
+                onClick={() => setShowAddModal(true)}
+                className="p-2 h-[34px] w-[34px] bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg border border-slate-300 cursor-pointer flex items-center justify-center shrink-0 hover:text-blue-600 hover:border-blue-350 transition-colors"
+                title="Thêm mã lỗi mới trực tiếp"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConfirm}
+                className={`px-3 h-[34px] text-white font-extrabold text-[11px] rounded-lg border cursor-pointer uppercase transition-all shadow-sm flex items-center justify-center gap-1 shrink-0 ${showConfirmPulse ? 'bg-emerald-500 border-emerald-400 hover:bg-emerald-600 animate-[pulse_1.5s_infinite] shadow-[0_0_12px_rgba(16,185,129,0.55)] font-black' : 'bg-emerald-600 hover:bg-emerald-700 border-emerald-700'}`}
+              >
+                <span translate="no" className="notranslate">Xác nhận</span>
+              </button>
+            </div>
+          </div>
+          ) : (
+            <div className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] text-slate-500 italic flex items-center gap-1.5 py-1">
+              <span>⏳</span>
+              <span translate="no" className="notranslate">Chờ Trưởng phòng QC chọn và xác nhận mã lỗi này...</span>
+            </div>
+          )}
+          {selectedCode && !report.qcConfirmed && matchedErr && (
+            <div className="text-[10px] text-slate-650 bg-white p-2 rounded-lg border border-slate-200 leading-relaxed">
+              <span className="font-bold text-slate-700 block mb-0.5 notranslate" translate="no">Diễn giải:</span>
+              {matchedErr.description}
+            </div>
+          )}
+        </div>
+      )}
+
+      {showAddModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-[2px] z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-sm overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="px-4 py-3 bg-slate-50 border-b border-slate-150 flex items-center justify-between">
+              <span className="font-bold text-slate-800 text-[11px] uppercase tracking-wider notranslate" translate="no">Thêm mã lỗi mới</span>
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            {/* Form content */}
+            <div className="p-4 space-y-3 overflow-y-auto text-left">
+              {/* Category */}
+              <div>
+                <label className="block text-[9.5px] font-black text-slate-500 uppercase mb-1 notranslate" translate="no">Phân loại ngành</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewErrorCategory("BBM");
+                      if (!newErrorCode || newErrorCode.startsWith("ERM") || newErrorCode.startsWith("ERC")) {
+                        const num = String(errorCatalog.filter(x => x.category === "BBM").length + 1).padStart(4, "0");
+                        setNewErrorCode(`ERM${num}`);
+                      }
+                    }}
+                    className={`py-1.5 px-2 rounded border text-[10px] font-bold text-center cursor-pointer transition-all ${newErrorCategory === "BBM" ? "bg-blue-50 border-blue-400 text-blue-700" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+                  >
+                    <span className="notranslate" translate="no">Bao bì mềm (BBM)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewErrorCategory("BBC");
+                      if (!newErrorCode || newErrorCode.startsWith("ERM") || newErrorCode.startsWith("ERC")) {
+                        const num = String(errorCatalog.filter(x => x.category === "BBC").length + 1).padStart(4, "0");
+                        setNewErrorCode(`ERC${num}`);
+                      }
+                    }}
+                    className={`py-1.5 px-2 rounded border text-[10px] font-bold text-center cursor-pointer transition-all ${newErrorCategory === "BBC" ? "bg-blue-50 border-blue-400 text-blue-700" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+                  >
+                    <span className="notranslate" translate="no">Bao bì cứng (BBC)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Code */}
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-[9.5px] font-black text-slate-500 uppercase notranslate" translate="no">Mã lỗi</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const prefix = newErrorCategory === "BBM" ? "ERM" : "ERC";
+                      const num = String(errorCatalog.filter(x => x.category === newErrorCategory).length + 1).padStart(4, "0");
+                      setNewErrorCode(`${prefix}${num}`);
+                    }}
+                    className="text-[9px] font-bold text-blue-600 hover:underline cursor-pointer"
+                  >
+                    <span className="notranslate" translate="no">Gợi ý mã</span>
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={newErrorCode}
+                  onChange={(e) => setNewErrorCode(e.target.value.toUpperCase())}
+                  placeholder="Ví dụ: ERM0105"
+                  className="w-full border border-slate-200 rounded p-1.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-blue-500 font-bold text-slate-800"
+                />
+              </div>
+
+              {/* Name */}
+              <div>
+                <label className="block text-[9.5px] font-black text-slate-500 uppercase mb-1 notranslate" translate="no">Tên lỗi</label>
+                <input
+                  type="text"
+                  value={newErrorName}
+                  onChange={(e) => setNewErrorName(e.target.value)}
+                  placeholder="Ví dụ: Co màng, Bavia, Trầy xước"
+                  className="w-full border border-slate-200 rounded p-1.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-800 font-medium"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-[9.5px] font-black text-slate-500 uppercase mb-1 notranslate" translate="no">Diễn giải chi tiết</label>
+                <textarea
+                  value={newErrorDesc}
+                  onChange={(e) => setNewErrorDesc(e.target.value)}
+                  placeholder="Mô tả cụ thể về biểu hiện lỗi hoặc cách nhận biết..."
+                  rows={3}
+                  className="w-full border border-slate-200 rounded p-1.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-800 leading-normal"
+                />
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="px-4 py-3 bg-slate-50 border-t border-slate-150 flex items-center justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="px-3 py-1.5 border border-slate-200 text-slate-500 hover:bg-slate-100 rounded text-[10px] font-bold transition-all cursor-pointer"
+              >
+                <span className="notranslate" translate="no">Hủy</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!newErrorCode.trim()) {
+                    showToast("Vui lòng điền mã lỗi!");
+                    return;
+                  }
+                  if (!newErrorName.trim()) {
+                    showToast("Vui lòng điền tên lỗi!");
+                    return;
+                  }
+                  if (errorCatalog.some(x => x.code.toUpperCase() === newErrorCode.trim().toUpperCase())) {
+                    showToast(`Mã lỗi [${newErrorCode.trim().toUpperCase()}] đã tồn tại trong danh mục!`);
+                    return;
+                  }
+
+                  const dateObj = new Date();
+                  const dd = String(dateObj.getDate()).padStart(2, '0');
+                  const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+                  const yy = String(dateObj.getFullYear()).slice(-2);
+                  const createdAtStr = `${dd}/${mm}/${yy}`;
+
+                  const newItem: ErrorCatalogItem = {
+                    code: newErrorCode.trim().toUpperCase(),
+                    category: newErrorCategory,
+                    name: newErrorName.trim(),
+                    description: newErrorDesc.trim() || `Lỗi ${newErrorName.trim()} ngành ${newErrorCategory}`,
+                    createdAt: createdAtStr
+                  };
+
+                  if (onAddErrorCatalogItem) {
+                    onAddErrorCatalogItem(newItem);
+                    setSelectedCode(newItem.code);
+                  }
+                  setShowAddModal(false);
+                  setNewErrorCode("");
+                  setNewErrorName("");
+                  setNewErrorDesc("");
+                }}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white border border-blue-700 rounded text-[10px] font-bold transition-all shadow-sm cursor-pointer"
+              >
+                <span className="notranslate" translate="no">Thêm mới</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -847,7 +1321,11 @@ export default function MobileFrame({
   onAddForumTopic,
   onAddForumReply,
   onUpdateForumTopicStatus,
-  onToggleForumTopicPin
+  onToggleForumTopicPin,
+  errorCatalog = [],
+  onAddErrorCatalogItem,
+  isQcFeatureEnabled = true,
+  onToggleQcFeature
 }: MobileFrameProps) {
   const isRealMobile = typeof window !== "undefined" && (
     window.innerWidth < 1024 || 
@@ -1228,6 +1706,54 @@ export default function MobileFrame({
     }
   };
 
+  const handleAIDsaAnalyze = async (report: QualityReport) => {
+    setAiAnalysisReport(report);
+    setAiAnalysisText("");
+    setIsAnalyzing(true);
+    setActiveAiTab('analysis');
+
+    const isReportDnp = report && (
+      report.factory?.includes("DNP") || 
+      report.factory?.includes("BBM") || 
+      report.factory?.includes("BBC")
+    );
+    const companyLabel = isReportDnp ? "DNP" : "Tân Phú";
+
+    setAiChatMessages([
+      {
+        role: 'model',
+        content: `Chào bạn! Tôi là Chuyên gia Trợ lý AI của **${companyLabel}**. Tôi đang tiến hành rà soát các RỦI RO TIỀM ẨN liên quan tới Điểm Sáng này (chẳng hạn như sai lệch kích thước khi chế tạo khuôn mới, rủi ro khách hàng phản đối và quy tắc nghiêm ngặt **TUÂN THỦ TIÊU CHUẨN và YÊU CẦU KHÁCH HÀNG** khi có sự thay đổi). Sau khi đọc kết quả đánh giá rủi ro bên tab kế bên, bạn có thể gửi tin nhắn để hỏi đáp hoặc thảo luận thêm với tôi!`
+      }
+    ]);
+
+    try {
+      const response = await fetch("/api/analyze-dsa", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          factory: report.factory,
+          category: report.category,
+          content: report.content,
+          notes: report.notes,
+          directives: report.directives,
+        }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAiAnalysisText(data.analysis);
+      } else {
+        setAiAnalysisText(`### ❌ Có lỗi xảy ra khi phân tích:\n${data.error || "Không rõ nguyên nhân."}`);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setAiAnalysisText(`### ❌ Lỗi kết nối máy chủ:\n${err.message || "Không thể gửi yêu cầu phân tích."}`);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   const handleSendAiChatMessage = async () => {
     if (!aiChatInput.trim() || isAiSendingChat || !aiAnalysisReport) return;
     const userText = aiChatInput.trim();
@@ -1253,6 +1779,8 @@ export default function MobileFrame({
             content: aiAnalysisReport.content,
             notes: aiAnalysisReport.notes,
             directives: aiAnalysisReport.directives,
+            reportType: aiAnalysisReport.reportType,
+            isSpotlight: aiAnalysisReport.isSpotlight,
           },
           messages: updatedMessages,
           aiKnowledgeText: aiKnowledgeText || "",
@@ -1363,7 +1891,7 @@ export default function MobileFrame({
   const [mobileForumReplyMessage, setMobileForumReplyMessage] = useState("");
   const [mobileForumSearchQuery, setMobileForumSearchQuery] = useState("");
   const [mobileForumCategoryFilter, setMobileForumCategoryFilter] = useState<string>("ALL");
-  const [mobileStatsSubTab, setMobileStatsSubTab] = useState<"NHAN_SU" | "CHAT_LUONG">("NHAN_SU");
+  const [mobileStatsSubTab, setMobileStatsSubTab] = useState<"NHAN_SU" | "CHAT_LUONG" | "TIEN_DO">("TIEN_DO");
   const [mobileFeedSubTab, setMobileFeedSubTab] = useState<"FEED" | "PROPOSAL">("FEED");
   const [showTrash, setShowTrash] = useState(false);
   const [mobileBranchFilter, setMobileBranchFilter] = useState<string>("Tất cả");
@@ -1733,9 +2261,11 @@ export default function MobileFrame({
 
   useEffect(() => {
     if (activeBottomTab === "PHAN_TICH" && currentUser?.role !== UserRole.ADMIN) {
-      setMobileStatsSubTab("CHAT_LUONG");
+      if (mobileStatsSubTab === "NHAN_SU") {
+        setMobileStatsSubTab("TIEN_DO");
+      }
     }
-  }, [activeBottomTab, currentUser]);
+  }, [activeBottomTab, currentUser, mobileStatsSubTab]);
 
   const toggleLike = (reportId: string) => {
     const report = reports.find((r) => r.id === reportId);
@@ -3560,39 +4090,60 @@ App Link: ${window.location.origin}`;
               )}
             </p>
 
-            {/* Sub-tab Switcher matching PWA mobile styles - Only show for Admin */}
-            {currentUser?.role === UserRole.ADMIN && (
-              <div className="flex bg-slate-100 p-1 rounded-xl text-[10px] font-black select-none border border-slate-200">
+            {/* Sub-tab Switcher matching PWA mobile styles */}
+            <div className="flex bg-slate-100 p-1 rounded-xl text-[10px] font-black select-none border border-slate-200">
+              {currentUser?.role === UserRole.ADMIN && (
                 <button
                   type="button"
                   onClick={() => setMobileStatsSubTab("NHAN_SU")}
-                  className={`flex-1 py-2.5 rounded-lg transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 border-none ${
+                  className={`flex-1 py-2 rounded-lg transition-all cursor-pointer text-center flex items-center justify-center gap-1 border-none ${
                     mobileStatsSubTab === "NHAN_SU"
                       ? "bg-[#1d4ed8] text-white shadow-xs font-extrabold"
                       : "text-slate-600 hover:text-slate-800 bg-transparent"
                   }`}
                 >
                   <span>👥</span>
-                  <T><span translate="no" className="notranslate">NHÂN SỰ ONLINE</span></T>
+                  <T><span translate="no" className="notranslate">NHÂN SỰ</span></T>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setMobileStatsSubTab("CHAT_LUONG")}
-                  className={`flex-1 py-2.5 rounded-lg transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 border-none ${
-                    mobileStatsSubTab === "CHAT_LUONG"
-                      ? "bg-[#1d4ed8] text-white shadow-xs font-extrabold"
-                      : "text-slate-600 hover:text-slate-800 bg-transparent"
-                  }`}
-                >
-                  <span>📊</span>
-                  <T><span translate="no" className="notranslate">BIỂU ĐỒ CHẤT LƯỢNG</span></T>
-                </button>
-              </div>
-            )}
+              )}
+              <button
+                type="button"
+                onClick={() => setMobileStatsSubTab("TIEN_DO")}
+                className={`flex-1 py-2 rounded-lg transition-all cursor-pointer text-center flex items-center justify-center gap-1 border-none ${
+                  mobileStatsSubTab === "TIEN_DO"
+                    ? "bg-[#1d4ed8] text-white shadow-xs font-extrabold"
+                    : "text-slate-600 hover:text-slate-800 bg-transparent"
+                }`}
+              >
+                <span>🎯</span>
+                <T><span translate="no" className="notranslate">TIẾN ĐỘ CẢI TIẾN</span></T>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileStatsSubTab("CHAT_LUONG")}
+                className={`flex-1 py-2 rounded-lg transition-all cursor-pointer text-center flex items-center justify-center gap-1 border-none ${
+                  mobileStatsSubTab === "CHAT_LUONG"
+                    ? "bg-[#1d4ed8] text-white shadow-xs font-extrabold"
+                    : "text-slate-600 hover:text-slate-800 bg-transparent"
+                }`}
+              >
+                <span>📊</span>
+                <T><span translate="no" className="notranslate">BIỂU ĐỒ</span></T>
+              </button>
+            </div>
           </div>
 
           {mobileStatsSubTab === "NHAN_SU" ? (
             <StatisticsDashboard users={users} branches={branches} />
+          ) : mobileStatsSubTab === "TIEN_DO" ? (
+            <ProgressTrackingDashboard
+              reports={reports}
+              users={users}
+              currentUser={currentUser}
+              onUpdateReport={onUpdateReport}
+              onAddBroadcast={onAddBroadcast}
+              showToast={showToast}
+            />
           ) : (
             <>
 
@@ -4206,6 +4757,18 @@ App Link: ${window.location.origin}`;
                     </div>
                   )}
 
+                  {(report.reportType === "KPH" || report.isAbnormal) && isQcFeatureEnabled && (
+                    <MobileQCConfirmation
+                      report={report}
+                      reports={reports}
+                      currentUser={currentUser}
+                      errorCatalog={errorCatalog}
+                      onUpdateReport={onUpdateReport}
+                      showToast={showToast}
+                      onAddErrorCatalogItem={onAddErrorCatalogItem}
+                    />
+                  )}
+
                   {(report.reportType === "KPH" || report.isAbnormal) && (
                     <button
                       onClick={() => handleAIAnalyze(report)}
@@ -4213,6 +4776,16 @@ App Link: ${window.location.origin}`;
                     >
                       <Bot className="w-4 h-4 text-blue-100" />
                       <span translate="no" className="notranslate">Phân tích AI (5-Why)</span>
+                    </button>
+                  )}
+
+                  {(report.reportType === "DSA" || report.isSpotlight) && (
+                    <button
+                      onClick={() => handleAIDsaAnalyze(report)}
+                      className="mt-3 w-full flex items-center justify-center gap-1.5 px-3 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-[11px] rounded-lg shadow-sm cursor-pointer hover:shadow active:scale-98 transition-all select-none uppercase tracking-wider"
+                    >
+                      <Bot className="w-4 h-4 text-emerald-100" />
+                      <span translate="no" className="notranslate">AI Phân tích rủi ro</span>
                     </button>
                   )}
 
@@ -4783,7 +5356,7 @@ App Link: ${window.location.origin}`;
                     )}
 
                     {/* ĐĂNG KÝ NHÂN RỘNG list display */}
-                    {(report.reportType === "DSA" || report.isSpotlight) && (
+                    {(report.reportType === "DSA" || report.isSpotlight || (report.reportType === "KPH" && report.resolutions?.some(res => res.status === "Đã xử lý"))) && (
                       <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-col gap-1.5" id={`replication-section-${report.id}`}>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1 text-[10px] font-extrabold text-emerald-700 uppercase">
@@ -7679,17 +8252,33 @@ App Link: ${window.location.origin}`}
               className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full flex flex-col h-[80vh] overflow-hidden animate-scaleIn select-text"
             >
               {/* Header */}
-              <div className="p-4 border-b border-slate-150 bg-gradient-to-r from-blue-50 to-indigo-50 flex items-center justify-between select-none">
+              <div className={`p-4 border-b border-slate-150 ${
+                aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                  ? "bg-gradient-to-r from-emerald-50 to-teal-50"
+                  : "bg-gradient-to-r from-blue-50 to-indigo-50"
+              } flex items-center justify-between select-none`}>
                 <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+                  <div className={`w-9 h-9 rounded-xl bg-gradient-to-tr ${
+                    aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                      ? "from-emerald-600 to-teal-600 shadow-emerald-500/20"
+                      : "from-blue-600 to-indigo-600 shadow-blue-500/20"
+                  } flex items-center justify-center text-white shadow-md`}>
                     <Bot className="w-4 h-4 animate-pulse" />
                   </div>
                   <div>
                     <h3 className="font-extrabold text-[12px] text-slate-850">
                       <span translate="no" className="notranslate">{aiAssistantTitle}</span>
                     </h3>
-                    <p className="text-[9px] font-bold text-indigo-600 uppercase tracking-wider">
-                      <span translate="no" className="notranslate">Phân tích 5-Why 4M1E1I</span>
+                    <p className={`text-[9px] font-bold ${
+                      aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                        ? "text-emerald-600"
+                        : "text-indigo-600"
+                    } uppercase tracking-wider`}>
+                      <span translate="no" className="notranslate">
+                        {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                          ? "Phân tích rủi ro 4M1E1I"
+                          : "Phân tích 5-Why 4M1E1I"}
+                      </span>
                     </p>
                   </div>
                 </div>
@@ -7741,8 +8330,14 @@ App Link: ${window.location.origin}`}
                   {/* Input report summary card */}
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
                     <div className="flex items-center justify-between text-[9px] font-extrabold text-slate-400 uppercase tracking-wider select-none">
-                      <span translate="no" className="notranslate">Thông tin sự cố:</span>
-                      <span className="px-1.5 py-0.2 bg-red-100 text-red-800 border border-red-200 rounded text-[8px]">KPH</span>
+                      <span translate="no" className="notranslate">
+                        {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight ? "Thông tin điểm sáng:" : "Thông tin sự cố:"}
+                      </span>
+                      {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight ? (
+                        <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded text-[8px]">DSA</span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 bg-red-100 text-red-800 border border-red-200 rounded text-[8px]">KPH</span>
+                      )}
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-[11px]">
                       <div>
@@ -7760,7 +8355,9 @@ App Link: ${window.location.origin}`}
                     </div>
                     <div className="text-[11px] pt-1.5 border-t border-slate-200/60">
                       <span className="text-slate-400 block select-none">
-                        <span translate="no" className="notranslate">Nội dung lỗi:</span>
+                        <span translate="no" className="notranslate">
+                          {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight ? "Nội dung sáng kiến:" : "Nội dung lỗi:"}
+                        </span>
                       </span>
                       <p className="text-slate-700 font-medium leading-relaxed line-clamp-3">{aiAnalysisReport.content}</p>
                     </div>
@@ -7771,14 +8368,34 @@ App Link: ${window.location.origin}`}
                     {isAnalyzing ? (
                       <div className="absolute inset-0 flex flex-col items-center justify-center p-4 space-y-3 select-none">
                         <div className="relative">
-                          <div className="w-12 h-12 rounded-full border-4 border-indigo-100 border-t-indigo-600 animate-spin"></div>
-                          <div className="absolute inset-0 flex items-center justify-center text-indigo-600">
+                          <div className={`w-12 h-12 rounded-full border-4 ${
+                            aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                              ? "border-emerald-100 border-t-emerald-600"
+                              : "border-indigo-100 border-t-indigo-600"
+                          } animate-spin`}></div>
+                          <div className={`absolute inset-0 flex items-center justify-center ${
+                            aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                              ? "text-emerald-600"
+                              : "text-indigo-600"
+                          }`}>
                             <Brain className="w-5 h-5 animate-pulse" />
                           </div>
                         </div>
                         <div className="text-center">
-                          <p className="text-[11px] font-black text-slate-700 animate-pulse"><span translate="no" className="notranslate">AI đang phân tích lỗi...</span></p>
-                          <p className="text-[9px] text-slate-400 mt-0.5"><span translate="no" className="notranslate">Đang áp dụng mô hình 5-Why chất lượng Tân Phú</span></p>
+                          <p className="text-[11px] font-black text-slate-750 animate-pulse">
+                            <span translate="no" className="notranslate">
+                              {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                                ? "AI đang phân tích rủi ro..."
+                                : "AI đang phân tích lỗi..."}
+                            </span>
+                          </p>
+                          <p className="text-[9px] text-slate-400 mt-0.5">
+                            <span translate="no" className="notranslate">
+                              {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                                ? "Đang rà soát và đánh giá rủi ro 4M1E1I"
+                                : "Đang áp dụng mô hình 5-Why chất lượng Tân Phú"}
+                            </span>
+                          </p>
                         </div>
                       </div>
                     ) : aiAnalysisText ? (
@@ -7788,7 +8405,13 @@ App Link: ${window.location.origin}`}
                     ) : (
                       <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 select-none">
                         <Bot className="w-8 h-8 mb-2 opacity-50" />
-                        <p className="text-[11px]"><span translate="no" className="notranslate">Bấm nút "Phân tích AI" để bắt đầu</span></p>
+                        <p className="text-[11px]">
+                          <span translate="no" className="notranslate">
+                            {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                              ? "Bấm nút \"AI Phân tích rủi ro\" để bắt đầu"
+                              : "Bấm nút \"Phân tích AI\" để bắt đầu"}
+                          </span>
+                        </p>
                       </div>
                     )}
                   </div>
@@ -7797,10 +8420,20 @@ App Link: ${window.location.origin}`}
                 /* Chat Tab content */
                 <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/40">
                   {/* Top banner */}
-                  <div className="p-2.5 bg-indigo-50 border-b border-indigo-100 flex items-center gap-1.5 select-none flex-shrink-0">
-                    <Sparkles className="w-3.5 h-3.5 text-indigo-600 animate-bounce" />
-                    <span className="text-[10px] font-bold text-indigo-700">
-                      <span translate="no" className="notranslate">Đặt câu hỏi chuyên sâu về lỗi 4M1E1I này</span>
+                  <div className={`p-2.5 border-b flex items-center gap-1.5 select-none flex-shrink-0 ${
+                    aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                      ? "bg-emerald-50 border-emerald-100 text-emerald-700"
+                      : "bg-indigo-50 border-indigo-100 text-indigo-700"
+                  }`}>
+                    <Sparkles className={`w-3.5 h-3.5 animate-bounce ${
+                      aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight ? "text-emerald-600" : "text-indigo-600"
+                    }`} />
+                    <span className="text-[10px] font-bold">
+                      <span translate="no" className="notranslate">
+                        {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                          ? "Hỏi đáp về rủi ro của Điểm Sáng này"
+                          : "Đặt câu hỏi chuyên sâu về lỗi 4M1E1I này"}
+                      </span>
                     </span>
                   </div>
 
@@ -7812,7 +8445,11 @@ App Link: ${window.location.origin}`}
                         className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                       >
                         {msg.role !== 'user' && (
-                          <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white flex-shrink-0 shadow">
+                          <div className={`w-7 h-7 rounded-lg bg-gradient-to-tr ${
+                            aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
+                              ? "from-emerald-600 to-teal-600 shadow-emerald-500/10"
+                              : "from-blue-600 to-indigo-600 shadow-blue-500/10"
+                          } flex items-center justify-center text-white flex-shrink-0 shadow`}>
                             <Bot className="w-3.5 h-3.5" />
                           </div>
                         )}

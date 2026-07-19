@@ -132,6 +132,58 @@ Hãy viết phản hồi bằng tiếng Việt, định dạng Markdown đẹp, 
   }
 });
 
+app.post("/api/analyze-dsa", async (req, res) => {
+  try {
+    const { factory, category, content, notes, directives } = req.body;
+    
+    const ai = getAIInstance();
+
+    const isDnp = factory && (
+      factory.includes("DNP") || 
+      factory.includes("BBM") || 
+      factory.includes("BBC")
+    );
+    const companyName = isDnp ? "DNP" : "Công Ty Cổ Phần Tân Phú Việt Nam";
+    const expertRole = isDnp 
+      ? "chuyên gia quản lý chất lượng 4M1E1I của Công ty DNP" 
+      : "chuyên gia quản lý chất lượng 4M1E1I của Công Ty Cổ Phần Tân Phú Việt Nam";
+
+    const prompt = `
+Bạn là ${expertRole}.
+Nhiệm vụ của bạn là phân tích rủi ro kỹ thuật và vận hành cho báo cáo "Điểm Sáng (DSA)" này. Điểm Sáng ghi nhận một cải tiến, sáng kiến hoặc thực hành tốt, nhưng mọi sự thay đổi trong sản xuất đều tiềm ẩn rủi ro chất lượng cần kiểm soát chặt chẽ theo tinh thần 4M1E1I của ${companyName}.
+
+Thông tin Điểm Sáng:
+- Nhà máy/Xưởng: ${factory || "Không xác định"}
+- Nhóm yếu tố (4M1E1I): ${category || "Không xác định"}
+- Nội dung Điểm Sáng / Sáng kiến: ${content || "Trống"}
+- Ghi chú thêm: ${notes || "Không có"}
+- Các chỉ đạo hiện tại (nếu có): ${directives && directives.length > 0 ? directives.map((d: any) => d.text).join("; ") : "Chưa có"}
+
+Yêu cầu phân tích rủi ro chi tiết:
+1. Phân tích các RỦI RO TIỀM ẨN đối với chất lượng sản phẩm và vận hành:
+   - Thay đổi kỹ thuật: Ví dụ nếu chế tạo khuôn mới hoặc thay đổi cơ cấu, rủi ro về hình dạng, kích thước, biên dạng sản phẩm... khác biệt so với khuôn cũ (đang sản xuất ổn định), ảnh hưởng tới lắp ráp hoặc chất lượng chức năng.
+   - Rủi ro khách hàng không chấp nhận: Khách hàng có thể lo ngại sự thay đổi này làm thay đổi chất lượng sản phẩm, thậm chí sợ người tiêu dùng cuối nghi ngờ là hàng giả/hàng nhái nếu không thông báo trước. Do đó cần kiểm soát quy trình phê duyệt của khách hàng.
+   - Các rủi ro khác liên quan đến 4M1E1I (Thiết bị, Con người, Phương pháp, Nguyên vật liệu, Môi trường, Thông tin).
+2. QUY TẮC TUÂN THỦ TIÊU CHUẨN và YÊU CẦU KHÁCH HÀNG (Compliance with Standards and Customer Requirements):
+   - Nhấn mạnh quy tắc nghiêm ngặt của ${companyName}: TUÂN THỦ TIÊU CHUẨN và YÊU CẦU KHÁCH HÀNG, không tự ý thay đổi quy trình, thông số kỹ thuật hay tiêu chuẩn khi chưa qua phê duyệt chính thức từ các bên liên quan và khách hàng.
+   - Mọi thay đổi phải tuân thủ quy trình kiểm soát thay đổi (MOC - Management of Change), phải được thử nghiệm, đánh giá rủi ro và ký duyệt bởi cấp thẩm quyền (QC, Ban Giám đốc, hoặc Khách hàng).
+3. Đề xuất các Biện pháp Kiểm soát & Phòng ngừa Rủi ro khả thi:
+   - Thử nghiệm (Trial run) và kiểm tra mẫu đầu tiên (First Article Inspection - FAI).
+   - Đo đạc kích thước biên dạng 3D so sánh khuôn cũ và khuôn mới.
+   - Gửi văn bản thông báo hoặc xin phê duyệt mẫu từ Khách hàng trước khi áp dụng.
+   - Đào tạo công nhân về sự thay đổi.
+
+Hãy viết phản hồi bằng tiếng Việt, định dạng Markdown đẹp, rõ ràng, phân cấp tiêu đề rõ ràng, sử dụng bullet points để dễ đọc. Tránh sử dụng ngôn từ lý thuyết suông, hãy hướng tới hành động thực tế tại nhà máy. Tuyệt đối không dùng sai tên pháp nhân (nếu báo cáo này tại nhà máy DNP thì dùng DNP, nếu tại Tân Phú thì dùng Tân Phú, không dùng lẫn lộn). Do không có thẻ chống dịch trong văn bản trả về của AI, hãy trả về văn bản Markdown thông thường.
+`;
+
+    const aiText = await generateContentWithFallback(ai, prompt);
+    res.json({ success: true, analysis: aiText });
+  } catch (error: any) {
+    console.error("AI DSA Analysis Error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.post("/api/chat-5whys", async (req, res) => {
   try {
     const { report, messages } = req.body;
@@ -168,7 +220,28 @@ app.post("/api/chat-5whys", async (req, res) => {
       chatHistoryText += `${roleName}: ${msg.content}\n\n`;
     });
 
-    const prompt = `
+    const isDsa = report.reportType === "DSA" || report.isSpotlight || report.isDsaReport;
+
+    const prompt = isDsa ? `
+Bạn là ${expertRole}. Bạn đang hỗ trợ người dùng phân tích chuyên sâu các RỦI RO TIỀM ẨN của báo cáo "Điểm Sáng (DSA)" này thông qua một cuộc hội thoại chat trực tiếp trong bảng phân tích rủi ro.
+
+Thông tin Điểm Sáng đang thảo luận:
+- Nhà máy/Xưởng: ${factory}
+- Nhóm yếu tố (4M1E1I): ${category}
+- Nội dung Điểm Sáng / Sáng kiến: ${content}
+- Ghi chú thêm: ${notes}
+- Các chỉ đạo hiện tại (nếu có): ${directives}
+
+Nhiệm vụ của bạn:
+1. Hãy trả lời câu hỏi mới nhất của người dùng dưới góc nhìn của một chuyên gia chất lượng dày dạn kinh nghiệm tại ${companyName}.
+2. Trả lời một cách thực tế, tập trung vào việc quản lý rủi ro hiện trường sản xuất, giải thích các yếu tố kỹ thuật (ví dụ kích thước/biên dạng khuôn mới khác khuôn cũ), rủi ro khách hàng không chấp nhận (lo ngại người tiêu dùng hiểu lầm là hàng giả), và quy tắc TUÂN THỦ TIÊU CHUẨN và YÊU CẦU KHÁCH HÀNG khi có bất kỳ sự thay đổi nào.
+3. Hãy phản hồi ngắn gọn, súc tích, dễ hiểu và chuyên nghiệp.
+
+Lịch sử cuộc thảo luận:
+${chatHistoryText}
+
+Hãy viết câu trả lời tiếp theo dưới dạng Markdown thông thường (bằng tiếng Việt), rõ ràng, có phân cấp. Do không có thẻ chống dịch trong văn bản trả về của AI, hãy trả về văn bản Markdown thông thường.
+` : `
 Bạn là ${expertRole}. Bạn đang hỗ trợ người dùng phân tích chuyên sâu báo cáo "Không Phù Hợp (KPH)" này thông qua một cuộc hội thoại chat trực tiếp trong bảng phân tích 5-Why.
 
 Thông tin báo cáo KPH đang thảo luận:

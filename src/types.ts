@@ -102,8 +102,15 @@ export interface QualityReport {
   resolutions?: QualityReportResolution[];
   replications?: QualityReportReplication[];
   reportCode?: string;
+  errorCode?: string; // Mã lỗi từ danh mục (ví dụ ERM0001, ERC0001)
+  qcConfirmed?: boolean;
+  qcConfirmedBy?: string;
+  qcConfirmedAt?: string;
   ratings?: QualityReportRating[];
   badges?: QualityReportBadge[];
+  assignedPersonId?: string;
+  assignedPersonName?: string;
+  assignedPersonRole?: string;
 }
 
 export interface QualityReportBadge {
@@ -352,4 +359,13 @@ export interface ForumReply {
   message: string;
   timestamp: string;
 }
+
+export interface ErrorCatalogItem {
+  code: string;        // Ví dụ: ERM0001, ERC0001
+  category: "BBM" | "BBC"; // BBM (Bao bì mềm), BBC (Bao bì cứng)
+  name: string;        // Tên lỗi (ví dụ: Xước màng, Bavia, Thiếu liệu)
+  description: string; // Diễn giải lỗi rõ ràng
+  createdAt: string;   // dd/mm/yy
+}
+
 

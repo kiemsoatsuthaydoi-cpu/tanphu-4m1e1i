@@ -143,41 +143,61 @@ export function generateNotifications(
         const cleanLog = log.replace(/\s*\(\d{2}:\d{2}:\d{2} \d{2}\/\d{2}\/\d{2}\)\s*$/, "").trim();
 
         const uploaderNameCapitalized = getCleanName(report.uploaderName);
-        let description = `Bản tin của ${uploaderNameCapitalized} tại ${report.factory} vừa thay đổi thông tin.`;
+        let description = "";
         
         const likeMatch = cleanLog.match(/^Lượt thích mới \((.*)\)$/);
+        const shareMatch = cleanLog.match(/^Chia sẻ mới \((.*)\)$/) || cleanLog.match(/^Tiếp nhận mới \((.*)\)$/);
+        const chatMatch = cleanLog.match(/^Tương tác bình luận mới từ (.*?)$/);
+        const dirMatch = cleanLog.match(/^Chỉ đạo mới \((.*?): "(.*)"\)$/);
+        const ratingMatch = cleanLog.match(/^Đánh giá mới \((.*?): (\d+) sao\)$/);
+        const badgeMatch = cleanLog.match(/^Trao huy hiệu mới \((.*?): "(.*?)"\)$/);
+        const revokeBadgeMatch = cleanLog.match(/^Thu hồi huy hiệu \((.*?): "(.*?)"\)$/);
+
         if (likeMatch) {
           const actor = getCleanName(likeMatch[1]);
           const gender = guessGenderPrefix(actor);
           const genderPrefix = gender ? `${gender} ` : "";
           description = `Bản tin của ${uploaderNameCapitalized} vừa được ${genderPrefix}@${actor} thả 1 lượt like.`;
-        } else {
-          const shareMatch = cleanLog.match(/^Chia sẻ mới \((.*)\)$/) || cleanLog.match(/^Tiếp nhận mới \((.*)\)$/);
-          if (shareMatch) {
-            const actor = getCleanName(shareMatch[1]);
-            const gender = guessGenderPrefix(actor);
-            const genderPrefix = gender ? `${gender} ` : "";
-            description = `Bản tin của ${uploaderNameCapitalized} vừa được ${genderPrefix}@${actor} xác nhận tiếp nhận.`;
-          } else {
-            const chatMatch = cleanLog.match(/^Tương tác bình luận mới từ (.*?)$/);
-            if (chatMatch) {
-              const actor = getCleanName(chatMatch[1]);
-              const gender = guessGenderPrefix(actor);
-              const genderPrefix = gender ? `${gender} ` : "";
-              description = `Bản tin của ${uploaderNameCapitalized} vừa nhận bình luận tương tác từ ${genderPrefix}@${actor}.`;
-            } else {
-              const dirMatch = cleanLog.match(/^Chỉ đạo mới \((.*?): "(.*)"\)$/);
-              if (dirMatch) {
-                const actor = getCleanName(dirMatch[1]);
-                const content = dirMatch[2];
-                const gender = guessGenderPrefix(actor);
-                const genderPrefix = gender ? `${gender} ` : "";
-                description = `${genderPrefix}@${actor} vừa ban hành chỉ đạo mới trên bản tin của ${uploaderNameCapitalized}: "${content}"`;
-              } else if (cleanLog.includes("Sửa chi tiết") || cleanLog.includes("Sửa chi nhánh") || cleanLog.includes("Sửa hạng mục 4M1E1I") || cleanLog.includes("Sửa ghi chú") || cleanLog.includes("Thay đổi mức cảnh báo") || cleanLog.includes("Sửa ảnh")) {
-                description = `Bản tin của ${uploaderNameCapitalized} tại ${report.factory} vừa thay đổi: ${cleanLog}.`;
-              }
-            }
-          }
+        } else if (shareMatch) {
+          const actor = getCleanName(shareMatch[1]);
+          const gender = guessGenderPrefix(actor);
+          const genderPrefix = gender ? `${gender} ` : "";
+          description = `Bản tin của ${uploaderNameCapitalized} vừa được ${genderPrefix}@${actor} xác nhận tiếp nhận.`;
+        } else if (chatMatch) {
+          const actor = getCleanName(chatMatch[1]);
+          const gender = guessGenderPrefix(actor);
+          const genderPrefix = gender ? `${gender} ` : "";
+          description = `Bản tin của ${uploaderNameCapitalized} vừa nhận bình luận tương tác từ ${genderPrefix}@${actor}.`;
+        } else if (dirMatch) {
+          const actor = getCleanName(dirMatch[1]);
+          const content = dirMatch[2];
+          const gender = guessGenderPrefix(actor);
+          const genderPrefix = gender ? `${gender} ` : "";
+          description = `${genderPrefix}@${actor} vừa ban hành chỉ đạo mới trên bản tin của ${uploaderNameCapitalized}: "${content}"`;
+        } else if (ratingMatch) {
+          const actor = getCleanName(ratingMatch[1]);
+          const stars = ratingMatch[2];
+          const gender = guessGenderPrefix(actor);
+          const genderPrefix = gender ? `${gender} ` : "";
+          description = `Bản tin của ${uploaderNameCapitalized} vừa được ${genderPrefix}@${actor} đánh giá chất lượng ${stars} sao. ⭐`;
+        } else if (badgeMatch) {
+          const actor = getCleanName(badgeMatch[1]);
+          const badge = badgeMatch[2];
+          const gender = guessGenderPrefix(actor);
+          const genderPrefix = gender ? `${gender} ` : "";
+          description = `Bản tin của ${uploaderNameCapitalized} vừa được ${genderPrefix}@${actor} trao tặng huy hiệu "${badge}". 🏅`;
+        } else if (revokeBadgeMatch) {
+          const actor = getCleanName(revokeBadgeMatch[1]);
+          const badge = revokeBadgeMatch[2];
+          const gender = guessGenderPrefix(actor);
+          const genderPrefix = gender ? `${gender} ` : "";
+          description = `Huy hiệu "${badge}" trên bản tin của ${uploaderNameCapitalized} đã bị ${genderPrefix}@${actor} thu hồi.`;
+        } else if (cleanLog.includes("Sửa chi tiết") || cleanLog.includes("Sửa chi nhánh") || cleanLog.includes("Sửa hạng mục 4M1E1I") || cleanLog.includes("Sửa ghi chú") || cleanLog.includes("Thay đổi mức cảnh báo") || cleanLog.includes("Sửa ảnh")) {
+          description = `Bản tin của ${uploaderNameCapitalized} tại ${report.factory} vừa thay đổi: ${cleanLog}.`;
+        }
+
+        if (!description) {
+          return;
         }
 
         list.push({
