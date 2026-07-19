@@ -20,6 +20,7 @@ export interface User {
   role: UserRole;
   status: UserStatus;
   password?: string;
+  position?: string;
   isOnline?: boolean;
   lastActive?: number;
   company?: string;
@@ -120,7 +121,60 @@ export interface QualityReportBadge {
   giverId: string;
   giverName: string;
   giverRole: string;
+  giverPosition?: string;
   timestamp: string; // dd/mm/yy
+}
+
+export interface BadgePointConfigItem {
+  id: string;
+  keywords: string[];
+  displayName: string;
+  points: number;
+}
+
+export function getBadgeScore(position?: string): number {
+  if (!position) return 0;
+  const clean = position.toLowerCase().normalize("NFC").trim();
+  
+  // Try to load custom badge configs from localStorage
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      const saved = window.localStorage.getItem("4m1e1i_badge_points_config");
+      if (saved) {
+        const customConfigs: BadgePointConfigItem[] = JSON.parse(saved);
+        if (customConfigs && Array.isArray(customConfigs) && customConfigs.length > 0) {
+          for (const config of customConfigs) {
+            if (config.keywords && Array.isArray(config.keywords)) {
+              for (const kw of config.keywords) {
+                const kwClean = kw.toLowerCase().normalize("NFC").trim();
+                if (kwClean && clean.includes(kwClean)) {
+                  return config.points;
+                }
+              }
+            }
+          }
+          // If we have custom configs defined but none matches, we fallback to 0
+          return 0;
+        }
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  if (clean.includes("tổng giám đốc") || clean.includes("tgđ") || clean.includes("tổng gđ")) {
+    return 100;
+  }
+  if (clean.includes("giám đốc") || clean.includes("gđ") || clean.includes("ban giám đốc")) {
+    return 50;
+  }
+  if (clean.includes("trưởng phòng") || clean.includes("phó phòng") || clean.includes("trưởng phân xưởng") || clean.includes("phó phân xưởng")) {
+    return 30;
+  }
+  if (clean.includes("trưởng ca") || clean.includes("phó ca") || clean.includes("ca trưởng") || clean.includes("ca phó")) {
+    return 10;
+  }
+  return 0;
 }
 
 export interface QualityReportRating {

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Star, ChevronDown, ChevronUp, Award, Check } from "lucide-react";
-import { QualityReport, QualityReportRating, User, UserRole } from "../types";
+import { QualityReport, QualityReportRating, User, UserRole, getBadgeScore } from "../types";
 import { T } from "./TranslateText";
 
 interface MobileReportRatingSectionProps {
@@ -559,64 +559,80 @@ export function MobileReportRatingContainer({
               </button>
 
               {/* Badges Dropdown Popover */}
-              {isBadgesMenuOpen && (
-                <div className="absolute right-0 top-7 mt-1.5 w-56 bg-white rounded-xl shadow-xl border border-amber-100 p-2 z-[50] flex flex-col gap-1.5 animate-in fade-in slide-in-from-top-2 duration-150">
-                  <div className="text-[8.5px] uppercase font-black text-amber-800 tracking-wider pb-1.5 border-b border-amber-50 px-1.5 flex items-center justify-between">
-                    <span>🏆 <T>HUY HIỆU ĐÃ NHẬN</T></span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setIsBadgesMenuOpen(false);
-                      }}
-                      className="text-slate-400 hover:text-slate-600 font-bold px-1 text-[10px]"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  <div className="max-h-48 overflow-y-auto space-y-1.5 pr-0.5 scrollbar-thin">
-                    {report.badges.map((badge, idx) => {
-                      const icon = badge.id === "CANH_BAO_KIP_THOI" ? "🚨" :
-                                   badge.id === "CON_MAT_TINH_TUONG" ? "🔍" :
-                                   badge.id === "CHOT_CHAN_RUI_RO" ? "🛡️" :
-                                   badge.id === "THONG_TIN_CHUAN_MUC" ? "📊" :
-                                   badge.id === "DIEM_SANG_TIEU_BIEU" ? "🌟" :
-                                   badge.id === "CO_HOI_VANG" ? "🤝" :
-                                   badge.id === "SANG_KIEN_LAN_TOA" ? "🚀" :
-                                   badge.id === "VUOT_TROI_NANG_SUAT" ? "💎" :
-                                   badge.id === "CHAT_LUONG_VUOT_TROI" ? "🛡️" :
-                                   badge.id === "MOI_TRUONG_5_SAO" ? "✨" :
-                                   badge.id === "THONG_TIN_RO_RANG" ? "📜" :
-                                   badge.id === "VAN_HANH_BEN_BI" ? "🦾" :
-                                   badge.id === "BAO_CHUNG_HE_THONG" ? "🔄" : "🏅";
-                      return (
-                        <div
-                          key={idx}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setIsBadgesMenuOpen(false);
-                            const badgeMapItem = BADGE_PRAISE_MAP[badge.id] || { praises: ["Xin nhiệt liệt biểu dương đóng góp xuất sắc của bạn!"] };
-                            const praisesList = badgeMapItem.praises;
-                            const selectedPraise = praisesList[Math.floor(Math.random() * praisesList.length)];
-                            setSelectedInfoBadge({ ...badge, icon, praise: selectedPraise });
-                          }}
-                          className="flex items-center gap-2 p-1.5 bg-amber-50/20 hover:bg-amber-50 rounded-lg border border-transparent hover:border-amber-100 cursor-pointer transition-all duration-150 text-left"
-                        >
-                          <span className="text-[18px] shrink-0 filter drop-shadow-3xs">{icon}</span>
-                          <div className="flex-1 min-w-0">
-                            <span className="text-[10px] font-extrabold text-slate-800 block truncate notranslate" translate="no">
-                              <T>{badge.name}</T>
-                            </span>
-                            <span className="text-[8px] text-slate-500 block truncate notranslate" translate="no">
-                              <T>Bởi: {badge.giverName}</T>
-                            </span>
+              {isBadgesMenuOpen && (() => {
+                const totalScore = report.badges.reduce((acc, b) => acc + getBadgeScore(b.giverPosition), 0);
+                return (
+                  <div className="absolute right-0 top-7 mt-1.5 w-60 bg-white rounded-xl shadow-xl border border-amber-100 p-2 z-[50] flex flex-col gap-1.5 animate-in fade-in slide-in-from-top-2 duration-150">
+                    <div className="text-[8.5px] uppercase font-black text-amber-800 tracking-wider pb-1.5 border-b border-amber-50 px-1.5 flex items-center justify-between">
+                      <span>🏆 <T>HUY HIỆU ĐÃ NHẬN</T></span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsBadgesMenuOpen(false);
+                        }}
+                        className="text-slate-400 hover:text-slate-600 font-bold px-1 text-[10px]"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto space-y-1.5 pr-0.5 scrollbar-thin">
+                      {report.badges.map((badge, idx) => {
+                        const icon = badge.id === "CANH_BAO_KIP_THOI" ? "🚨" :
+                                     badge.id === "CON_MAT_TINH_TUONG" ? "🔍" :
+                                     badge.id === "CHOT_CHAN_RUI_RO" ? "🛡️" :
+                                     badge.id === "THONG_TIN_CHUAN_MUC" ? "📊" :
+                                     badge.id === "DIEM_SANG_TIEU_BIEU" ? "🌟" :
+                                     badge.id === "CO_HOI_VANG" ? "🤝" :
+                                     badge.id === "SANG_KIEN_LAN_TOA" ? "🚀" :
+                                     badge.id === "VUOT_TROI_NANG_SUAT" ? "💎" :
+                                     badge.id === "CHAT_LUONG_VUOT_TROI" ? "🛡️" :
+                                     badge.id === "MOI_TRUONG_5_SAO" ? "✨" :
+                                     badge.id === "THONG_TIN_RO_RANG" ? "📜" :
+                                     badge.id === "VAN_HANH_BEN_BI" ? "🦾" :
+                                     badge.id === "BAO_CHUNG_HE_THONG" ? "🔄" : "🏅";
+                        const badgeScore = getBadgeScore(badge.giverPosition);
+                        return (
+                          <div
+                            key={idx}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIsBadgesMenuOpen(false);
+                              const badgeMapItem = BADGE_PRAISE_MAP[badge.id] || { praises: ["Xin nhiệt liệt biểu dương đóng góp xuất sắc của bạn!"] };
+                              const praisesList = badgeMapItem.praises;
+                              const selectedPraise = praisesList[Math.floor(Math.random() * praisesList.length)];
+                              setSelectedInfoBadge({ ...badge, icon, praise: selectedPraise });
+                            }}
+                            className="flex items-center gap-2 p-1.5 bg-amber-50/20 hover:bg-amber-50 rounded-lg border border-transparent hover:border-amber-100 cursor-pointer transition-all duration-150 text-left"
+                          >
+                            <span className="text-[18px] shrink-0 filter drop-shadow-3xs">{icon}</span>
+                            <div className="flex-1 min-w-0">
+                              <span className="text-[10px] font-extrabold text-slate-800 block truncate notranslate" translate="no">
+                                <T>{badge.name}</T>
+                              </span>
+                              <span className="text-[8px] text-slate-500 block truncate notranslate" translate="no">
+                                <T>Bởi:</T> {badge.giverName} {badge.giverPosition ? <span className="text-amber-700 font-medium">({badge.giverPosition})</span> : ""}
+                              </span>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200">
+                                +{badgeScore}đ
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
+                    {/* Total point footer */}
+                    <div className="pt-1.5 border-t border-amber-100 px-1.5 flex items-center justify-between text-[9px] font-bold text-amber-900 bg-amber-50/40 rounded-b-lg">
+                      <span><T>TỔNG ĐIỂM:</T></span>
+                      <span className="text-[11px] font-black text-amber-800 bg-amber-200/50 px-2 py-0.5 rounded-full">
+                        {totalScore}đ
+                      </span>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           )}
         </div>

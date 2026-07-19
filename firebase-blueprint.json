@@ -13,6 +13,7 @@
         "role": { "type": "string", "enum": ["STAFF", "REVIEWER", "ADMIN"] },
         "status": { "type": "string", "enum": ["PENDING", "ACTIVE", "LOCKED"] },
         "password": { "type": "string" },
+        "position": { "type": "string", "description": "Job title or position of the user." },
         "isOnline": { "type": "boolean" }
       },
       "required": ["id", "fullName", "phone", "role", "status", "password"]

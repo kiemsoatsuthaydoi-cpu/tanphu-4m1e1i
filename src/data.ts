@@ -107,6 +107,7 @@ export const defaultAdmin: User = {
   role: UserRole.ADMIN,
   status: UserStatus.ACTIVE,
   password: "111222",
+  position: "Trưởng Phòng Quản Lý Chất Lượng",
   isOnline: true
 };
 
@@ -120,7 +121,8 @@ export const initialUsers: User[] = [
     branch: "Văn Phòng Công Ty (TPP-CTY)",
     role: UserRole.ADMIN,
     status: UserStatus.ACTIVE,
-    password: "123456"
+    password: "123456",
+    position: "Ban Tổng Giám Đốc"
   },
   {
     id: "2025.01840",
@@ -130,7 +132,8 @@ export const initialUsers: User[] = [
     branch: "Văn Phòng Công Ty (TPP-CTY)",
     role: UserRole.ADMIN,
     status: UserStatus.ACTIVE,
-    password: "123456"
+    password: "123456",
+    position: "Ban Tổng Giám Đốc"
   },
   {
     id: "2025.01841",
@@ -140,7 +143,8 @@ export const initialUsers: User[] = [
     branch: "Văn Phòng Công Ty (TPP-CTY)",
     role: UserRole.ADMIN,
     status: UserStatus.ACTIVE,
-    password: "123456"
+    password: "123456",
+    position: "Ban Tổng Giám Đốc"
   },
   {
     id: "2025.01842",
@@ -150,7 +154,8 @@ export const initialUsers: User[] = [
     branch: "Văn Phòng Công Ty (TPP-CTY)",
     role: UserRole.ADMIN,
     status: UserStatus.ACTIVE,
-    password: "123456"
+    password: "123456",
+    position: "Ban Tổng Giám Đốc"
   },
   {
     id: "2025.01857",
@@ -160,7 +165,8 @@ export const initialUsers: User[] = [
     branch: "Chi Nhánh Bắc Ninh (TPP-BNI)",
     role: UserRole.REVIEWER,
     status: UserStatus.ACTIVE,
-    password: "123456"
+    password: "123456",
+    position: "Ban Giám Đốc"
   },
   {
     id: "2011.00134",
@@ -170,7 +176,8 @@ export const initialUsers: User[] = [
     branch: "Chi Nhánh Bắc Ninh (TPP-BNI)",
     role: UserRole.REVIEWER,
     status: UserStatus.ACTIVE,
-    password: "123456"
+    password: "123456",
+    position: "Ban Giám Đốc"
   },
   {
     id: "2020.00354",
@@ -180,7 +187,8 @@ export const initialUsers: User[] = [
     branch: "Chi Nhánh Bắc Ninh (TPP-BNI)",
     role: UserRole.REVIEWER,
     status: UserStatus.ACTIVE,
-    password: "123456"
+    password: "123456",
+    position: "Trưởng Ca"
   },
   {
     id: "2022.00129",
@@ -190,7 +198,8 @@ export const initialUsers: User[] = [
     branch: "Chi Nhánh Long An (TPP-LAN)",
     role: UserRole.STAFF,
     status: UserStatus.ACTIVE,
-    password: "123456"
+    password: "123456",
+    position: "Nhân Viên"
   },
   {
     id: "2023.00481",
@@ -200,7 +209,8 @@ export const initialUsers: User[] = [
     branch: "Chi Nhánh Bắc Ninh (TPP-BNI)",
     role: UserRole.STAFF,
     status: UserStatus.ACTIVE,
-    password: "123456"
+    password: "123456",
+    position: "Nhân Viên"
   },
   {
     id: "2024.00912",
@@ -210,7 +220,8 @@ export const initialUsers: User[] = [
     branch: "Nhà máy BBM (DNP-BBM)",
     role: UserRole.REVIEWER,
     status: UserStatus.ACTIVE,
-    password: "123456"
+    password: "123456",
+    position: "Trưởng Phòng"
   }
 ];
 

@@ -1147,6 +1147,7 @@ export default function App() {
   const [regCompany, setRegCompany] = useState("");
   const [regDepartment, setRegDepartment] = useState("");
   const [regBranch, setRegBranch] = useState("");
+  const [regPosition, setRegPosition] = useState("");
   const [regRole, setRegRole] = useState<UserRole>(UserRole.STAFF);
   const [regPassword, setRegPassword] = useState("");
   const [regConfirmPassword, setRegConfirmPassword] = useState("");
@@ -2367,7 +2368,8 @@ export default function App() {
       role: UserRole.STAFF, // employee default
       status: UserStatus.PENDING, // pending default
       password: regPassword,
-      company: regCompanyVal
+      company: regCompanyVal,
+      position: regPosition.trim() || "Nhân Viên"
     };
 
     const sanitizedNew = sanitizeUsers([newUser])[0];
@@ -2388,6 +2390,7 @@ export default function App() {
     setRegPhone("");
     setRegPassword("");
     setRegConfirmPassword("");
+    setRegPosition("");
   };
 
   // Admin controls
@@ -3553,6 +3556,25 @@ export default function App() {
                 </div>
               </div>
 
+              <div>
+                <label className="text-[11px] text-slate-500 font-bold block mb-1">
+                  <T>CHỨC VỤ *</T>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none select-none z-10 text-slate-400">
+                    <UserIcon className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ví dụ: Nhân Viên, Trưởng Ca, Trưởng Phòng..."
+                    value={regPosition}
+                    onChange={(e) => setRegPosition(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-850 shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
               {/* Grid 1: employee ID and phone number - side by side on wide screen, stack on mobile for maximum legibility */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -3868,9 +3890,9 @@ export default function App() {
               <div className="pt-2 select-none">
                 <button
                   type="submit"
-                  disabled={!isRegIdValid || !isRegPhoneValid || !regBranch || !regDepartment || !regFullName.trim() || !regPassword.trim() || regPassword !== regConfirmPassword}
+                  disabled={!isRegIdValid || !isRegPhoneValid || !regBranch || !regDepartment || !regFullName.trim() || !regPassword.trim() || regPassword !== regConfirmPassword || !regPosition.trim()}
                   className={`w-full py-3.5 text-white rounded-xl text-xs font-bold uppercase transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer ${
-                    (!isRegIdValid || !isRegPhoneValid || !regBranch || !regDepartment || !regFullName.trim() || !regPassword.trim() || regPassword !== regConfirmPassword)
+                    (!isRegIdValid || !isRegPhoneValid || !regBranch || !regDepartment || !regFullName.trim() || !regPassword.trim() || regPassword !== regConfirmPassword || !regPosition.trim())
                       ? "bg-slate-350 cursor-not-allowed opacity-50 select-none shadow-none"
                       : "bg-blue-600 hover:bg-blue-700 hover:shadow-lg"
                   }`}

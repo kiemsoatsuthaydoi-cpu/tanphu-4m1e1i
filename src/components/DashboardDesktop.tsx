@@ -107,7 +107,9 @@ import {
   ForumReply,
   ForumTopicCategory,
   ForumTopicStatus,
-  ErrorCatalogItem
+  ErrorCatalogItem,
+  BadgePointConfigItem,
+  getBadgeScore
 } from "../types";
 import { parseReportTimestamp } from "../utils/notificationHelper";
 import { STANDARDIZED_QC_DEPT } from "../data";
@@ -1751,6 +1753,99 @@ export default function DashboardDesktop({
     return `${prefix}-${maxIdx + 1}`;
   };
   
+  const [badgeConfigs, setBadgeConfigs] = useState<BadgePointConfigItem[]>(() => {
+    try {
+      const saved = localStorage.getItem("4m1e1i_badge_points_config");
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      // ignore
+    }
+    return [
+      { id: "1", keywords: ["tổng giám đốc", "tgđ", "tổng gđ"], displayName: "Ban Tổng Giám Đốc", points: 100 },
+      { id: "2", keywords: ["giám đốc", "gđ", "ban giám đốc"], displayName: "Ban Giám Đốc", points: 50 },
+      { id: "3", keywords: ["trưởng phòng", "phó phòng", "trưởng phân xưởng", "phó phân xưởng"], displayName: "Trưởng / Phó Phòng", points: 30 },
+      { id: "4", keywords: ["trưởng ca", "phó ca", "ca trưởng", "ca phó"], displayName: "Trưởng / Phó Ca", points: 10 }
+    ];
+  });
+
+  const [editingBadgeId, setEditingBadgeId] = useState<string | null>(null);
+  const [badgeFormDisplayName, setBadgeFormDisplayName] = useState("");
+  const [badgeFormKeywords, setBadgeFormKeywords] = useState("");
+  const [badgeFormPoints, setBadgeFormPoints] = useState<number>(10);
+  const [isAddingBadge, setIsAddingBadge] = useState(false);
+
+  const handleSaveBadgeConfigs = (updated: BadgePointConfigItem[]) => {
+    setBadgeConfigs(updated);
+    try {
+      localStorage.setItem("4m1e1i_badge_points_config", JSON.stringify(updated));
+      onShowToast?.("Đã cập nhật cấu hình cộng điểm huy hiệu thành công! 🏆", "success");
+    } catch (e) {
+      onShowToast?.("Lỗi lưu cấu hình điểm!", "error");
+    }
+  };
+
+  const handleAddOrUpdateBadge = () => {
+    if (!badgeFormDisplayName.trim()) {
+      onShowToast?.("Vui lòng nhập tên hiển thị cho vị trí!", "warning");
+      return;
+    }
+    if (!badgeFormKeywords.trim()) {
+      onShowToast?.("Vui lòng nhập ít nhất một từ khóa!", "warning");
+      return;
+    }
+
+    const keywordsArray = badgeFormKeywords
+      .split(",")
+      .map(k => k.trim())
+      .filter(Boolean);
+
+    if (editingBadgeId) {
+      const updated = badgeConfigs.map(item => {
+        if (item.id === editingBadgeId) {
+          return {
+            ...item,
+            displayName: badgeFormDisplayName.trim(),
+            keywords: keywordsArray,
+            points: badgeFormPoints
+          };
+        }
+        return item;
+      });
+      handleSaveBadgeConfigs(updated);
+      setEditingBadgeId(null);
+    } else {
+      const newBadge: BadgePointConfigItem = {
+        id: "badge_" + Date.now(),
+        displayName: badgeFormDisplayName.trim(),
+        keywords: keywordsArray,
+        points: badgeFormPoints
+      };
+      handleSaveBadgeConfigs([...badgeConfigs, newBadge]);
+    }
+
+    setIsAddingBadge(false);
+    setBadgeFormDisplayName("");
+    setBadgeFormKeywords("");
+    setBadgeFormPoints(10);
+  };
+
+  const handleEditBadge = (item: BadgePointConfigItem) => {
+    setEditingBadgeId(item.id);
+    setBadgeFormDisplayName(item.displayName);
+    setBadgeFormKeywords(item.keywords.join(", "));
+    setBadgeFormPoints(item.points);
+    setIsAddingBadge(true);
+  };
+
+  const handleDeleteBadge = (id: string) => {
+    if (window.confirm("Bạn có chắc chắn muốn xóa cấu hình điểm của vị trí này?")) {
+      const updated = badgeConfigs.filter(item => item.id !== id);
+      handleSaveBadgeConfigs(updated);
+    }
+  };
+
   const [isEditingTicker, setIsEditingTicker] = useState(false);
   const [editTickerText, setEditTickerText] = useState("");
   const [editTickerSpeed, setEditTickerSpeed] = useState(35);
@@ -1859,6 +1954,7 @@ export default function DashboardDesktop({
   const [editPhone, setEditPhone] = useState("");
   const [editDepartment, setEditDepartment] = useState("");
   const [editBranch, setEditBranch] = useState("");
+  const [editPosition, setEditPosition] = useState("");
   const [editRole, setEditRole] = useState<UserRole>(UserRole.STAFF);
   const [editStatus, setEditStatus] = useState<UserStatus>(UserStatus.PENDING);
   const [editPassword, setEditPassword] = useState("");
@@ -1963,6 +2059,7 @@ export default function DashboardDesktop({
 
     setEditBranch(getFormattedUserBranch(u.branch, userCompany?.id || ""));
     setEditDepartment(getFormattedUserDept(u.department, u.branch));
+    setEditPosition(u.position || "");
     setEditPassword(u.password || "123456");
 
     setEditRole(u.role);
@@ -2076,6 +2173,7 @@ export default function DashboardDesktop({
       phone: editPhone.trim(),
       department: editDepartment,
       branch: editBranch,
+      position: editPosition,
       role: editRole,
       status: editStatus,
       password: editPassword,
@@ -2098,6 +2196,7 @@ export default function DashboardDesktop({
   });
   const [profileBranch, setProfileBranch] = useState(currentUser?.branch || "");
   const [profileDept, setProfileDept] = useState(currentUser?.department || "");
+  const [profilePosition, setProfilePosition] = useState(currentUser?.position || "");
   const [profileAvatar, setProfileAvatar] = useState(currentUser?.avatar || "");
   const [profileShowPassword, setProfileShowPassword] = useState(false);
 
@@ -2117,6 +2216,7 @@ export default function DashboardDesktop({
       setProfileCompany(matched ? matched.id : raw);
       setProfileBranch(currentUser.branch || "");
       setProfileDept(currentUser.department || "");
+      setProfilePosition(currentUser.position || "");
       setProfileAvatar(currentUser.avatar || "");
     }
   }, [currentUser, companies]);
@@ -2965,6 +3065,7 @@ export default function DashboardDesktop({
                             "Mã nhân sự",
                             "Họ tên",
                             "Số điện thoại",
+                            "Chức vụ",
                             "Chi nhánh",
                             "Bộ phận",
                             "Vai trò",
@@ -2974,6 +3075,7 @@ export default function DashboardDesktop({
                             u.id,
                             u.fullName,
                             u.phone,
+                            u.position || "Nhân Viên",
                             u.branch,
                             u.department,
                             u.role,
@@ -3222,21 +3324,28 @@ export default function DashboardDesktop({
                                       {u.fullName.charAt(0)}
                                     </div>
                                   )}
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-2 flex-wrap">
+                                  <div className="min-w-0 flex flex-col gap-1">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
                                       <T className="font-extrabold text-slate-800 text-[12px] uppercase">{u.fullName}</T>
-                                      <span className="bg-blue-50 text-blue-600 border border-blue-150 rounded px-1.5 py-0.5 text-[9px] font-bold font-mono tracking-wider">
-                                        MS: {u.id}
-                                      </span>
                                       {isSelf && (
-                                        <span className="bg-slate-100 text-slate-600 rounded px-1.5 py-0.5 text-[8.5px] font-extrabold uppercase">
+                                        <span className="bg-slate-100 text-slate-600 rounded px-1 py-0.2 text-[8px] font-black uppercase">
                                           <T>Bạn</T>
                                         </span>
                                       )}
                                     </div>
-                                    <span className="text-slate-400 font-mono text-[11px] mt-0.5 block">
-                                      {u.phone}
-                                    </span>
+                                    <div className="text-[11px] text-slate-500 flex items-center gap-1">
+                                      <span className="font-black text-slate-400 select-none uppercase tracking-wider text-[10px]">MS:</span>
+                                      <span className="font-mono font-bold text-blue-600">{u.id}</span>
+                                    </div>
+                                    <div className="text-[11px] text-slate-500 flex items-center gap-1">
+                                      <span className="font-black text-slate-400 select-none uppercase tracking-wider text-[10px]">ĐT:</span>
+                                      <span className="font-mono font-semibold text-slate-700">{u.phone}</span>
+                                    </div>
+                                    <div className="pt-0.5">
+                                      <span className="font-sans font-black text-indigo-700 uppercase text-[9.5px] bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md inline-block tracking-wide select-none notranslate" translate="no">
+                                        {u.position || "Nhân Viên"}
+                                      </span>
+                                    </div>
                                   </div>
                                 </div>
                               </td>
@@ -3605,6 +3714,21 @@ export default function DashboardDesktop({
                         </select>
                       </div>
 
+                      {/* Chức vụ */}
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">
+                          <T>Chức vụ (Tính điểm huy hiệu)</T>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={editPosition}
+                          onChange={(e) => setEditPosition(e.target.value)}
+                          placeholder="Ví dụ: Nhân Viên, Trưởng Ca, Trưởng Phòng..."
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all"
+                        />
+                      </div>
+
                       {/* Vai trò hệ thống & Trạng thái tài khoản */}
                       <div className="grid grid-cols-2 gap-3">
                         <div>
@@ -3800,10 +3924,26 @@ export default function DashboardDesktop({
                                 const id = parts[0];
                                 const fullName = parts[1];
                                 const phone = parts[2];
-                                const branch = parts[3] || "TPP-CTY";
-                                const department = parts[4] || "Phòng Quản Lý Chất Lượng";
-                                const role = (parts[5] as UserRole) || UserRole.STAFF;
-                                const status = (parts[6] as UserStatus) || UserStatus.ACTIVE;
+                                
+                                let position = "Nhân Viên";
+                                let branch = "TPP-CTY";
+                                let department = "Phòng Quản Lý Chất Lượng";
+                                let role = UserRole.STAFF;
+                                let status = UserStatus.ACTIVE;
+
+                                if (parts.length >= 8) {
+                                  position = parts[3] || "Nhân Viên";
+                                  branch = parts[4] || "TPP-CTY";
+                                  department = parts[5] || "Phòng Quản Lý Chất Lượng";
+                                  role = (parts[6] as UserRole) || UserRole.STAFF;
+                                  status = (parts[7] as UserStatus) || UserStatus.ACTIVE;
+                                } else {
+                                  // Legacy format: ID, Họ tên, SĐT, Chi nhánh, Bộ phận, Vai trò, Trạng thái
+                                  branch = parts[3] || "TPP-CTY";
+                                  department = parts[4] || "Phòng Quản Lý Chất Lượng";
+                                  role = (parts[5] as UserRole) || UserRole.STAFF;
+                                  status = (parts[6] as UserStatus) || UserStatus.ACTIVE;
+                                }
 
                                 if (!id || !fullName || !phone) return;
 
@@ -3817,6 +3957,7 @@ export default function DashboardDesktop({
                                   id,
                                   fullName: formatNameCapitalized(fullName),
                                   phone,
+                                  position,
                                   branch,
                                   department,
                                   role,
@@ -6791,6 +6932,7 @@ export default function DashboardDesktop({
                         company: profileCompany,
                         branch: profileBranch,
                         department: profileDept,
+                        position: profilePosition,
                         avatar: profileAvatar,
                       };
                       if (onUpdateUser) {
@@ -6879,6 +7021,26 @@ export default function DashboardDesktop({
                           >
                             {profileShowPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                           </button>
+                        </div>
+                      </div>
+
+                      {/* Chức vụ */}
+                      <div>
+                        <label className="text-[10px] text-slate-500 font-bold uppercase block mb-1">
+                          <T>Chức vụ (Gamification)</T>
+                        </label>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                            <Users className="w-4 h-4" />
+                          </div>
+                          <input 
+                            type="text" 
+                            required
+                            value={profilePosition}
+                            onChange={(e) => setProfilePosition(e.target.value)}
+                            placeholder="Ví dụ: Nhân Viên, Trưởng Ca, Trưởng Phòng..."
+                            className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-850 font-semibold focus:outline-none shadow-xs transition-colors"
+                          />
                         </div>
                       </div>
 
@@ -7405,6 +7567,150 @@ export default function DashboardDesktop({
                     </div>
                   </div>
 
+                  {/* Card 1D: CẤU HÌNH CỘNG ĐIỂM HUY HIỆU */}
+                  <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm space-y-4">
+                    <h3 className="font-bold text-slate-800 text-sm flex items-center justify-between border-b border-slate-100 pb-3">
+                      <span className="flex items-center gap-2">
+                        <Award className="w-5 h-5 text-indigo-500 shrink-0" />
+                        <T>CẤU HÌNH CỘNG ĐIỂM HUY HIỆU</T>
+                      </span>
+                      {!isAddingBadge && (
+                        <button
+                          onClick={() => {
+                            setEditingBadgeId(null);
+                            setBadgeFormDisplayName("");
+                            setBadgeFormKeywords("");
+                            setBadgeFormPoints(10);
+                            setIsAddingBadge(true);
+                          }}
+                          className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg text-[10px] font-black flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <T>THÊM VỊ TRÍ</T>
+                        </button>
+                      )}
+                    </h3>
+
+                    <T className="text-[11px] text-slate-500 leading-normal block">
+                      Thiết lập quy tắc cộng điểm tự động khi nhân sự thuộc các chức vụ này tiến hành trao tặng huy hiệu (Gamification). Hệ thống sẽ tự động so khớp từ khóa chức vụ không phân biệt hoa thường để tính điểm.
+                    </T>
+
+                    {isAddingBadge && (
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 animate-fadeIn">
+                        <T className="text-slate-800 text-xs font-black uppercase tracking-wide block">
+                          {editingBadgeId ? "CẬP NHẬT CẤU HÌNH ĐIỂM" : "THÊM CẤU HÌNH ĐIỂM MỚI"}
+                        </T>
+                        
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] text-slate-500 block font-bold uppercase"><T>Tên vị trí hiển thị:</T></label>
+                          <input
+                            type="text"
+                            required
+                            value={badgeFormDisplayName}
+                            onChange={(e) => setBadgeFormDisplayName(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-bold"
+                            placeholder="Ví dụ: Trưởng Phòng / Phó Phòng"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] text-slate-500 block font-bold uppercase"><T>Từ khóa so khớp (ngăn cách bằng dấu phẩy):</T></label>
+                          <input
+                            type="text"
+                            required
+                            value={badgeFormKeywords}
+                            onChange={(e) => setBadgeFormKeywords(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                            placeholder="Ví dụ: trưởng phòng, phó phòng, trưởng phân xưởng"
+                          />
+                          <T className="text-[9px] text-slate-400 block"><T>Hệ thống sẽ cộng điểm nếu chức vụ của người tặng chứa một trong các từ khóa này.</T></T>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] text-slate-500 block font-bold uppercase"><T>Điểm cộng tương ứng:</T></label>
+                          <input
+                            type="number"
+                            required
+                            min={0}
+                            max={1000}
+                            value={badgeFormPoints}
+                            onChange={(e) => setBadgeFormPoints(Math.max(0, Number(e.target.value)))}
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono font-bold"
+                          />
+                        </div>
+
+                        <div className="flex gap-2 pt-2">
+                          <button
+                            onClick={handleAddOrUpdateBadge}
+                            className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <T>XÁC NHẬN</T>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setIsAddingBadge(false);
+                              setEditingBadgeId(null);
+                              setBadgeFormDisplayName("");
+                              setBadgeFormKeywords("");
+                              setBadgeFormPoints(10);
+                            }}
+                            className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                            <T>HỦY</T>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                      {badgeConfigs.map((item) => (
+                        <div key={item.id} className="bg-slate-50 border border-slate-150 rounded-xl p-3 flex items-start justify-between gap-3 hover:border-slate-300 transition-colors">
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-extrabold text-slate-750 text-xs tracking-tight uppercase select-none notranslate" translate="no">
+                                {item.displayName}
+                              </span>
+                              <span className="bg-indigo-100 text-indigo-700 rounded-full px-2 py-0.5 text-[9.5px] font-black font-mono">
+                                +{item.points}đ
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {item.keywords.map((kw, idx) => (
+                                <span key={idx} className="bg-slate-200 text-slate-600 text-[8.5px] font-bold px-1.5 py-0.2 rounded font-mono uppercase notranslate" translate="no">
+                                  {kw}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              onClick={() => handleEditBadge(item)}
+                              className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors cursor-pointer"
+                              title="Sửa"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteBadge(item.id)}
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                              title="Xóa"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      {badgeConfigs.length === 0 && (
+                        <div className="text-center py-4 bg-slate-50 border border-dashed border-slate-200 rounded-xl">
+                          <T className="text-[11px] text-slate-400 font-bold"><T>Chưa có cấu hình nào. Sẽ sử dụng luật mặc định.</T></T>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Card 2: ĐĂNG TIN THÔNG BÁO MỚI */}
                   <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm space-y-4">
                     <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2 border-b border-slate-100 pb-3">
@@ -7455,7 +7761,7 @@ export default function DashboardDesktop({
 
                 {/* Right side: THÔNG BÁO */}
                 <div className="xl:col-span-7">
-                  <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm flex flex-col h-[650px]">
+                  <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm flex flex-col h-[650px] xl:h-[1200px]">
                     <div className="flex justify-between items-center border-b border-slate-100 pb-3 mb-4 shrink-0">
                       <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
                         <Globe className="w-5 h-5 text-emerald-500" />

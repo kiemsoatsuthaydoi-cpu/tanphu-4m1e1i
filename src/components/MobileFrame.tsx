@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import html2canvas from "html2canvas";
-import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send } from "lucide-react";
-import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus, QualityReportBadge, AppNotification, ErrorCatalogItem } from "../types";
+import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send, Award } from "lucide-react";
+import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus, QualityReportBadge, AppNotification, ErrorCatalogItem, BadgePointConfigItem } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
 import { QRCodeSVG } from "qrcode.react";
@@ -2028,6 +2028,98 @@ export default function MobileFrame({
     });
   };
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [badgeConfigs, setBadgeConfigs] = useState<BadgePointConfigItem[]>(() => {
+    try {
+      const saved = localStorage.getItem("4m1e1i_badge_points_config");
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      // ignore
+    }
+    return [
+      { id: "1", keywords: ["tổng giám đốc", "tgđ", "tổng gđ"], displayName: "Ban Tổng Giám Đốc", points: 100 },
+      { id: "2", keywords: ["giám đốc", "gđ", "ban giám đốc"], displayName: "Ban Giám Đốc", points: 50 },
+      { id: "3", keywords: ["trưởng phòng", "phó phòng", "trưởng phân xưởng", "phó phân xưởng"], displayName: "Trưởng / Phó Phòng", points: 30 },
+      { id: "4", keywords: ["trưởng ca", "phó ca", "ca trưởng", "ca phó"], displayName: "Trưởng / Phó Ca", points: 10 }
+    ];
+  });
+
+  const [editingBadgeId, setEditingBadgeId] = useState<string | null>(null);
+  const [badgeFormDisplayName, setBadgeFormDisplayName] = useState("");
+  const [badgeFormKeywords, setBadgeFormKeywords] = useState("");
+  const [badgeFormPoints, setBadgeFormPoints] = useState<number>(10);
+  const [isAddingBadge, setIsAddingBadge] = useState(false);
+
+  const handleSaveBadgeConfigs = (updated: BadgePointConfigItem[]) => {
+    setBadgeConfigs(updated);
+    try {
+      localStorage.setItem("4m1e1i_badge_points_config", JSON.stringify(updated));
+      showToast("Đã cập nhật cấu hình cộng điểm huy hiệu thành công! 🏆");
+    } catch (e) {
+      showToast("Lỗi lưu cấu hình điểm!");
+    }
+  };
+
+  const handleAddOrUpdateBadge = () => {
+    if (!badgeFormDisplayName.trim()) {
+      showToast("Vui lòng nhập tên hiển thị cho vị trí!");
+      return;
+    }
+    if (!badgeFormKeywords.trim()) {
+      showToast("Vui lòng nhập ít nhất một từ khóa!");
+      return;
+    }
+
+    const keywordsArray = badgeFormKeywords
+      .split(",")
+      .map(k => k.trim())
+      .filter(Boolean);
+
+    if (editingBadgeId) {
+      const updated = badgeConfigs.map(item => {
+        if (item.id === editingBadgeId) {
+          return {
+            ...item,
+            displayName: badgeFormDisplayName.trim(),
+            keywords: keywordsArray,
+            points: badgeFormPoints
+          };
+        }
+        return item;
+      });
+      handleSaveBadgeConfigs(updated);
+      setEditingBadgeId(null);
+    } else {
+      const newBadge: BadgePointConfigItem = {
+        id: "badge_" + Date.now(),
+        displayName: badgeFormDisplayName.trim(),
+        keywords: keywordsArray,
+        points: badgeFormPoints
+      };
+      handleSaveBadgeConfigs([...badgeConfigs, newBadge]);
+    }
+
+    setIsAddingBadge(false);
+    setBadgeFormDisplayName("");
+    setBadgeFormKeywords("");
+    setBadgeFormPoints(10);
+  };
+
+  const handleEditBadge = (item: BadgePointConfigItem) => {
+    setEditingBadgeId(item.id);
+    setBadgeFormDisplayName(item.displayName);
+    setBadgeFormKeywords(item.keywords.join(", "));
+    setBadgeFormPoints(item.points);
+    setIsAddingBadge(true);
+  };
+
+  const handleDeleteBadge = (id: string) => {
+    if (window.confirm("Bạn có chắc chắn muốn xóa cấu hình điểm của vị trí này?")) {
+      const updated = badgeConfigs.filter(item => item.id !== id);
+      handleSaveBadgeConfigs(updated);
+    }
+  };
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showMobileCloudQuota, setShowMobileCloudQuota] = useState(false);
@@ -2385,6 +2477,7 @@ export default function MobileFrame({
         giverId: currentUser.id,
         giverName: currentUser.fullName,
         giverRole: currentUser.role === UserRole.ADMIN ? "Chủ Admin" : (currentUser.department || "Quản lý"),
+        giverPosition: currentUser.position,
         timestamp: dateStr
       };
       updatedBadges = [...currentBadges, newBadge];
@@ -7243,6 +7336,147 @@ App Link: ${window.location.origin}`}
                                 <span className="flex items-center gap-1 text-amber-600 font-extrabold">🟡 <T>Đang tạm thời ẩn khỏi màn hình</T></span>
                               )}
                             </div>
+                          </div>
+                        </div>
+
+                        {/* BOX 1D: CẤU HÌNH CỘNG ĐIỂM HUY HIỆU */}
+                        <div className="bg-[#EEF2F6] border border-slate-300 p-3.5 rounded-xl space-y-3 shadow-3xs">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-extrabold text-indigo-700 flex items-center gap-1 uppercase">
+                              <Award className="w-4 h-4 text-indigo-500 shrink-0" />
+                              <T>CẤU HÌNH CỘNG ĐIỂM HUY HIỆU</T>
+                            </span>
+                            {!isAddingBadge && (
+                              <button
+                                onClick={() => {
+                                  setEditingBadgeId(null);
+                                  setBadgeFormDisplayName("");
+                                  setBadgeFormKeywords("");
+                                  setBadgeFormPoints(10);
+                                  setIsAddingBadge(true);
+                                }}
+                                className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-[#3B82F6] border border-blue-200 rounded-lg text-[9px] font-black flex items-center gap-0.5 cursor-pointer"
+                              >
+                                <Plus className="w-3 h-3" />
+                                <T>THÊM VỊ TRÍ</T>
+                              </button>
+                            )}
+                          </div>
+
+                          <T className="text-[9.5px] text-slate-500 leading-normal block">
+                            Hệ thống sẽ tự động cộng điểm khi người thuộc các chức vụ này tặng huy hiệu.
+                          </T>
+
+                          {isAddingBadge && (
+                            <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-2.5 animate-fadeIn">
+                              <span translate="no" className="notranslate text-slate-800 text-[10px] font-black uppercase tracking-wide block">
+                                {editingBadgeId ? "CẬP NHẬT CẤU HÌNH" : "THÊM CẤU HÌNH MỚI"}
+                              </span>
+
+                              <div className="space-y-1">
+                                <label className="text-[9px] text-slate-500 block font-bold uppercase"><T>Tên vị trí hiển thị:</T></label>
+                                <input
+                                  type="text"
+                                  required
+                                  value={badgeFormDisplayName}
+                                  onChange={(e) => setBadgeFormDisplayName(e.target.value)}
+                                  className="w-full bg-slate-50 border border-slate-200 rounded-md px-2 py-1 text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-bold"
+                                  placeholder="Ví dụ: Trưởng / Phó Phòng"
+                                />
+                              </div>
+
+                              <div className="space-y-1">
+                                <label className="text-[9px] text-slate-500 block font-bold uppercase"><T>Từ khóa so khớp (ngăn cách bằng dấu phẩy):</T></label>
+                                <input
+                                  type="text"
+                                  required
+                                  value={badgeFormKeywords}
+                                  onChange={(e) => setBadgeFormKeywords(e.target.value)}
+                                  className="w-full bg-slate-50 border border-slate-200 rounded-md px-2 py-1 text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                                  placeholder="Ví dụ: trưởng phòng, phó phòng"
+                                />
+                              </div>
+
+                              <div className="space-y-1">
+                                <label className="text-[9px] text-slate-500 block font-bold uppercase"><T>Điểm cộng tương ứng:</T></label>
+                                <input
+                                  type="number"
+                                  required
+                                  min={0}
+                                  max={1000}
+                                  value={badgeFormPoints}
+                                  onChange={(e) => setBadgeFormPoints(Math.max(0, Number(e.target.value)))}
+                                  className="w-full bg-slate-50 border border-slate-200 rounded-md px-2 py-1 text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono font-bold"
+                                />
+                              </div>
+
+                              <div className="flex gap-2 pt-1.5">
+                                <button
+                                  onClick={handleAddOrUpdateBadge}
+                                  className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-md text-[10px] flex items-center justify-center gap-1 cursor-pointer border-none"
+                                >
+                                  <Check className="w-3 h-3" />
+                                  <T>XÁC NHẬN</T>
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setIsAddingBadge(false);
+                                    setEditingBadgeId(null);
+                                    setBadgeFormDisplayName("");
+                                    setBadgeFormKeywords("");
+                                    setBadgeFormPoints(10);
+                                  }}
+                                  className="px-2 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold rounded-md text-[10px] flex items-center justify-center gap-1 cursor-pointer border-none"
+                                >
+                                  <X className="w-3 h-3" />
+                                  <T>HỦY</T>
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                            {badgeConfigs.map((item) => (
+                              <div key={item.id} className="bg-white border border-slate-200 rounded-lg p-2.5 flex items-start justify-between gap-2.5">
+                                <div className="min-w-0 space-y-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span translate="no" className="notranslate font-extrabold text-slate-800 text-[10.5px] uppercase">
+                                      {item.displayName}
+                                    </span>
+                                    <span className="bg-indigo-100 text-indigo-700 rounded-full px-1.5 py-0.2 text-[8.5px] font-black font-mono">
+                                      +{item.points}đ
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-wrap gap-0.5">
+                                    {item.keywords.map((kw, idx) => (
+                                      <span key={idx} translate="no" className="notranslate bg-slate-100 text-slate-500 text-[8px] font-bold px-1 py-0.2 rounded font-mono uppercase">
+                                        {kw}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                                
+                                <div className="flex items-center gap-0.5 shrink-0">
+                                  <button
+                                    onClick={() => handleEditBadge(item)}
+                                    className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded cursor-pointer border-none bg-transparent"
+                                  >
+                                    <Edit className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteBadge(item.id)}
+                                    className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded cursor-pointer border-none bg-transparent"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                            {badgeConfigs.length === 0 && (
+                              <div className="text-center py-3 bg-white border border-dashed border-slate-200 rounded-lg">
+                                <T className="text-[10px] text-slate-400 font-bold"><T>Chưa có cấu hình nào.</T></T>
+                              </div>
+                            )}
                           </div>
                         </div>
 

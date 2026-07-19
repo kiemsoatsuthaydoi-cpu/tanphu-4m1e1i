@@ -62,6 +62,7 @@ export async function seedFirestoreIfNeeded(): Promise<boolean> {
           department: u.department || "",
           branch: u.branch || "",
           company: u.company || "TÂN PHÚ VIỆT NAM",
+          position: u.position || "",
           createdAt: new Date().toISOString()
         };
 
