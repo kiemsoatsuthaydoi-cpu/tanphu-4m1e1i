@@ -120,7 +120,35 @@ export default async function handler(req: any, res: any) {
       chatHistoryText += `${roleName}: ${msg.content}\n\n`;
     });
 
-    const prompt = `
+    const isDsa = report.reportType === "DSA" || report.isSpotlight || report.isDsaReport;
+
+    const prompt = isDsa ? `
+Bạn là ${expertRole}. Bạn đang hỗ trợ người dùng phân tích chuyên sâu các RỦI RO TIỀM ẨN của báo cáo "Điểm Sáng (DSA)" này thông qua một cuộc hội thoại chat trực tiếp trong bảng phân tích rủi ro.
+
+Thông tin Điểm Sáng đang thảo luận:
+- Nhà máy/Xưởng: ${factory}
+- Nhóm yếu tố (4M1E1I): ${category}
+- Nội dung Điểm Sáng / Sáng kiến: ${content}
+- Ghi chú thêm: ${notes}
+- Các chỉ đạo hiện tại (nếu có): ${directives}
+
+${aiKnowledgeText ? `
+DƯỚI ĐÂY LÀ KHO TRI THỨC VÀ TIÊU CHUẨN CHẤT LƯỢNG MỚI NHẤT CỦA CÔNG TY (ISO 9001, BRCGS, BSCI, SCAN...):
+${aiKnowledgeText}
+
+Hãy đối chiếu với kho tri thức trên để trả lời người dùng. Nếu người dùng hỏi về nguyên nhân vi phạm, tính nhất quán quy trình, an toàn, an ninh,... hãy trích dẫn chính xác điều khoản, mục nào của tiêu chuẩn tương ứng (ISO 9001, BRCGS, BSCI, SCAN...) đang bị vi phạm hoặc cần lưu ý cải tiến.
+` : ""}
+
+Nhiệm vụ của bạn:
+1. Hãy trả lời câu hỏi mới nhất của người dùng dưới góc nhìn của một chuyên gia chất lượng dày dạn kinh nghiệm tại ${companyName}.
+2. Trả lời một cách thực tế, tập trung vào việc quản lý rủi ro hiện trường sản xuất, giải thích các yếu tố kỹ thuật (ví dụ kích thước/biên dạng khuôn mới khác khuôn cũ), rủi ro khách hàng không chấp nhận (lo ngại người tiêu dùng hiểu lầm là hàng giả), và quy tắc TUÂN THỦ TIÊU CHUẨN và YÊU CẦU KHÁCH HÀNG khi có bất kỳ sự thay đổi nào.
+3. Hãy phản hồi ngắn gọn, súc tích, dễ hiểu và chuyên nghiệp.
+
+Lịch sử cuộc thảo luận:
+${chatHistoryText}
+
+Hãy viết câu trả lời tiếp theo dưới dạng Markdown thông thường (bằng tiếng Việt), rõ ràng, có phân cấp. Do không có thẻ chống dịch trong văn bản trả về của AI, hãy trả về văn bản Markdown thông thường.
+` : `
 Bạn là ${expertRole}. Bạn đang hỗ trợ người dùng phân tích chuyên sâu báo cáo "Không Phù Hợp (KPH)" này thông qua một cuộc hội thoại chat trực tiếp trong bảng phân tích 5-Why.
 
 Thông tin báo cáo KPH đang thảo luận:
