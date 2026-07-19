@@ -4769,7 +4769,7 @@ App Link: ${window.location.origin}`;
                     />
                   )}
 
-                  {(report.reportType === "KPH" || report.isAbnormal) && isQcFeatureEnabled && (
+                  {(report.reportType === "KPH" || report.isAbnormal) && (
                     <button
                       onClick={() => handleAIAnalyze(report)}
                       className="mt-3 w-full flex items-center justify-center gap-1.5 px-3 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-[11px] rounded-lg shadow-sm cursor-pointer hover:shadow active:scale-98 transition-all select-none uppercase tracking-wider"
