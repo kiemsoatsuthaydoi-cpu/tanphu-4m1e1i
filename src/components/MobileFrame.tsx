@@ -4769,7 +4769,7 @@ App Link: ${window.location.origin}`;
                     />
                   )}
 
-                  {(report.reportType === "KPH" || report.isAbnormal) && (
+                  {(report.reportType === "KPH" || report.isAbnormal) && isQcFeatureEnabled && (
                     <button
                       onClick={() => handleAIAnalyze(report)}
                       className="mt-3 w-full flex items-center justify-center gap-1.5 px-3 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-[11px] rounded-lg shadow-sm cursor-pointer hover:shadow active:scale-98 transition-all select-none uppercase tracking-wider"
@@ -7198,6 +7198,52 @@ App Link: ${window.location.origin}`}
                               </button>
                             </div>
                           )}
+                        </div>
+
+                        {/* BOX 1C: CẤU HÌNH CHỨC NĂNG PHÊ DUYỆT QC */}
+                        <div className="bg-[#ECFDF5] border border-emerald-200 p-3.5 rounded-xl space-y-3 shadow-3xs">
+                          <span className="text-[10px] font-extrabold text-emerald-700 flex items-center gap-1 uppercase">
+                            ⚙️ <T>CẤU HÌNH CHỨC NĂNG PHÊ DUYỆT QC</T>
+                          </span>
+                          
+                          <div className="bg-white p-3 rounded-xl border border-emerald-100 space-y-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex-1">
+                                <span className="font-extrabold text-slate-850 text-[11px] block">
+                                  <T>Phê duyệt mã lỗi QC</T>
+                                </span>
+                                <span className="text-[9.5px] text-slate-500 block mt-0.5 leading-relaxed">
+                                  <T>Bật hoặc tạm ẩn tính năng xác nhận mã lỗi QC và cảnh báo lỗi lặp lại đối với các báo cáo Không Phù Hợp (KPH).</T>
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (onToggleQcFeature) {
+                                    onToggleQcFeature(!isQcFeatureEnabled);
+                                    showToast(
+                                      !isQcFeatureEnabled 
+                                        ? "Đã kích hoạt chức năng Phê duyệt mã lỗi QC! 🛡️" 
+                                        : "Đã tạm ẩn chức năng Phê duyệt mã lỗi QC! 👁️‍🗨️"
+                                    );
+                                  }
+                                }}
+                                className={`w-10 h-5.5 flex items-center rounded-full p-0.5 cursor-pointer transition-colors duration-300 shrink-0 ${isQcFeatureEnabled ? "bg-emerald-500" : "bg-slate-300"}`}
+                              >
+                                <div
+                                  className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform duration-300 ${isQcFeatureEnabled ? "translate-x-4.5" : "translate-x-0"}`}
+                                />
+                              </button>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 text-[9px] pt-2 border-t border-slate-100">
+                              {isQcFeatureEnabled ? (
+                                <span className="flex items-center gap-1 text-emerald-600 font-extrabold">🟢 <T>Đang hoạt động bình thường</T></span>
+                              ) : (
+                                <span className="flex items-center gap-1 text-amber-600 font-extrabold">🟡 <T>Đang tạm thời ẩn khỏi màn hình</T></span>
+                              )}
+                            </div>
+                          </div>
                         </div>
 
                         {/* BOX 2: ĐĂNG THÔNG BÁO TỪ BAN QUẢN TRỊ */}

@@ -6251,7 +6251,7 @@ export default function DashboardDesktop({
                                     />
                                   )}
 
-                                  {(r.reportType === "KPH" || r.isAbnormal) && (
+                                  {(r.reportType === "KPH" || r.isAbnormal) && isQcFeatureEnabled && (
                                     <button
                                       onClick={() => handleAIAnalyze(r)}
                                       className="mt-2.5 flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-[10px] rounded-lg shadow-sm border border-blue-500/10 cursor-pointer hover:shadow active:scale-95 transition-all select-none uppercase tracking-wide"
