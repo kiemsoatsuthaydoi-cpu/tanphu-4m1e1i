@@ -650,7 +650,7 @@ export default function ProgressTrackingDashboard({
 
                 {/* Content description */}
                 <p className={`font-bold text-slate-700 leading-relaxed bg-slate-50 border border-slate-100 ${
-                  isMobile ? "text-[11px] p-2.5 rounded-lg" : "text-[15px] p-2.5 rounded-xl"
+                  isMobile ? "text-[15px] p-2.5 rounded-lg" : "text-[19px] p-2.5 rounded-xl"
                 }`}>
                   <span translate="no" className="notranslate">"{report.content}"</span>
                 </p>

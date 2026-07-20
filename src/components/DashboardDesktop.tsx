@@ -7383,7 +7383,8 @@ export default function DashboardDesktop({
 
               <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
                 {/* Left side configurations */}
-                <div className="xl:col-span-5 space-y-6">
+                {currentUser?.role === UserRole.ADMIN && (
+                  <div className="xl:col-span-5 space-y-6">
                   {/* Card 1: THÔNG BÁO CHỮ CHẠY HỆ THỐNG */}
                   <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm space-y-4">
                     <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2 border-b border-slate-100 pb-3">
@@ -7767,9 +7768,10 @@ export default function DashboardDesktop({
                     </button>
                   </div>
                 </div>
+                )}
 
                 {/* Right side: THÔNG BÁO */}
-                <div className="xl:col-span-7">
+                <div className={currentUser?.role === UserRole.ADMIN ? "xl:col-span-7" : "xl:col-span-12"}>
                   <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm flex flex-col h-[650px] xl:h-[1200px]">
                     <div className="flex justify-between items-center border-b border-slate-100 pb-3 mb-4 shrink-0">
                       <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">

@@ -1945,6 +1945,60 @@ export default function MobileFrame({
   const [showTrash, setShowTrash] = useState(false);
   const [mobileBranchFilter, setMobileBranchFilter] = useState<string>("Tất cả");
   const [mobileTimeFilter, setMobileTimeFilter] = useState<"NGAY" | "TUAN" | "THANG">("THANG");
+  const [mobileCategoryFilter, setMobileCategoryFilter] = useState<string>("Tất cả");
+
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartX(e.targetTouches[0].clientX);
+    setTouchStartY(e.targetTouches[0].clientY);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX === null || touchStartY === null) return;
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+
+    const diffX = touchStartX - touchEndX;
+    const diffY = touchStartY - touchEndY;
+
+    // Phải là lướt ngang chủ đạo và vượt ngưỡng 50px
+    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
+      const tabs: ("NHAN_SU" | "TIEN_DO" | "CHAT_LUONG")[] = [];
+      if (currentUser?.role === UserRole.ADMIN) {
+        tabs.push("NHAN_SU");
+      }
+      tabs.push("TIEN_DO");
+      tabs.push("CHAT_LUONG");
+
+      const currentIndex = tabs.indexOf(mobileStatsSubTab);
+      if (currentIndex !== -1) {
+        if (diffX > 0) {
+          // Vuốt sang trái -> chuyển tab tiếp theo
+          const nextIndex = Math.min(currentIndex + 1, tabs.length - 1);
+          if (nextIndex !== currentIndex) {
+            setMobileStatsSubTab(tabs[nextIndex]);
+            showToast(`Chuyển sang tab: ${
+              tabs[nextIndex] === "NHAN_SU" ? "Nhân sự" : tabs[nextIndex] === "TIEN_DO" ? "Tiến độ cải tiến" : "Biểu đồ"
+            } 📑`);
+          }
+        } else {
+          // Vuốt sang phải -> chuyển tab trước đó
+          const prevIndex = Math.max(currentIndex - 1, 0);
+          if (prevIndex !== currentIndex) {
+            setMobileStatsSubTab(tabs[prevIndex]);
+            showToast(`Chuyển sang tab: ${
+              tabs[prevIndex] === "NHAN_SU" ? "Nhân sự" : tabs[prevIndex] === "TIEN_DO" ? "Tiến độ cải tiến" : "Biểu đồ"
+            } 📑`);
+          }
+        }
+      }
+    }
+
+    setTouchStartX(null);
+    setTouchStartY(null);
+  };
 
   const filterByTimeRange = (reportDate: Date) => {
     const now = new Date();
@@ -1956,6 +2010,14 @@ export default function MobileFrame({
     } else {
       return diffMs <= 30 * 24 * 60 * 60 * 1000;
     }
+  };
+
+  const getTimeFilteredReportsOnly = () => {
+    return reports.filter((r) => {
+      if (r.isDeleted) return false;
+      const rDate = parseReportTimestamp(r.timestamp);
+      return filterByTimeRange(rDate);
+    });
   };
 
   const getMobileStats = () => {
@@ -2049,7 +2111,7 @@ export default function MobileFrame({
     });
   };
 
-  const getMobileBranchComparisonData = () => {
+  const getMobileBranchComparisonData = (targetReports?: QualityReport[]) => {
     const map: Record<string, { kph: number; dsa: number }> = {};
     branches.forEach((b) => {
       if (b.isScoring) {
@@ -2057,7 +2119,9 @@ export default function MobileFrame({
       }
     });
 
-    reports.filter((r) => !r.isDeleted).forEach((r) => {
+    const activeReports = targetReports || reports;
+
+    activeReports.filter((r) => !r.isDeleted).forEach((r) => {
       if (map[r.factory]) {
         if (r.reportType === "KPH" || r.isAbnormal) {
           map[r.factory].kph++;
@@ -4353,7 +4417,9 @@ App Link: ${window.location.origin}`;
         <div 
           ref={phanTichScrollRef}
           onScroll={(e) => setPhanTichScrollTop(e.currentTarget.scrollTop)}
-          className="flex-1 p-4 bg-slate-50 space-y-4 select-none overflow-y-auto phantich-scroll-container"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          className="flex-1 p-4 bg-slate-50 space-y-4 select-none overflow-y-auto phantich-scroll-container transition-all duration-300 touch-pan-y"
         >
           {/* Header Analysis info with custom icon & switcher */}
           <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3.5">
@@ -4374,7 +4440,7 @@ App Link: ${window.location.origin}`;
             </p>
 
             {/* Sub-tab Switcher matching PWA mobile styles */}
-            <div className="flex bg-slate-100 p-1 rounded-xl text-[10px] font-black select-none border border-slate-200">
+            <div className="flex bg-slate-100 p-1 rounded-xl text-[9px] font-black select-none border border-slate-200">
               {currentUser?.role === UserRole.ADMIN && (
                 <button
                   type="button"
@@ -4565,7 +4631,7 @@ App Link: ${window.location.origin}`;
                 {/* Categories progress */}
                 <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-3xs space-y-2">
                   <h3 className="text-[9px] font-black uppercase text-slate-600 tracking-wider">
-                    <T><span translate="no" className="notranslate">Phân bổ theo M-E-I (4M1E1I)</span></T>
+                    <T><span translate="no" className="notranslate">Phân bổ theo M-E-I (4M1E1I) (Bấm để lọc)</span></T>
                   </h3>
                   <div className="space-y-2">
                     {(["CON NGƯỜI", "MÁY MÓC", "NGUYÊN VẬT LIỆU", "PHƯƠNG PHÁP", "MÔI TRƯỜNG", "THÔNG TIN"] as Category4M1E1I[]).map((cat) => {
@@ -4580,11 +4646,27 @@ App Link: ${window.location.origin}`;
                       else if (cat === "MÔI TRƯỜNG") barColor = "bg-teal-500";
                       else if (cat === "THÔNG TIN") barColor = "bg-slate-500";
 
+                      const isSelected = mobileCategoryFilter === cat;
+
                       return (
-                        <div key={cat} className="space-y-0.5">
+                        <div 
+                          key={cat} 
+                          className={`space-y-0.5 cursor-pointer p-1 rounded-lg transition-all hover:bg-slate-50 border ${
+                            isSelected ? "bg-indigo-50 border-indigo-200" : "border-transparent"
+                          }`}
+                          onClick={() => {
+                            if (isSelected) {
+                              setMobileCategoryFilter("Tất cả");
+                              showToast("Đã bỏ lọc danh mục");
+                            } else {
+                              setMobileCategoryFilter(cat);
+                              showToast(`Đã lọc nhật ký theo danh mục: ${cat} 💡`);
+                            }
+                          }}
+                        >
                           <div className="flex justify-between items-center text-[9px] font-bold">
                             <span className="text-slate-700 flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full inline-block bg-slate-300"></span>
+                              <span className={`w-1.5 h-1.5 rounded-full inline-block ${isSelected ? "bg-indigo-650 animate-pulse" : "bg-slate-300"}`}></span>
                               <T><span translate="no" className="notranslate">{cat}</span></T>
                             </span>
                             <span className="text-slate-505 font-mono">
@@ -4624,16 +4706,33 @@ App Link: ${window.location.origin}`;
                 <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-3xs space-y-2">
                   <div>
                     <span className="text-[10px] font-black uppercase tracking-wider text-rose-600 block">
-                      <T><span translate="no" className="notranslate">1. Biểu Đồ Radar: Thống Kê Điểm Không Phù Hợp (KPH) theo 4M1E1I</span></T>
+                      <T><span translate="no" className="notranslate">1. Biểu Đồ Radar: Thống Kê Điểm Không Phù Hợp (KPH) theo 4M1E1I (Bấm chọn lọc)</span></T>
                     </span>
                     <p className="text-[8px] text-slate-500 leading-normal mt-0.5">
-                      <T><span translate="no" className="notranslate">Xác định phân hệ phân bố lỗi chất lượng để biết yếu tố nào trong 6 trụ cột (Con người, Nguyên vật liệu, Máy móc, Phương pháp, Môi trường, Thông tin) đang suy giảm nặng nề nhất.</span></T>
+                      <T><span translate="no" className="notranslate">Xác định phân hệ phân bố lỗi chất lượng. Bấm vào biểu đồ để lọc danh mục tương ứng bên dưới.</span></T>
                     </p>
                   </div>
                   <div className="h-56 mt-2 relative">
                     {stats.kph > 0 ? (
                       <ResponsiveContainer width="100%" height="100%">
-                        <RadarChart cx="50%" cy="50%" outerRadius="65%" data={getMobileRadarKphData(stats.filteredReports)}>
+                        <RadarChart 
+                          cx="50%" 
+                          cy="50%" 
+                          outerRadius="65%" 
+                          data={getMobileRadarKphData(stats.filteredReports)}
+                          onClick={(state) => {
+                            if (state && state.activeLabel) {
+                              const clickedCat = String(state.activeLabel);
+                              if (mobileCategoryFilter === clickedCat) {
+                                setMobileCategoryFilter("Tất cả");
+                                showToast("Đã bỏ lọc danh mục");
+                              } else {
+                                setMobileCategoryFilter(clickedCat);
+                                showToast(`Đã lọc nhật ký theo danh mục: ${clickedCat} 💡`);
+                              }
+                            }
+                          }}
+                        >
                           <PolarGrid stroke="#cbd5e1" />
                           <PolarAngleAxis dataKey="subject" tick={{ fill: '#334155', fontSize: 7, fontWeight: 700 }} />
                           <PolarRadiusAxis angle={30} domain={[0, 'auto']} tick={{ fill: '#64748b', fontSize: 7 }} />
@@ -4655,23 +4754,37 @@ App Link: ${window.location.origin}`;
                 <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-3xs space-y-2">
                   <div>
                     <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 block">
-                      <T><span translate="no" className="notranslate">2. Sơ Đồ Pareto: Tầng Lỗi & Phần Trăm Lũy Kế 80/20</span></T>
+                      <T><span translate="no" className="notranslate">2. Sơ Đồ Pareto: Tầng Lỗi & Phần Trăm Lũy Kế 80/20 (Bấm chọn lọc)</span></T>
                     </span>
                     <p className="text-[8px] text-slate-500 leading-normal mt-0.5">
-                      <T><span translate="no" className="notranslate">Sắp xếp lỗi theo tần suất xuất hiện giảm dần cùng đường tích lũy phần trăm. Giúp nhà quản lý dồn sức xử lý đúng 20% nguyên nhân cốt lõi để loại bỏ 80% phế phẩm chất lượng.</span></T>
+                      <T><span translate="no" className="notranslate">Sắp xếp lỗi theo tần suất xuất hiện giảm dần. Bấm vào cột hoặc danh mục để lọc tương ứng bên dưới.</span></T>
                     </p>
                   </div>
                   <div className="h-56 mt-2">
                     {stats.kph > 0 ? (
                       <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={getMobileParetoData(stats.filteredReports)}>
+                        <ComposedChart 
+                          data={getMobileParetoData(stats.filteredReports)}
+                          onClick={(state) => {
+                            if (state && state.activeLabel) {
+                              const clickedCat = String(state.activeLabel);
+                              if (mobileCategoryFilter === clickedCat) {
+                                setMobileCategoryFilter("Tất cả");
+                                showToast("Đã bỏ lọc danh mục");
+                              } else {
+                                setMobileCategoryFilter(clickedCat);
+                                showToast(`Đã lọc nhật ký theo danh mục: ${clickedCat} 🎯`);
+                              }
+                            }
+                          }}
+                        >
                           <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
                           <XAxis dataKey="category" interval={0} angle={-25} textAnchor="end" height={55} tick={{ fill: '#475569', fontSize: 6.5, fontWeight: 700 }} />
                           <YAxis yAxisId="left" tick={{ fill: '#64748b', fontSize: 7 }} />
                           <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fill: '#d97706', fontSize: 7 }} />
                           <Tooltip wrapperStyle={{ fontSize: '9px' }} />
                           <Legend wrapperStyle={{ fontSize: '8px' }} />
-                          <Bar yAxisId="left" dataKey="Số lỗi (Tần suất)" fill="#3b82f6" barSize={15} radius={[2, 2, 0, 0]} />
+                          <Bar yAxisId="left" dataKey="Số lỗi (Tần suất)" fill="#3b82f6" barSize={15} radius={[2, 2, 0, 0]} className="cursor-pointer" />
                           <Line yAxisId="right" type="monotone" dataKey="Phần trăm lũy kế (%)" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3, fill: '#f59e0b' }} />
                         </ComposedChart>
                       </ResponsiveContainer>
@@ -4689,87 +4802,131 @@ App Link: ${window.location.origin}`;
                 <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-3xs space-y-2">
                   <div>
                     <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 block">
-                      <T><span translate="no" className="notranslate">3. So Sánh Hiệu Suất Chất Lượng: Điểm Sáng (DSA) vs Điểm Lỗi (KPH)</span></T>
+                      <T><span translate="no" className="notranslate">3. So Sánh Hiệu Suất Chất Lượng: Điểm Sáng (DSA) vs Điểm Lỗi (KPH) (Bấm chọn lọc)</span></T>
                     </span>
                     <p className="text-[8px] text-slate-500 leading-normal mt-0.5">
-                      <T><span translate="no" className="notranslate">Biểu hiện của tính đối sáng thi đua giữa tất cả xưởng và văn phòng toàn bộ lãnh thổ Tân Phú. Cho thấy đơn vị nào có tỷ lệ cải tiến DSA đột phá và đơn vị nào còn nhiều điểm KPH.</span></T>
+                      <T><span translate="no" className="notranslate">Bấm vào cột hoặc nhãn chi nhánh trên biểu đồ để lọc danh sách sự kiện theo chi nhánh tương ứng.</span></T>
                     </p>
                   </div>
                   <div className="h-60 mt-2">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={getMobileBranchComparisonData()}>
+                      <BarChart 
+                        data={getMobileBranchComparisonData(getTimeFilteredReportsOnly())}
+                        onClick={(state) => {
+                          if (state && state.activeLabel) {
+                            const clickedShortName = String(state.activeLabel);
+                            const foundBranch = branches.find(b => {
+                              const match = b.name.match(/\(([^)]+)\)/);
+                              const shortName = match ? match[1] : b.name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn phòng ", "VP ");
+                              return shortName.toLowerCase() === clickedShortName.toLowerCase();
+                            });
+                            if (foundBranch) {
+                              if (mobileBranchFilter === foundBranch.id) {
+                                setMobileBranchFilter("Tất cả");
+                                showToast("Đã bỏ lọc chi nhánh");
+                              } else {
+                                setMobileBranchFilter(foundBranch.id);
+                                showToast(`Đã lọc nhật ký theo chi nhánh: ${getFactoryDisplayName(foundBranch.name)} 🏭`);
+                              }
+                            }
+                          }
+                        }}
+                      >
                         <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
                         <XAxis dataKey="name" interval={0} angle={-25} textAnchor="end" height={55} tick={{ fill: '#334155', fontSize: 6.5, fontWeight: 700 }} />
                         <YAxis tick={{ fill: '#64748b', fontSize: 7 }} />
                         <Tooltip wrapperStyle={{ fontSize: '9px' }} />
                         <Legend wrapperStyle={{ fontSize: '8px' }} />
-                        <Bar dataKey="Điểm Sáng (DSA)" fill="#10b981" barSize={12} radius={[2, 2, 0, 0]} />
-                        <Bar dataKey="Không Phù Hợp (KPH)" fill="#ef4444" barSize={12} radius={[2, 2, 0, 0]} />
+                        <Bar dataKey="Điểm Sáng (DSA)" fill="#10b981" barSize={12} radius={[2, 2, 0, 0]} className="cursor-pointer" />
+                        <Bar dataKey="Không Phù Hợp (KPH)" fill="#ef4444" barSize={12} radius={[2, 2, 0, 0]} className="cursor-pointer" />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
 
                 {/* Filtered logs */}
-                <div className="space-y-1.5 pb-2">
-                  <div className="text-[9px] font-black uppercase text-slate-500 flex items-center gap-1">
-                    <span>📋</span>
-                    <T><span translate="no" className="notranslate">Nhật Ký Biến Động Liên Quan ({stats.filteredReports.length}):</span></T>
-                  </div>
-                  {stats.filteredReports.length === 0 ? (
-                    <div className="text-center py-4 bg-white border border-slate-200 rounded-xl text-[9.5px] italic text-slate-400">
-                      <T><span translate="no" className="notranslate">Không có nhật ký phù hợp.</span></T>
-                    </div>
-                  ) : (
-                    stats.filteredReports.slice(0, 5).map((rep) => {
-                      let dateDisplay = rep.timestamp;
-                      try {
-                        const parsed = parseReportTimestamp(rep.timestamp);
-                        const d = String(parsed.getDate()).padStart(2, "0");
-                        const m = String(parsed.getMonth() + 1).padStart(2, "0");
-                        const y = String(parsed.getFullYear()).slice(-2);
-                        dateDisplay = `${d}/${m}/${y}`;
-                      } catch {
-                        // fallback
-                      }
-                      return (
-                        <div 
-                          key={rep.id} 
-                          className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-3xs flex flex-col gap-1 active:scale-98 transition-all cursor-pointer"
-                          onClick={() => {
-                            setActiveBottomTab("BAO_CAO");
-                            setSearchTerm(rep.uploaderName);
-                          }}
-                        >
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <span translate="no" className="notranslate text-[9.5px] font-black text-slate-800 block leading-tight">
-                                {getFactoryDisplayName(rep.factory)}
-                              </span>
-                              <span className="text-[7.5px] font-mono text-slate-405 block mt-0.5">
-                                <T><span translate="no" className="notranslate">{dateDisplay}</span></T>
-                                <span className="mx-1">|</span>
-                                <span>{formatNameCapitalized(rep.uploaderName)}</span>
-                              </span>
-                            </div>
-                            {rep.reportType === "KPH" || rep.isAbnormal ? (
-                              <span className="bg-rose-500 text-white font-sans font-black text-[7px] px-1 rounded uppercase tracking-wide">
-                                KPH
-                              </span>
-                            ) : (
-                              <span className="bg-emerald-500 text-white font-sans font-black text-[7px] px-1 rounded uppercase tracking-wide">
-                                DSA
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[9.5px] leading-relaxed text-slate-600 font-bold truncate">
-                            <T><span translate="no" className="notranslate">{rep.content}</span></T>
-                          </p>
+                {(() => {
+                  const displayReports = stats.filteredReports.filter((r) => {
+                    return mobileCategoryFilter === "Tất cả" || r.category === mobileCategoryFilter;
+                  });
+
+                  return (
+                    <div className="space-y-1.5 pb-2 animate-fadeIn">
+                      <div className="text-[9px] font-black uppercase text-slate-550 flex items-center justify-between gap-1">
+                        <span className="flex items-center gap-1">
+                          <span>📋</span>
+                          <T><span translate="no" className="notranslate">Nhật Ký Biến Động Liên Quan ({displayReports.length}):</span></T>
+                        </span>
+                        {(mobileBranchFilter !== "Tất cả" || mobileCategoryFilter !== "Tất cả") && (
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              setMobileBranchFilter("Tất cả");
+                              setMobileCategoryFilter("Tất cả");
+                              showToast("Đã thiết lập lại bộ lọc");
+                            }}
+                            className="text-[8px] text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md font-black cursor-pointer uppercase transition-all select-none hover:bg-rose-100"
+                          >
+                            Xóa lọc ✕
+                          </button>
+                        )}
+                      </div>
+                      {displayReports.length === 0 ? (
+                        <div className="text-center py-6 bg-white border border-slate-200 rounded-xl text-[9.5px] italic text-slate-400">
+                          <T><span translate="no" className="notranslate">Không có nhật ký phù hợp. Vui lòng bấm xóa lọc hoặc chọn biểu đồ khác.</span></T>
                         </div>
-                      );
-                    })
-                  )}
-                </div>
+                      ) : (
+                        displayReports.map((rep) => {
+                          let dateDisplay = rep.timestamp;
+                          try {
+                            const parsed = parseReportTimestamp(rep.timestamp);
+                            const d = String(parsed.getDate()).padStart(2, "0");
+                            const m = String(parsed.getMonth() + 1).padStart(2, "0");
+                            const y = String(parsed.getFullYear()).slice(-2);
+                            dateDisplay = `${d}/${m}/${y}`;
+                          } catch {
+                            // fallback
+                          }
+                          return (
+                            <div 
+                              key={rep.id} 
+                              className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-3xs flex flex-col gap-1 active:scale-98 transition-all cursor-pointer hover:border-blue-300"
+                              onClick={() => {
+                                setActiveBottomTab("BAO_CAO");
+                                setSearchTerm(rep.uploaderName);
+                              }}
+                            >
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <span translate="no" className="notranslate text-[9.5px] font-black text-slate-800 block leading-tight">
+                                    {getFactoryDisplayName(rep.factory)}
+                                  </span>
+                                  <span className="text-[7.5px] font-mono text-slate-405 block mt-0.5">
+                                    <T><span translate="no" className="notranslate">{dateDisplay}</span></T>
+                                    <span className="mx-1">|</span>
+                                    <span>{formatNameCapitalized(rep.uploaderName)}</span>
+                                  </span>
+                                </div>
+                                {rep.reportType === "KPH" || rep.isAbnormal ? (
+                                  <span className="bg-rose-500 text-white font-sans font-black text-[7px] px-1 rounded uppercase tracking-wide">
+                                    KPH
+                                  </span>
+                                ) : (
+                                  <span className="bg-emerald-500 text-white font-sans font-black text-[7px] px-1 rounded uppercase tracking-wide">
+                                    DSA
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[9.5px] leading-relaxed text-slate-600 font-bold truncate">
+                                <T><span translate="no" className="notranslate">{rep.content}</span></T>
+                              </p>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  );
+                })()}
               </>
             );
           })()}
