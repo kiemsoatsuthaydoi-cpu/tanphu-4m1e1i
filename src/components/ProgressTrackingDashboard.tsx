@@ -435,7 +435,7 @@ export default function ProgressTrackingDashboard({
       </div>
 
       {/* 2. Hot Alarm/Urgent list Section */}
-      {laggingList.length > 0 && (
+      {currentUser?.role === UserRole.ADMIN && laggingList.length > 0 && (
         <div className={`bg-red-50 border border-red-200 rounded-xl ${isMobile ? "p-3 space-y-2" : "p-3.5 space-y-3"}`}>
           <div className="flex items-center gap-1.5">
             <ShieldAlert className={`text-red-600 shrink-0 ${isMobile ? "w-3.5 h-3.5" : "w-4 h-4"}`} />

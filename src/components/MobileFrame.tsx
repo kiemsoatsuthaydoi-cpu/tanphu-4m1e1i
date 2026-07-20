@@ -4723,21 +4723,49 @@ App Link: ${window.location.origin}`;
                           cy="50%" 
                           outerRadius="65%" 
                           data={getMobileRadarKphData(stats.filteredReports)}
-                          onClick={(state) => {
-                            if (state && state.activeLabel) {
-                              const clickedCat = String(state.activeLabel);
-                              if (mobileCategoryFilter === clickedCat) {
-                                setMobileCategoryFilter("Tất cả");
-                                showToast("Đã bỏ lọc danh mục");
-                              } else {
-                                setMobileCategoryFilter(clickedCat);
-                                showToast(`Đã lọc nhật ký theo danh mục: ${clickedCat} 💡`);
-                              }
-                            }
-                          }}
                         >
                           <PolarGrid stroke="#cbd5e1" />
-                          <PolarAngleAxis dataKey="subject" tick={{ fill: '#334155', fontSize: 7, fontWeight: 700 }} />
+                          <PolarAngleAxis 
+                            dataKey="subject" 
+                            tick={(props: any) => {
+                              const { 
+                                payload, 
+                                x, 
+                                y, 
+                                cx, 
+                                cy, 
+                                verticalAnchor, 
+                                verticalanchor, 
+                                visibleTicksCount, 
+                                index, 
+                                coordinate, 
+                                ...rest 
+                              } = props;
+                              return (
+                                <text
+                                  {...rest}
+                                  cx={cx}
+                                  cy={cy}
+                                  x={x}
+                                  y={y}
+                                  className="notranslate cursor-pointer hover:fill-rose-600 transition-colors font-sans text-[7px] font-bold"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const clickedCat = payload.value;
+                                    if (mobileCategoryFilter === clickedCat) {
+                                      setMobileCategoryFilter("Tất cả");
+                                      showToast("Đã bỏ lọc danh mục");
+                                    } else {
+                                      setMobileCategoryFilter(clickedCat);
+                                      showToast(`Đã lọc nhật ký theo danh mục: ${clickedCat} 💡`);
+                                    }
+                                  }}
+                                >
+                                  {payload.value}
+                                </text>
+                              );
+                            }} 
+                          />
                           <PolarRadiusAxis angle={30} domain={[0, 'auto']} tick={{ fill: '#64748b', fontSize: 7 }} />
                           <Radar name="Số lỗi KPH" dataKey="Không Phù Hợp (KPH)" stroke="#ef4444" fill="#f87171" fillOpacity={0.35} />
                           <Tooltip wrapperStyle={{ fontSize: '9px' }} />
@@ -4768,26 +4796,70 @@ App Link: ${window.location.origin}`;
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart 
                           data={getMobileParetoData(stats.filteredReports)}
-                          onClick={(state) => {
-                            if (state && state.activeLabel) {
-                              const clickedCat = String(state.activeLabel);
-                              if (mobileCategoryFilter === clickedCat) {
-                                setMobileCategoryFilter("Tất cả");
-                                showToast("Đã bỏ lọc danh mục");
-                              } else {
-                                setMobileCategoryFilter(clickedCat);
-                                showToast(`Đã lọc nhật ký theo danh mục: ${clickedCat} 🎯`);
-                              }
-                            }
-                          }}
                         >
                           <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                          <XAxis dataKey="category" interval={0} angle={-25} textAnchor="end" height={55} tick={{ fill: '#475569', fontSize: 6.5, fontWeight: 700 }} />
+                          <XAxis 
+                            dataKey="category" 
+                            interval={0} 
+                            angle={-25} 
+                            textAnchor="end" 
+                            height={55} 
+                            tick={(props: any) => {
+                              const { x, y, payload } = props;
+                              return (
+                                <g transform={`translate(${x},${y})`}>
+                                  <text
+                                    x={0}
+                                    y={0}
+                                    dy={12}
+                                    textAnchor="end"
+                                    fill="#475569"
+                                    fontSize={6.5}
+                                    fontWeight={700}
+                                    transform="rotate(-25)"
+                                    className="notranslate cursor-pointer hover:fill-blue-600 transition-colors font-sans"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const clickedCat = payload.value;
+                                      if (mobileCategoryFilter === clickedCat) {
+                                        setMobileCategoryFilter("Tất cả");
+                                        showToast("Đã bỏ lọc danh mục");
+                                      } else {
+                                        setMobileCategoryFilter(clickedCat);
+                                        showToast(`Đã lọc nhật ký theo danh mục: ${clickedCat} 🎯`);
+                                      }
+                                    }}
+                                  >
+                                    {payload.value}
+                                  </text>
+                                </g>
+                              );
+                            }}
+                          />
                           <YAxis yAxisId="left" tick={{ fill: '#64748b', fontSize: 7 }} />
                           <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fill: '#d97706', fontSize: 7 }} />
                           <Tooltip wrapperStyle={{ fontSize: '9px' }} />
                           <Legend wrapperStyle={{ fontSize: '8px' }} />
-                          <Bar yAxisId="left" dataKey="Số lỗi (Tần suất)" fill="#3b82f6" barSize={15} radius={[2, 2, 0, 0]} className="cursor-pointer" />
+                          <Bar 
+                            yAxisId="left" 
+                            dataKey="Số lỗi (Tần suất)" 
+                            fill="#3b82f6" 
+                            barSize={15} 
+                            radius={[2, 2, 0, 0]} 
+                            className="cursor-pointer" 
+                            onClick={(data: any) => {
+                              if (data && data.category) {
+                                const clickedCat = data.category;
+                                if (mobileCategoryFilter === clickedCat) {
+                                  setMobileCategoryFilter("Tất cả");
+                                  showToast("Đã bỏ lọc danh mục");
+                                } else {
+                                  setMobileCategoryFilter(clickedCat);
+                                  showToast(`Đã lọc nhật ký theo danh mục: ${clickedCat} 🎯`);
+                                }
+                              }
+                            }}
+                          />
                           <Line yAxisId="right" type="monotone" dataKey="Phần trăm lũy kế (%)" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3, fill: '#f59e0b' }} />
                         </ComposedChart>
                       </ResponsiveContainer>
@@ -4815,27 +4887,65 @@ App Link: ${window.location.origin}`;
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart 
                         data={getMobileBranchComparisonData(getTimeFilteredReportsOnly())}
-                        onClick={(state: any) => {
-                          if (state) {
-                            let clickedBranchId: string | undefined = undefined;
-                            if (state.activePayload && state.activePayload.length > 0) {
-                              clickedBranchId = state.activePayload[0].payload?.branchId;
-                            }
-                            
-                            if (!clickedBranchId && state.activeLabel) {
-                              const clickedShortName = String(state.activeLabel);
-                              const foundBranch = branches.find(b => {
-                                const match = b.name.match(/\(([^)]+)\)/);
-                                const shortName = match ? match[1] : b.name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn phòng ", "VP ");
-                                return shortName.toLowerCase() === clickedShortName.toLowerCase() || b.id.toLowerCase() === clickedShortName.toLowerCase();
-                              });
-                              if (foundBranch) {
-                                clickedBranchId = foundBranch.id;
-                              }
-                            }
-
-                            if (clickedBranchId) {
-                              const foundBranch = branches.find(b => b.id === clickedBranchId);
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                        <XAxis 
+                          dataKey="name" 
+                          interval={0} 
+                          angle={-25} 
+                          textAnchor="end" 
+                          height={55} 
+                          tick={(props: any) => {
+                            const { x, y, payload } = props;
+                            return (
+                              <g transform={`translate(${x},${y})`}>
+                                <text
+                                  x={0}
+                                  y={0}
+                                  dy={12}
+                                  textAnchor="end"
+                                  fill="#334155"
+                                  fontSize={6.5}
+                                  fontWeight={700}
+                                  transform="rotate(-25)"
+                                  className="notranslate cursor-pointer hover:fill-emerald-600 transition-colors font-sans"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const clickedShortName = payload.value;
+                                    const foundBranch = (branches || []).find(b => {
+                                      const match = b.name.match(/\(([^)]+)\)/);
+                                      const shortName = match ? match[1] : b.name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn phòng ", "VP ");
+                                      return shortName.toLowerCase() === clickedShortName.toLowerCase() || b.id.toLowerCase() === clickedShortName.toLowerCase();
+                                    });
+                                    if (foundBranch) {
+                                      if (mobileBranchFilter === foundBranch.id) {
+                                        setMobileBranchFilter("Tất cả");
+                                        showToast("Đã bỏ lọc chi nhánh");
+                                      } else {
+                                        setMobileBranchFilter(foundBranch.id);
+                                        showToast(`Đã lọc nhật ký theo chi nhánh: ${getFactoryDisplayName(foundBranch.name)} 🏭`);
+                                      }
+                                    }
+                                  }}
+                                >
+                                  {payload.value}
+                                </text>
+                              </g>
+                            );
+                          }}
+                        />
+                        <YAxis tick={{ fill: '#64748b', fontSize: 7 }} />
+                        <Tooltip wrapperStyle={{ fontSize: '9px' }} />
+                        <Legend wrapperStyle={{ fontSize: '8px' }} />
+                        <Bar 
+                          dataKey="Điểm Sáng (DSA)" 
+                          fill="#10b981" 
+                          barSize={12} 
+                          radius={[2, 2, 0, 0]} 
+                          className="cursor-pointer"
+                          onClick={(data: any) => {
+                            if (data && data.branchId) {
+                              const foundBranch = (branches || []).find(b => b.id === data.branchId);
                               if (foundBranch) {
                                 if (mobileBranchFilter === foundBranch.id) {
                                   setMobileBranchFilter("Tất cả");
@@ -4846,16 +4956,29 @@ App Link: ${window.location.origin}`;
                                 }
                               }
                             }
-                          }
-                        }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                        <XAxis dataKey="name" interval={0} angle={-25} textAnchor="end" height={55} tick={{ fill: '#334155', fontSize: 6.5, fontWeight: 700 }} />
-                        <YAxis tick={{ fill: '#64748b', fontSize: 7 }} />
-                        <Tooltip wrapperStyle={{ fontSize: '9px' }} />
-                        <Legend wrapperStyle={{ fontSize: '8px' }} />
-                        <Bar dataKey="Điểm Sáng (DSA)" fill="#10b981" barSize={12} radius={[2, 2, 0, 0]} className="cursor-pointer" />
-                        <Bar dataKey="Không Phù Hợp (KPH)" fill="#ef4444" barSize={12} radius={[2, 2, 0, 0]} className="cursor-pointer" />
+                          }}
+                        />
+                        <Bar 
+                          dataKey="Không Phù Hợp (KPH)" 
+                          fill="#ef4444" 
+                          barSize={12} 
+                          radius={[2, 2, 0, 0]} 
+                          className="cursor-pointer"
+                          onClick={(data: any) => {
+                            if (data && data.branchId) {
+                              const foundBranch = (branches || []).find(b => b.id === data.branchId);
+                              if (foundBranch) {
+                                if (mobileBranchFilter === foundBranch.id) {
+                                  setMobileBranchFilter("Tất cả");
+                                  showToast("Đã bỏ lọc chi nhánh");
+                                } else {
+                                  setMobileBranchFilter(foundBranch.id);
+                                  showToast(`Đã lọc nhật ký theo chi nhánh: ${getFactoryDisplayName(foundBranch.name)} 🏭`);
+                                }
+                              }
+                            }
+                          }}
+                        />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
