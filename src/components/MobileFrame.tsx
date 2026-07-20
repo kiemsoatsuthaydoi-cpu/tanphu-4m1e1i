@@ -2115,29 +2115,32 @@ export default function MobileFrame({
     const map: Record<string, { kph: number; dsa: number }> = {};
     branches.forEach((b) => {
       if (b.isScoring) {
-        map[b.name] = { kph: 0, dsa: 0 };
+        map[b.id] = { kph: 0, dsa: 0 };
       }
     });
 
     const activeReports = targetReports || reports;
 
     activeReports.filter((r) => !r.isDeleted).forEach((r) => {
-      if (map[r.factory]) {
+      const matchedBranch = branches.find(b => b.isScoring && matchSelectedFactory(r.factory, b.id));
+      if (matchedBranch && map[matchedBranch.id]) {
         if (r.reportType === "KPH" || r.isAbnormal) {
-          map[r.factory].kph++;
+          map[matchedBranch.id].kph++;
         } else if (r.reportType === "DSA" || r.isSpotlight) {
-          map[r.factory].dsa++;
+          map[matchedBranch.id].dsa++;
         }
       }
     });
 
-    return Object.keys(map).map((name) => {
-      const match = name.match(/\(([^)]+)\)/);
-      const shortName = match ? match[1] : name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn phòng ", "VP ");
+    return branches.filter((b) => b.isScoring).map((b) => {
+      const match = b.name.match(/\(([^)]+)\)/);
+      const shortName = match ? match[1] : b.name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn phòng ", "VP ");
       return {
         name: shortName,
-        "Không Phù Hợp (KPH)": map[name].kph,
-        "Điểm Sáng (DSA)": map[name].dsa
+        "Không Phù Hợp (KPH)": map[b.id].kph,
+        "Điểm Sáng (DSA)": map[b.id].dsa,
+        branchId: b.id,
+        fullName: b.name
       };
     });
   };
@@ -3949,7 +3952,7 @@ App Link: ${window.location.origin}`;
               )}
 
               {/* --- 2. SAO LƯU & ĐỒNG BỘ (Secondary) --- */}
-              {currentUser && (
+              {currentUser?.role === UserRole.ADMIN && (
                 <button
                   onClick={() => {
                     setShowMobileCloudQuota(true);
@@ -4812,21 +4815,35 @@ App Link: ${window.location.origin}`;
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart 
                         data={getMobileBranchComparisonData(getTimeFilteredReportsOnly())}
-                        onClick={(state) => {
-                          if (state && state.activeLabel) {
-                            const clickedShortName = String(state.activeLabel);
-                            const foundBranch = branches.find(b => {
-                              const match = b.name.match(/\(([^)]+)\)/);
-                              const shortName = match ? match[1] : b.name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn phòng ", "VP ");
-                              return shortName.toLowerCase() === clickedShortName.toLowerCase();
-                            });
-                            if (foundBranch) {
-                              if (mobileBranchFilter === foundBranch.id) {
-                                setMobileBranchFilter("Tất cả");
-                                showToast("Đã bỏ lọc chi nhánh");
-                              } else {
-                                setMobileBranchFilter(foundBranch.id);
-                                showToast(`Đã lọc nhật ký theo chi nhánh: ${getFactoryDisplayName(foundBranch.name)} 🏭`);
+                        onClick={(state: any) => {
+                          if (state) {
+                            let clickedBranchId: string | undefined = undefined;
+                            if (state.activePayload && state.activePayload.length > 0) {
+                              clickedBranchId = state.activePayload[0].payload?.branchId;
+                            }
+                            
+                            if (!clickedBranchId && state.activeLabel) {
+                              const clickedShortName = String(state.activeLabel);
+                              const foundBranch = branches.find(b => {
+                                const match = b.name.match(/\(([^)]+)\)/);
+                                const shortName = match ? match[1] : b.name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn phòng ", "VP ");
+                                return shortName.toLowerCase() === clickedShortName.toLowerCase() || b.id.toLowerCase() === clickedShortName.toLowerCase();
+                              });
+                              if (foundBranch) {
+                                clickedBranchId = foundBranch.id;
+                              }
+                            }
+
+                            if (clickedBranchId) {
+                              const foundBranch = branches.find(b => b.id === clickedBranchId);
+                              if (foundBranch) {
+                                if (mobileBranchFilter === foundBranch.id) {
+                                  setMobileBranchFilter("Tất cả");
+                                  showToast("Đã bỏ lọc chi nhánh");
+                                } else {
+                                  setMobileBranchFilter(foundBranch.id);
+                                  showToast(`Đã lọc nhật ký theo chi nhánh: ${getFactoryDisplayName(foundBranch.name)} 🏭`);
+                                }
                               }
                             }
                           }
@@ -6976,11 +6993,40 @@ App Link: ${window.location.origin}`}
             }}
             className="fixed lg:absolute inset-0 bg-slate-900/65 backdrop-blur-xs flex items-end justify-center z-50 select-none animate-fadeIn cursor-pointer"
           >
-            <div 
-              onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-t-3xl w-full max-h-[85%] overflow-hidden flex flex-col shadow-2xl border-t border-slate-100 animate-slideUp cursor-default"
-            >
-              {showBadgeExplanations ? (
+            {!eligible ? (
+              <div 
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white rounded-2xl w-[92%] max-w-sm overflow-hidden flex flex-col shadow-2xl border border-slate-150 animate-slideUp cursor-default p-4 mb-6 space-y-3 animate-fadeIn select-none"
+              >
+                {/* Compact Header */}
+                <div className="flex justify-between items-center pb-2 border-b border-slate-100 shrink-0">
+                  <div className="flex items-center gap-1.5 text-indigo-700">
+                    <span className="text-base">🏅</span>
+                    <span className="font-extrabold text-[12px] uppercase tracking-tight font-sans">
+                      <span translate="no" className="notranslate"><T>HUY HIỆU DANH GIÁ</T></span>
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedBadgeReport(null)}
+                    className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-xs border-none"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Warning Content */}
+                <div className="p-3.5 bg-amber-500/5 border border-amber-500/10 rounded-xl text-[10.5px] leading-relaxed text-slate-655 font-semibold">
+                  <span className="mr-1 text-base">⚠️</span>
+                  <T>Chỉ cấp quản lý trực tiếp (Trưởng/Phó đơn vị), Ban Giám đốc, Ban TGĐ và Admin mới có quyền trao tặng Huy hiệu cho bản tin.</T>
+                </div>
+              </div>
+            ) : (
+              <div 
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white rounded-t-3xl w-full max-h-[85%] overflow-hidden flex flex-col shadow-2xl border-t border-slate-100 animate-slideUp cursor-default"
+              >
+                {showBadgeExplanations ? (
                 // Explanation View
                 <div className="flex-1 flex flex-col overflow-hidden">
                   <div className="flex justify-between items-center px-4 py-3.5 border-b border-indigo-100 shrink-0 bg-indigo-50/50">
@@ -7303,6 +7349,7 @@ App Link: ${window.location.origin}`}
                 </div>
               )}
             </div>
+            )}
           </div>
         );
       })()}

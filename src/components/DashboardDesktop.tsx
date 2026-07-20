@@ -1131,7 +1131,12 @@ export default function DashboardDesktop({
 }: DashboardDesktopProps) {
   const [activeTab, setActiveTab] = useState<
     "PHÊ_DUYỆT" | "MÃ_HÓA" | "THỐNG_KÊ" | "DỮ_LIỆU" | "QUY_CHẾ" | "CÁ_NHÂN" | "THÔNG_BÁO" | "TRAO_ĐỔI" | "TRIỂN_KHAI" | "ĐỀ_XUẤT" | "QUOTA_CLOUD"
-  >("PHÊ_DUYỆT");
+  >(() => {
+    if (currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) {
+      return "PHÊ_DUYỆT";
+    }
+    return "MÃ_HÓA";
+  });
   const [statsSubTab, setStatsSubTab] = useState<"NHAN_SU" | "CHAT_LUONG" | "TIEN_DO">("NHAN_SU");
   const [maHoaSubTab, setMaHoaSubTab] = useState<"SO_DO" | "MA_LOI">("SO_DO");
   
@@ -2427,10 +2432,48 @@ export default function DashboardDesktop({
   // --- STATS FILTER BY BRANCH & ADVANCED STATISTICAL FUNCTIONS ---
   const [statsBranchFilter, setStatsBranchFilter] = useState("Tất cả");
 
+  const matchFactory = (factoryName: string, filterKey: string): boolean => {
+    if (!factoryName) return false;
+    const norm = factoryName.toLowerCase();
+    if (filterKey === "Tất cả") return true;
+    const filterLower = filterKey.toLowerCase();
+    if (norm === filterLower || norm.includes(filterLower) || filterLower.includes(norm)) return true;
+    const clean = (s: string) => (s || "").replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
+    if (clean(factoryName) === clean(filterKey)) return true;
+    const extractId = (s: string) => {
+      const match = s.match(/\(([^)]+)\)/);
+      return match ? match[1].trim().toUpperCase() : "";
+    };
+    const id1 = extractId(factoryName);
+    const id2 = extractId(filterKey);
+    if (id1 && id2 && id1 === id2) return true;
+    if (id1 && filterLower.includes(id1.toLowerCase())) return true;
+    if (id2 && norm.includes(id2.toLowerCase())) return true;
+    if (filterLower.includes("bắc ninh") || filterLower.includes("tpp-bni")) {
+      return norm.includes("bắc ninh") || norm.includes("tpp-bni");
+    }
+    if (filterLower.includes("long an") || filterLower.includes("tpp-lan")) {
+      return norm.includes("long an") || norm.includes("tpp-lan");
+    }
+    if (filterLower.includes("văn phòng") || filterLower.includes("tpp-cty") || filterLower.includes("vp cty")) {
+      return norm.includes("văn phòng") || norm.includes("tpp-cty") || norm.includes("vp cty");
+    }
+    if (filterLower.includes("314") || filterLower.includes("tpp-314")) {
+      return norm.includes("314") || norm.includes("tpp-314");
+    }
+    if (filterLower.includes("bbm") || filterLower.includes("dnp-bbm")) {
+      return norm.includes("bbm") || norm.includes("dnp-bbm");
+    }
+    if (filterLower.includes("bbc") || filterLower.includes("dnp-bbc")) {
+      return norm.includes("bbc") || norm.includes("dnp-bbc");
+    }
+    return false;
+  };
+
   const getFilteredStatsReports = () => {
     const nonDeleted = reports.filter((r) => !r.isDeleted);
     if (statsBranchFilter === "Tất cả") return nonDeleted;
-    return nonDeleted.filter((r) => r.factory === statsBranchFilter);
+    return nonDeleted.filter((r) => matchFactory(r.factory, statsBranchFilter));
   };
 
   // Helper values for current dynamic filter stats
@@ -2475,27 +2518,30 @@ export default function DashboardDesktop({
     const map: Record<string, { kph: number; dsa: number }> = {};
     branches.forEach((b) => {
       if (b.isScoring) {
-        map[b.name] = { kph: 0, dsa: 0 };
+        map[b.id] = { kph: 0, dsa: 0 };
       }
     });
 
     reports.filter((r) => !r.isDeleted).forEach((r) => {
-      if (map[r.factory]) {
+      const matchedBranch = branches.find(b => b.isScoring && matchFactory(r.factory, b.id));
+      if (matchedBranch && map[matchedBranch.id]) {
         if (r.reportType === "KPH" || r.isAbnormal) {
-          map[r.factory].kph++;
+          map[matchedBranch.id].kph++;
         } else if (r.reportType === "DSA" || r.isSpotlight) {
-          map[r.factory].dsa++;
+          map[matchedBranch.id].dsa++;
         }
       }
     });
 
-    return Object.keys(map).map((name) => {
-      const match = name.match(/\(([^)]+)\)/);
-      const shortName = match ? match[1] : name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn phòng ", "VP ");
+    return branches.filter(b => b.isScoring).map((b) => {
+      const match = b.name.match(/\(([^)]+)\)/);
+      const shortName = match ? match[1] : b.name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn phòng ", "VP ");
       return {
         name: shortName,
-        "Không Phù Hợp (KPH)": map[name].kph,
-        "Điểm Sáng (DSA)": map[name].dsa
+        "Không Phù Hợp (KPH)": map[b.id].kph,
+        "Điểm Sáng (DSA)": map[b.id].dsa,
+        branchId: b.id,
+        fullName: b.name
       };
     });
   };
@@ -2921,7 +2967,9 @@ export default function DashboardDesktop({
             ...(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.REVIEWER
               ? [{ id: "ĐỀ_XUẤT", label: "Đề xuất chờ duyệt", icon: CheckSquare, count: pendingReportsCount, color: "text-sky-400" }]
               : []),
-            { id: "DỮ_LIỆU", label: "Nhật ký dữ liệu & PDF", icon: Database, color: "text-blue-450" },
+            ...(currentUser.role === UserRole.ADMIN
+              ? [{ id: "DỮ_LIỆU", label: "Nhật ký dữ liệu & PDF", icon: Database, color: "text-blue-450" }]
+              : []),
             { id: "THÔNG_BÁO", label: "Phát sóng & Ticker", icon: Bell, count: unreadCount, color: "text-yellow-400" },
             { id: "TRAO_ĐỔI", label: "Trao đổi diễn đàn", icon: MessageSquare, color: "text-pink-400" },
             { id: "QUY_CHẾ", label: "Quy chế & Quy trình", icon: FileSpreadsheet, color: "text-teal-400" },
