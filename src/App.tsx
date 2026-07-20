@@ -1587,6 +1587,8 @@ export default function App() {
           ...prev,
           ...cleanCfg
         }));
+      } else {
+        saveDocument("config", "mobile_ui", mobileUIConfig).catch(console.error);
       }
 
       const remoteTicker = fConfigs.find((c: any) => c.id === "ticker");
@@ -1596,16 +1598,22 @@ export default function App() {
           ...prev,
           ...cleanTicker
         }));
+      } else {
+        saveDocument("config", "ticker", tickerConfig).catch(console.error);
       }
 
       const remoteAiKnowledge = fConfigs.find((c: any) => c.id === "ai_knowledge");
       if (remoteAiKnowledge && typeof remoteAiKnowledge.text === "string") {
         setAiKnowledgeText(remoteAiKnowledge.text);
+      } else {
+        saveDocument("config", "ai_knowledge", { text: aiKnowledgeText }).catch(console.error);
       }
 
       const remoteQcFeature = fConfigs.find((c: any) => c.id === "qc_feature");
       if (remoteQcFeature && typeof remoteQcFeature.enabled === "boolean") {
         setIsQcFeatureEnabled(remoteQcFeature.enabled);
+      } else {
+        saveDocument("config", "qc_feature", { enabled: isQcFeatureEnabled }).catch(console.error);
       }
 
       setDbConnected(true);

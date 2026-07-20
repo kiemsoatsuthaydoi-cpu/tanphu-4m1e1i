@@ -220,6 +220,44 @@ export async function seedFirestoreIfNeeded(): Promise<boolean> {
         batch.set(docRef, r);
       });
 
+      // Seed default configs
+      const defaultConfigs = [
+        {
+          id: "mobile_ui",
+          displayRule: "clean",
+          columns: 2,
+          padding: "normal",
+          colorTheme: "blue",
+          fontSize: "xs",
+          customAliases: {
+            "TPP-CTY": "VP Công Ty",
+            "TPP-BNI": "Bắc Ninh",
+            "TPP-LAN": "Long An",
+            "TPP-314": "Nhà máy 314"
+          }
+        },
+        {
+          id: "ticker",
+          text: "",
+          speed: 35,
+          spacing: 50
+        },
+        {
+          id: "ai_knowledge",
+          text: ""
+        },
+        {
+          id: "qc_feature",
+          enabled: true
+        }
+      ];
+
+      defaultConfigs.forEach((c) => {
+        const docRef = doc(db, "config", c.id);
+        const { id, ...data } = c;
+        batch.set(docRef, data);
+      });
+
       await batch.commit();
       console.log("All collections seeded successfully into Firestore!");
       return true;
@@ -271,7 +309,7 @@ export async function fetchCollection<T>(collectionName: string): Promise<T[]> {
         
         items.push(appUser as T);
       } else {
-        items.push({ ...data } as T);
+        items.push({ id: doc.id, ...data } as T);
       }
     });
     return items;
