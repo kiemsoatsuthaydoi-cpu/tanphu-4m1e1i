@@ -19,6 +19,7 @@ import {
 import { T } from "./TranslateText";
 import { QualityReport, User, UserRole, QualityReportResolution } from "../types";
 import { formatNameCapitalized } from "../utils/branchHelpers";
+import { MentionTextArea } from "./MentionTextArea";
 
 interface ProgressTrackingDashboardProps {
   reports: QualityReport[];
@@ -27,6 +28,7 @@ interface ProgressTrackingDashboardProps {
   onUpdateReport?: (report: QualityReport) => void;
   onAddBroadcast?: (notice: string, type: string) => void;
   showToast: (message: string, type?: "success" | "error" | "warning" | "info") => void;
+  isMobile?: boolean;
 }
 
 export default function ProgressTrackingDashboard({
@@ -35,7 +37,8 @@ export default function ProgressTrackingDashboard({
   currentUser,
   onUpdateReport,
   onAddBroadcast,
-  showToast
+  showToast,
+  isMobile = false
 }: ProgressTrackingDashboardProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBranch, setSelectedBranch] = useState("Tất cả");
@@ -338,78 +341,93 @@ export default function ProgressTrackingDashboard({
   };
 
   return (
-    <div className="space-y-4 animate-fadeIn select-text pb-10">
+    <div className={`animate-fadeIn select-text pb-10 ${isMobile ? "space-y-3 mobile-8pt-force" : "space-y-4"}`}>
+      {isMobile && (
+        <style dangerouslySetInnerHTML={{__html: `
+          .mobile-8pt-force, .mobile-8pt-force * {
+            font-size: 8pt !important;
+          }
+        `}} />
+      )}
       
       {/* 1. Header & KPI counters */}
-      <div className="bg-gradient-to-br from-slate-900 to-indigo-950 rounded-2xl border border-indigo-900 p-4 shadow-md text-white space-y-3">
+      <div className={`bg-gradient-to-br from-slate-900 to-indigo-950 rounded-xl border border-indigo-900 shadow-md text-white ${
+        isMobile ? "p-3 space-y-2.5" : "p-4 space-y-3"
+      }`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-xl bg-indigo-500/20 text-indigo-300">
-              <TrendingUp className="w-4 h-4" />
+            <div className={`rounded-lg bg-indigo-500/20 text-indigo-300 ${isMobile ? "p-1" : "p-1.5"}`}>
+              <TrendingUp className={isMobile ? "w-3.5 h-3.5" : "w-4 h-4"} />
             </div>
-            <h3 className="text-[16.5px] font-black uppercase tracking-tight">
+            <h3 className={`font-black uppercase tracking-tight ${isMobile ? "text-[12.5px]" : "text-[16.5px]"}`}>
               <span translate="no" className="notranslate"><T>Mục Tiêu Khắc Phục KPH</T></span>
             </h3>
           </div>
-          <span className="text-[14px] font-bold bg-indigo-550 px-2.5 py-1 rounded-full">
+          <span className={`font-bold bg-indigo-550 rounded-full ${isMobile ? "text-[10.5px] px-2 py-0.5" : "text-[14px] px-2.5 py-1"}`}>
             <span translate="no" className="notranslate">HT: {percentProgress}%</span>
           </span>
         </div>
 
         {/* Big Progress bar */}
         <div className="space-y-1">
-          <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden border border-slate-700">
+          <div className={`w-full bg-slate-800 rounded-full overflow-hidden border border-slate-700 ${isMobile ? "h-2" : "h-2.5"}`}>
             <div 
               className="bg-gradient-to-r from-teal-400 to-emerald-500 h-full transition-all duration-500"
               style={{ width: `${percentProgress}%` }}
             />
           </div>
-          <div className="flex justify-between items-center text-[13.5px] text-slate-400 font-bold">
+          <div className={`flex justify-between items-center text-slate-400 font-bold ${isMobile ? "text-[10.5px]" : "text-[13.5px]"}`}>
             <span translate="no" className="notranslate"><T>Đã hoàn thành</T>: {countDaXuLy}/{totalKph} KPH</span>
             <span translate="no" className="notranslate">{percentProgress}%</span>
           </div>
         </div>
 
         {/* 3 Status mini blocks */}
-        <div className="grid grid-cols-3 gap-2 pt-1.5">
+        <div className="grid grid-cols-3 gap-2 pt-1">
           <button
             onClick={() => setSelectedStatus("CHUA_TIEP_NHAN")}
-            className={`p-2 rounded-xl text-center border transition-all cursor-pointer bg-transparent ${
+            className={`rounded-xl text-center border transition-all cursor-pointer bg-transparent ${
+              isMobile ? "p-1.5" : "p-2"
+            } ${
               selectedStatus === "CHUA_TIEP_NHAN"
                 ? "border-red-500 bg-red-950/40 text-red-100"
                 : "border-slate-800 hover:border-slate-700 text-slate-300"
             }`}
           >
-            <div className="text-[20px] font-black text-red-400">{countChuaTiepNhan}</div>
-            <div className="text-[13px] font-black uppercase tracking-wider text-slate-400 leading-tight">
+            <div className={`font-black text-red-400 ${isMobile ? "text-[15px]" : "text-[20px]"}`}>{countChuaTiepNhan}</div>
+            <div className={`font-black uppercase tracking-wider text-slate-400 leading-tight ${isMobile ? "text-[9.5px]" : "text-[13px]"}`}>
               <span translate="no" className="notranslate"><T>Chưa Tiếp Nhận</T></span>
             </div>
           </button>
 
           <button
             onClick={() => setSelectedStatus("DANG_XU_LY")}
-            className={`p-2 rounded-xl text-center border transition-all cursor-pointer bg-transparent ${
+            className={`rounded-xl text-center border transition-all cursor-pointer bg-transparent ${
+              isMobile ? "p-1.5" : "p-2"
+            } ${
               selectedStatus === "DANG_XU_LY"
                 ? "border-amber-500 bg-amber-950/40 text-amber-100"
                 : "border-slate-800 hover:border-slate-700 text-slate-300"
             }`}
           >
-            <div className="text-[20px] font-black text-amber-400">{countDangXuLy}</div>
-            <div className="text-[13px] font-black uppercase tracking-wider text-slate-400 leading-tight">
+            <div className={`font-black text-amber-400 ${isMobile ? "text-[15px]" : "text-[20px]"}`}>{countDangXuLy}</div>
+            <div className={`font-black uppercase tracking-wider text-slate-400 leading-tight ${isMobile ? "text-[9.5px]" : "text-[13px]"}`}>
               <span translate="no" className="notranslate"><T>Đang Khắc Phục</T></span>
             </div>
           </button>
 
           <button
             onClick={() => setSelectedStatus("DA_XU_LY")}
-            className={`p-2 rounded-xl text-center border transition-all cursor-pointer bg-transparent ${
+            className={`rounded-xl text-center border transition-all cursor-pointer bg-transparent ${
+              isMobile ? "p-1.5" : "p-2"
+            } ${
               selectedStatus === "DA_XU_LY"
                 ? "border-emerald-500 bg-emerald-950/40 text-emerald-100"
                 : "border-slate-800 hover:border-slate-700 text-slate-300"
             }`}
           >
-            <div className="text-[20px] font-black text-emerald-400">{countDaXuLy}</div>
-            <div className="text-[13px] font-black uppercase tracking-wider text-slate-400 leading-tight">
+            <div className={`font-black text-emerald-400 ${isMobile ? "text-[15px]" : "text-[20px]"}`}>{countDaXuLy}</div>
+            <div className={`font-black uppercase tracking-wider text-slate-400 leading-tight ${isMobile ? "text-[9.5px]" : "text-[13px]"}`}>
               <span translate="no" className="notranslate"><T>Đã Xử Lý Xong</T></span>
             </div>
           </button>
@@ -418,40 +436,42 @@ export default function ProgressTrackingDashboard({
 
       {/* 2. Hot Alarm/Urgent list Section */}
       {laggingList.length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-2xl p-3.5 space-y-3">
+        <div className={`bg-red-50 border border-red-200 rounded-xl ${isMobile ? "p-3 space-y-2" : "p-3.5 space-y-3"}`}>
           <div className="flex items-center gap-1.5">
-            <ShieldAlert className="w-4 h-4 text-red-600 shrink-0" />
-            <h4 className="text-[15px] font-black text-red-900 uppercase tracking-tight">
+            <ShieldAlert className={`text-red-600 shrink-0 ${isMobile ? "w-3.5 h-3.5" : "w-4 h-4"}`} />
+            <h4 className={`font-black text-red-900 uppercase tracking-tight ${isMobile ? "text-[11.5px]" : "text-[15px]"}`}>
               <span translate="no" className="notranslate"><T>BÁO ĐỘNG & THÚC ĐẨY CẢI TIẾN TRỌNG ĐIỂM</T></span>
             </h4>
           </div>
-          <p className="text-[14px] text-slate-600 leading-normal font-semibold">
+          <p className={`text-slate-600 leading-normal font-semibold ${isMobile ? "text-[10px]" : "text-[14px]"}`}>
             <span translate="no" className="notranslate">Dưới đây là danh sách Trưởng đơn vị có số lượng tin KPH chưa hoàn thành xử lý. Hãy nhấp nút thúc đẩy để phát tín hiệu báo động hệ thống.</span>
           </p>
 
           <div className="flex flex-col gap-2">
             {laggingList.slice(0, 3).map(({ user, count }) => (
-              <div key={user.id} className="bg-white rounded-xl border border-red-100 p-2.5 flex items-center justify-between gap-3 shadow-6xs">
+              <div key={user.id} className={`bg-white rounded-xl border border-red-100 flex items-center justify-between gap-3 shadow-6xs ${isMobile ? "p-2" : "p-2.5"}`}>
                 <div className="min-w-0">
-                  <div className="text-[15px] font-black text-slate-800 truncate flex items-center gap-1">
+                  <div className={`font-black text-slate-800 truncate flex items-center gap-1 ${isMobile ? "text-[11.5px]" : "text-[15px]"}`}>
                     <span>👤</span>
                     <span translate="no" className="notranslate">{formatNameCapitalized(user.fullName)}</span>
                   </div>
-                  <div className="text-[13.5px] text-slate-500 font-extrabold mt-0.5 uppercase">
+                  <div className={`text-slate-500 font-extrabold mt-0.5 uppercase ${isMobile ? "text-[9.5px]" : "text-[13.5px]"}`}>
                     <span translate="no" className="notranslate">{user.department} - {user.branch}</span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-[14px] font-black bg-red-100 text-red-700 px-2 py-1 rounded-lg">
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className={`font-black bg-red-100 text-red-700 rounded-lg ${isMobile ? "text-[10px] px-1.5 py-0.5" : "text-[14px] px-2 py-1"}`}>
                     <span translate="no" className="notranslate">{count} Sự cố</span>
                   </span>
                   <button
                     type="button"
                     onClick={() => handleTriggerUrgentAlert(user.fullName, user.department, count, user.id)}
-                    className="bg-red-600 hover:bg-red-700 text-white font-extrabold text-[13.5px] px-2.5 py-1.5 rounded-lg flex items-center gap-1 border-none cursor-pointer uppercase shadow-5xs"
+                    className={`bg-red-600 hover:bg-red-700 text-white font-extrabold rounded-lg flex items-center gap-1 border-none cursor-pointer uppercase shadow-5xs ${
+                      isMobile ? "text-[9.5px] px-1.5 py-1" : "text-[13.5px] px-2.5 py-1.5"
+                    }`}
                   >
-                    <Bell className="w-3 h-3 text-white animate-bounce" />
+                    <Bell className="w-2.5 h-2.5 text-white animate-bounce" />
                     <span translate="no" className="notranslate"><T>Hối thúc</T></span>
                   </button>
                 </div>
@@ -462,20 +482,24 @@ export default function ProgressTrackingDashboard({
       )}
 
       {/* 3. Filter & Search Panel */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-6xs space-y-2.5">
+      <div className={`bg-white rounded-xl border border-slate-200 p-2.5 shadow-6xs ${isMobile ? "space-y-2" : "space-y-2.5"}`}>
         <div className="relative">
           <input
             type="text"
             placeholder="Tìm theo uploader, assignee, mã, nội dung..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-[15px] font-bold focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-inner"
+            className={`w-full bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-inner ${
+              isMobile ? "text-[11px] pl-7 pr-2 py-1 h-[28px]" : "text-[15px] pl-8 pr-3 py-1.5"
+            }`}
           />
-          <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
+          <Search className={`text-slate-400 absolute ${isMobile ? "left-2 top-2 w-3 h-3" : "left-2.5 top-2.5 w-3.5 h-3.5"}`} />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery("")}
-              className="absolute right-2.5 top-2.5 text-[13px] text-slate-400 hover:text-slate-600 font-black border-none bg-transparent cursor-pointer"
+              className={`absolute text-slate-400 hover:text-slate-600 font-black border-none bg-transparent cursor-pointer ${
+                isMobile ? "right-1.5 top-1 text-[11px]" : "right-2.5 top-2.5 text-[13px]"
+              }`}
             >
               ❌
             </button>
@@ -485,14 +509,16 @@ export default function ProgressTrackingDashboard({
         <div className="grid grid-cols-2 gap-2">
           {/* Filter Branch */}
           <div className="space-y-0.5">
-            <label className="text-[13px] font-black uppercase tracking-wider text-slate-500">
+            <label className={`font-black uppercase tracking-wider text-slate-500 block ${isMobile ? "text-[9.5px]" : "text-[13px]"}`}>
               <span translate="no" className="notranslate"><T>Nhà Máy:</T></span>
             </label>
             <div className="relative">
               <select
                 value={selectedBranch}
                 onChange={(e) => setSelectedBranch(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-[14.5px] font-bold focus:outline-none shadow-3xs text-slate-700 appearance-none cursor-pointer"
+                className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-2 focus:outline-none shadow-3xs text-slate-700 appearance-none cursor-pointer ${
+                  isMobile ? "text-[10.5px] py-1 h-[28px]" : "text-[14.5px] py-1.5"
+                }`}
               >
                 <option value="Tất cả">Tất cả chi nhánh</option>
                 <option value="Nhà máy DNP-BBM">DNP BBM</option>
@@ -502,21 +528,23 @@ export default function ProgressTrackingDashboard({
                 <option value="Nhà máy Tân Phú - Bắc Ninh">Tân Phú BN</option>
               </select>
               <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-slate-400">
-                <span className="text-[12px]">▼</span>
+                <span className={isMobile ? "text-[8px]" : "text-[12px]"}>▼</span>
               </div>
             </div>
           </div>
 
           {/* Filter Status select */}
           <div className="space-y-0.5">
-            <label className="text-[13px] font-black uppercase tracking-wider text-slate-500">
+            <label className={`font-black uppercase tracking-wider text-slate-500 block ${isMobile ? "text-[9.5px]" : "text-[13px]"}`}>
               <span translate="no" className="notranslate"><T>Trạng Thái Khắc Phục:</T></span>
             </label>
             <div className="relative">
               <select
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value as any)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-[14.5px] font-bold focus:outline-none shadow-3xs text-slate-700 appearance-none cursor-pointer"
+                className={`w-full bg-slate-50 border border-slate-200 rounded-lg px-2 focus:outline-none shadow-3xs text-slate-700 appearance-none cursor-pointer ${
+                  isMobile ? "text-[10.5px] py-1 h-[28px]" : "text-[14.5px] py-1.5"
+                }`}
               >
                 <option value="ALL">Tất cả trạng thái</option>
                 <option value="CHUA_TIEP_NHAN">🔴 Chưa Tiếp Nhận</option>
@@ -524,7 +552,7 @@ export default function ProgressTrackingDashboard({
                 <option value="DA_XU_LY">🟢 Đã Xử Lý Xong</option>
               </select>
               <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-slate-400">
-                <span className="text-[12px]">▼</span>
+                <span className={isMobile ? "text-[8px]" : "text-[12px]"}>▼</span>
               </div>
             </div>
           </div>
@@ -548,9 +576,9 @@ export default function ProgressTrackingDashboard({
         </div>
 
         {filteredKph.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-400 space-y-2">
-            <div className="text-3xl">🎉</div>
-            <p className="text-[15px] font-bold leading-normal">
+          <div className={`bg-white border border-slate-200 text-center text-slate-400 space-y-2 ${isMobile ? "rounded-xl p-4" : "rounded-2xl p-8"}`}>
+            <div className={isMobile ? "text-xl" : "text-3xl"}>🎉</div>
+            <p className={`font-bold leading-normal ${isMobile ? "text-[11.5px]" : "text-[15px]"}`}>
               <span translate="no" className="notranslate">Không tìm thấy báo cáo sự cố KPH nào cần khắc phục theo bộ lọc hiện tại. Tất cả đều an toàn và kiểm soát tốt!</span>
             </p>
           </div>
@@ -564,7 +592,9 @@ export default function ProgressTrackingDashboard({
             return (
               <div 
                 key={report.id}
-                className={`bg-white rounded-2xl border-2 transition-all p-3.5 space-y-3 ${
+                className={`bg-white border-2 transition-all ${
+                  isMobile ? "rounded-xl p-3 space-y-2.5" : "rounded-2xl p-3.5 space-y-3"
+                } ${
                   status === "DA_XU_LY" 
                     ? "border-emerald-200 bg-emerald-50/10" 
                     : status === "DANG_XU_LY" 
@@ -575,33 +605,43 @@ export default function ProgressTrackingDashboard({
                 {/* Card Top Row: Factory & Status Badge */}
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <span className="text-[14px] font-black bg-slate-100 text-slate-800 px-2.5 py-1 rounded-md uppercase">
+                    <span className={`font-black bg-slate-100 text-slate-800 rounded-md uppercase ${
+                      isMobile ? "text-[10px] px-1.5 py-0.5" : "text-[14px] px-2.5 py-1"
+                    }`}>
                       <span translate="no" className="notranslate">{report.factory}</span>
                     </span>
-                    <h5 className="text-[15.5px] font-black text-slate-800 mt-1 leading-tight">
+                    <h5 className={`font-black text-slate-800 leading-tight ${
+                      isMobile ? "text-[12px] mt-1" : "text-[15.5px] mt-1"
+                    }`}>
                       <span translate="no" className="notranslate">{report.category}</span>
                     </h5>
                   </div>
 
                   <div className="flex flex-col items-end gap-1 shrink-0">
                     {status === "DA_XU_LY" ? (
-                      <span className="text-[13.5px] font-black text-emerald-800 bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg flex items-center gap-1">
+                      <span className={`font-black text-emerald-800 bg-emerald-100 border border-emerald-200 rounded-lg flex items-center gap-1 leading-none ${
+                        isMobile ? "text-[10px] px-1.5 py-0.5" : "text-[13.5px] px-2.5 py-1"
+                      }`}>
                         <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                         <span translate="no" className="notranslate"><T>Đã Khắc Phục</T></span>
                       </span>
                     ) : status === "DANG_XU_LY" ? (
-                      <span className="text-[13.5px] font-black text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg flex items-center gap-1 animate-pulse">
+                      <span className={`font-black text-amber-800 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-1 animate-pulse leading-none ${
+                        isMobile ? "text-[10px] px-1.5 py-0.5" : "text-[13.5px] px-2.5 py-1"
+                      }`}>
                         <Clock className="w-3 h-3 text-amber-600" />
                         <span translate="no" className="notranslate"><T>Đang Xử Lý</T></span>
                       </span>
                     ) : (
-                      <span className="text-[13.5px] font-black text-red-800 bg-red-100 border border-red-200 px-2.5 py-1 rounded-lg flex items-center gap-1 animate-pulse">
+                      <span className={`font-black text-red-800 bg-red-100 border border-red-200 rounded-lg flex items-center gap-1 animate-pulse leading-none ${
+                        isMobile ? "text-[10px] px-1.5 py-0.5" : "text-[13.5px] px-2.5 py-1"
+                      }`}>
                         <AlertTriangle className="w-3 h-3 text-red-600" />
                         <span translate="no" className="notranslate"><T>Chưa Tiếp Nhận</T></span>
                       </span>
                     )}
                     {report.reportCode && (
-                      <span className="text-[13px] text-slate-400 font-mono">
+                      <span className={`text-slate-400 font-mono ${isMobile ? "text-[9.5px]" : "text-[13px]"}`}>
                         <span translate="no" className="notranslate">Code: {report.reportCode}</span>
                       </span>
                     )}
@@ -609,22 +649,26 @@ export default function ProgressTrackingDashboard({
                 </div>
 
                 {/* Content description */}
-                <p className="text-[15px] font-bold text-slate-700 leading-relaxed bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                <p className={`font-bold text-slate-700 leading-relaxed bg-slate-50 border border-slate-100 ${
+                  isMobile ? "text-[11px] p-2.5 rounded-lg" : "text-[15px] p-2.5 rounded-xl"
+                }`}>
                   <span translate="no" className="notranslate">"{report.content}"</span>
                 </p>
 
                 {/* Uploader & Date */}
-                <div className="flex justify-between items-center text-[13.5px] text-slate-400 border-b border-slate-100 pb-2">
+                <div className={`flex justify-between items-center text-slate-400 border-b border-slate-100 pb-2 ${
+                  isMobile ? "text-[10px]" : "text-[13.5px]"
+                }`}>
                   <span translate="no" className="notranslate">Đăng bởi: {report.uploaderName}</span>
                   <span translate="no" className="notranslate">{report.timestamp}</span>
                 </div>
 
                 {/* Assigned Person Display / Assignment edit */}
-                <div className="space-y-2">
+                <div className={isMobile ? "space-y-1.5" : "space-y-2"}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-[15px]">👤</span>
-                      <span className="text-[14.5px] font-black text-slate-700">
+                      <span className={isMobile ? "text-[11px]" : "text-[15px]"}>👤</span>
+                      <span className={`font-black text-slate-700 ${isMobile ? "text-[10.5px]" : "text-[14.5px]"}`}>
                         <span translate="no" className="notranslate">
                           Người phụ trách: {report.assignedPersonName ? (
                             <strong className="text-blue-700">{report.assignedPersonName} (Trưởng {report.assignedPersonRole || "BP"})</strong>
@@ -643,9 +687,11 @@ export default function ProgressTrackingDashboard({
                           setAssigningReportId(assigningReportId === report.id ? null : report.id);
                           setAssigneeId(report.assignedPersonId || "");
                         }}
-                        className="text-[14px] text-blue-600 hover:text-blue-800 font-black cursor-pointer bg-transparent border-none flex items-center gap-0.5"
+                        className={`text-blue-600 hover:text-blue-800 font-black cursor-pointer bg-transparent border-none flex items-center gap-0.5 ${
+                          isMobile ? "text-[10px]" : "text-[14px]"
+                        }`}
                       >
-                        <PlusCircle className="w-3 h-3" />
+                        <PlusCircle className={isMobile ? "w-2.5 h-2.5" : "w-3 h-3"} />
                         <span translate="no" className="notranslate">{report.assignedPersonId ? "Giao lại" : "Chỉ định"}</span>
                       </button>
                     )}
@@ -653,15 +699,19 @@ export default function ProgressTrackingDashboard({
 
                   {/* Inline Dropdown for direct assign */}
                   {assigningReportId === report.id && (
-                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 flex flex-col gap-2 animate-fadeIn">
-                      <label className="text-[13.5px] font-black text-slate-500 uppercase tracking-wider">
+                    <div className={`bg-slate-50 border border-slate-200 flex flex-col gap-2 animate-fadeIn ${
+                      isMobile ? "p-2 rounded-lg" : "p-2.5 rounded-xl"
+                    }`}>
+                      <label className={`font-black text-slate-500 uppercase tracking-wider ${isMobile ? "text-[10px]" : "text-[13.5px]"}`}>
                         <span translate="no" className="notranslate">Chọn Nhân Sự Đảm Nhận:</span>
                       </label>
                       <div className="flex gap-2">
                         <select
                           value={assigneeId}
                           onChange={(e) => setAssigneeId(e.target.value)}
-                          className="flex-1 bg-white border border-slate-200 rounded-lg px-2 py-1 text-[14.5px] font-bold focus:outline-none cursor-pointer"
+                          className={`flex-1 bg-white border border-slate-200 rounded-lg px-2 py-1 font-bold focus:outline-none cursor-pointer ${
+                            isMobile ? "text-[11px]" : "text-[14.5px]"
+                          }`}
                         >
                           <option value="">-- Chọn Trưởng BP / DV --</option>
                           {users
@@ -676,7 +726,9 @@ export default function ProgressTrackingDashboard({
                         <button
                           type="button"
                           onClick={() => handleAssignPerson(report.id)}
-                          className="bg-blue-600 active:bg-blue-700 text-white font-extrabold text-[14px] px-3 py-1.5 rounded-lg border-none cursor-pointer"
+                          className={`bg-blue-600 active:bg-blue-700 text-white font-extrabold rounded-lg border-none cursor-pointer ${
+                            isMobile ? "text-[11px] px-2.5 py-1" : "text-[14px] px-3 py-1.5"
+                          }`}
                         >
                           <span translate="no" className="notranslate">Lưu</span>
                         </button>
@@ -686,15 +738,17 @@ export default function ProgressTrackingDashboard({
                 </div>
 
                 {/* Direct Action Buttons on Card for assigned person */}
-                <div className="flex flex-wrap gap-2 pt-1 border-t border-slate-50">
+                <div className="flex flex-wrap items-center gap-1.5 md:gap-2 pt-1 border-t border-slate-50">
                   {/* Receive action */}
                   {status === "CHUA_TIEP_NHAN" && (
                     <button
                       type="button"
                       onClick={() => handleQuickReceive(report.id)}
-                      className="bg-red-600 active:bg-red-700 text-white font-black text-[14px] px-3 py-2 rounded-xl border-none cursor-pointer flex items-center gap-1 shadow-4xs"
+                      className={`bg-red-600 active:bg-red-700 text-white font-black border-none cursor-pointer flex items-center gap-1 shadow-4xs ${
+                        isMobile ? "text-[10px] px-2 py-1.5 rounded-lg" : "text-[14px] px-3 py-2 rounded-xl"
+                      }`}
                     >
-                      <UserCheck className="w-3.5 h-3.5 stroke-[2.5]" />
+                      <UserCheck className={`stroke-[2.5] ${isMobile ? "w-3 h-3" : "w-3.5 h-3.5"}`} />
                       <span translate="no" className="notranslate"><T>TIẾP NHẬN SỰ CỐ NOW</T></span>
                     </button>
                   )}
@@ -707,27 +761,37 @@ export default function ProgressTrackingDashboard({
                         setEditingReportId(editingReportId === report.id ? null : report.id);
                         setResStatus("Đã xử lý");
                       }}
-                      className="bg-indigo-600 active:bg-indigo-700 text-white font-black text-[14px] px-3 py-2 rounded-xl border-none cursor-pointer flex items-center gap-1 shadow-4xs"
+                      className={`bg-indigo-600 active:bg-indigo-700 text-white font-black border-none cursor-pointer flex items-center gap-1 shadow-4xs ${
+                        isMobile ? "text-[10px] px-2 py-1.5 rounded-lg" : "text-[14px] px-3 py-2 rounded-xl"
+                      }`}
                     >
                       <span>⚙️</span>
-                      <span translate="no" className="notranslate">CẬP NHẬT BIỆN PHÁP KHẮC PHỤC</span>
+                      <span translate="no" className="notranslate">
+                        <T>{isMobile ? "CẬP NHẬT BPKP" : "CẬP NHẬT BIỆN PHÁP KHẮC PHỤC"}</T>
+                      </span>
                     </button>
                   )}
 
                   <button
                     type="button"
                     onClick={() => setExpandedReportId(isExpanded ? null : report.id)}
-                    className="ml-auto text-[14.5px] font-black text-slate-500 hover:text-slate-800 cursor-pointer bg-transparent border-none flex items-center gap-0.5"
+                    className={`ml-auto font-black text-slate-500 hover:text-slate-800 cursor-pointer bg-transparent border-none flex items-center gap-0.5 ${
+                      isMobile ? "text-[10.5px]" : "text-[14.5px]"
+                    }`}
                   >
                     <span translate="no" className="notranslate">{isExpanded ? "Thu gọn" : "Xem lịch sử"}</span>
-                    {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    {isExpanded ? <ChevronUp className={isMobile ? "w-3 h-3" : "w-3.5 h-3.5"} /> : <ChevronDown className={isMobile ? "w-3 h-3" : "w-3.5 h-3.5"} />}
                   </button>
                 </div>
 
                 {/* Direct Add Resolution Form panel */}
                 {editingReportId === report.id && (
-                  <div className="bg-slate-50 p-3 rounded-xl border border-indigo-100 space-y-2.5 animate-fadeIn">
-                    <div className="text-[14px] font-black text-indigo-950 uppercase tracking-wide flex items-center gap-1">
+                  <div className={`bg-slate-50 border border-indigo-100 animate-fadeIn ${
+                    isMobile ? "p-2 rounded-lg space-y-2" : "p-3 rounded-xl space-y-2.5"
+                  }`}>
+                    <div className={`font-black text-indigo-950 uppercase tracking-wide flex items-center gap-1 ${
+                      isMobile ? "text-[11px]" : "text-[14px]"
+                    }`}>
                       <span>🛠️</span>
                       <span translate="no" className="notranslate">Khai báo Kết quả / Biện pháp khắc phục:</span>
                     </div>
@@ -736,7 +800,9 @@ export default function ProgressTrackingDashboard({
                       <button
                         type="button"
                         onClick={() => setResStatus("Đang xử lý")}
-                        className={`flex-1 py-1.5 px-2 rounded-lg text-[13.5px] font-black uppercase transition-all border ${
+                        className={`flex-1 rounded-lg font-black uppercase transition-all border ${
+                          isMobile ? "py-1 px-1.5 text-[11px]" : "py-1.5 px-2 text-[13.5px]"
+                        } ${
                           resStatus === "Đang xử lý"
                             ? "bg-amber-100 border-amber-300 text-amber-900"
                             : "bg-white border-slate-200 text-slate-500"
@@ -747,7 +813,9 @@ export default function ProgressTrackingDashboard({
                       <button
                         type="button"
                         onClick={() => setResStatus("Đã xử lý")}
-                        className={`flex-1 py-1.5 px-2 rounded-lg text-[13.5px] font-black uppercase transition-all border ${
+                        className={`flex-1 rounded-lg font-black uppercase transition-all border ${
+                          isMobile ? "py-1 px-1.5 text-[11px]" : "py-1.5 px-2 text-[13.5px]"
+                        } ${
                           resStatus === "Đã xử lý"
                             ? "bg-emerald-100 border-emerald-300 text-emerald-900"
                             : "bg-white border-slate-200 text-slate-500"
@@ -757,12 +825,15 @@ export default function ProgressTrackingDashboard({
                       </button>
                     </div>
 
-                    <textarea
+                    <MentionTextArea
+                      users={users}
                       placeholder="Ghi cụ thể kết quả khắc phục sự cố, nguyên nhân rễ được xử lý thế nào..."
                       rows={2}
                       value={resResultText}
-                      onChange={(e) => setResResultText(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-[14.5px] font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      onChange={setResResultText}
+                      className={`w-full bg-white border border-slate-200 rounded-lg p-2 font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
+                        isMobile ? "text-[11px]" : "text-[14.5px]"
+                      }`}
                     />
 
                     <div className="flex justify-end gap-2">
@@ -772,14 +843,18 @@ export default function ProgressTrackingDashboard({
                           setEditingReportId(null);
                           setResResultText("");
                         }}
-                        className="px-2.5 py-1.5 rounded-lg text-[13.5px] font-bold text-slate-500 bg-transparent hover:bg-slate-100 border-none cursor-pointer"
+                        className={`rounded-lg font-bold text-slate-500 bg-transparent hover:bg-slate-100 border-none cursor-pointer ${
+                          isMobile ? "px-2 py-1 text-[11px]" : "px-2.5 py-1.5 text-[13.5px]"
+                        }`}
                       >
                         <span translate="no" className="notranslate">Hủy</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => handleAddResolution(report.id)}
-                        className="px-3 py-1.5 rounded-lg text-[13.5px] font-black text-white bg-indigo-600 active:bg-indigo-700 border-none cursor-pointer flex items-center gap-1"
+                        className={`rounded-lg font-black text-white bg-indigo-600 active:bg-indigo-700 border-none cursor-pointer flex items-center gap-1 ${
+                          isMobile ? "px-2.5 py-1 text-[11px]" : "px-3 py-1.5 text-[13.5px]"
+                        }`}
                       >
                         <Send className="w-2.5 h-2.5" />
                         <span translate="no" className="notranslate">Cập nhật</span>
@@ -790,8 +865,12 @@ export default function ProgressTrackingDashboard({
 
                 {/* Expanded details / History of changes */}
                 {isExpanded && (
-                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-150 space-y-2 text-[14px] font-medium leading-relaxed animate-fadeIn">
-                    <div className="text-[14px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1 border-b border-slate-200 pb-1">
+                  <div className={`bg-slate-50 border border-slate-150 leading-relaxed animate-fadeIn ${
+                    isMobile ? "p-2 rounded-lg space-y-1.5 text-[11px]" : "p-3 rounded-xl space-y-2 text-[14px]"
+                  }`}>
+                    <div className={`font-black uppercase tracking-wider text-slate-500 flex items-center gap-1 border-b border-slate-200 pb-1 ${
+                      isMobile ? "text-[10.5px]" : "text-[14px]"
+                    }`}>
                       <span>⏳</span>
                       <span translate="no" className="notranslate">Lịch sử sự cố & Nhật ký xử lý:</span>
                     </div>
@@ -823,16 +902,22 @@ export default function ProgressTrackingDashboard({
                               <span translate="no" className="notranslate font-black text-slate-800">
                                 {res.handlerName} ({res.departmentName})
                               </span>
-                              <span className={`text-[13px] px-1.5 py-0.5 rounded font-black ${
+                              <span className={`px-1.5 py-0.5 rounded font-black ${
+                                isMobile ? "text-[10px]" : "text-[13px]"
+                              } ${
                                 res.status === "Đã xử lý" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
                               }`}>
                                 <span translate="no" className="notranslate">{res.status}</span>
                               </span>
                             </div>
-                            <div translate="no" className="notranslate text-slate-650 text-[13.5px] leading-relaxed italic">
+                            <div translate="no" className={`notranslate text-slate-650 leading-relaxed italic ${
+                              isMobile ? "text-[10.5px]" : "text-[13.5px]"
+                            }`}>
                               "{res.resultText}"
                             </div>
-                            <div translate="no" className="notranslate text-[12.5px] text-slate-400 text-right">
+                            <div translate="no" className={`notranslate text-slate-400 text-right ${
+                              isMobile ? "text-[9.5px]" : "text-[12.5px]"
+                            }`}>
                               Cập nhật lúc: {res.updatedAt}
                             </div>
                           </div>
@@ -843,16 +928,18 @@ export default function ProgressTrackingDashboard({
                     {/* Replications Section for Resolved KPH */}
                     {report.resolutions && report.resolutions.some(res => res.status === "Đã xử lý") && (
                       <div className="space-y-2 pt-2 border-t border-slate-200">
-                        <div className="flex justify-between items-center">
-                          <div className="font-extrabold text-emerald-700 flex items-center gap-1">
+                        <div className="flex justify-between items-center gap-1">
+                          <div className={`font-extrabold text-emerald-700 flex items-center gap-1 ${
+                            isMobile ? "text-[11px]" : "text-[13px]"
+                          }`}>
                             <span>🚀</span>
-                            <span>Nhân rộng biện pháp khắc phục (cải tiến) sang nhà máy khác:</span>
+                            <span>Nhân rộng biện pháp cải tiến sang nhà máy khác:</span>
                           </div>
                           <button
                             type="button"
                             onClick={() => {
                               if (replicatingReportId === report.id) {
-                                setReplicatingReportId(null);
+                                  setReplicatingReportId(null);
                               } else {
                                 setReplicatingReportId(report.id);
                                 setEditingRepId(null);
@@ -864,7 +951,9 @@ export default function ProgressTrackingDashboard({
                                 setRepSupportRequired("");
                               }
                             }}
-                            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-extrabold text-[12px] px-2 py-1 rounded border border-emerald-200 cursor-pointer transition-all"
+                            className={`bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-extrabold border border-emerald-200 cursor-pointer transition-all ${
+                              isMobile ? "text-[9.5px] px-1.5 py-0.5 rounded" : "text-[12px] px-2 py-1 rounded"
+                            }`}
                           >
                             ➕ Đăng ký nhân rộng
                           </button>
@@ -872,18 +961,24 @@ export default function ProgressTrackingDashboard({
 
                         {/* Replication Form */}
                         {replicatingReportId === report.id && (
-                          <div className="bg-white p-3 rounded-xl border border-emerald-100 space-y-2.5 shadow-xs animate-fadeIn text-[13px]">
-                            <div className="text-[13px] font-black text-emerald-900 uppercase">
+                          <div className={`bg-white border border-emerald-100 shadow-xs animate-fadeIn ${
+                            isMobile ? "p-2 rounded-lg space-y-2 text-[10.5px]" : "p-3 rounded-xl space-y-2.5 text-[13px]"
+                          }`}>
+                            <div className={`font-black text-emerald-900 uppercase ${
+                              isMobile ? "text-[10.5px]" : "text-[13px]"
+                            }`}>
                               {editingRepId ? "Sửa thông tin nhân rộng" : "Đăng ký nhân rộng biện pháp cải tiến"}
                             </div>
                             
                             <div className="grid grid-cols-2 gap-2">
                               <div>
-                                <label className="block text-[11px] font-bold text-slate-500 uppercase">Nhà Máy:</label>
+                                <label className={`block font-bold text-slate-500 uppercase ${isMobile ? "text-[9px]" : "text-[11px]"}`}>Nhà Máy:</label>
                                 <select
                                   value={repFactoryName}
                                   onChange={(e) => setRepFactoryName(e.target.value)}
-                                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 font-bold cursor-pointer"
+                                  className={`w-full bg-slate-50 border border-slate-200 rounded-lg font-bold cursor-pointer ${
+                                    isMobile ? "p-1 text-[10.5px]" : "p-1.5 text-[13px]"
+                                  }`}
                                 >
                                   <option value="">-- Chọn Nhà Máy --</option>
                                   <option value="Nhà máy DNP-BBM">DNP BBM</option>
@@ -893,24 +988,28 @@ export default function ProgressTrackingDashboard({
                                 </select>
                               </div>
                               <div>
-                                <label className="block text-[11px] font-bold text-slate-500 uppercase">Bộ phận:</label>
+                                <label className={`block font-bold text-slate-500 uppercase ${isMobile ? "text-[9px]" : "text-[11px]"}`}>Bộ phận:</label>
                                 <input
                                   type="text"
                                   value={repDeptName}
                                   onChange={(e) => setRepDeptName(e.target.value)}
                                   placeholder="Ví dụ: KCS, Sản xuất..."
-                                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 font-bold"
+                                  className={`w-full bg-slate-50 border border-slate-200 rounded-lg font-bold ${
+                                    isMobile ? "p-1 text-[10.5px]" : "p-1.5 text-[13px]"
+                                  }`}
                                 />
                               </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-2">
                               <div>
-                                <label className="block text-[11px] font-bold text-slate-500 uppercase">Trạng thái:</label>
+                                <label className={`block font-bold text-slate-500 uppercase ${isMobile ? "text-[9px]" : "text-[11px]"}`}>Trạng thái:</label>
                                 <select
                                   value={repStatus}
                                   onChange={(e) => setRepStatus(e.target.value as any)}
-                                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 font-bold cursor-pointer"
+                                  className={`w-full bg-slate-50 border border-slate-200 rounded-lg font-bold cursor-pointer ${
+                                    isMobile ? "p-1 text-[10.5px]" : "p-1.5 text-[13px]"
+                                  }`}
                                 >
                                   <option value="Đang chuẩn bị">⏳ Đang chuẩn bị</option>
                                   <option value="Đang triển khai">⚙️ Đang triển khai</option>
@@ -918,38 +1017,48 @@ export default function ProgressTrackingDashboard({
                                 </select>
                               </div>
                               <div>
-                                <label className="block text-[11px] font-bold text-slate-500 uppercase">Hạn hoàn thành (dd/mm/yy):</label>
+                                <label className={`block font-bold text-slate-500 uppercase ${isMobile ? "text-[9px]" : "text-[11px]"}`}>Hạn hoàn thành (dd/mm/yy):</label>
                                 <input
                                   type="text"
                                   placeholder="Ví dụ: 30/12/26"
                                   value={repTargetDate}
                                   onChange={(e) => setRepTargetDate(e.target.value)}
-                                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 font-bold"
+                                  className={`w-full bg-slate-50 border border-slate-200 rounded-lg font-bold ${
+                                    isMobile ? "p-1 text-[10.5px]" : "p-1.5 text-[13px]"
+                                  }`}
                                 />
                               </div>
                             </div>
 
                             <div>
-                              <label className="block text-[11px] font-bold text-slate-500 uppercase">Hiện trạng triển khai:</label>
-                              <textarea
+                              <label className={`block font-bold text-slate-500 uppercase ${isMobile ? "text-[9px]" : "text-[11px]"}`}>Hiện trạng triển khai:</label>
+                              <MentionTextArea
+                                users={users}
                                 placeholder="Ghi nhận hiện trạng áp dụng..."
                                 value={repCurrentState}
-                                onChange={(e) => setRepCurrentState(e.target.value)}
+                                onChange={setRepCurrentState}
                                 rows={1}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 font-bold"
+                                className={`w-full bg-slate-50 border border-slate-200 rounded-lg font-bold ${
+                                  isMobile ? "p-1 text-[10.5px]" : "p-1.5 text-[13px]"
+                                }`}
                               />
                             </div>
 
                             <div>
-                              <label className="block text-[11px] font-bold text-slate-500 uppercase">Đề xuất hỗ trợ (nếu có):</label>
-                              <textarea
+                              <label className={`block font-bold text-slate-500 uppercase ${isMobile ? "text-[9px]" : "text-[11px]"}`}>Đề xuất hỗ trợ (nếu có):</label>
+                              <MentionTextArea
+                                users={users}
                                 placeholder="Cần hỗ trợ thiết bị, SOP mẫu hay đào tạo..."
                                 value={repSupportRequired}
-                                onChange={(e) => setRepSupportRequired(e.target.value)}
+                                onChange={setRepSupportRequired}
                                 rows={1}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 font-bold"
+                                className={`w-full bg-slate-50 border border-slate-200 rounded-lg font-bold ${
+                                  isMobile ? "p-1 text-[10.5px]" : "p-1.5 text-[13px]"
+                                }`}
                               />
                             </div>
+
+
 
                             <div className="flex justify-end gap-2">
                               <button
@@ -958,14 +1067,18 @@ export default function ProgressTrackingDashboard({
                                   setReplicatingReportId(null);
                                   setEditingRepId(null);
                                 }}
-                                className="px-3 py-1.5 rounded-lg font-bold text-slate-500 hover:bg-slate-100 border-none cursor-pointer"
+                                className={`rounded-lg font-bold text-slate-500 hover:bg-slate-100 border-none cursor-pointer ${
+                                  isMobile ? "px-2 py-1 text-[10px]" : "px-3 py-1.5 text-[13px]"
+                                }`}
                               >
                                 Hủy
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleSaveReplication(report)}
-                                className="px-4 py-1.5 rounded-lg font-black text-white bg-emerald-600 hover:bg-emerald-700 border-none cursor-pointer flex items-center gap-1"
+                                className={`rounded-lg font-black text-white bg-emerald-600 hover:bg-emerald-700 border-none cursor-pointer flex items-center gap-1 ${
+                                  isMobile ? "px-3 py-1 text-[11px]" : "px-4 py-1.5"
+                                }`}
                               >
                                 <Check className="w-4 h-4" />
                                 Lưu đăng ký
@@ -978,12 +1091,16 @@ export default function ProgressTrackingDashboard({
                         {report.replications && report.replications.length > 0 ? (
                           <div className="space-y-1.5">
                             {report.replications.map((rep) => (
-                              <div key={rep.id} className="bg-white p-2 rounded-lg border border-emerald-100 flex flex-col gap-1 text-[13.5px]">
+                              <div key={rep.id} className={`bg-white border border-emerald-100 flex flex-col gap-1 ${
+                                isMobile ? "p-2 rounded-lg text-[11px]" : "p-2 rounded-lg text-[13.5px]"
+                              }`}>
                                 <div className="flex items-center justify-between">
                                   <span className="font-black text-slate-800">
                                     {rep.factoryName} - {rep.departmentName}
                                   </span>
-                                  <span className={`text-[12px] px-1.5 py-0.5 rounded font-black ${
+                                  <span className={`px-1.5 py-0.5 rounded font-black ${
+                                    isMobile ? "text-[10px]" : "text-[12px]"
+                                  } ${
                                     rep.status === "Đã hoàn thành"
                                       ? "bg-emerald-100 text-emerald-800"
                                       : rep.status === "Đang triển khai"
@@ -995,18 +1112,20 @@ export default function ProgressTrackingDashboard({
                                 </div>
                                 
                                 {rep.currentState && (
-                                  <div className="text-slate-650 text-[13px] leading-relaxed">
+                                  <div className={`text-slate-650 leading-relaxed ${isMobile ? "text-[10.5px]" : "text-[13px]"}`}>
                                     <strong className="text-emerald-850">Hiện trạng:</strong> {rep.currentState}
                                   </div>
                                 )}
                                 {rep.supportRequired && (
-                                  <div className="text-slate-650 text-[13px] leading-relaxed">
+                                  <div className={`text-slate-650 leading-relaxed ${isMobile ? "text-[10.5px]" : "text-[13px]"}`}>
                                     <strong className="text-amber-850">Đề xuất hỗ trợ:</strong> {rep.supportRequired}
                                   </div>
                                 )}
 
-                                <div className="text-[12px] text-slate-400 flex justify-between items-center pt-1 border-t border-slate-50">
-                                  <span>Đăng ký bởi: {rep.registrantName} (Hạn: {rep.targetDate})</span>
+                                <div className={`text-slate-400 flex justify-between items-center pt-1 border-t border-slate-50 ${
+                                  isMobile ? "text-[9.5px]" : "text-[12px]"
+                                }`}>
+                                  <span>Đăng ký: {rep.registrantName} ({rep.targetDate})</span>
                                   <div className="flex gap-2">
                                     <button
                                       type="button"
@@ -1020,14 +1139,18 @@ export default function ProgressTrackingDashboard({
                                         setRepCurrentState(rep.currentState || "");
                                         setRepSupportRequired(rep.supportRequired || "");
                                       }}
-                                      className="text-blue-600 hover:underline bg-transparent border-none cursor-pointer font-bold text-[12px]"
+                                      className={`text-blue-600 hover:underline bg-transparent border-none cursor-pointer font-bold ${
+                                        isMobile ? "text-[10px]" : "text-[12px]"
+                                      }`}
                                     >
                                       Sửa
                                     </button>
                                     <button
                                       type="button"
                                       onClick={() => handleDeleteReplication(report, rep.id)}
-                                      className="text-red-600 hover:underline bg-transparent border-none cursor-pointer font-bold text-[12px]"
+                                      className={`text-red-600 hover:underline bg-transparent border-none cursor-pointer font-bold ${
+                                        isMobile ? "text-[10px]" : "text-[12px]"
+                                      }`}
                                     >
                                       Xóa
                                     </button>
@@ -1037,7 +1160,7 @@ export default function ProgressTrackingDashboard({
                             ))}
                           </div>
                         ) : (
-                          <div className="text-slate-400 italic text-[13px] pl-1">Chưa có đơn vị nào đăng ký nhân rộng biện pháp khắc phục này.</div>
+                          <div className={`text-slate-400 italic pl-1 ${isMobile ? "text-[10.5px]" : "text-[13px]"}`}>Chưa có đơn vị nào đăng ký nhân rộng biện pháp khắc phục này.</div>
                         )}
                       </div>
                     )}

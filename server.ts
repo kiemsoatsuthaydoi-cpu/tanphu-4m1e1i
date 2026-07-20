@@ -113,7 +113,7 @@ Thông tin báo cáo:
 
 Yêu cầu phân tích:
 1. Phân tích nguyên nhân gốc rễ theo phương pháp 5-Why (Đặt câu hỏi Tại sao 5 lần để tìm ra nguyên nhân sâu xa dựa trên thông tin được cung cấp, hãy suy luận logic, thực tế với bối cảnh sản xuất của ${companyName}).
-2. Đề xuất các biện pháp khắc phục (khẩn cấp trước mắt) và biện pháp phòng ngừa (lâu dài) khả thi, bám sát nhóm yếu tố ${category} của ${companyName}.
+2. Đề xuất các biện pháp khắc phục (khẩn cấp trước mắt) và biện pháp phòng ngừa lâu dài (cơ hội cải tiến) khả thi, bám sát nhóm yếu tố ${category} của ${companyName}. Khi trình bày phần này, hãy sử dụng chính xác tiêu đề "Biện pháp phòng ngừa lâu dài (cơ hội cải tiến)".
 3. Gợi ý 1 huy hiệu (Badge) phù hợp nhất cho người phát hiện báo cáo này từ danh sách sau:
    - "Chốt chặn rủi ro" (Nếu báo cáo ngăn chặn kịp thời lỗi nghiêm trọng/sự cố lớn)
    - "Mắt thần" (Nếu phát hiện lỗi nhỏ khó thấy, tinh tế hoặc lỗi tiềm ẩn)
@@ -150,7 +150,7 @@ app.post("/api/analyze-dsa", async (req, res) => {
 
     const prompt = `
 Bạn là ${expertRole}.
-Nhiệm vụ của bạn là phân tích rủi ro kỹ thuật và vận hành cho báo cáo "Điểm Sáng (DSA)" này. Điểm Sáng ghi nhận một cải tiến, sáng kiến hoặc thực hành tốt, nhưng mọi sự thay đổi trong sản xuất đều tiềm ẩn rủi ro chất lượng cần kiểm soát chặt chẽ theo tinh thần 4M1E1I của ${companyName}.
+Nhiệm vụ của bạn là phân tích toàn diện cả CƠ HỘI và RỦI RO kỹ thuật/vận hành cho báo cáo "Điểm Sáng (DSA)" này. Điểm Sáng ghi nhận một cải tiến, sáng kiến, hoặc thực hành tốt. Mọi cải tiến đều mang lại cơ hội phát triển to lớn, nhưng đồng thời bất kỳ sự thay đổi nào trong sản xuất cũng tiềm ẩn rủi ro chất lượng cần kiểm soát chặt chẽ theo tinh thần 4M1E1I của ${companyName}.
 
 Thông tin Điểm Sáng:
 - Nhà máy/Xưởng: ${factory || "Không xác định"}
@@ -159,21 +159,23 @@ Thông tin Điểm Sáng:
 - Ghi chú thêm: ${notes || "Không có"}
 - Các chỉ đạo hiện tại (nếu có): ${directives && directives.length > 0 ? directives.map((d: any) => d.text).join("; ") : "Chưa có"}
 
-Yêu cầu phân tích rủi ro chi tiết:
-1. Phân tích các RỦI RO TIỀM ẨN đối với chất lượng sản phẩm và vận hành:
-   - Thay đổi kỹ thuật: Ví dụ nếu chế tạo khuôn mới hoặc thay đổi cơ cấu, rủi ro về hình dạng, kích thước, biên dạng sản phẩm... khác biệt so với khuôn cũ (đang sản xuất ổn định), ảnh hưởng tới lắp ráp hoặc chất lượng chức năng.
-   - Rủi ro khách hàng không chấp nhận: Khách hàng có thể lo ngại sự thay đổi này làm thay đổi chất lượng sản phẩm, thậm chí sợ người tiêu dùng cuối nghi ngờ là hàng giả/hàng nhái nếu không thông báo trước. Do đó cần kiểm soát quy trình phê duyệt của khách hàng.
-   - Các rủi ro khác liên quan đến 4M1E1I (Thiết bị, Con người, Phương pháp, Nguyên vật liệu, Môi trường, Thông tin).
-2. QUY TẮC TUÂN THỦ TIÊU CHUẨN và YÊU CẦU KHÁCH HÀNG (Compliance with Standards and Customer Requirements):
-   - Nhấn mạnh quy tắc nghiêm ngặt của ${companyName}: TUÂN THỦ TIÊU CHUẨN và YÊU CẦU KHÁCH HÀNG, không tự ý thay đổi quy trình, thông số kỹ thuật hay tiêu chuẩn khi chưa qua phê duyệt chính thức từ các bên liên quan và khách hàng.
-   - Mọi thay đổi phải tuân thủ quy trình kiểm soát thay đổi (MOC - Management of Change), phải được thử nghiệm, đánh giá rủi ro và ký duyệt bởi cấp thẩm quyền (QC, Ban Giám đốc, hoặc Khách hàng).
-3. Đề xuất các Biện pháp Kiểm soát & Phòng ngừa Rủi ro khả thi:
-   - Thử nghiệm (Trial run) và kiểm tra mẫu đầu tiên (First Article Inspection - FAI).
-   - Đo đạc kích thước biên dạng 3D so sánh khuôn cũ và khuôn mới.
-   - Gửi văn bản thông báo hoặc xin phê duyệt mẫu từ Khách hàng trước khi áp dụng.
-   - Đào tạo công nhân về sự thay đổi.
+Yêu cầu phân tích chi tiết:
+1. PHÂN TÍCH CƠ HỘI (OPPORTUNITIES):
+   - Chỉ ra các cơ hội hợp tác và phát triển thị trường: Ví dụ cơ hội hợp tác sâu rộng, thu hút và thêm khách hàng mới (đặc biệt khi đón tiếp khách hàng đến viếng thăm, audit hệ thống), tăng sản lượng sản xuất, tăng doanh thu, tăng lợi nhuận cho ${companyName}.
+   - Cơ hội nâng cao hình ảnh thương hiệu, chuẩn hóa quy trình và nhân rộng sáng kiến này sang các tổ/đội/nhà máy khác.
+2. PHÂN TÍCH RỦI RO TIỀM ẨN (RISKS):
+   - Rủi ro không đáp ứng năng lực khi sản lượng tăng đột biến: Nhà máy không đáp ứng được tiến độ do hạn chế về thiết bị, kho bãi hoặc hạ tầng, dẫn tới việc cần phải đầu tư thêm (máy móc, mở rộng kho bãi, chỉnh trang cơ sở hạ tầng, nâng cấp hệ thống).
+   - Rủi ro từ yêu cầu của khách hàng quá cao hoặc khắt khe: Phải xây dựng và chuẩn bị các tiêu chuẩn phức tạp mà khách hàng yêu cầu, rủi ro phát sinh chi phí vận hành và đào tạo con người.
+   - Rủi ro kỹ thuật từ sự thay đổi: Thay đổi thiết kế, khuôn mẫu mới hoặc chuyển đổi nguyên vật liệu có thể dẫn đến rủi ro về hình dạng, kích thước, biên dạng sản phẩm... khác biệt so với khuôn cũ/quy trình cũ đang chạy ổn định.
+   - Rủi ro khách hàng không chấp nhận sự thay đổi nếu chưa được thông báo hoặc phê duyệt chính thức trước khi áp dụng.
+3. QUY TẮC TUÂN THỦ TIÊU CHUẨN và YÊU CẦU KHÁCH HÀNG (Compliance with Standards and Customer Requirements):
+   - Nhấn mạnh quy tắc nghiêm ngặt của ${companyName}: TUÂN THỦ TIÊU CHUẨN và YÊU CẦU KHÁCH HÀNG, tuyệt đối không tự ý thay đổi quy trình, thông số kỹ thuật hay tiêu chuẩn khi chưa qua phê duyệt chính thức từ khách hàng và các bên liên quan.
+   - Mọi thay đổi lớn phát sinh từ Điểm Sáng này phải tuân thủ quy trình kiểm soát thay đổi (MOC - Management of Change), phải được chạy thử nghiệm (Trial run), đánh giá rủi ro 4M1E1I và ký duyệt chính thức.
+4. ĐỀ XUẤT HÀNH ĐỘNG & BIỆN PHÁP KIỂM SOÁT KHẢ THI:
+   - Các hành động thực tế để tối đa hóa và hiện thực hóa các Cơ hội nêu trên.
+   - Các giải pháp kiểm soát rủi ro chi tiết: Đầu tư nâng cấp máy móc/nhà xưởng đồng bộ, đo đạc kích thước biên dạng 3D so sánh FAI, gửi văn bản thông báo và xin phê duyệt mẫu từ khách hàng trước khi chạy đại trà, đào tạo công nhân hiện trường.
 
-Hãy viết phản hồi bằng tiếng Việt, định dạng Markdown đẹp, rõ ràng, phân cấp tiêu đề rõ ràng, sử dụng bullet points để dễ đọc. Tránh sử dụng ngôn từ lý thuyết suông, hãy hướng tới hành động thực tế tại nhà máy. Tuyệt đối không dùng sai tên pháp nhân (nếu báo cáo này tại nhà máy DNP thì dùng DNP, nếu tại Tân Phú thì dùng Tân Phú, không dùng lẫn lộn). Do không có thẻ chống dịch trong văn bản trả về của AI, hãy trả về văn bản Markdown thông thường.
+Hãy viết phản hồi bằng tiếng Việt, định dạng Markdown đẹp, rõ ràng, phân cấp tiêu đề rõ ràng (sử dụng dấu # thích hợp), sử dụng bullet points để dễ đọc. Tránh sử dụng ngôn từ lý thuyết suông, hãy hướng tới hành động thực tế tại nhà máy. Tuyệt đối không dùng sai tên pháp nhân (nếu báo cáo này tại nhà máy DNP thì dùng DNP, nếu tại Tân Phú thì dùng Tân Phú, không dùng lẫn lộn). Do không có thẻ chống dịch trong văn bản trả về của AI, hãy trả về văn bản Markdown thông thường.
 `;
 
     const aiText = await generateContentWithFallback(ai, prompt);
@@ -223,7 +225,7 @@ app.post("/api/chat-5whys", async (req, res) => {
     const isDsa = report.reportType === "DSA" || report.isSpotlight || report.isDsaReport;
 
     const prompt = isDsa ? `
-Bạn là ${expertRole}. Bạn đang hỗ trợ người dùng phân tích chuyên sâu các RỦI RO TIỀM ẨN của báo cáo "Điểm Sáng (DSA)" này thông qua một cuộc hội thoại chat trực tiếp trong bảng phân tích rủi ro.
+Bạn là ${expertRole}. Bạn đang hỗ trợ người dùng phân tích chuyên sâu các CƠ HỘI & RỦI RO TIỀM ẨN của báo cáo "Điểm Sáng (DSA)" này thông qua một cuộc hội thoại chat trực tiếp trong bảng phân tích cơ hội & rủi ro.
 
 Thông tin Điểm Sáng đang thảo luận:
 - Nhà máy/Xưởng: ${factory}
@@ -234,7 +236,7 @@ Thông tin Điểm Sáng đang thảo luận:
 
 Nhiệm vụ của bạn:
 1. Hãy trả lời câu hỏi mới nhất của người dùng dưới góc nhìn của một chuyên gia chất lượng dày dạn kinh nghiệm tại ${companyName}.
-2. Trả lời một cách thực tế, tập trung vào việc quản lý rủi ro hiện trường sản xuất, giải thích các yếu tố kỹ thuật (ví dụ kích thước/biên dạng khuôn mới khác khuôn cũ), rủi ro khách hàng không chấp nhận (lo ngại người tiêu dùng hiểu lầm là hàng giả), và quy tắc TUÂN THỦ TIÊU CHUẨN và YÊU CẦU KHÁCH HÀNG khi có bất kỳ sự thay đổi nào.
+2. Trả lời một cách thực tế, tập trung vào cả việc khai thác cơ hội phát triển (hợp tác, khách hàng mới, tăng sản lượng, doanh thu) và quản lý rủi ro hiện trường sản xuất (nhà máy không đáp ứng kịp, cần đầu tư máy móc, kho bãi, xây dựng tiêu chuẩn, thay đổi kích thước biên dạng sản phẩm), và quy tắc TUÂN THỦ TIÊU CHUẨN và YÊU CẦU KHÁCH HÀNG khi có bất kỳ sự thay đổi nào.
 3. Hãy phản hồi ngắn gọn, súc tích, dễ hiểu và chuyên nghiệp.
 
 Lịch sử cuộc thảo luận:

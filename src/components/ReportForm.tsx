@@ -25,6 +25,7 @@ interface ReportFormProps {
   };
   onShowToast?: (message: string, type: "success" | "error" | "warning" | "info") => void;
   errorCatalog?: ErrorCatalogItem[];
+  isQcFeatureEnabled?: boolean;
 }
 
 export default function ReportForm({
@@ -37,7 +38,8 @@ export default function ReportForm({
   branches = initialBranches,
   mobileUIConfig,
   onShowToast,
-  errorCatalog = []
+  errorCatalog = [],
+  isQcFeatureEnabled = true
 }: ReportFormProps) {
   const isRealMobile = typeof window !== "undefined" && (
     window.innerWidth < 1024 || 
@@ -235,8 +237,14 @@ export default function ReportForm({
   const [timestamp, setTimestamp] = useState("");
   const [content, setContent] = useState(editingReport?.content || "");
   const [notes, setNotes] = useState(editingReport?.notes || "");
-  const [isAbnormal, setIsAbnormal] = useState(editingReport?.isAbnormal || editingReport?.reportType === "KPH" || false);
-  const [isSpotlight, setIsSpotlight] = useState(editingReport?.isSpotlight || editingReport?.reportType === "DSA" || false);
+  const [localReportType, setLocalReportType] = useState<"KPH" | "DSA" | "KNN" | "NORMAL">(() => {
+    if (editingReport?.reportType === "KNN") return "KNN";
+    if (editingReport?.reportType === "DSA" || editingReport?.isSpotlight) return "DSA";
+    if (editingReport?.isAbnormal || editingReport?.reportType === "KPH") return "KPH";
+    return "NORMAL";
+  });
+  const isAbnormal = localReportType === "KPH" || localReportType === "KNN";
+  const isSpotlight = localReportType === "DSA";
   const [errorCode, setErrorCode] = useState(editingReport?.errorCode || "");
 
   const [assignedPersonId, setAssignedPersonId] = useState(editingReport?.assignedPersonId || "");
@@ -286,7 +294,7 @@ export default function ReportForm({
 
   // Loading existing report's images
   useEffect(() => {
-    if (editingReport && images.length === 0) {
+    if (editingReport) {
       const urls = editingReport.imageUrls || (editingReport.imageUrl ? [editingReport.imageUrl] : []);
       
       const loadInitialImages = async () => {
@@ -461,7 +469,7 @@ export default function ReportForm({
     }
 
     if (!isAbnormal && !isSpotlight) {
-      triggerNotification("Điểm KPH và Điểm sáng bắt buộc phải chọn một.", "warning");
+      triggerNotification("Điểm KPH, Điểm KNN hoặc Điểm sáng bắt buộc phải chọn một.", "warning");
       return;
     }
 
@@ -484,7 +492,7 @@ export default function ReportForm({
       notes: notes.trim() ? notes : undefined,
       isAbnormal,
       isSpotlight,
-      reportType: isAbnormal ? "KPH" : (isSpotlight ? "DSA" : "NORMAL"),
+      reportType: localReportType,
       assignedPersonId: isAbnormal ? assignedPersonId : undefined,
       assignedPersonName: isAbnormal ? assignedPersonName : undefined,
       assignedPersonRole: isAbnormal ? assignedPersonRole : undefined,
@@ -806,17 +814,16 @@ export default function ReportForm({
           )}
         </div>
 
-        {/* 5. Classification controls (KPH / DSA) */}
-        <div className="grid grid-cols-2 gap-3">
+        {/* 5. Classification controls (KPH / KNN / DSA) */}
+        <div className="grid grid-cols-3 gap-2">
           {/* Left panel: Điểm Không Phù Hợp */}
           <button
             type="button"
             onClick={() => {
-              setIsAbnormal(true);
-              setIsSpotlight(false);
+              setLocalReportType("KPH");
             }}
-            className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all h-[80px] cursor-pointer ${
-              isAbnormal
+            className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all h-[80px] cursor-pointer ${
+              localReportType === "KPH"
                 ? "bg-red-50 border-red-500 text-red-900 ring-2 ring-red-200 font-extrabold"
                 : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
             }`}
@@ -826,22 +833,45 @@ export default function ReportForm({
                 <X size={14} className="stroke-[3.5] text-red-600" />
                 <T>KPH</T>
               </span>
-              <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${isAbnormal ? "bg-red-600 text-white shadow-sm ring-2 ring-red-350" : "bg-slate-100 border border-slate-300 text-slate-400"}`}>
-                <X size={11} className="stroke-[4]" />
+              <div className={`w-4 h-4 rounded-full flex items-center justify-center transition-all ${localReportType === "KPH" ? "bg-red-600 text-white shadow-sm ring-2 ring-red-350" : "bg-slate-100 border border-slate-300 text-slate-400"}`}>
+                <X size={10} className="stroke-[4]" />
               </div>
             </div>
             <span className="text-[9px] text-slate-500 block leading-tight font-bold mt-auto"><T>Điểm Không Phù Hợp</T></span>
+          </button>
+
+          {/* Middle panel: Điểm KNN */}
+          <button
+            type="button"
+            onClick={() => {
+              setLocalReportType("KNN");
+            }}
+            className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all h-[80px] cursor-pointer ${
+              localReportType === "KNN"
+                ? "bg-amber-50 border-amber-500 text-amber-950 ring-2 ring-amber-200 font-extrabold"
+                : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+            }`}
+          >
+            <div className="flex items-center justify-between w-full">
+              <span className="text-xs font-black flex items-center gap-1.5 text-amber-700">
+                <AlertTriangle size={14} className="stroke-[3] text-amber-600" />
+                <T>KNN</T>
+              </span>
+              <div className={`w-4 h-4 rounded-full flex items-center justify-center transition-all ${localReportType === "KNN" ? "bg-amber-600 text-white shadow-sm ring-2 ring-amber-350" : "bg-slate-100 border border-slate-300 text-slate-400"}`}>
+                <AlertTriangle size={10} className="stroke-[4]" />
+              </div>
+            </div>
+            <span className="text-[9px] text-slate-500 block leading-tight font-bold mt-auto"><T>Điểm KNN (Khiếu nại KH)</T></span>
           </button>
 
           {/* Right panel: Điểm Sáng */}
           <button
             type="button"
             onClick={() => {
-              setIsSpotlight(true);
-              setIsAbnormal(false);
+              setLocalReportType("DSA");
             }}
-            className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all h-[80px] cursor-pointer ${
-              isSpotlight
+            className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all h-[80px] cursor-pointer ${
+              localReportType === "DSA"
                 ? "bg-emerald-50 border-emerald-500 text-emerald-950 ring-2 ring-emerald-200 font-extrabold"
                 : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
             }`}
@@ -851,15 +881,15 @@ export default function ReportForm({
                 <Check size={14} className="stroke-[3.5] text-emerald-600" />
                 <T>DSA</T>
               </span>
-              <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${isSpotlight ? "bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-350" : "bg-slate-100 border border-slate-300 text-slate-400"}`}>
-                <Check size={11} className="stroke-[4]" />
+              <div className={`w-4 h-4 rounded-full flex items-center justify-center transition-all ${localReportType === "DSA" ? "bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-350" : "bg-slate-100 border border-slate-300 text-slate-400"}`}>
+                <Check size={10} className="stroke-[4]" />
               </div>
             </div>
             <span className="text-[9px] text-slate-500 block leading-tight font-bold mt-auto"><T>Điểm Sáng (Tin tốt)</T></span>
           </button>
         </div>
 
-        {isAbnormal && (
+        {isAbnormal && isQcFeatureEnabled && (
           <div className="bg-red-50/50 p-3.5 rounded-xl border border-red-100 space-y-2.5 animate-fadeIn">
             <label className="text-[10px] font-black uppercase tracking-wider text-red-800 flex items-center gap-1.5">
               <span>👤</span>

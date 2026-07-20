@@ -1,4 +1,15 @@
-import { QualityReport, AppNotification, BroadcastNotice } from "../types";
+import { QualityReport, AppNotification, BroadcastNotice, User, ChatMessage, ForumTopic, ForumReply } from "../types";
+
+export function findMentionedUsers(text: string | undefined | null, users?: User[]): User[] {
+  if (!text || !users || users.length === 0) return [];
+  const matched: User[] = [];
+  users.forEach((u) => {
+    if (u.fullName && text.includes(`@${u.fullName}`)) {
+      matched.push(u);
+    }
+  });
+  return matched;
+}
 
 export function parseReportTimestamp(ts: string): Date {
   try {
@@ -37,7 +48,11 @@ export function parseReportTimestamp(ts: string): Date {
 export function generateNotifications(
   reports: QualityReport[],
   deletedNotifIds: string[],
-  broadcasts?: BroadcastNotice[]
+  broadcasts?: BroadcastNotice[],
+  chats?: ChatMessage[],
+  users?: User[],
+  topics?: ForumTopic[],
+  replies?: ForumReply[]
 ): AppNotification[] {
   const list: AppNotification[] = [];
 
@@ -239,7 +254,118 @@ export function generateNotifications(
         });
       });
     }
+
+    // 4. Mentions in report content, notes, and directives
+    if (users && users.length > 0) {
+      const mentionedContent = findMentionedUsers(report.content, users);
+      mentionedContent.forEach((u) => {
+        list.push({
+          id: `mention-report-${report.id}-${u.id}`,
+          title: "📌 Bạn được nhắc đến",
+          description: `${report.uploaderName} đã nhắc đến bạn trong nội dung bản tin tại ${report.factory}: "${report.content.substring(0, 45)}..."`,
+          timestamp: report.timestamp,
+          type: "mention",
+          targetReportId: report.id,
+          authorName: report.uploaderName,
+          factoryName: report.factory
+        });
+      });
+
+      if (report.notes) {
+        const mentionedNotes = findMentionedUsers(report.notes, users);
+        mentionedNotes.forEach((u) => {
+          list.push({
+            id: `mention-notes-${report.id}-${u.id}`,
+            title: "📌 Bạn được nhắc đến",
+            description: `${report.uploaderName} đã nhắc đến bạn trong ghi chú bản tin tại ${report.factory}: "${report.notes?.substring(0, 45)}..."`,
+            timestamp: report.timestamp,
+            type: "mention",
+            targetReportId: report.id,
+            authorName: report.uploaderName,
+            factoryName: report.factory
+          });
+        });
+      }
+
+      if (report.directives && report.directives.length > 0) {
+        report.directives.forEach((dir, idx) => {
+          const mentionedDir = findMentionedUsers(dir.text, users);
+          mentionedDir.forEach((u) => {
+            list.push({
+              id: `mention-directive-${report.id}-${idx}-${u.id}`,
+              title: "📌 Bạn được nhắc đến",
+              description: `${dir.author} đã nhắc đến bạn trong chỉ đạo bản tin tại ${report.factory}: "${dir.text.substring(0, 45)}..."`,
+              timestamp: dir.timestamp,
+              type: "mention",
+              targetReportId: report.id,
+              authorName: dir.author,
+              factoryName: report.factory
+            });
+          });
+        });
+      }
+    }
   });
+
+  // 5. Mentions in Chats
+  if (users && users.length > 0 && chats && Array.isArray(chats)) {
+    chats.forEach((chat) => {
+      if (!chat.message || !chat.reportRefId) return;
+      const r = reports.find((rep) => rep.id === chat.reportRefId);
+      const mentioned = findMentionedUsers(chat.message, users);
+      mentioned.forEach((u) => {
+        list.push({
+          id: `mention-chat-${chat.id}-${u.id}`,
+          title: "📌 Bạn được nhắc đến",
+          description: `${chat.senderName} đã nhắc đến bạn trong thảo luận bản tin tại ${r?.factory || "Hệ thống"}: "${chat.message.substring(0, 45)}..."`,
+          timestamp: chat.timestamp,
+          type: "mention",
+          targetReportId: chat.reportRefId,
+          authorName: chat.senderName,
+          factoryName: r?.factory || "Hệ thống"
+        });
+      });
+    });
+  }
+
+  // 6. Mentions in Forum Topics
+  if (users && users.length > 0 && topics && Array.isArray(topics)) {
+    topics.forEach((topic) => {
+      const mentioned = findMentionedUsers(topic.description, users);
+      mentioned.forEach((u) => {
+        list.push({
+          id: `mention-topic-${topic.id}-${u.id}`,
+          title: "📌 Bạn được nhắc đến",
+          description: `${topic.creatorName} đã nhắc đến bạn trong chủ đề "${topic.title}": "${topic.description.substring(0, 45)}..."`,
+          timestamp: topic.timestamp,
+          type: "mention",
+          targetReportId: undefined,
+          authorName: topic.creatorName,
+          factoryName: "Diễn đàn"
+        });
+      });
+    });
+  }
+
+  // 7. Mentions in Forum Replies
+  if (users && users.length > 0 && replies && Array.isArray(replies) && topics) {
+    replies.forEach((reply) => {
+      const topic = topics.find((t) => t.id === reply.topicId);
+      const mentioned = findMentionedUsers(reply.message, users);
+      mentioned.forEach((u) => {
+        list.push({
+          id: `mention-reply-${reply.id}-${u.id}`,
+          title: "📌 Bạn được nhắc đến",
+          description: `${reply.senderName} đã nhắc đến bạn trong phản hồi chủ đề "${topic?.title || "Diễn đàn"}": "${reply.message.substring(0, 45)}..."`,
+          timestamp: reply.timestamp,
+          type: "mention",
+          targetReportId: undefined,
+          authorName: reply.senderName,
+          factoryName: "Diễn đàn"
+        });
+      });
+    });
+  }
 
   // Filter out deleted notifications
   const activeList = list.filter((n) => !deletedNotifIds.includes(n.id));

@@ -22,6 +22,7 @@ import {
   ArrowUp
 } from "lucide-react";
 import { T } from "./TranslateText";
+import { MentionTextArea, MentionInput } from "./MentionTextArea";
 
 interface MobileForumViewProps {
   topics: ForumTopic[];
@@ -427,11 +428,11 @@ export default function MobileForumView({
               onSubmit={handleSendReply}
               className="p-2 border-t border-slate-200 bg-white flex gap-1.5 items-center shrink-0 select-none"
             >
-              <input
-                type="text"
+              <MentionInput
+                users={users}
                 placeholder="Phản hồi ý kiến của bạn..."
                 value={replyMessage}
-                onChange={(e) => setReplyMessage(e.target.value)}
+                onChange={setReplyMessage}
                 className="flex-1 bg-slate-150 border-none outline-none pl-3 pr-2 py-2 rounded-lg text-xs font-medium placeholder:text-slate-400"
               />
               <button
@@ -516,13 +517,13 @@ export default function MobileForumView({
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-wide block">
                   <T>Nội dung chi tiết</T>
                 </label>
-                <textarea
-                  required
-                  rows={4}
+                <MentionTextArea
+                  users={users}
                   placeholder="Ghi rõ ý kiến, đề xuất chi tiết hoặc phản hồi đến BQT..."
                   value={newDesc}
-                  onChange={(e) => setNewDesc(e.target.value)}
+                  onChange={setNewDesc}
                   className="w-full bg-slate-100 border border-slate-250 rounded-lg px-3 py-2 text-xs font-medium outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+                  rows={4}
                 />
               </div>
             </div>

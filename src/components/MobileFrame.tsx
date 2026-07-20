@@ -5,6 +5,7 @@ import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon,
 import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus, QualityReportBadge, AppNotification, ErrorCatalogItem, BadgePointConfigItem } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
+import { findMentionedUsers } from "../utils/notificationHelper";
 import { QRCodeSVG } from "qrcode.react";
 import { isSameBranchOrFactory, formatNameCapitalized } from "../utils/branchHelpers";
 import { AutoImageSlider } from "./AutoImageSlider";
@@ -33,6 +34,53 @@ import {
   Line,
   BarChart
 } from "recharts";
+
+function MobileReportChatForm({
+  reportId,
+  users,
+  onAddChatMessage,
+  theme
+}: {
+  reportId: string;
+  users: User[];
+  onAddChatMessage?: (text: string, reportRefId?: string) => void;
+  theme: any;
+}) {
+  const [text, setText] = useState("");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = text.trim();
+    if (val && onAddChatMessage) {
+      onAddChatMessage(val, reportId);
+      setText("");
+    }
+  };
+
+  return (
+    <form 
+      onSubmit={handleSubmit}
+      className="flex items-center gap-1.5 mt-1 border-t border-slate-150 pt-2"
+    >
+      <div className="flex-1 min-w-0">
+        <MentionInput 
+          users={users}
+          value={text}
+          onChange={setText}
+          placeholder="Nhập nội dung trao đổi..."
+          className="w-full text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-blue-500 font-medium text-slate-800"
+        />
+      </div>
+      <button 
+        type="submit"
+        disabled={!text.trim()}
+        className="bg-blue-600 hover:bg-blue-700 active:scale-95 disabled:bg-slate-300 disabled:opacity-50 text-white font-extrabold rounded-lg py-1 px-3.5 text-[9.5px] font-sans tracking-tight cursor-pointer border-none uppercase transition-all shadow-xs h-[30px] flex items-center justify-center shrink-0"
+      >
+        <span translate="no" className="notranslate"><T>GỬI</T></span>
+      </button>
+    </form>
+  );
+}
 
 function convertModernColorsToRgb(cssValue: string): string {
   if (!cssValue || typeof cssValue !== "string") return cssValue;
@@ -1849,7 +1897,7 @@ export default function MobileFrame({
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedFactoryFilter, setSelectedFactoryFilter] = useState<string | null>(null);
   const [selectedWeekFilter, setSelectedWeekFilter] = useState<string>("ALL");
-  const [selectedReportTypeFilter, setSelectedReportTypeFilter] = useState<"KPH" | "DSA" | null>(null);
+  const [selectedReportTypeFilter, setSelectedReportTypeFilter] = useState<"KPH" | "DSA" | "KNN" | null>(null);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [activeFilterSheet, setActiveFilterSheet] = useState<"BRANCH" | "CATEGORY" | "WEEK" | null>(null);
   const [onboardingStep, setOnboardingStep] = useState<number | null>(null);
@@ -1920,9 +1968,10 @@ export default function MobileFrame({
     });
 
     const total = filtered.length;
-    const kph = filtered.filter((r) => r.reportType === "KPH" || r.isAbnormal).length;
+    const kph = filtered.filter((r) => (r.reportType === "KPH" || r.isAbnormal) && r.reportType !== "KNN").length;
     const dsa = filtered.filter((r) => r.reportType === "DSA" || r.isSpotlight).length;
-    const safeRate = total > 0 ? Math.round(((total - kph) / total) * 100) : 100;
+    const knn = filtered.filter((r) => r.reportType === "KNN").length;
+    const safeRate = total > 0 ? Math.round(((total - (kph + knn)) / total) * 100) : 100;
 
     const counts: Record<Category4M1E1I, number> = {
       "CON NGƯỜI": 0,
@@ -1938,7 +1987,7 @@ export default function MobileFrame({
       }
     });
 
-    return { total, kph, dsa, safeRate, counts, filteredReports: filtered };
+    return { total, kph, dsa, knn, safeRate, counts, filteredReports: filtered };
   };
 
   const getMobileRadarKphData = (filteredReports: QualityReport[]) => {
@@ -2983,8 +3032,10 @@ App Link: ${window.location.origin}`;
     const matchesWeek = isDateInWeekFilter(rDate, selectedWeekFilter);
     const matchesType = !selectedReportTypeFilter
       ? true
+      : selectedReportTypeFilter === "KNN"
+      ? r.reportType === "KNN"
       : selectedReportTypeFilter === "KPH"
-      ? (r.reportType === "KPH" || r.isAbnormal)
+      ? (r.reportType === "KPH" || r.isAbnormal) && r.reportType !== "KNN"
       : (r.reportType === "DSA" || r.isSpotlight);
     
     return matchesSearch && matchesCategory && matchesFactoryFilter && matchesWeek && matchesType;
@@ -3228,7 +3279,118 @@ App Link: ${window.location.origin}`;
           });
         });
       }
+
+      // 4. Mentions in report content, notes, and directives
+      if (users && users.length > 0) {
+        const mentionedContent = findMentionedUsers(report.content, users);
+        mentionedContent.forEach((u) => {
+          list.push({
+            id: `mention-report-${report.id}-${u.id}`,
+            title: "📌 Bạn được nhắc đến",
+            description: `${report.uploaderName} đã nhắc đến bạn trong nội dung bản tin tại ${report.factory}: "${report.content.substring(0, 45)}..."`,
+            timestamp: report.timestamp,
+            type: "mention",
+            targetReportId: report.id,
+            authorName: report.uploaderName,
+            factoryName: report.factory
+          });
+        });
+
+        if (report.notes) {
+          const mentionedNotes = findMentionedUsers(report.notes, users);
+          mentionedNotes.forEach((u) => {
+            list.push({
+              id: `mention-notes-${report.id}-${u.id}`,
+              title: "📌 Bạn được nhắc đến",
+              description: `${report.uploaderName} đã nhắc đến bạn trong ghi chú bản tin tại ${report.factory}: "${report.notes?.substring(0, 45)}..."`,
+              timestamp: report.timestamp,
+              type: "mention",
+              targetReportId: report.id,
+              authorName: report.uploaderName,
+              factoryName: report.factory
+            });
+          });
+        }
+
+        if (report.directives && report.directives.length > 0) {
+          report.directives.forEach((dir, idx) => {
+            const mentionedDir = findMentionedUsers(dir.text, users);
+            mentionedDir.forEach((u) => {
+              list.push({
+                id: `mention-directive-${report.id}-${idx}-${u.id}`,
+                title: "📌 Bạn được nhắc đến",
+                description: `${dir.author} đã nhắc đến bạn trong chỉ đạo bản tin tại ${report.factory}: "${dir.text.substring(0, 45)}..."`,
+                timestamp: dir.timestamp,
+                type: "mention",
+                targetReportId: report.id,
+                authorName: dir.author,
+                factoryName: report.factory
+              });
+            });
+          });
+        }
+      }
     });
+
+    // 5. Mentions in Chats
+    if (users && users.length > 0 && chats && Array.isArray(chats)) {
+      chats.forEach((chat) => {
+        if (!chat.message || !chat.reportRefId) return;
+        const r = reports.find((rep) => rep.id === chat.reportRefId);
+        const mentioned = findMentionedUsers(chat.message, users);
+        mentioned.forEach((u) => {
+          list.push({
+            id: `mention-chat-${chat.id}-${u.id}`,
+            title: "📌 Bạn được nhắc đến",
+            description: `${chat.senderName} đã nhắc đến bạn trong thảo luận bản tin tại ${r?.factory || "Hệ thống"}: "${chat.message.substring(0, 45)}..."`,
+            timestamp: chat.timestamp,
+            type: "mention",
+            targetReportId: chat.reportRefId,
+            authorName: chat.senderName,
+            factoryName: r?.factory || "Hệ thống"
+          });
+        });
+      });
+    }
+
+    // 6. Mentions in Forum Topics
+    if (users && users.length > 0 && topics && Array.isArray(topics)) {
+      topics.forEach((topic) => {
+        const mentioned = findMentionedUsers(topic.description, users);
+        mentioned.forEach((u) => {
+          list.push({
+            id: `mention-topic-${topic.id}-${u.id}`,
+            title: "📌 Bạn được nhắc đến",
+            description: `${topic.creatorName} đã nhắc đến bạn trong chủ đề "${topic.title}": "${topic.description.substring(0, 45)}..."`,
+            timestamp: topic.timestamp,
+            type: "mention",
+            targetReportId: undefined,
+            authorName: topic.creatorName,
+            factoryName: "Diễn đàn"
+          });
+        });
+      });
+    }
+
+    // 7. Mentions in Forum Replies
+    if (users && users.length > 0 && replies && Array.isArray(replies) && topics) {
+      replies.forEach((reply) => {
+        const topic = topics.find((t) => t.id === reply.topicId);
+        const mentioned = findMentionedUsers(reply.message, users);
+        mentioned.forEach((u) => {
+          list.push({
+            id: `mention-reply-${reply.id}-${u.id}`,
+            title: "📌 Bạn được nhắc đến",
+            description: `${reply.senderName} đã nhắc đến bạn trong phản hồi chủ đề "${topic?.title || "Diễn đàn"}": "${reply.message.substring(0, 45)}..."`,
+            timestamp: reply.timestamp,
+            type: "mention",
+            targetReportId: undefined,
+            authorName: reply.senderName,
+            factoryName: "Diễn đàn"
+          });
+        });
+      });
+    }
 
     // Filter out deleted notifications
     const activeList = list.filter((n) => !resolvedDeletedNotifIds.includes(n.id));
@@ -3942,6 +4104,27 @@ App Link: ${window.location.origin}`;
               <span translate="no" className="notranslate">KPH</span>
             </button>
 
+            {/* KNN Filter Button */}
+            <button
+              type="button"
+              onClick={() => setSelectedReportTypeFilter(prev => prev === "KNN" ? null : "KNN")}
+              className={`h-[26px] px-1.5 rounded-lg text-[9.5px] font-black shrink-0 border transition-all cursor-pointer flex items-center justify-center gap-1 shadow-xs ${
+                selectedReportTypeFilter === "KNN"
+                  ? "border-white ring-1 ring-amber-600 font-extrabold z-10 opacity-100"
+                  : "border-transparent opacity-85"
+              }`}
+              style={{
+                minWidth: "36px",
+                backgroundColor: "#d97706",
+                color: "#ffffff"
+              }}
+            >
+              {selectedReportTypeFilter === "KNN" && (
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block shrink-0" />
+              )}
+              <span translate="no" className="notranslate">KNN</span>
+            </button>
+
             {/* DSA Filter Button */}
             <button
               type="button"
@@ -4105,7 +4288,11 @@ App Link: ${window.location.origin}`;
                         </span>
                       </div>
                       <div className="flex flex-col items-end gap-1">
-                        {report.reportType === "KPH" || report.isAbnormal ? (
+                        {report.reportType === "KNN" ? (
+                          <span className="text-[8px] font-black bg-amber-600 text-white px-2 py-0.5 rounded-md leading-none select-none">
+                            <T><span translate="no" className="notranslate">⚠️ ĐIỂM KNN</span></T>
+                          </span>
+                        ) : report.reportType === "KPH" || report.isAbnormal ? (
                           <span className="text-[8px] font-black bg-red-600 text-white px-2 py-0.5 rounded-md leading-none select-none">
                             <T><span translate="no" className="notranslate">⚠️ ĐIỂM KPH</span></T>
                           </span>
@@ -4237,6 +4424,7 @@ App Link: ${window.location.origin}`;
               onUpdateReport={onUpdateReport}
               onAddBroadcast={onAddBroadcast}
               showToast={showToast}
+              isMobile={true}
             />
           ) : (
             <>
@@ -4705,7 +4893,9 @@ App Link: ${window.location.origin}`;
                 id={`report-card-${report.id}`}
                 key={report.id}
                 className={`bg-white rounded-xl shadow-lg border-2 overflow-hidden transition-all duration-200 hover:-translate-y-0.5 ${
-                  report.reportType === "KPH" || report.isAbnormal
+                  report.reportType === "KNN"
+                    ? "border-amber-400"
+                    : report.reportType === "KPH" || report.isAbnormal
                     ? "border-red-400"
                     : report.reportType === "DSA" || report.isSpotlight
                     ? "border-emerald-400"
@@ -4723,7 +4913,12 @@ App Link: ${window.location.origin}`;
                     </T>
                   </div>
                   <div className="shrink-0 flex flex-col items-end gap-1">
-                    {report.reportType === "KPH" || report.isAbnormal ? (
+                    {report.reportType === "KNN" ? (
+                      <span className="text-[9px] font-black text-white flex items-center gap-1 bg-amber-600 border border-amber-700 px-2 py-1 rounded-md leading-none shadow-3xs shrink-0 select-none">
+                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block" />
+                        <T><span translate="no" className="notranslate">⚠️ ĐIỂM KNN</span></T>
+                      </span>
+                    ) : report.reportType === "KPH" || report.isAbnormal ? (
                       <span className="text-[9px] font-black text-white flex items-center gap-1 bg-red-600 border border-red-700 px-2 py-1 rounded-md leading-none shadow-3xs shrink-0 select-none">
                         <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block" />
                         <T><span translate="no" className="notranslate">⚠️ ĐIỂM KPH</span></T>
@@ -4872,7 +5067,7 @@ App Link: ${window.location.origin}`;
                       className="mt-3 w-full flex items-center justify-center gap-1.5 px-3 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-[11px] rounded-lg shadow-sm cursor-pointer hover:shadow active:scale-98 transition-all select-none uppercase tracking-wider"
                     >
                       <Bot className="w-4 h-4 text-blue-100" />
-                      <span translate="no" className="notranslate">Phân tích AI (5-Why)</span>
+                      <span translate="no" className="notranslate">5-WHYs & CƠ HỘI CẢI TIẾN</span>
                     </button>
                   )}
 
@@ -4882,7 +5077,7 @@ App Link: ${window.location.origin}`;
                       className="mt-3 w-full flex items-center justify-center gap-1.5 px-3 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-[11px] rounded-lg shadow-sm cursor-pointer hover:shadow active:scale-98 transition-all select-none uppercase tracking-wider"
                     >
                       <Bot className="w-4 h-4 text-emerald-100" />
-                      <span translate="no" className="notranslate">AI Phân tích rủi ro</span>
+                      <span translate="no" className="notranslate">Phân tích Cơ hội & Rủi ro</span>
                     </button>
                   )}
 
@@ -6066,33 +6261,12 @@ App Link: ${window.location.origin}`;
                     </div>
 
                     {/* Instant reply send input section */}
-                    <form 
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        const form = e.currentTarget;
-                        const input = form.elements.namedItem("messageText") as HTMLInputElement;
-                        const text = input.value.trim();
-                        if (text && onAddChatMessage) {
-                          onAddChatMessage(text, report.id);
-                          input.value = "";
-                        }
-                      }}
-                      className="flex items-center gap-1.5 mt-1 border-t border-slate-150 pt-2"
-                    >
-                      <input 
-                        type="text"
-                        name="messageText"
-                        placeholder="Nhập nội dung trao đổi..."
-                        autoComplete="off"
-                        className="flex-1 text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-blue-500 font-medium text-slate-800"
-                      />
-                      <button 
-                        type="submit"
-                        className="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-extrabold rounded-lg py-1 px-3.5 text-[9.5px] font-sans tracking-tight cursor-pointer border-none uppercase transition-all shadow-xs h-[30px] flex items-center justify-center shrink-0"
-                      >
-                        <span translate="no" className="notranslate"><T>GỬI</T></span>
-                      </button>
-                    </form>
+                    <MobileReportChatForm
+                      reportId={report.id}
+                      users={users}
+                      onAddChatMessage={onAddChatMessage}
+                      theme={theme}
+                    />
                   </div>
                 )}
               </div>
@@ -7635,6 +7809,11 @@ App Link: ${window.location.origin}`}
                                   🔄
                                 </div>
                               )}
+                              {notif.type === "mention" && (
+                                <div className="w-8.5 h-8.5 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs shadow-2xs">
+                                  📌
+                                </div>
+                              )}
                             </div>
 
                             {/* Right Side Info */}
@@ -7819,6 +7998,11 @@ App Link: ${window.location.origin}`}
                             {notif.type === "update_report" && (
                               <div className="w-8.5 h-8.5 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs shadow-2xs">
                                 🔄
+                              </div>
+                            )}
+                            {notif.type === "mention" && (
+                              <div className="w-8.5 h-8.5 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs shadow-2xs">
+                                📌
                               </div>
                             )}
                           </div>
@@ -8562,8 +8746,8 @@ App Link: ${window.location.origin}`}
                     } uppercase tracking-wider`}>
                       <span translate="no" className="notranslate">
                         {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                          ? "Phân tích rủi ro 4M1E1I"
-                          : "Phân tích 5-Why 4M1E1I"}
+                          ? "Phân tích cơ hội & rủi ro 4M1E1I"
+                          : "5-WHYs & CƠ HỘI CẢI TIẾN"}
                       </span>
                     </p>
                   </div>
@@ -8617,10 +8801,14 @@ App Link: ${window.location.origin}`}
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
                     <div className="flex items-center justify-between text-[9px] font-extrabold text-slate-400 uppercase tracking-wider select-none">
                       <span translate="no" className="notranslate">
-                        {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight ? "Thông tin điểm sáng:" : "Thông tin sự cố:"}
+                        {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight 
+                          ? "Thông tin điểm sáng:" 
+                          : (aiAnalysisReport?.reportType === "KNN" ? "Thông tin khiếu nại:" : "Thông tin sự cố:")}
                       </span>
                       {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight ? (
                         <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded text-[8px]">DSA</span>
+                      ) : aiAnalysisReport?.reportType === "KNN" ? (
+                        <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 border border-amber-200 rounded text-[8px]">KNN</span>
                       ) : (
                         <span className="px-1.5 py-0.5 bg-red-100 text-red-800 border border-red-200 rounded text-[8px]">KPH</span>
                       )}
@@ -8642,7 +8830,9 @@ App Link: ${window.location.origin}`}
                     <div className="text-[11px] pt-1.5 border-t border-slate-200/60">
                       <span className="text-slate-400 block select-none">
                         <span translate="no" className="notranslate">
-                          {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight ? "Nội dung sáng kiến:" : "Nội dung lỗi:"}
+                          {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight 
+                            ? "Nội dung sáng kiến:" 
+                            : (aiAnalysisReport?.reportType === "KNN" ? "Nội dung khiếu nại:" : "Nội dung lỗi:")}
                         </span>
                       </span>
                       <p className="text-slate-700 font-medium leading-relaxed line-clamp-3">{aiAnalysisReport.content}</p>
@@ -8671,14 +8861,14 @@ App Link: ${window.location.origin}`}
                           <p className="text-[11px] font-black text-slate-750 animate-pulse">
                             <span translate="no" className="notranslate">
                               {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                                ? "AI đang phân tích rủi ro..."
+                                ? "AI đang phân tích cơ hội & rủi ro..."
                                 : "AI đang phân tích lỗi..."}
                             </span>
                           </p>
                           <p className="text-[9px] text-slate-400 mt-0.5">
                             <span translate="no" className="notranslate">
                               {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                                ? "Đang rà soát và đánh giá rủi ro 4M1E1I"
+                                ? "Đang rà soát, đánh giá cơ hội & rủi ro 4M1E1I"
                                 : "Đang áp dụng mô hình 5-Why chất lượng Tân Phú"}
                             </span>
                           </p>
@@ -8694,8 +8884,8 @@ App Link: ${window.location.origin}`}
                         <p className="text-[11px]">
                           <span translate="no" className="notranslate">
                             {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                              ? "Bấm nút \"AI Phân tích rủi ro\" để bắt đầu"
-                              : "Bấm nút \"Phân tích AI\" để bắt đầu"}
+                              ? "Bấm nút \"Phân tích Cơ hội & Rủi ro\" để bắt đầu"
+                              : "Bấm nút \"5-WHYs & CƠ HỘI CẢI TIẾN\" để bắt đầu"}
                           </span>
                         </p>
                       </div>
@@ -8717,7 +8907,7 @@ App Link: ${window.location.origin}`}
                     <span className="text-[10px] font-bold">
                       <span translate="no" className="notranslate">
                         {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                          ? "Hỏi đáp về rủi ro của Điểm Sáng này"
+                          ? "Hỏi đáp về cơ hội & rủi ro của Điểm Sáng này"
                           : "Đặt câu hỏi chuyên sâu về lỗi 4M1E1I này"}
                       </span>
                     </span>

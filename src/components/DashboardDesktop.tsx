@@ -6170,7 +6170,11 @@ export default function DashboardDesktop({
                                   </td>
                                   <td className="p-4 text-center select-none whitespace-nowrap font-mono font-bold text-xs font-black border border-slate-200">
                                     <div className="flex flex-col items-center justify-center gap-1">
-                                      {r.reportType === "KPH" || r.isAbnormal ? (
+                                      {r.reportType === "KNN" ? (
+                                        <span className="bg-amber-50 text-amber-700 border border-amber-200 font-extrabold text-[9px] px-2 py-0.5 rounded uppercase block">
+                                          <T><span translate="no" className="notranslate">KNN</span></T>
+                                        </span>
+                                      ) : r.reportType === "KPH" || r.isAbnormal ? (
                                         <span className="bg-red-50 text-red-700 border border-red-200 font-extrabold text-[9px] px-2 py-0.5 rounded uppercase block">
                                           <T><span translate="no" className="notranslate">KPH</span></T>
                                         </span>
@@ -6399,7 +6403,7 @@ export default function DashboardDesktop({
                                       className="mt-2.5 flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-[10px] rounded-lg shadow-sm border border-blue-500/10 cursor-pointer hover:shadow active:scale-95 transition-all select-none uppercase tracking-wide"
                                     >
                                       <Bot className="w-3.5 h-3.5 text-blue-100" />
-                                      <span translate="no" className="notranslate">Phân tích AI (5-Why)</span>
+                                      <span translate="no" className="notranslate">5-WHYs & CƠ HỘI CẢI TIẾN</span>
                                     </button>
                                   )}
 
@@ -6409,7 +6413,7 @@ export default function DashboardDesktop({
                                       className="mt-2.5 flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-[10px] rounded-lg shadow-sm border border-emerald-500/10 cursor-pointer hover:shadow active:scale-95 transition-all select-none uppercase tracking-wide"
                                     >
                                       <Bot className="w-3.5 h-3.5 text-emerald-100" />
-                                      <span translate="no" className="notranslate">AI Phân tích rủi ro</span>
+                                      <span translate="no" className="notranslate">Phân tích Cơ hội & Rủi ro</span>
                                     </button>
                                   )}
 
@@ -6549,7 +6553,11 @@ export default function DashboardDesktop({
                                 </td>
                                 <td className="p-4 text-center select-none whitespace-nowrap font-mono font-bold text-xs font-black border border-slate-200">
                                   <div className="flex flex-col items-center justify-center gap-1.5">
-                                    {r.reportType === "KPH" || r.isAbnormal ? (
+                                    {r.reportType === "KNN" ? (
+                                      <span className="bg-amber-100 text-amber-900 border border-amber-200 font-black text-[10px] px-2.5 py-1 rounded tracking-wider">
+                                        <T>KNN</T>
+                                      </span>
+                                    ) : r.reportType === "KPH" || r.isAbnormal ? (
                                       <span className="bg-red-100 text-red-800 border border-red-200 font-black text-[10px] px-2.5 py-1 rounded tracking-wider">
                                         <T>KPH</T>
                                       </span>
@@ -7840,6 +7848,11 @@ export default function DashboardDesktop({
                               tag1Class = isUnread
                                 ? "text-indigo-800 bg-indigo-100 border-indigo-300 font-black"
                                 : "text-indigo-700 bg-indigo-50 border-indigo-100 font-medium";
+                            } else if (typeL.includes("nhắc đến") || typeL.includes("mention") || typeL.includes("tag")) {
+                              tag1Text = "📌 ĐƯỢC NHẮC ĐẾN";
+                              tag1Class = isUnread
+                                ? "text-rose-800 bg-rose-100 border-rose-300 font-black"
+                                : "text-rose-700 bg-rose-50 border-rose-100 font-medium";
                             }
                           }
 
@@ -8289,10 +8302,11 @@ export default function DashboardDesktop({
 
                         {/* Reply editor input */}
                         <div className="p-3 border-t border-slate-200 bg-slate-50 flex gap-2">
-                          <textarea
+                          <MentionTextArea
+                            users={users}
                             placeholder="Mời nhập phản hồi ý kiến đóng góp tại đây..."
                             value={forumReplyMessage}
-                            onChange={(e) => setForumReplyMessage(e.target.value)}
+                            onChange={setForumReplyMessage}
                             onKeyDown={(e) => {
                               if (e.key === "Enter" && !e.shiftKey && forumReplyMessage.trim()) {
                                 e.preventDefault();
@@ -8379,11 +8393,13 @@ export default function DashboardDesktop({
                         <label className="text-[10px] font-bold text-slate-500 uppercase">
                           <T>Nội dung chi tiết</T>
                         </label>
-                        <textarea
+                        <MentionTextArea
+                          users={users}
                           placeholder="Mô tả cụ thể ý kiến hoặc giải pháp cải tiến của bạn để Ban Quản Trị xem xét..."
                           value={newTopicDesc}
-                          onChange={(e) => setNewTopicDesc(e.target.value)}
+                          onChange={setNewTopicDesc}
                           className="w-full h-32 bg-slate-50 text-slate-800 border border-slate-200 rounded-md px-3 py-2 text-xs focus:outline-none focus:border-blue-500 resize-none"
+                          rows={4}
                         />
                       </div>
                     </div>
@@ -8469,8 +8485,8 @@ export default function DashboardDesktop({
                         } uppercase tracking-wider`}>
                           <span translate="no" className="notranslate">
                             {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                              ? "Phân tích Rủi ro 4M1E1I"
-                              : "Phân tích Sự cố 4M1E1I (Phương pháp 5-Why)"}
+                              ? "Phân tích Cơ hội & Rủi ro 4M1E1I"
+                              : "5-WHYs & CƠ HỘI CẢI TIẾN"}
                           </span>
                         </p>
                       </div>
@@ -8499,8 +8515,8 @@ export default function DashboardDesktop({
                       <Brain className="w-4 h-4" />
                       <span translate="no" className="notranslate">
                         {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                          ? "Bảng Phân tích Rủi ro"
-                          : "Kết quả Phân tích (5-Why)"}
+                          ? "Bảng Phân tích Cơ hội & Rủi ro"
+                          : "5-WHYs & CƠ HỘI CẢI TIẾN"}
                       </span>
                     </button>
                     <button
@@ -8528,10 +8544,14 @@ export default function DashboardDesktop({
                       <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2.5">
                         <div className="flex items-center justify-between text-[10px] font-extrabold text-slate-400 uppercase tracking-wider select-none">
                           <span translate="no" className="notranslate">
-                            {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight ? "Thông tin điểm sáng phân tích:" : "Thông tin sự cố phân tích:"}
+                            {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight 
+                              ? "Thông tin điểm sáng phân tích:" 
+                              : (aiAnalysisReport?.reportType === "KNN" ? "Thông tin khiếu nại phân tích:" : "Thông tin sự cố phân tích:")}
                           </span>
                           {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight ? (
                             <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded">DSA</span>
+                          ) : aiAnalysisReport?.reportType === "KNN" ? (
+                            <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-200 rounded">KNN</span>
                           ) : (
                             <span className="px-2 py-0.5 bg-red-100 text-red-800 border border-red-200 rounded">KPH</span>
                           )}
@@ -8582,14 +8602,14 @@ export default function DashboardDesktop({
                               <p className="text-xs font-black text-slate-750 animate-pulse">
                                 <span translate="no" className="notranslate">
                                   {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                                    ? "Trí tuệ nhân tạo đang phân tích rủi ro..."
+                                    ? "Trí tuệ nhân tạo đang phân tích cơ hội & rủi ro..."
                                     : "Trí tuệ nhân tạo đang phân tích lỗi..."}
                                 </span>
                               </p>
                               <p className="text-[10px] text-slate-400 mt-1">
                                 <span translate="no" className="notranslate">
                                   {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                                    ? "Đang rà soát rủi ro và đánh giá quy tắc nghiêm ngặt 4M1E1I"
+                                    ? "Đang rà soát cơ hội, rủi ro và đánh giá quy tắc nghiêm ngặt 4M1E1I"
                                     : `Đang áp dụng mô hình 5-Why và đề xuất giải pháp cho ${companyName}`}
                                 </span>
                               </p>
@@ -8605,8 +8625,8 @@ export default function DashboardDesktop({
                             <p className="text-xs">
                               <span translate="no" className="notranslate">
                                 {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                                  ? "Bấm nút \"AI Phân tích rủi ro\" để bắt đầu"
-                                  : "Bấm nút \"Phân tích AI (5-Why)\" để bắt đầu"}
+                                  ? "Bấm nút \"Phân tích Cơ hội & Rủi ro\" để bắt đầu"
+                                  : "Bấm nút \"5-WHYs & CƠ HỘI CẢI TIẾN\" để bắt đầu"}
                               </span>
                             </p>
                           </div>

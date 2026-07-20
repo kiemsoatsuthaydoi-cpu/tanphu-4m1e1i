@@ -119,7 +119,7 @@ Hãy áp dụng kho tri thức trên để đối chiếu. Nếu lỗi này liê
 
 Yêu cầu phân tích:
 1. Phân tích nguyên nhân gốc rễ theo phương pháp 5-Why (Đặt câu hỏi Tại sao 5 lần để tìm ra nguyên nhân sâu xa dựa trên thông tin được cung cấp, hãy suy luận logic, thực tế với bối cảnh sản xuất của ${companyName}).
-2. Đề xuất các biện pháp khắc phục (khẩn cấp trước mắt) và biện pháp phòng ngừa (lâu dài) khả thi, bám sát nhóm yếu tố ${category} của ${companyName}.
+2. Đề xuất các biện pháp khắc phục (khẩn cấp trước mắt) và biện pháp phòng ngừa lâu dài (cơ hội cải tiến) khả thi, bám sát nhóm yếu tố ${category} của ${companyName}. Khi trình bày phần này, hãy sử dụng chính xác tiêu đề "Biện pháp phòng ngừa lâu dài (cơ hội cải tiến)".
 3. Gợi ý 1 huy hiệu (Badge) phù hợp nhất cho người phát hiện báo cáo này từ danh sách sau:
    - "Chốt chặn rủi ro" (Nếu báo cáo ngăn chặn kịp thời lỗi nghiêm trọng/sự cố lớn)
    - "Mắt thần" (Nếu phát hiện lỗi nhỏ khó thấy, tinh tế hoặc lỗi tiềm ẩn)

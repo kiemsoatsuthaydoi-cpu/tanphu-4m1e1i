@@ -934,8 +934,8 @@ export default function App() {
   }, [dbConnected]);
 
   const systemNotifications = React.useMemo(() => {
-    return generateNotifications(reports, deletedNotifIds, broadcasts);
-  }, [reports, deletedNotifIds, broadcasts]);
+    return generateNotifications(reports, deletedNotifIds, broadcasts, chats, users, topics, replies);
+  }, [reports, deletedNotifIds, broadcasts, chats, users, topics, replies]);
 
   const prevBroadcastsRef = useRef<BroadcastNotice[]>([]);
   const isFirstBroadcastsLoadRef = useRef(true);
@@ -4095,6 +4095,7 @@ export default function App() {
       <div className="min-h-screen bg-white flex flex-col font-sans relative overflow-x-hidden p-0">
         {isFormOpen ? (
           <ReportForm
+            key={editingReport ? editingReport.id : "new"}
             currentUser={currentUser}
             users={users}
             editingReport={editingReport}
@@ -4107,6 +4108,7 @@ export default function App() {
             branches={branches}
             mobileUIConfig={mobileUIConfig}
             onShowToast={showToast}
+            isQcFeatureEnabled={isQcFeatureEnabled}
           />
         ) : (
           <MobileFrame
@@ -4214,6 +4216,7 @@ export default function App() {
 
         {isFormOpen ? (
           <ReportForm
+            key={editingReport ? editingReport.id : "new"}
             currentUser={currentUser}
             users={users}
             editingReport={editingReport}
@@ -4226,6 +4229,7 @@ export default function App() {
             branches={branches}
             mobileUIConfig={mobileUIConfig}
             onShowToast={showToast}
+            isQcFeatureEnabled={isQcFeatureEnabled}
           />
         ) : (
           <MobileFrame
@@ -4447,6 +4451,7 @@ export default function App() {
 
             {isFormOpen ? (
               <ReportForm
+                key={editingReport ? editingReport.id : "new"}
                 currentUser={currentUser}
                 users={users}
                 editingReport={editingReport}
@@ -4460,6 +4465,7 @@ export default function App() {
                 mobileUIConfig={mobileUIConfig}
                 onShowToast={showToast}
                 errorCatalog={errorCatalog}
+                isQcFeatureEnabled={isQcFeatureEnabled}
               />
             ) : (
               <MobileFrame
@@ -4521,6 +4527,7 @@ export default function App() {
           <div className="relative w-full h-[100dvh] max-w-[440px] flex flex-col items-center justify-center">
             {isFormOpen ? (
               <ReportForm
+                key={editingReport ? editingReport.id : "new"}
                 currentUser={currentUser}
                 users={users}
                 editingReport={editingReport}
@@ -4534,6 +4541,7 @@ export default function App() {
                 mobileUIConfig={mobileUIConfig}
                 onShowToast={showToast}
                 errorCatalog={errorCatalog}
+                isQcFeatureEnabled={isQcFeatureEnabled}
               />
             ) : (
               <MobileFrame

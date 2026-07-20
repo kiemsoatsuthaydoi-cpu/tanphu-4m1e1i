@@ -88,7 +88,7 @@ export interface QualityReport {
   notes?: string;
   isAbnormal: boolean; // Is abnormal/alert report (Không phù hợp - KPH)
   isSpotlight?: boolean; // Is spotlight (Điểm sáng - DSA)
-  reportType?: "KPH" | "DSA" | "NORMAL"; // Classification of the report
+  reportType?: "KPH" | "DSA" | "KNN" | "NORMAL"; // Classification of the report
   googleDrivePath?: string;
   directives?: QualityReportDirective[];
   likedBy?: string[];
@@ -220,7 +220,7 @@ export interface AppNotification {
   title: string;
   description: string;
   timestamp: string;
-  type: "new_report" | "new_directive" | "update_report" | "broadcast";
+  type: "new_report" | "new_directive" | "update_report" | "broadcast" | "mention";
   targetReportId?: string;
   authorName: string;
   factoryName: string;
