@@ -7,6 +7,7 @@ import {
   User, 
   UserRole 
 } from "../types";
+import { resolveSenderInfo } from "../utils/userResolver";
 import { 
   Search, 
   Pin, 
@@ -26,6 +27,7 @@ interface MobileForumViewProps {
   topics: ForumTopic[];
   replies: ForumReply[];
   currentUser: User | null;
+  users?: User[];
   onAddForumTopic?: (title: string, description: string, category: ForumTopicCategory) => void;
   onAddForumReply?: (topicId: string, message: string) => void;
   onUpdateForumTopicStatus?: (topicId: string, status: ForumTopicStatus) => void;
@@ -45,6 +47,7 @@ export default function MobileForumView({
   topics,
   replies,
   currentUser,
+  users = [],
   onAddForumTopic,
   onAddForumReply,
   onUpdateForumTopicStatus,
@@ -392,15 +395,17 @@ export default function MobileForumView({
                   <T>Chưa có phản hồi nào cho chủ đề này.</T>
                 </div>
               ) : (
-                topicReplies.map((reply) => (
-                  <div
-                    key={reply.id}
-                    className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1.5 shadow-3xs"
-                  >
-                    <div className="flex justify-between items-center text-[8.5px] text-slate-450 font-extrabold border-b border-slate-100 pb-1">
-                      <span className="text-slate-850 notranslate" translate="no">
-                        {reply.senderName} ({reply.senderRole === UserRole.ADMIN ? "BQT" : "Nhân viên"})
-                      </span>
+                topicReplies.map((reply) => {
+                  const resolvedSender = resolveSenderInfo(users, reply.senderPhone, reply.senderName, reply.senderRole);
+                  return (
+                    <div
+                      key={reply.id}
+                      className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1.5 shadow-3xs"
+                    >
+                      <div className="flex justify-between items-center text-[8.5px] text-slate-450 font-extrabold border-b border-slate-100 pb-1">
+                        <span className="text-slate-850 notranslate" translate="no">
+                          {resolvedSender.fullName} ({resolvedSender.position || (resolvedSender.role === UserRole.ADMIN ? "BQT" : "Nhân viên")})
+                        </span>
                       <span className="text-slate-400 notranslate" translate="no">
                         {reply.timestamp}
                       </span>
@@ -411,7 +416,8 @@ export default function MobileForumView({
                       </span>
                     </p>
                   </div>
-                ))
+                );
+              })
               )}
               <div ref={repliesEndRef} />
             </div>

@@ -121,6 +121,7 @@ import FirebaseQuotaMonitor from "./FirebaseQuotaMonitor";
 import StatisticsDashboard from "./StatisticsDashboard";
 import ProgressTrackingDashboard from "./ProgressTrackingDashboard";
 import { compressAvatar, getCategoryFallbackImage } from "../utils/imageProcessor";
+import { findUser, resolveUploaderInfo, resolveBadgeGiverInfo, resolveEvaluatorInfo, resolveSenderInfo } from "../utils/userResolver";
 
 
 interface DashboardDesktopProps {
@@ -1275,7 +1276,7 @@ export default function DashboardDesktop({
           content: r.content,
           notes: r.notes || "",
           reportType: r.reportType || (r.isAbnormal ? "KPH" : "NORMAL"),
-          uploaderName: r.uploaderName,
+          uploaderName: userObj ? userObj.fullName : r.uploaderName,
           uploaderPhone: r.uploaderPhone,
           uploaderDepartment: resolvedDept,
           status: isApproved ? "Đã duyệt" : "Chờ duyệt",
@@ -5650,7 +5651,7 @@ export default function DashboardDesktop({
                             <td className="p-4 text-center font-mono text-slate-400 border border-slate-200">{index + 1}</td>
                             <td className="p-4 space-y-1.5 min-w-[180px] border border-slate-200">
                               <div className="text-[10.5px] text-slate-600 leading-snug">
-                                <span className="font-extrabold text-slate-700 block">{formatNameCapitalized(r.uploaderName)}</span>
+                                <span className="font-extrabold text-slate-700 block">{formatNameCapitalized(resolveUploaderInfo(users, r).fullName)}</span>
                                 <span className="text-[9.5px] text-slate-400 font-mono block"><span translate="no" className="notranslate">{r.uploaderPhone}</span></span>
                               </div>
                               <div className="flex items-center gap-1 font-mono text-[9.5px] text-slate-400 select-none">
@@ -5927,7 +5928,7 @@ export default function DashboardDesktop({
                               r.content,
                               r.notes || "",
                               r.reportType || (r.isAbnormal ? "KPH" : "NORMAL"),
-                              r.uploaderName,
+                              userObj ? userObj.fullName : r.uploaderName,
                               r.uploaderPhone,
                               resolvedDept,
                               isApproved ? "Đã duyệt" : "Chờ duyệt",
@@ -6139,7 +6140,7 @@ export default function DashboardDesktop({
                                   <td className="p-4 text-center font-mono text-slate-400 border border-slate-200">{index + 1}</td>
                                   <td className="p-4 space-y-1.5 min-w-[180px] border border-slate-200">
                                     <div className="text-[10.5px] text-slate-600 leading-snug">
-                                      <span className="font-extrabold text-slate-700 block">{formatNameCapitalized(r.uploaderName)}</span>
+                                      <span className="font-extrabold text-slate-700 block">{formatNameCapitalized(resolveUploaderInfo(users, r).fullName)}</span>
                                       <span className="text-[9.5px] text-slate-400 font-mono block"><span translate="no" className="notranslate">{r.uploaderPhone}</span></span>
                                     </div>
                                     <div className="flex items-center gap-1 font-mono text-[9.5px] text-slate-400 select-none">
@@ -6356,7 +6357,7 @@ export default function DashboardDesktop({
                                 <td className="p-4 text-center font-mono text-slate-400 border border-slate-200">{index + 1}</td>
                                 <td className="p-4 space-y-1.5 min-w-[180px] border border-slate-200">
                                   <div className="text-[10.5px] text-slate-600 leading-snug">
-                                    <span className="font-extrabold text-slate-700 block">{formatNameCapitalized(r.uploaderName)}</span>
+                                    <span className="font-extrabold text-slate-700 block">{formatNameCapitalized(resolveUploaderInfo(users, r).fullName)}</span>
                                     <span className="text-[9.5px] text-slate-400 font-mono block"><span translate="no" className="notranslate">{r.uploaderPhone}</span></span>
                                   </div>
                                   <div className="flex items-center gap-1 font-mono text-[9.5px] text-slate-400 select-none">
@@ -8238,7 +8239,8 @@ export default function DashboardDesktop({
                             topicReplies
                               .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
                               .map((r) => {
-                                const isBQT = r.senderRole === "CHỦ ADMIN" || r.senderPhone === "BQT";
+                                const resolvedSender = resolveSenderInfo(users, r.senderPhone, r.senderName, r.senderRole);
+                                const isBQT = r.senderRole === "CHỦ ADMIN" || r.senderPhone === "BQT" || resolvedSender.role === "ADMIN";
                                 return (
                                   <div
                                     key={r.id}
@@ -8254,12 +8256,12 @@ export default function DashboardDesktop({
                                           isBQT ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-700 border border-slate-200"
                                         }`}
                                       >
-                                        {r.senderName.charAt(0)}
+                                        {resolvedSender.fullName.charAt(0)}
                                       </div>
                                       <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 flex-wrap">
                                           <span className="font-bold text-slate-800 text-xs">
-                                            <T>{r.senderName}</T>
+                                            <T>{resolvedSender.fullName}</T>
                                           </span>
                                           <span
                                             className={`text-[9px] px-1 py-0.2 rounded-md font-bold border ${
@@ -8268,7 +8270,7 @@ export default function DashboardDesktop({
                                                 : "bg-slate-100 border-slate-250 text-slate-600"
                                             }`}
                                           >
-                                            <T>{r.senderRole}</T>
+                                            <T>{resolvedSender.position || resolvedSender.role || r.senderRole}</T>
                                           </span>
                                           <span className="text-[9px] text-slate-400">
                                             <T>{r.timestamp}</T>

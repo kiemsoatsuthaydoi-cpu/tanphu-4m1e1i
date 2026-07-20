@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { Star, ChevronDown, ChevronUp, Award, Check } from "lucide-react";
 import { QualityReport, QualityReportRating, User, UserRole, getBadgeScore } from "../types";
 import { T } from "./TranslateText";
+import { resolveBadgeGiverInfo } from "../utils/userResolver";
 
 interface MobileReportRatingSectionProps {
   report: QualityReport;
@@ -495,33 +496,53 @@ export function MobileReportRatingContainer({
   currentUser,
   onUpdateReport,
   categoryIcon,
-  theme
+  theme,
+  users
 }: {
   report: QualityReport;
   currentUser: User | null;
   onUpdateReport?: (report: QualityReport) => void;
   categoryIcon: React.ReactNode;
   theme: any;
+  users?: User[];
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isBadgesMenuOpen, setIsBadgesMenuOpen] = useState(false);
   const [selectedInfoBadge, setSelectedInfoBadge] = useState<any | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const badgeMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!isExpanded && !isBadgesMenuOpen) return;
-    const handleOutsideClick = (e: MouseEvent) => {
+    if (!isExpanded) return;
+    const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
       const target = e.target as HTMLElement;
       if (containerRef.current && !containerRef.current.contains(target)) {
         setIsExpanded(false);
-        setIsBadgesMenuOpen(false);
       }
     };
     document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("touchstart", handleOutsideClick);
     return () => {
       document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("touchstart", handleOutsideClick);
     };
-  }, [isExpanded, isBadgesMenuOpen]);
+  }, [isExpanded]);
+
+  useEffect(() => {
+    if (!isBadgesMenuOpen) return;
+    const handleBadgeOutsideClick = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as HTMLElement;
+      if (badgeMenuRef.current && !badgeMenuRef.current.contains(target)) {
+        setIsBadgesMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleBadgeOutsideClick);
+    document.addEventListener("touchstart", handleBadgeOutsideClick);
+    return () => {
+      document.removeEventListener("mousedown", handleBadgeOutsideClick);
+      document.removeEventListener("touchstart", handleBadgeOutsideClick);
+    };
+  }, [isBadgesMenuOpen]);
 
   return (
     <div ref={containerRef} className="pb-2 border-b border-slate-100 block w-full select-none">
@@ -542,7 +563,7 @@ export function MobileReportRatingContainer({
 
           {/* Awarded Badges List (Hộp Huy Hiệu) */}
           {report.badges && report.badges.length > 0 && (
-            <div className="pl-1.5 border-l border-slate-300 ml-1.5 shrink-0 flex items-center">
+            <div ref={badgeMenuRef} className="pl-1.5 border-l border-slate-300 ml-1.5 shrink-0 flex items-center">
               <button
                 type="button"
                 onClick={(e) => {
@@ -560,7 +581,12 @@ export function MobileReportRatingContainer({
 
               {/* Badges Dropdown Popover */}
               {isBadgesMenuOpen && (() => {
-                const totalScore = report.badges.reduce((acc, b) => acc + getBadgeScore(b.giverPosition), 0);
+                const getLocalBadgeScore = (b: any) => {
+                  const resolvedGiver = resolveBadgeGiverInfo(users, b);
+                  const pos = resolvedGiver.position || (b.giverName === "Lê Nhật Trường" ? "Trưởng Phòng Quản Lý Chất Lượng" : b.giverRole);
+                  return getBadgeScore(pos);
+                };
+                const totalScore = report.badges.reduce((acc, b) => acc + getLocalBadgeScore(b), 0);
                 return (
                   <div className="absolute right-0 top-7 mt-1.5 w-60 bg-white rounded-xl shadow-xl border border-amber-100 p-2 z-[50] flex flex-col gap-1.5 animate-in fade-in slide-in-from-top-2 duration-150">
                     <div className="text-[8.5px] uppercase font-black text-amber-800 tracking-wider pb-1.5 border-b border-amber-50 px-1.5 flex items-center justify-between">
@@ -591,7 +617,9 @@ export function MobileReportRatingContainer({
                                      badge.id === "THONG_TIN_RO_RANG" ? "📜" :
                                      badge.id === "VAN_HANH_BEN_BI" ? "🦾" :
                                      badge.id === "BAO_CHUNG_HE_THONG" ? "🔄" : "🏅";
-                        const badgeScore = getBadgeScore(badge.giverPosition);
+                        const resolvedGiver = resolveBadgeGiverInfo(users, badge);
+                        const badgeScore = getLocalBadgeScore(badge);
+                        const displayPosition = resolvedGiver.position || (resolvedGiver.fullName === "Lê Nhật Trường" ? "Trưởng Phòng" : resolvedGiver.role);
                         return (
                           <div
                             key={idx}
@@ -601,7 +629,7 @@ export function MobileReportRatingContainer({
                               const badgeMapItem = BADGE_PRAISE_MAP[badge.id] || { praises: ["Xin nhiệt liệt biểu dương đóng góp xuất sắc của bạn!"] };
                               const praisesList = badgeMapItem.praises;
                               const selectedPraise = praisesList[Math.floor(Math.random() * praisesList.length)];
-                              setSelectedInfoBadge({ ...badge, icon, praise: selectedPraise });
+                              setSelectedInfoBadge({ ...badge, icon, praise: selectedPraise, giverName: resolvedGiver.fullName, giverPosition: displayPosition });
                             }}
                             className="flex items-center gap-2 p-1.5 bg-amber-50/20 hover:bg-amber-50 rounded-lg border border-transparent hover:border-amber-100 cursor-pointer transition-all duration-150 text-left"
                           >
@@ -611,7 +639,7 @@ export function MobileReportRatingContainer({
                                 <T>{badge.name}</T>
                               </span>
                               <span className="text-[8px] text-slate-500 block truncate notranslate" translate="no">
-                                <T>Bởi:</T> {badge.giverName} {badge.giverPosition ? <span className="text-amber-700 font-medium">({badge.giverPosition})</span> : ""}
+                                <T>Bởi:</T> {resolvedGiver.fullName} {displayPosition ? <span className="text-amber-700 font-medium">({displayPosition})</span> : ""}
                               </span>
                             </div>
                             <div className="shrink-0 text-right">
@@ -704,7 +732,7 @@ export function MobileReportRatingContainer({
               <div className="text-[8px] text-slate-500 font-semibold bg-slate-50 border border-slate-100 py-2.5 px-2.5 rounded-md flex flex-col gap-0.5">
                 <div>
                   <span translate="no" className="notranslate">
-                    <T>Người trao: {selectedInfoBadge.giverName} ({selectedInfoBadge.giverRole})</T>
+                    <T>Người trao: {selectedInfoBadge.giverName} ({selectedInfoBadge.giverPosition || selectedInfoBadge.giverRole})</T>
                   </span>
                 </div>
                 <div>

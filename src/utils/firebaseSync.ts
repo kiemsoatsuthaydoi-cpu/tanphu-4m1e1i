@@ -242,12 +242,17 @@ export async function fetchCollection<T>(collectionName: string): Promise<T[]> {
     snap.forEach((doc) => {
       const data = { ...doc.data() } as any;
       if (collectionName === "user_profiles") {
+        // Find default position from initialUsers if missing in database
+        const defaultUser = initialUsers.find((u) => u.id === doc.id);
+        const defaultPosition = defaultUser ? defaultUser.position : "Nhân Viên";
+
         // Map database schema fields to App internal fields
         const appUser: any = {
           ...data,
           id: doc.id || data.id,
           phone: data.phone || data.phoneNumber || "",
           fullName: data.fullName || data.name || "",
+          position: data.position || defaultPosition,
           createdAt: data.createdAt || new Date().toISOString()
         };
         

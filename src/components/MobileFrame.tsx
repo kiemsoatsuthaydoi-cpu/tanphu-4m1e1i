@@ -9,6 +9,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { isSameBranchOrFactory, formatNameCapitalized } from "../utils/branchHelpers";
 import { AutoImageSlider } from "./AutoImageSlider";
 import { getCategoryFallbackImage } from "../utils/imageProcessor";
+import { findUser, resolveUploaderInfo, resolveBadgeGiverInfo, resolveEvaluatorInfo, resolveSenderInfo } from "../utils/userResolver";
 import { MobileReportRatingContainer, isEligibleEvaluator, BADGE_PRAISE_MAP } from "./MobileReportRatingSection";
 import { RED_BADGES, GREEN_BADGES } from "../data";
 import FirebaseQuotaMonitor from "./FirebaseQuotaMonitor";
@@ -2477,7 +2478,7 @@ export default function MobileFrame({
         giverId: currentUser.id,
         giverName: currentUser.fullName,
         giverRole: currentUser.role === UserRole.ADMIN ? "Chủ Admin" : (currentUser.department || "Quản lý"),
-        giverPosition: currentUser.position,
+        giverPosition: currentUser.position || (currentUser.role === UserRole.ADMIN ? "Trưởng Phòng Quản Lý Chất Lượng" : "Quản lý"),
         timestamp: dateStr
       };
       updatedBadges = [...currentBadges, newBadge];
@@ -4628,6 +4629,7 @@ App Link: ${window.location.origin}`;
           topics={topics}
           replies={replies}
           currentUser={currentUser}
+          users={users}
           onAddForumTopic={onAddForumTopic}
           onAddForumReply={onAddForumReply}
           onUpdateForumTopicStatus={onUpdateForumTopicStatus}
@@ -4696,7 +4698,8 @@ App Link: ${window.location.origin}`;
           </div>
         ) : (
           sortedReports.map((report) => {
-            const isUploader = report.uploaderId === currentUserId;
+            const resolvedUploader = resolveUploaderInfo(users, report);
+            const isUploader = resolvedUploader.id === currentUserId;
              return (
               <div
                 id={`report-card-${report.id}`}
@@ -4716,7 +4719,7 @@ App Link: ${window.location.origin}`;
                       {getFactoryDisplayName(report.factory)?.toUpperCase()}
                     </T>
                     <T className="text-[10px] text-slate-605 block font-extrabold mt-0.5">
-                      <UserIcon className="w-3.5 h-3.5 inline-block mr-0.5 align-text-bottom stroke-[2.5] text-blue-600" /> {formatNameCapitalized(report.uploaderName)} <span className="text-slate-300 mx-1.5 font-normal">|</span> <span className="text-[9px] text-slate-400 font-sans font-semibold">{report.timestamp}</span>
+                      <UserIcon className="w-3.5 h-3.5 inline-block mr-0.5 align-text-bottom stroke-[2.5] text-blue-600" /> {formatNameCapitalized(resolvedUploader.fullName)} <span className="text-slate-300 mx-1.5 font-normal">|</span> <span className="text-[9px] text-slate-400 font-sans font-semibold">{report.timestamp}</span>
                     </T>
                   </div>
                   <div className="shrink-0 flex flex-col items-end gap-1">
@@ -4837,6 +4840,7 @@ App Link: ${window.location.origin}`;
                     onUpdateReport={onUpdateReport}
                     categoryIcon={getCategoryIcon(report.category)}
                     theme={theme}
+                    users={users}
                   />
 
                   {/* Body description text */}
@@ -6027,7 +6031,8 @@ App Link: ${window.location.origin}`;
                           );
                         }
                         return reportChats.map((msg) => {
-                          const isMyself = msg.senderName === currentUser?.fullName || msg.senderPhone === currentUser?.phone;
+                          const resolvedSender = resolveSenderInfo(users, msg.senderPhone, msg.senderName, msg.senderRole);
+                          const isMyself = resolvedSender.fullName === currentUser?.fullName || msg.senderPhone === currentUser?.phone;
                           return (
                             <div 
                               key={msg.id} 
@@ -6035,8 +6040,8 @@ App Link: ${window.location.origin}`;
                             >
                               {/* Metadata block containing sender title and role details */}
                               <div className="text-[8.5px] font-bold text-slate-500 mb-0.5 px-0.5 select-none flex items-center gap-1 flex-wrap">
-                                <span translate="no" className="notranslate">{msg.senderName}</span>
-                                <span className="opacity-60 text-[7px] font-normal font-mono">({msg.senderRole})</span>
+                                <span translate="no" className="notranslate">{resolvedSender.fullName}</span>
+                                <span className="opacity-60 text-[7px] font-normal font-mono">({resolvedSender.position || resolvedSender.role || msg.senderRole})</span>
                               </div>
 
                               {/* Rich comment bubble text styled blue for myself and white for others */}
@@ -6829,6 +6834,7 @@ App Link: ${window.location.origin}`}
                       ) : (
                         <div className="space-y-1.5">
                           {awardedBadges.map((badge, idx) => {
+                            const resolvedGiver = resolveBadgeGiverInfo(users, badge);
                             const icon = badge.id === "CANH_BAO_KIP_THOI" ? "🚨" :
                                          badge.id === "CON_MAT_TINH_TUONG" ? "🔍" :
                                          badge.id === "CHOT_CHAN_RUI_RO" ? "🛡️" :
@@ -6865,7 +6871,7 @@ App Link: ${window.location.origin}`}
                                       <T>{badge.name}</T>
                                     </span>
                                     <span translate="no" className="notranslate text-[8.5px] text-slate-500 font-medium">
-                                      <T>Người trao: {badge.giverName} ({badge.giverRole}) • {badge.timestamp}</T>
+                                      <T>Người trao: {resolvedGiver.fullName} ({resolvedGiver.position || resolvedGiver.role}) • {badge.timestamp}</T>
                                     </span>
                                   </div>
                                 </div>
@@ -7025,7 +7031,7 @@ App Link: ${window.location.origin}`}
               <div className="text-[8px] text-slate-500 font-semibold bg-slate-50 border border-slate-100 py-2.5 px-2.5 rounded-md flex flex-col gap-0.5">
                 <div>
                   <span translate="no" className="notranslate">
-                    <T>Người trao: {selectedInfoBadge.giverName} ({selectedInfoBadge.giverRole})</T>
+                    <T>Người trao: {selectedInfoBadge.giverName} ({selectedInfoBadge.giverPosition || selectedInfoBadge.giverRole})</T>
                   </span>
                 </div>
                 <div>
