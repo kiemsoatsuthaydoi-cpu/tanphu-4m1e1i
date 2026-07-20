@@ -4008,11 +4008,11 @@ App Link: ${window.location.origin}`;
         }`}>
           <div className="bg-white pl-2.5 pr-1.5 py-1.5 border-b border-slate-200 shadow-xs flex items-center gap-0.5 flex-nowrap overflow-x-auto scrollbar-none select-none">
             {/* Search Input */}
-            <div className={`relative transition-all duration-300 flex-1 ${isSearchFocused ? "min-w-[140px]" : "min-w-[70px]"}`}>
-              <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+            <div className={`relative transition-all duration-300 ${isSearchFocused ? "flex-1 min-w-[130px]" : "w-[28px] shrink-0"}`}>
+              <Search className={`absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none transition-all duration-300 ${isSearchFocused ? "left-2" : "left-1/2 -translate-x-1/2"}`} />
               <input
                 type="text"
-                placeholder="Tìm..."
+                placeholder={isSearchFocused ? "Tìm..." : ""}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 onFocus={() => setIsSearchFocused(true)}
@@ -4021,7 +4021,9 @@ App Link: ${window.location.origin}`;
                 autoCorrect="off"
                 autoCapitalize="off"
                 spellCheck="false"
-                className="w-full pl-5 pr-1 py-1 bg-slate-100 rounded-lg text-[9px] focus:ring-1 focus:ring-blue-500 outline-none placeholder:text-slate-400 text-slate-700 font-bold border-none h-[26px]"
+                className={`w-full bg-slate-100 rounded-lg text-[9px] focus:ring-1 focus:ring-blue-500 outline-none placeholder:text-slate-400 text-slate-700 font-bold border-none h-[26px] transition-all duration-300 ${
+                  isSearchFocused ? "pl-7 pr-2" : "pl-0 pr-0 cursor-pointer text-transparent"
+                }`}
               />
             </div>
 
