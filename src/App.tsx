@@ -890,6 +890,13 @@ export default function App() {
     });
   }, [dbConnected]);
 
+  const handleToggleQcFeature = useCallback((enabled: boolean) => {
+    setIsQcFeatureEnabled(enabled);
+    if (dbConnected) {
+      saveDocument("config", "qc_feature", { enabled }).catch(console.error);
+    }
+  }, [dbConnected]);
+
   const [deletedNotifIds, setDeletedNotifIds] = useState<string[]>(() => {
     const saved = safeGetItem("4m1e1i_deleted_notifications");
     if (saved) {
@@ -1596,6 +1603,11 @@ export default function App() {
         setAiKnowledgeText(remoteAiKnowledge.text);
       }
 
+      const remoteQcFeature = fConfigs.find((c: any) => c.id === "qc_feature");
+      if (remoteQcFeature && typeof remoteQcFeature.enabled === "boolean") {
+        setIsQcFeatureEnabled(remoteQcFeature.enabled);
+      }
+
       setDbConnected(true);
       setSyncCompleted(true);
       setDbStatus("Đồng bộ liên kết với server thành công!");
@@ -1738,6 +1750,11 @@ export default function App() {
             const data = doc.data();
             if (data && Array.isArray(data.ids)) {
               setDeletedNotifIds(data.ids);
+            }
+          } else if (doc.id === "qc_feature") {
+            const data = doc.data();
+            if (data && typeof data.enabled === "boolean") {
+              setIsQcFeatureEnabled(data.enabled);
             }
           }
         });
@@ -4115,7 +4132,7 @@ export default function App() {
             errorCatalog={errorCatalog}
             onAddErrorCatalogItem={handleAddErrorCatalogItem}
             isQcFeatureEnabled={isQcFeatureEnabled}
-            onToggleQcFeature={setIsQcFeatureEnabled}
+            onToggleQcFeature={handleToggleQcFeature}
             reports={reports}
             currentUserId={currentUser.id}
             onOpenReportForm={() => setIsFormOpen(true)}
@@ -4236,7 +4253,7 @@ export default function App() {
             errorCatalog={errorCatalog}
             onAddErrorCatalogItem={handleAddErrorCatalogItem}
             isQcFeatureEnabled={isQcFeatureEnabled}
-            onToggleQcFeature={setIsQcFeatureEnabled}
+            onToggleQcFeature={handleToggleQcFeature}
             reports={reports}
             currentUserId={currentUser.id}
             onOpenReportForm={() => setIsFormOpen(true)}
@@ -4436,7 +4453,7 @@ export default function App() {
             onUpdateErrorCatalogItem={handleUpdateErrorCatalogItem}
             onDeleteErrorCatalogItem={handleDeleteErrorCatalogItem}
             isQcFeatureEnabled={isQcFeatureEnabled}
-            onToggleQcFeature={setIsQcFeatureEnabled}
+            onToggleQcFeature={handleToggleQcFeature}
           />
         </div>
 
@@ -4472,7 +4489,7 @@ export default function App() {
                 errorCatalog={errorCatalog}
                 onAddErrorCatalogItem={handleAddErrorCatalogItem}
                 isQcFeatureEnabled={isQcFeatureEnabled}
-                onToggleQcFeature={setIsQcFeatureEnabled}
+                onToggleQcFeature={handleToggleQcFeature}
                 reports={reports}
                 currentUserId={currentUser.id}
                 onOpenReportForm={() => setIsFormOpen(true)}
@@ -4548,7 +4565,7 @@ export default function App() {
                 errorCatalog={errorCatalog}
                 onAddErrorCatalogItem={handleAddErrorCatalogItem}
                 isQcFeatureEnabled={isQcFeatureEnabled}
-                onToggleQcFeature={setIsQcFeatureEnabled}
+                onToggleQcFeature={handleToggleQcFeature}
                 reports={reports}
                 currentUserId={currentUser.id}
                 onOpenReportForm={() => setIsFormOpen(true)}

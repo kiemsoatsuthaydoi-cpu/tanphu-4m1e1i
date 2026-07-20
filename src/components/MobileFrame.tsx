@@ -4006,7 +4006,7 @@ App Link: ${window.location.origin}`;
         <div className={`transition-all duration-300 overflow-hidden shrink-0 ${
           showFilters ? "max-h-[50px] opacity-100" : "max-h-0 opacity-0 pointer-events-none"
         }`}>
-          <div className="bg-white pl-2.5 pr-1.5 py-1.5 border-b border-slate-200 shadow-xs flex items-center gap-0.5 flex-nowrap overflow-x-auto scrollbar-none select-none">
+          <div className="bg-white pl-2.5 pr-1.5 py-1.5 border-b border-slate-200 shadow-xs flex items-center gap-1 flex-nowrap overflow-x-auto scrollbar-none select-none">
             {/* Search Input */}
             <div className={`relative transition-all duration-300 ${isSearchFocused ? "flex-1 min-w-[130px]" : "w-[28px] shrink-0"}`}>
               <Search className={`absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none transition-all duration-300 ${isSearchFocused ? "left-2" : "left-1/2 -translate-x-1/2"}`} />
