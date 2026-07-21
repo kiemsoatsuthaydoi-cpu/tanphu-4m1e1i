@@ -480,7 +480,7 @@ export default function ReportForm({
       factory: selectedBranch,
       timestamp,
       category: selectedCategory,
-      content,
+      content: content.trim().toUpperCase(),
       imageUrl: images[0].base64,
       imageUrls: images.map(img => img.base64),
       compressedSizeKb: totalCompressedSizeKb,
@@ -1006,12 +1006,18 @@ export default function ReportForm({
         {/* 6. Content statement description (Nội dung thay đổi*) */}
         <div>
           <label className="text-xs font-bold text-slate-700 flex justify-between items-center mb-1 uppercase">
-            <T>Nội dung chất lượng chi tiết*</T>
+            <T>Mô tả chi tiết*</T>
             <T className="text-[9px] text-slate-400 lowercase font-normal">(Chi tiết yếu tố biến động)</T>
           </label>
           <MentionTextArea
             users={users}
-            placeholder="Mô tả cụ thể vấn đề chất lượng hay sự đổi mới, ví dụ: 'Bảo dưỡng định kỳ đầu cắm phôi phát hiện bám cặn...'"
+            placeholder={
+              localReportType === "KPH" || localReportType === "KNN"
+                ? "• Tên sản phẩm? Máy sản xuất ? Công đoạn? Ngày sản xuất?  Mô tả lỗi cụ thể."
+                : localReportType === "DSA"
+                ? "• Tên cải tiến / Sáng kiến;  Hoạt động cụ thể là gì? Trạng thái: (Mới thử nghiệm / Đã triển khai chính thức; Giá trị mang lại: (Tiết kiệm bao nhiêu thời gian/chi phí/nhân công?); Kỳ vọng?"
+                : "Mô tả cụ thể vấn đề chất lượng hay sự đổi mới, ví dụ: 'Bảo dưỡng định kỳ đầu cắm phôi phát hiện bám cặn...'"
+            }
             value={content}
             onChange={setContent}
             rows={3}

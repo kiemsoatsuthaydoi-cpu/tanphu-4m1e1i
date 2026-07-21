@@ -4,6 +4,8 @@ import {
   Users, 
   ChevronDown, 
   ChevronUp, 
+  ChevronLeft,
+  ChevronRight,
   Activity,
   Award,
   BarChart4,
@@ -92,6 +94,22 @@ export default function StatisticsDashboard({
   const [selectedMonth, setSelectedMonth] = useState<number>(currentMonth);
   const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
   const [calendarMonth, setCalendarMonth] = useState<number>(currentMonth);
+
+  const handlePrevDay = () => {
+    const d = new Date(currentYear, selectedMonth - 1, selectedDay);
+    d.setDate(d.getDate() - 1);
+    setSelectedDay(d.getDate());
+    setSelectedMonth(d.getMonth() + 1);
+    setCalendarMonth(d.getMonth() + 1);
+  };
+
+  const handleNextDay = () => {
+    const d = new Date(currentYear, selectedMonth - 1, selectedDay);
+    d.setDate(d.getDate() + 1);
+    setSelectedDay(d.getDate());
+    setSelectedMonth(d.getMonth() + 1);
+    setCalendarMonth(d.getMonth() + 1);
+  };
 
   const maxDaysInMonth = useMemo(() => {
     return new Date(currentYear, selectedMonth, 0).getDate();
@@ -388,6 +406,15 @@ export default function StatisticsDashboard({
 
           {/* New Interactive Calendar Selector Popover */}
           <div className="relative flex items-center gap-2 flex-wrap sm:flex-nowrap z-50">
+            {/* Nút lùi ngày */}
+            <button
+              onClick={handlePrevDay}
+              className="flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl cursor-pointer transition-all active:scale-95 text-slate-600 shrink-0"
+              title="Ngày trước"
+            >
+              <ChevronLeft className="w-4 h-4 text-blue-600" />
+            </button>
+
             {/* Display formatted dd/mm/yy badge, clicking also triggers date picker */}
             <button
               onClick={() => {
@@ -403,6 +430,15 @@ export default function StatisticsDashboard({
                 </span>
               </div>
               <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${showDatePicker ? "rotate-180" : ""}`} />
+            </button>
+
+            {/* Nút tiến ngày */}
+            <button
+              onClick={handleNextDay}
+              className="flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl cursor-pointer transition-all active:scale-95 text-slate-600 shrink-0"
+              title="Ngày sau"
+            >
+              <ChevronRight className="w-4 h-4 text-blue-600" />
             </button>
 
             {/* Quick Reset back to Today */}

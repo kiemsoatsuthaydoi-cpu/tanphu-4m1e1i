@@ -140,7 +140,7 @@ export async function generateDailyReportPDF(options: PDFExportOptions): Promise
           <th style="padding: 12px; font-size: 11px; text-transform: uppercase; text-align: center; width: 6%;">STT</th>
           <th style="padding: 12px; font-size: 11px; text-transform: uppercase; width: 30%;">Chi nhánh / Nhân viên</th>
           <th style="padding: 12px; font-size: 11px; text-transform: uppercase; text-align: center; width: 18%;">Hạng mục (4M1E1I)</th>
-          <th style="padding: 12px; font-size: 11px; text-transform: uppercase; width: 30%;">Nội dung chất lượng chi tiết</th>
+          <th style="padding: 12px; font-size: 11px; text-transform: uppercase; width: 30%;">Mô tả chi tiết</th>
           <th style="padding: 12px; font-size: 11px; text-transform: uppercase; text-align: center; width: 16%;">Trạng thái / Hình ảnh</th>
         </tr>
       </thead>

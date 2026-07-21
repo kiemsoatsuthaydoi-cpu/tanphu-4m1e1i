@@ -90,6 +90,7 @@ export default function ProgressTrackingDashboard({
 
     const currentReps = report.replications ? [...report.replications] : [];
     const targetRepId = editingRepId || `rep-${Date.now()}`;
+    const existingRep = currentReps.find((r) => r.id === targetRepId);
 
     const newRep = {
       id: targetRepId,
@@ -101,7 +102,8 @@ export default function ProgressTrackingDashboard({
       notes: (repCurrentState.trim() + " " + repSupportRequired.trim()).trim(),
       currentState: repCurrentState.trim(),
       supportRequired: repSupportRequired.trim(),
-      updatedAt: getFormattedNow()
+      updatedAt: getFormattedNow(),
+      phoneNumber: existingRep?.phoneNumber || currentUser?.phone || ""
     };
 
     const existingIndex = currentReps.findIndex((r) => r.id === targetRepId);
@@ -652,7 +654,7 @@ export default function ProgressTrackingDashboard({
                 <p className={`font-bold text-slate-700 leading-relaxed bg-slate-50 border border-slate-100 ${
                   isMobile ? "text-[15px] p-2.5 rounded-lg" : "text-[19px] p-2.5 rounded-xl"
                 }`}>
-                  <span translate="no" className="notranslate">"{report.content}"</span>
+                  <span translate="no" className="notranslate">"{(report.content || "").toUpperCase()}"</span>
                 </p>
 
                 {/* Uploader & Date */}
@@ -1125,7 +1127,7 @@ export default function ProgressTrackingDashboard({
                                 <div className={`text-slate-400 flex justify-between items-center pt-1 border-t border-slate-50 ${
                                   isMobile ? "text-[9.5px]" : "text-[12px]"
                                 }`}>
-                                  <span>Đăng ký: {rep.registrantName} ({rep.targetDate})</span>
+                                  <span>Đăng ký: {rep.registrantName} {rep.phoneNumber ? `- SĐT: ${rep.phoneNumber}` : ""} ({rep.targetDate})</span>
                                   <div className="flex gap-2">
                                     <button
                                       type="button"

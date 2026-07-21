@@ -2463,6 +2463,7 @@ export default function MobileFrame({
   const [repNotes, setRepNotes] = useState<string>("");
   const [repCurrentState, setRepCurrentState] = useState<string>("");
   const [repSupportRequired, setRepSupportRequired] = useState<string>("");
+  const [repPhoneNumber, setRepPhoneNumber] = useState<string>("");
 
   useEffect(() => {
     safeSetItem("4m1e1i_liked_reports", JSON.stringify(likedReports));
@@ -2885,7 +2886,7 @@ App Link: ${window.location.origin}`;
           if (prev) return false;
           return prev;
         });
-      } else if (diff < -12 || scrollTop <= 12) {
+      } else if ((diff < -8 && scrollTop < 150) || scrollTop <= 15) {
         setShowFilters((prev) => {
           if (!prev) return true;
           return prev;
@@ -3753,7 +3754,7 @@ App Link: ${window.location.origin}`;
         className={`w-full flex flex-col relative transition-all duration-300 ${
           isRealMobile 
             ? "max-w-none rounded-none border-0 shadow-none h-[100dvh] overflow-hidden" 
-            : "max-w-[440px] lg:w-[375px] h-[100dvh] lg:h-[780px] bg-slate-950 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl overflow-hidden"
+            : "max-w-[480px] lg:w-[415px] h-[100dvh] lg:h-[780px] bg-slate-950 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl overflow-hidden"
         }`}
       >
         {/* Main Title Bar / Header */}
@@ -3896,7 +3897,7 @@ App Link: ${window.location.origin}`;
       className={`w-full flex flex-col relative transition-all duration-300 ${
         isRealMobile 
           ? "max-w-none rounded-none border-0 shadow-none h-[100dvh] overflow-hidden" 
-          : "max-w-[440px] lg:w-[375px] h-[100dvh] lg:h-[780px] bg-slate-950 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl overflow-hidden"
+          : "max-w-[480px] lg:w-[415px] h-[100dvh] lg:h-[780px] bg-slate-950 rounded-[18px] lg:rounded-[36px] border-[3px] lg:border-8 border-slate-950 shadow-2xl overflow-hidden"
       }`}
     >
 
@@ -4982,6 +4983,56 @@ App Link: ${window.location.origin}`;
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
+
+                  {/* Quick Branch Filter Chips */}
+                  <div className="pt-2 border-t border-slate-100">
+                    <span className="text-[8px] font-black uppercase text-slate-400 block mb-1.5">
+                      <T><span translate="no" className="notranslate">Chọn nhanh Chi nhánh:</span></T>
+                    </span>
+                    <div className="flex flex-wrap gap-1 border-none max-h-24 overflow-y-auto">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMobileBranchFilter("Tất cả");
+                          showToast("Đã bỏ lọc chi nhánh");
+                        }}
+                        className={`px-2 py-0.5 rounded text-[8px] font-black border transition-all cursor-pointer uppercase select-none ${
+                          mobileBranchFilter === "Tất cả"
+                            ? "bg-slate-800 text-white border-slate-800 shadow-3xs"
+                            : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                        }`}
+                      >
+                        <T><span translate="no" className="notranslate">TẤT CẢ</span></T>
+                      </button>
+                      {(branches || []).filter(b => b.isScoring).map((b) => {
+                        const match = b.name.match(/\(([^)]+)\)/);
+                        const shortName = match ? match[1] : b.name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn phòng ", "VP ");
+                        const isSelected = mobileBranchFilter === b.id;
+                        return (
+                          <button
+                            key={b.id}
+                            type="button"
+                            onClick={() => {
+                              if (isSelected) {
+                                setMobileBranchFilter("Tất cả");
+                                showToast("Đã bỏ lọc chi nhánh");
+                              } else {
+                                setMobileBranchFilter(b.id);
+                                showToast(`Đã lọc nhật ký theo chi nhánh: ${getFactoryDisplayName(b.name)} 🏭`);
+                              }
+                            }}
+                            className={`px-2 py-0.5 rounded text-[8px] font-black border transition-all cursor-pointer uppercase select-none ${
+                              isSelected
+                                ? "bg-emerald-600 text-white border-emerald-600 shadow-3xs"
+                                : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                            }`}
+                          >
+                            <T><span translate="no" className="notranslate">{shortName}</span></T>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Filtered logs */}
@@ -5058,7 +5109,7 @@ App Link: ${window.location.origin}`;
                                 )}
                               </div>
                               <p className="text-[9.5px] leading-relaxed text-slate-600 font-bold truncate">
-                                <T><span translate="no" className="notranslate">{rep.content}</span></T>
+                                <T><span translate="no" className="notranslate">{(rep.content || "").toUpperCase()}</span></T>
                               </p>
                             </div>
                           );
@@ -5128,7 +5179,9 @@ App Link: ${window.location.origin}`;
         <>
           {/* Top segment control switcher for ADMIN and REVIEWER */}
           {(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) && (
-            <div className="bg-white border-b border-slate-200 px-3 py-2 flex items-center justify-between shrink-0 select-none shadow-3xs">
+            <div className={`transition-all duration-300 overflow-hidden shrink-0 bg-white border-b border-slate-200 px-3 select-none ${
+              showFilters ? "max-h-[50px] py-2 opacity-100" : "max-h-0 py-0 opacity-0 pointer-events-none"
+            }`}>
               <div className="flex bg-slate-100 p-0.5 rounded-lg items-center w-full border border-slate-200/40">
                 <button
                   type="button"
@@ -5339,7 +5392,7 @@ App Link: ${window.location.origin}`;
 
                   {/* Body description text */}
                   <div className={`pt-2 font-medium leading-relaxed text-slate-705 ${contentFontSizeClass}`}>
-                    <T>{report.content}</T>
+                    <T>{(report.content || "").toUpperCase()}</T>
                   </div>
 
                   {report.notes && (
@@ -5816,14 +5869,32 @@ App Link: ${window.location.origin}`;
                               <label className="text-[8px] font-extrabold text-indigo-700 uppercase">
                                 <span translate="no" className="notranslate">Trạng thái:</span>
                               </label>
-                              <select
-                                value={resStatus}
-                                onChange={(e) => setResStatus(e.target.value as "Đang xử lý" | "Đã xử lý")}
-                                className="w-full text-[9px] font-semibold text-slate-800 bg-white border border-slate-250 rounded px-1 py-1 focus:outline-none focus:border-indigo-400"
-                              >
-                                <option value="Đang xử lý">⏳ Đang xử lý</option>
-                                <option value="Đã xử lý">✅ Đã xử lý</option>
-                              </select>
+                              <div className="flex gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setResStatus("Đang xử lý")}
+                                  className={`flex-1 flex items-center justify-center gap-1 py-1.5 px-1 rounded border text-[8.5px] font-extrabold transition-all select-none cursor-pointer active:scale-95 ${
+                                    resStatus === "Đang xử lý"
+                                      ? "bg-amber-50 text-amber-700 border-amber-400 shadow-3xs"
+                                      : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+                                  }`}
+                                >
+                                  <span>⏳</span>
+                                  <span translate="no" className="notranslate">Đang xử lý</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setResStatus("Đã xử lý")}
+                                  className={`flex-1 flex items-center justify-center gap-1 py-1.5 px-1 rounded border text-[8.5px] font-extrabold transition-all select-none cursor-pointer active:scale-95 ${
+                                    resStatus === "Đã xử lý"
+                                      ? "bg-emerald-50 text-emerald-700 border-emerald-400 shadow-3xs"
+                                      : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+                                  }`}
+                                >
+                                  <span>✅</span>
+                                  <span translate="no" className="notranslate">Đã xử lý</span>
+                                </button>
+                              </div>
                             </div>
                             <div className="flex flex-col gap-0.5">
                               <label className="text-[8px] font-extrabold text-indigo-700 uppercase">
@@ -5841,7 +5912,7 @@ App Link: ${window.location.origin}`;
                           {/* Result Description text field */}
                           <div className="flex flex-col gap-0.5">
                             <label className="text-[8px] font-extrabold text-indigo-700 uppercase">
-                              <span translate="no" className="notranslate">Nội dung / Kết quả cụ thể:</span>
+                              <span translate="no" className="notranslate">Mô tả/ Ghi chú (nếu có):</span>
                             </label>
                             <textarea
                               rows={2}
@@ -5969,6 +6040,7 @@ App Link: ${window.location.origin}`;
                                 setRepNotes("");
                                 setRepCurrentState("");
                                 setRepSupportRequired("");
+                                setRepPhoneNumber(currentUser?.phone || "");
                               }
                             }}
                             className="text-[9px] font-bold text-emerald-600 hover:text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-150 cursor-pointer active:scale-95 transition-all"
@@ -5992,6 +6064,7 @@ App Link: ${window.location.origin}`;
                                   setRepNotes(rep.notes || "");
                                   setRepCurrentState(rep.currentState || "");
                                   setRepSupportRequired(rep.supportRequired || "");
+                                  setRepPhoneNumber(rep.phoneNumber || "");
                                 }}
                                 className={`text-[9px] px-2 py-0.5 rounded border font-bold flex items-center gap-1 cursor-pointer select-none transition-all duration-200 ${
                                   rep.status === "Đã hoàn thành"
@@ -6000,7 +6073,7 @@ App Link: ${window.location.origin}`;
                                     ? "bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100"
                                     : "bg-sky-50 border-sky-150 text-sky-800 hover:bg-sky-100"
                                 }`}
-                                title={`Đại diện: ${rep.registrantName}\nTarget: ${rep.targetDate}\nHiện trạng: ${rep.currentState || rep.notes || ""}\nHỗ trợ: ${rep.supportRequired || ""}`}
+                                title={`Đại diện: ${rep.registrantName} ${rep.phoneNumber ? `(${rep.phoneNumber})` : ""}\nTarget: ${rep.targetDate}\nHiện trạng: ${rep.currentState || rep.notes || ""}\nHỗ trợ: ${rep.supportRequired || ""}`}
                               >
                                 <span translate="no" className="notranslate">
                                   {rep.factoryName} - {rep.departmentName}
@@ -6057,7 +6130,7 @@ App Link: ${window.location.origin}`;
                                 )}
                                 <div className="mt-1 text-[7.5px] text-slate-400 font-mono flex items-center justify-between select-none">
                                   <span translate="no" className="notranslate">
-                                    Đăng ký bởi: {rep.registrantName}
+                                    Đăng ký bởi: {rep.registrantName} {rep.phoneNumber ? `- SĐT: ${rep.phoneNumber}` : ""}
                                   </span>
                                   <span translate="no" className="notranslate font-medium bg-emerald-50 px-1 py-0.2 rounded text-emerald-800">
                                     Hạn: {rep.targetDate || "N/A"}
@@ -6115,8 +6188,8 @@ App Link: ${window.location.origin}`;
                               </div>
                             </div>
 
-                            {/* Status, Registrant & Target Date */}
-                            <div className="grid grid-cols-3 gap-1.5">
+                            {/* Status & Target Date */}
+                            <div className="grid grid-cols-2 gap-1.5">
                               <div className="flex flex-col gap-0.5">
                                 <label className="text-[8px] font-extrabold text-emerald-700 uppercase">
                                   <span translate="no" className="notranslate">Trạng thái:</span>
@@ -6143,6 +6216,10 @@ App Link: ${window.location.origin}`;
                                   className="w-full text-[9px] font-semibold text-slate-800 bg-white border border-slate-250 rounded px-1.5 py-1 focus:outline-none focus:border-emerald-400 font-mono font-bold text-center"
                                 />
                               </div>
+                            </div>
+
+                            {/* Registrant & Phone Number */}
+                            <div className="grid grid-cols-2 gap-1.5">
                               <div className="flex flex-col gap-0.5">
                                 <label className="text-[8px] font-extrabold text-emerald-700 uppercase">
                                   <span translate="no" className="notranslate">Người phụ trách:</span>
@@ -6152,6 +6229,18 @@ App Link: ${window.location.origin}`;
                                   readOnly
                                   value={currentUser?.fullName ? formatNameCapitalized(currentUser.fullName) : "Người đại diện"}
                                   className="w-full text-[9px] font-semibold text-slate-550 bg-slate-100 border border-slate-200 rounded px-1.5 py-1 focus:outline-none cursor-not-allowed"
+                                />
+                              </div>
+                              <div className="flex flex-col gap-0.5">
+                                <label className="text-[8px] font-extrabold text-emerald-700 uppercase">
+                                  <span translate="no" className="notranslate">Số ĐT liên lạc:</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  value={repPhoneNumber}
+                                  onChange={(e) => setRepPhoneNumber(e.target.value)}
+                                  placeholder="Nhập số điện thoại..."
+                                  className="w-full text-[9px] font-semibold text-slate-800 bg-white border border-slate-250 rounded px-1.5 py-1 focus:outline-none focus:border-emerald-400"
                                 />
                               </div>
                             </div>
@@ -6267,6 +6356,7 @@ App Link: ${window.location.origin}`;
                                       targetDate: repTargetDate.trim(),
                                       notes: (repCurrentState.trim() + " " + repSupportRequired.trim()).trim(),
                                       currentState: repCurrentState.trim(),
+                                      phoneNumber: repPhoneNumber.trim(),
                                       supportRequired: repSupportRequired.trim(),
                                       updatedAt: getFormattedNow()
                                     };

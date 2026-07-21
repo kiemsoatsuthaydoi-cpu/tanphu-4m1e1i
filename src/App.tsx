@@ -2998,6 +2998,9 @@ export default function App() {
 
   // Report Submission Handler
   const handleSubmitReport = async (payload: Omit<QualityReport, "id" | "googleDrivePath">) => {
+    // Force uppercase format for description/content by default
+    payload.content = (payload.content || "").trim().toUpperCase();
+
     if (offlineMode) {
       // Save inside local offline storage queue
       const offlineItem: QualityReport = {
@@ -4467,7 +4470,7 @@ export default function App() {
 
         {/* Floating/Docked elegant iPhone mockup frame on the right side if active */}
         {showMobilePreview && (
-          <div className="hidden lg:flex w-[420px] bg-[#F7F9FC] border-l border-slate-200 p-6 flex-col items-center shrink-0 overflow-y-auto select-none shadow-inner mobile-preview-dock">
+          <div className="hidden lg:flex w-[465px] bg-[#F7F9FC] border-l border-slate-200 p-6 flex-col items-center shrink-0 overflow-y-auto select-none shadow-inner mobile-preview-dock">
             <div className="w-full flex items-center justify-between mb-4 header-mobile-controls">
               <T className="text-[10px] text-slate-500 font-extrabold uppercase tracking-widest block font-sans">
                 📱 Xem trước giao diện di động (Mobile Preview)

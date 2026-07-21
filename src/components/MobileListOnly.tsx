@@ -278,7 +278,7 @@ export function MobileListOnly({
                   </div>
 
                   <div className={`font-semibold text-slate-800 ${contentFontSizeClass}`}>
-                    <span translate="no" className="notranslate">{report.content}</span>
+                    <span translate="no" className="notranslate">{(report.content || "").toUpperCase()}</span>
                   </div>
 
                   {report.notes && (
@@ -459,7 +459,7 @@ export function MobileListOnly({
                             </div>
                           )}
                           <div className="text-[8px] text-slate-400 mt-1.5 text-right select-none">
-                            <span translate="no" className="notranslate">Người thực hiện: {rep.registrantName} | Hạn: {rep.targetDate}</span>
+                            <span translate="no" className="notranslate">Người thực hiện: {rep.registrantName} {rep.phoneNumber ? `(SĐT: ${rep.phoneNumber})` : ""} | Hạn: {rep.targetDate}</span>
                           </div>
                         </div>
                       ))}

@@ -69,6 +69,7 @@ export interface QualityReportReplication {
   currentState: string;
   supportRequired: string;
   updatedAt: string;
+  phoneNumber?: string;
 }
 
 export interface QualityReport {

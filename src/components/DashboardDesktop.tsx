@@ -5718,7 +5718,7 @@ export default function DashboardDesktop({
                               </div>
                             </td>
                             <td className="p-4 leading-relaxed text-slate-700 max-w-sm font-medium border border-slate-200">
-                              <T><span translate="no" className="notranslate">{r.content}</span></T>
+                              <T><span translate="no" className="notranslate">{(r.content || "").toUpperCase()}</span></T>
                               {r.notes && (
                                 <div className="mt-1 text-[10px] text-slate-500 italic block border-l-2 border-amber-500 pl-1.5">
                                   <T><span translate="no" className="notranslate">Ghi chú: {r.notes}</span></T>
@@ -6208,7 +6208,7 @@ export default function DashboardDesktop({
                                   </td>
                                   <td className="p-4 leading-relaxed text-slate-600 max-w-sm border border-slate-200">
                                     <div className="line-through text-slate-400">
-                                      <T><span translate="no" className="notranslate">{r.content}</span></T>
+                                      <T><span translate="no" className="notranslate">{(r.content || "").toUpperCase()}</span></T>
                                     </div>
                                     {r.notes && (
                                       <div className="mt-1 text-[10px] text-slate-400 italic block border-l-2 border-slate-300 pl-1.5">
@@ -6428,7 +6428,7 @@ export default function DashboardDesktop({
                                   </div>
                                 </td>
                                 <td className="p-4 leading-relaxed text-slate-700 max-w-sm font-medium border border-slate-200">
-                                  <T>{r.content}</T>
+                                  <T>{(r.content || "").toUpperCase()}</T>
                                   {r.notes && (
                                     <div className="mt-1 text-[10px] text-slate-500 italic block border-l-2 border-emerald-500 pl-1.5">
                                       <T>Ghi chú: {r.notes}</T>
@@ -6757,7 +6757,7 @@ export default function DashboardDesktop({
                                                   </span>
                                                 </div>
                                                 <div className="text-[7.5px] text-slate-400 font-mono mt-0.5 flex justify-between select-none">
-                                                  <span translate="no" className="notranslate">{rep.registrantName}</span>
+                                                  <span translate="no" className="notranslate">{rep.registrantName} {rep.phoneNumber ? `(SĐT: ${rep.phoneNumber})` : ""}</span>
                                                   <span translate="no" className="notranslate">Hạn: {rep.targetDate}</span>
                                                 </div>
                                               </div>
@@ -6801,7 +6801,7 @@ export default function DashboardDesktop({
                                                 </div>
                                               )}
                                               <div className="text-[7.5px] text-slate-400 font-mono mt-0.5 flex justify-between select-none">
-                                                <span translate="no" className="notranslate">{rep.registrantName}</span>
+                                                <span translate="no" className="notranslate">{rep.registrantName} {rep.phoneNumber ? `(SĐT: ${rep.phoneNumber})` : ""}</span>
                                                 <span translate="no" className="notranslate">Hạn: {rep.targetDate}</span>
                                               </div>
                                             </div>
@@ -7288,7 +7288,7 @@ export default function DashboardDesktop({
                                   />
                                 ) : (
                                   <p className="text-xs text-slate-700 whitespace-pre-wrap font-sans break-words leading-relaxed">
-                                    {r.content}
+                                    {(r.content || "").toUpperCase()}
                                   </p>
                                 )}
                                 
@@ -7311,7 +7311,7 @@ export default function DashboardDesktop({
                                         if (onUpdateReport) {
                                           onUpdateReport({
                                             ...r,
-                                            content: editingPersonalReportText.trim()
+                                            content: editingPersonalReportText.trim().toUpperCase()
                                           });
                                           onShowToast?.("Đã cập nhật nội dung báo cáo thành công! 💾", "success");
                                         }
