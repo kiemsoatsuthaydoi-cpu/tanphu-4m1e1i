@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import html2canvas from "html2canvas";
-import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send, Award } from "lucide-react";
+import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send, Award, Calendar, Clock } from "lucide-react";
 import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus, QualityReportBadge, AppNotification, ErrorCatalogItem, BadgePointConfigItem } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
@@ -1326,6 +1326,45 @@ export const playNotificationSound = () => {
   }
 };
 
+// Helper to extract date components strictly in Vietnam timezone (ICT, GMT+7)
+const getVietnamTimeParts = (ts: number | Date) => {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+      second: "numeric",
+      hour12: false
+    });
+    const parts = formatter.formatToParts(new Date(ts));
+    const partMap: Record<string, string> = {};
+    parts.forEach(p => {
+      partMap[p.type] = p.value;
+    });
+    return {
+      day: parseInt(partMap.day, 10),
+      month: parseInt(partMap.month, 10),
+      year: parseInt(partMap.year, 10),
+      hours: parseInt(partMap.hour, 10),
+      minutes: parseInt(partMap.minute, 10),
+      seconds: parseInt(partMap.second, 10)
+    };
+  } catch (err) {
+    const d = new Date(ts);
+    return {
+      day: d.getDate(),
+      month: d.getMonth() + 1,
+      year: d.getFullYear(),
+      hours: d.getHours(),
+      minutes: d.getMinutes(),
+      seconds: d.getSeconds()
+    };
+  }
+};
+
 export default function MobileFrame({
   reports,
   currentUserId,
@@ -1946,6 +1985,148 @@ export default function MobileFrame({
   const [mobileBranchFilter, setMobileBranchFilter] = useState<string>("Tất cả");
   const [mobileTimeFilter, setMobileTimeFilter] = useState<"NGAY" | "TUAN" | "THANG">("THANG");
   const [mobileCategoryFilter, setMobileCategoryFilter] = useState<string>("Tất cả");
+  
+  // Clock ticking mechanism (every second) to animate [hh:mm:ss] live
+  const [ticker, setTicker] = useState<number>(0);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTicker((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Vietnam-specific current date parts for chart filtering
+  const chartCurrentParts = useMemo(() => {
+    // Current VN timezone parts (Vietnam is GMT+7)
+    const parts = getVietnamTimeParts(Date.now());
+    
+    // Calculate week number
+    const utcDate = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
+    const dayNum = utcDate.getUTCDay() || 7;
+    utcDate.setUTCDate(utcDate.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((utcDate.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+
+    return { 
+      day: parts.day, 
+      month: parts.month, 
+      year: parts.year, 
+      week: weekNo 
+    };
+  }, []);
+
+  const [chartDay, setChartDay] = useState<number>(chartCurrentParts.day);
+  const [chartMonth, setChartMonth] = useState<number>(chartCurrentParts.month);
+  const [chartYear, setChartYear] = useState<number>(chartCurrentParts.year);
+  const [chartWeek, setChartWeek] = useState<number>(chartCurrentParts.week);
+  
+  // Show calendar picker for the chart day filter
+  const [showChartDatePicker, setShowChartDatePicker] = useState<boolean>(false);
+  const [chartCalendarMonth, setChartCalendarMonth] = useState<number>(chartCurrentParts.month);
+
+  const handlePrevChartDay = () => {
+    const d = new Date(chartYear, chartMonth - 1, chartDay);
+    d.setDate(d.getDate() - 1);
+    setChartDay(d.getDate());
+    setChartMonth(d.getMonth() + 1);
+    setChartYear(d.getFullYear());
+    setChartCalendarMonth(d.getMonth() + 1);
+  };
+
+  const handleNextChartDay = () => {
+    const d = new Date(chartYear, chartMonth - 1, chartDay);
+    d.setDate(d.getDate() + 1);
+    setChartDay(d.getDate());
+    setChartMonth(d.getMonth() + 1);
+    setChartYear(d.getFullYear());
+    setChartCalendarMonth(d.getMonth() + 1);
+  };
+
+  const handlePrevChartWeek = () => {
+    let nextWeek = chartWeek - 1;
+    let nextYear = chartYear;
+    if (nextWeek < 1) {
+      nextWeek = 52;
+      nextYear = chartYear - 1;
+      if (nextYear < 2024) nextYear = 2024;
+    }
+    setChartWeek(nextWeek);
+    setChartYear(nextYear);
+  };
+
+  const handleNextChartWeek = () => {
+    let nextWeek = chartWeek + 1;
+    let nextYear = chartYear;
+    if (nextWeek > 52) {
+      nextWeek = 1;
+      nextYear = chartYear + 1;
+      if (nextYear > 2026) nextYear = 2026;
+    }
+    setChartWeek(nextWeek);
+    setChartYear(nextYear);
+  };
+
+  const handlePrevChartMonth = () => {
+    let nextMonth = chartMonth - 1;
+    let nextYear = chartYear;
+    if (nextMonth < 1) {
+      nextMonth = 12;
+      nextYear = chartYear - 1;
+      if (nextYear < 2024) nextYear = 2024;
+    }
+    setChartMonth(nextMonth);
+    setChartYear(nextYear);
+    setChartCalendarMonth(nextMonth);
+  };
+
+  const handleNextChartMonth = () => {
+    let nextMonth = chartMonth + 1;
+    let nextYear = chartYear;
+    if (nextMonth > 12) {
+      nextMonth = 1;
+      nextYear = chartYear + 1;
+      if (nextYear > 2026) nextYear = 2026;
+    }
+    setChartMonth(nextMonth);
+    setChartYear(nextYear);
+    setChartCalendarMonth(nextMonth);
+  };
+
+  const chartCalendarCells = useMemo(() => {
+    const cells: Array<{ day: number; month: number; isCurrentMonth: boolean }> = [];
+    let firstDayOffset = new Date(chartYear, chartCalendarMonth - 1, 1).getDay(); // 0-6 (Sun-Sat)
+    firstDayOffset = firstDayOffset === 0 ? 6 : firstDayOffset - 1;
+
+    const daysInPrevMonth = new Date(chartYear, chartCalendarMonth - 1, 0).getDate();
+    const daysInCurrMonth = new Date(chartYear, chartCalendarMonth, 0).getDate();
+    
+    for (let i = firstDayOffset - 1; i >= 0; i--) {
+      cells.push({
+        day: daysInPrevMonth - i,
+        month: chartCalendarMonth === 1 ? 12 : chartCalendarMonth - 1,
+        isCurrentMonth: false
+      });
+    }
+    
+    for (let i = 1; i <= daysInCurrMonth; i++) {
+      cells.push({
+        day: i,
+        month: chartCalendarMonth,
+        isCurrentMonth: true
+      });
+    }
+    
+    const remaining = 42 - cells.length;
+    for (let i = 1; i <= remaining; i++) {
+      cells.push({
+        day: i,
+        month: chartCalendarMonth === 12 ? 1 : chartCalendarMonth + 1,
+        isCurrentMonth: false
+      });
+    }
+    
+    return cells;
+  }, [chartCalendarMonth, chartYear]);
 
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
@@ -1953,6 +2134,66 @@ export default function MobileFrame({
   const handleTouchStart = (e: React.TouchEvent) => {
     setTouchStartX(e.targetTouches[0].clientX);
     setTouchStartY(e.targetTouches[0].clientY);
+  };
+
+  const feedTouchStartX = useRef<number | null>(null);
+  const feedTouchStartY = useRef<number | null>(null);
+
+  const handleFeedTouchStart = (e: React.TouchEvent) => {
+    if (!(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER)) {
+      return;
+    }
+
+    const target = e.target as HTMLElement;
+    if (
+      target.closest(".group") || 
+      target.closest(".image-slider-container") || 
+      target.closest("button") || 
+      target.closest("select") || 
+      target.closest("input") || 
+      target.closest("textarea") || 
+      target.closest("a")
+    ) {
+      return;
+    }
+
+    if (e.targetTouches.length === 1) {
+      feedTouchStartX.current = e.targetTouches[0].clientX;
+      feedTouchStartY.current = e.targetTouches[0].clientY;
+    }
+  };
+
+  const handleFeedTouchEnd = (e: React.TouchEvent) => {
+    if (feedTouchStartX.current === null || feedTouchStartY.current === null) return;
+    
+    if (!(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER)) {
+      feedTouchStartX.current = null;
+      feedTouchStartY.current = null;
+      return;
+    }
+
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+
+    const diffX = feedTouchStartX.current - touchEndX;
+    const diffY = feedTouchStartY.current - touchEndY;
+
+    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
+      if (diffX > 0) {
+        if (mobileFeedSubTab !== "PROPOSAL") {
+          setMobileFeedSubTab("PROPOSAL");
+          showToast("Chuyển sang tab: ĐỀ XUẤT 📑");
+        }
+      } else {
+        if (mobileFeedSubTab !== "FEED") {
+          setMobileFeedSubTab("FEED");
+          showToast("Chuyển sang tab: BẢN TIN 📑");
+        }
+      }
+    }
+
+    feedTouchStartX.current = null;
+    feedTouchStartY.current = null;
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
@@ -2001,14 +2242,19 @@ export default function MobileFrame({
   };
 
   const filterByTimeRange = (reportDate: Date) => {
-    const now = new Date();
-    const diffMs = Math.abs(now.getTime() - reportDate.getTime());
+    const parts = getVietnamTimeParts(reportDate);
     if (mobileTimeFilter === "NGAY") {
-      return diffMs <= 24 * 60 * 60 * 1000;
+      return parts.day === chartDay && parts.month === chartMonth && parts.year === chartYear;
     } else if (mobileTimeFilter === "TUAN") {
-      return diffMs <= 7 * 24 * 60 * 60 * 1000;
+      const utcDate = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
+      const dayNum = utcDate.getUTCDay() || 7;
+      utcDate.setUTCDate(utcDate.getUTCDate() + 4 - dayNum);
+      const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1));
+      const weekNo = Math.ceil((((utcDate.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+      
+      return weekNo === chartWeek && utcDate.getUTCFullYear() === chartYear;
     } else {
-      return diffMs <= 30 * 24 * 60 * 60 * 1000;
+      return parts.month === chartMonth && parts.year === chartYear;
     }
   };
 
@@ -4574,6 +4820,343 @@ App Link: ${window.location.origin}`;
                 </button>
               </div>
             </div>
+
+            {/* Filter 3: Custom Cycle Selectors based on selection */}
+            {mobileTimeFilter === "NGAY" && (
+              <div className="pt-1.5 border-t border-slate-100 flex flex-col gap-1.5 relative">
+                <label className="text-[9px] font-black uppercase tracking-wider text-slate-500">
+                  <T><span translate="no" className="notranslate">Chọn ngày thống kê:</span></T>
+                </label>
+                <div className="flex items-center gap-2">
+                  {/* Nút lùi ngày */}
+                  <button
+                    type="button"
+                    onClick={handlePrevChartDay}
+                    className="flex items-center justify-center w-8 h-8 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg cursor-pointer transition-all active:scale-95 text-slate-600 shrink-0"
+                    title="Ngày trước"
+                  >
+                    <ChevronLeft className="w-4 h-4 text-blue-600" />
+                  </button>
+
+                  {/* Display formatted dd/mm/yy badge, clicking also triggers date picker */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setChartCalendarMonth(chartMonth);
+                      setShowChartDatePicker(!showChartDatePicker);
+                    }}
+                    className="flex-1 flex items-center justify-center gap-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg py-1.5 shadow-3xs cursor-pointer transition-all active:scale-[0.98] select-none text-slate-700"
+                  >
+                    <Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                    <span translate="no" className="notranslate text-[11px] font-black">
+                      {chartDay.toString().padStart(2, "0")}/{chartMonth.toString().padStart(2, "0")}/{chartYear}
+                    </span>
+                    <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform duration-200 ${showChartDatePicker ? "rotate-180" : ""}`} />
+                  </button>
+
+                  {/* Nút tiến ngày */}
+                  <button
+                    type="button"
+                    onClick={handleNextChartDay}
+                    className="flex items-center justify-center w-8 h-8 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg cursor-pointer transition-all active:scale-95 text-slate-600 shrink-0"
+                    title="Ngày sau"
+                  >
+                    <ChevronRight className="w-4 h-4 text-blue-600" />
+                  </button>
+
+                  {/* Quick Reset back to Today */}
+                  {(chartDay !== chartCurrentParts.day || chartMonth !== chartCurrentParts.month || chartYear !== chartCurrentParts.year) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setChartDay(chartCurrentParts.day);
+                        setChartMonth(chartCurrentParts.month);
+                        setChartYear(chartCurrentParts.year);
+                        setChartCalendarMonth(chartCurrentParts.month);
+                      }}
+                      className="text-[9px] font-black text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100/60 transition-colors cursor-pointer px-2.5 py-1.5 rounded-lg border border-blue-100"
+                    >
+                      <T><span translate="no" className="notranslate">Hôm nay</span></T>
+                    </button>
+                  )}
+                </div>
+
+                {/* Calendar popover dropdown panel */}
+                {showChartDatePicker && (
+                  <>
+                    {/* Backdrop to dismiss calendar on clicking outside */}
+                    <div 
+                      className="fixed inset-0 z-40 cursor-default" 
+                      onClick={() => setShowChartDatePicker(false)}
+                    />
+                    
+                    {/* Calendar Panel Card */}
+                    <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 w-[280px] bg-white rounded-xl border border-slate-200 shadow-xl p-3 z-50 animate-scaleIn select-none">
+                      {/* Month Navigation Header */}
+                      <div className="flex items-center justify-between mb-3">
+                        <button
+                          type="button"
+                          onClick={() => setChartCalendarMonth(prev => prev === 1 ? 12 : prev - 1)}
+                          className="p-1 rounded hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
+                        >
+                          <ChevronLeft className="w-4 h-4 text-slate-500" />
+                        </button>
+                        
+                        <span translate="no" className="notranslate text-xs font-black text-slate-800 bg-slate-50 px-2.5 py-0.5 rounded border border-slate-100">
+                          Tháng {chartCalendarMonth.toString().padStart(2, "0")} / {chartYear}
+                        </span>
+                        
+                        <button
+                          type="button"
+                          onClick={() => setChartCalendarMonth(prev => prev === 12 ? 1 : prev + 1)}
+                          className="p-1 rounded hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
+                        >
+                          <ChevronRight className="w-4 h-4 text-slate-500" />
+                        </button>
+                      </div>
+                      
+                      {/* Weekday Labels (Monday is first) */}
+                      <div className="grid grid-cols-7 gap-1 text-center mb-1.5">
+                        {["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map((dayLabel, idx) => {
+                          const isWeekend = dayLabel === "CN" || dayLabel === "T7";
+                          return (
+                            <span 
+                              key={idx} 
+                              translate="no" 
+                              className={`notranslate text-[9px] font-black uppercase tracking-wider ${isWeekend ? "text-rose-500" : "text-slate-400"}`}
+                            >
+                              {dayLabel}
+                            </span>
+                          );
+                        })}
+                      </div>
+                      
+                      {/* Calendar Days Grid */}
+                      <div className="grid grid-cols-7 gap-1">
+                        {chartCalendarCells.map((cell, idx) => {
+                          const isSelected = chartDay === cell.day && chartMonth === cell.month;
+                          const isToday = chartCurrentParts.day === cell.day && chartCurrentParts.month === cell.month && chartCurrentParts.year === chartYear;
+                          
+                          return (
+                            <button
+                              type="button"
+                              key={idx}
+                              onClick={() => {
+                                setChartDay(cell.day);
+                                setChartMonth(cell.month);
+                                setChartCalendarMonth(cell.month);
+                                setShowChartDatePicker(false);
+                              }}
+                              className={`
+                                h-7 w-full rounded-md text-[10px] font-bold transition-all flex items-center justify-center cursor-pointer relative
+                                ${!cell.isCurrentMonth ? "text-slate-300 hover:bg-slate-50" : ""}
+                                ${cell.isCurrentMonth && !isSelected && !isToday ? "text-slate-700 hover:bg-slate-100" : ""}
+                                ${isToday && !isSelected ? "border border-blue-500/80 text-blue-600 bg-blue-50/20" : ""}
+                                ${isSelected ? "bg-blue-600 text-white shadow shadow-blue-500/20 font-extrabold scale-105" : ""}
+                              `}
+                              translate="no"
+                            >
+                              <span translate="no" className="notranslate">
+                                {cell.day}
+                              </span>
+                              {isToday && !isSelected && (
+                                <span className="absolute bottom-1 w-1 h-1 rounded-full bg-blue-500"></span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Today shortcut footer */}
+                      <div className="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10px]">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setChartDay(chartCurrentParts.day);
+                            setChartMonth(chartCurrentParts.month);
+                            setChartCalendarMonth(chartCurrentParts.month);
+                            setShowChartDatePicker(false);
+                          }}
+                          className="font-extrabold text-blue-600 hover:underline cursor-pointer"
+                        >
+                          <T><span translate="no" className="notranslate">Hôm nay</span></T>
+                        </button>
+                        <span translate="no" className="notranslate text-[9px] text-slate-400 font-mono font-bold bg-slate-50 px-1.5 py-0.5 rounded">
+                          {chartCurrentParts.day.toString().padStart(2, "0")}/{chartCurrentParts.month.toString().padStart(2, "0")}/{chartCurrentParts.year}
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {mobileTimeFilter === "TUAN" && (
+              <div className="pt-1.5 border-t border-slate-100 flex flex-col gap-1.5">
+                <label className="text-[9px] font-black uppercase tracking-wider text-slate-500">
+                  <T><span translate="no" className="notranslate">Chọn tuần & năm thống kê:</span></T>
+                </label>
+                <div className="flex items-center gap-1.5">
+                  {/* Nút lùi tuần */}
+                  <button
+                    type="button"
+                    onClick={handlePrevChartWeek}
+                    className="flex items-center justify-center w-8 h-8 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg cursor-pointer transition-all active:scale-95 text-slate-600 shrink-0"
+                    title="Tuần trước"
+                  >
+                    <ChevronLeft className="w-4 h-4 text-blue-600" />
+                  </button>
+
+                  {/* Week selector */}
+                  <div className="flex-1 grid grid-cols-2 gap-1">
+                    <div className="relative">
+                      <select
+                        value={chartWeek}
+                        onChange={(e) => setChartWeek(parseInt(e.target.value, 10))}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-black focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-3xs text-slate-800 transition-all cursor-pointer appearance-none"
+                      >
+                        {Array.from({ length: 52 }, (_, i) => i + 1).map((w) => (
+                          <option key={w} value={w} translate="no" className="notranslate">
+                            Tuần {w}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-slate-400">
+                        <span className="text-[7px]">▼</span>
+                      </div>
+                    </div>
+
+                    {/* Year Selector */}
+                    <div className="relative">
+                      <select
+                        value={chartYear}
+                        onChange={(e) => setChartYear(parseInt(e.target.value, 10))}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-black focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-3xs text-slate-800 transition-all cursor-pointer appearance-none"
+                      >
+                        {[2024, 2025, 2026].map((y) => (
+                          <option key={y} value={y} translate="no" className="notranslate">
+                            Năm {y}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-slate-400">
+                        <span className="text-[7px]">▼</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Nút tiến tuần */}
+                  <button
+                    type="button"
+                    onClick={handleNextChartWeek}
+                    className="flex items-center justify-center w-8 h-8 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg cursor-pointer transition-all active:scale-95 text-slate-600 shrink-0"
+                    title="Tuần sau"
+                  >
+                    <ChevronRight className="w-4 h-4 text-blue-600" />
+                  </button>
+
+                  {/* Quick Reset back to This Week */}
+                  {(chartWeek !== chartCurrentParts.week || chartYear !== chartCurrentParts.year) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setChartWeek(chartCurrentParts.week);
+                        setChartYear(chartCurrentParts.year);
+                      }}
+                      className="text-[9px] font-black text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100/60 transition-colors cursor-pointer px-2 py-1.5 rounded-lg border border-blue-100 shrink-0"
+                    >
+                      <T><span translate="no" className="notranslate">Tuần này</span></T>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {mobileTimeFilter === "THANG" && (
+              <div className="pt-1.5 border-t border-slate-100 flex flex-col gap-1.5">
+                <label className="text-[9px] font-black uppercase tracking-wider text-slate-500">
+                  <T><span translate="no" className="notranslate">Chọn tháng & năm thống kê:</span></T>
+                </label>
+                <div className="flex items-center gap-1.5">
+                  {/* Nút lùi tháng */}
+                  <button
+                    type="button"
+                    onClick={handlePrevChartMonth}
+                    className="flex items-center justify-center w-8 h-8 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg cursor-pointer transition-all active:scale-95 text-slate-600 shrink-0"
+                    title="Tháng trước"
+                  >
+                    <ChevronLeft className="w-4 h-4 text-blue-600" />
+                  </button>
+
+                  {/* Month Selector */}
+                  <div className="flex-1 grid grid-cols-2 gap-1">
+                    <div className="relative">
+                      <select
+                        value={chartMonth}
+                        onChange={(e) => {
+                          const m = parseInt(e.target.value, 10);
+                          setChartMonth(m);
+                          setChartCalendarMonth(m);
+                        }}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-black focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-3xs text-slate-800 transition-all cursor-pointer appearance-none"
+                      >
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                          <option key={m} value={m} translate="no" className="notranslate">
+                            Tháng {m}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-slate-400">
+                        <span className="text-[7px]">▼</span>
+                      </div>
+                    </div>
+
+                    {/* Year Selector */}
+                    <div className="relative">
+                      <select
+                        value={chartYear}
+                        onChange={(e) => setChartYear(parseInt(e.target.value, 10))}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-black focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-3xs text-slate-800 transition-all cursor-pointer appearance-none"
+                      >
+                        {[2024, 2025, 2026].map((y) => (
+                          <option key={y} value={y} translate="no" className="notranslate">
+                            Năm {y}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-slate-400">
+                        <span className="text-[7px]">▼</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Nút tiến tháng */}
+                  <button
+                    type="button"
+                    onClick={handleNextChartMonth}
+                    className="flex items-center justify-center w-8 h-8 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg cursor-pointer transition-all active:scale-95 text-slate-600 shrink-0"
+                    title="Tháng sau"
+                  >
+                    <ChevronRight className="w-4 h-4 text-blue-600" />
+                  </button>
+
+                  {/* Quick Reset back to This Month */}
+                  {(chartMonth !== chartCurrentParts.month || chartYear !== chartCurrentParts.year) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setChartMonth(chartCurrentParts.month);
+                        setChartYear(chartCurrentParts.year);
+                        setChartCalendarMonth(chartCurrentParts.month);
+                      }}
+                      className="text-[9px] font-black text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100/60 transition-colors cursor-pointer px-2 py-1.5 rounded-lg border border-blue-100 shrink-0"
+                    >
+                      <T><span translate="no" className="notranslate">Tháng này</span></T>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Calculated Statistics block */}
@@ -5230,6 +5813,8 @@ App Link: ${window.location.origin}`;
           <div
             ref={scrollContainerRef}
             onScroll={handleScroll}
+            onTouchStart={handleFeedTouchStart}
+            onTouchEnd={handleFeedTouchEnd}
             className="flex-1 p-3 space-y-3.5 bg-slate-50 relative overflow-y-auto"
           >
         {sortedReports.length === 0 ? (
@@ -6396,7 +6981,7 @@ App Link: ${window.location.origin}`;
 
                 {/* Footer buttons of card (Xóa/Sửa/Like/BP Tiếp Nhận) only for managers or the author */}
                 <div className="bg-slate-50 border-t border-slate-100 px-2 py-1.5 flex justify-between items-center select-none text-[10px] font-semibold text-slate-600 gap-1 flex-nowrap">
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0 flex-nowrap whitespace-nowrap">
                     {(() => {
                       const isUploader = currentUser?.id === report.uploaderId;
                       const isSpeciallyAuthorized = currentUser?.canSpeciallyEditDelete && isSameBranchOrFactory(currentUser?.branch, report.factory);
@@ -6470,61 +7055,97 @@ App Link: ${window.location.origin}`;
                     })()}
                   </div>
 
-                  <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                  {/* Digital Clock count [hh:mm:ss] from report uploader timestamp to "Đã xử lý" */}
+                  {(report.reportType === "KPH" || report.reportType === "KNN") && (
+                    (() => {
+                      const processedResList = report.resolutions?.filter(res => res.status === "Đã xử lý") || [];
+                      const isProcessed = processedResList.length > 0;
+                      
+                      let endMs = Date.now();
+                      if (isProcessed) {
+                        let latestMs = 0;
+                        processedResList.forEach(res => {
+                          if (res.updatedAt) {
+                            const t = parseReportTimestamp(res.updatedAt).getTime();
+                            if (t > latestMs) {
+                              latestMs = t;
+                            }
+                          }
+                        });
+                        if (latestMs > 0) {
+                          endMs = latestMs;
+                        }
+                      }
+                      
+                      const startMs = parseReportTimestamp(report.timestamp).getTime();
+                      const durationMs = Math.max(0, endMs - startMs);
+                      
+                      const totalHours = Math.floor(durationMs / (1000 * 60 * 60));
+                      const totalMinutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+                      const totalSeconds = Math.floor((durationMs % (1000 * 60)) / 1000);
+                      const timeStr = `${String(totalHours).padStart(2, "0")}:${String(totalMinutes).padStart(2, "0")}:${String(totalSeconds).padStart(2, "0")}`;
+                      
+                      const isOver24h = totalHours >= 24;
+                      
+                      return (
+                        <div 
+                          className={`flex items-center gap-1 px-1.5 py-1 rounded-md text-[10px] font-black font-sans leading-none shadow-3xs select-none border shrink-0 whitespace-nowrap flex-nowrap ${
+                            isOver24h 
+                              ? "bg-red-600 text-white border-red-700 shadow-[0_0_8px_rgba(220,38,38,0.3)] animate-pulse" 
+                              : "bg-blue-600 text-white border-blue-700 shadow-[0_0_8px_rgba(37,99,235,0.3)]"
+                          }`}
+                          title={isProcessed ? "Thời gian xử lý xong sự cố" : "Thời gian trôi qua từ khi đăng tin"}
+                        >
+                          <span translate="no" className="notranslate font-sans font-black tracking-wide text-[10px]">
+                            {timeStr}
+                          </span>
+                        </div>
+                      );
+                    })()
+                  )}
+
+                  <div className="flex items-center gap-1.5 ml-auto shrink-0 flex-nowrap whitespace-nowrap">
                     {(() => {
                       const reportChats = (chats || []).filter((c) => c.reportRefId === report.id);
                       const chatCount = reportChats.length;
                       const isOpen = openChatReportId === report.id;
                       
                       return (
-                        <div className={`flex items-center gap-1 bg-slate-50 border border-slate-100 rounded-lg py-0.5 px-1.5 shrink-0 chat-btn-${report.id}`}>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setOpenChatReportId(isOpen ? null : report.id);
-                            }}
-                            className={`flex items-center justify-center p-1 transition-all hover:scale-115 active:scale-95 cursor-pointer border-none bg-transparent ${
-                              isOpen ? "text-blue-600" : "text-slate-400 hover:text-blue-500"
-                            }`}
-                            title="Thảo luận / Hỏi đáp"
-                          >
-                            <MessageSquare className={`w-[17px] h-[17px] stroke-[2.3px] ${isOpen ? "fill-blue-500 text-blue-600" : ""}`} />
-                          </button>
-                          
-                          <button
-                            type="button"
-                            disabled={chatCount === 0}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setOpenChatReportId(isOpen ? null : report.id);
-                            }}
-                            className={`text-[10px] font-black font-sans px-1.5 py-0.5 rounded cursor-pointer transition-all border-none ${
-                              chatCount > 0 
-                                ? "text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 hover:scale-105" 
-                                : "text-slate-300 bg-transparent cursor-default"
-                            }`}
-                          >
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenChatReportId(isOpen ? null : report.id);
+                          }}
+                          className={`flex items-center gap-1 bg-white border rounded-lg py-1 px-1.5 shrink-0 shadow-3xs transition-all hover:scale-105 active:scale-95 cursor-pointer whitespace-nowrap flex-nowrap ${
+                            isOpen 
+                              ? "text-blue-600 border-blue-200 bg-blue-50/50" 
+                              : "text-slate-400 border-slate-200 hover:text-blue-500 hover:border-slate-300"
+                          } chat-btn-${report.id}`}
+                          title="Thảo luận / Hỏi đáp"
+                        >
+                          <MessageSquare className={`w-3.5 h-3.5 stroke-[2.3px] ${isOpen ? "fill-blue-500 text-blue-600" : ""}`} />
+                          <span className="text-[10px] font-black font-sans leading-none">
                             <T>{chatCount}</T>
-                          </button>
-                        </div>
+                          </span>
+                        </button>
                       );
                     })()}
                     {(() => {
                       const isReportLiked = report.likedBy?.includes(currentUser?.fullName || "Kiểm soát viên") || false;
                       const likesCount = report.likedBy?.length || 0;
-
+ 
                       return (
-                        <div className="flex items-center gap-1 bg-slate-50 border border-slate-100 rounded-lg py-0.5 px-1.5 shrink-0">
+                        <div className="flex items-center gap-0.5 bg-white border border-slate-200 rounded-lg py-0.5 px-1 shrink-0 shadow-3xs whitespace-nowrap flex-nowrap">
                           <button
                             type="button"
                             onClick={() => toggleLike(report.id)}
-                            className={`flex items-center justify-center p-1 transition-all hover:scale-115 active:scale-90 cursor-pointer border-none bg-transparent ${
+                            className={`flex items-center justify-center p-0.5 transition-all hover:scale-115 active:scale-90 cursor-pointer border-none bg-transparent ${
                               isReportLiked ? "text-rose-500" : "text-slate-400 hover:text-rose-500"
                             }`}
                             title={isReportLiked ? "Bỏ thích" : "Thích"}
                           >
-                            <Heart className={`w-[17px] h-[17px] stroke-[2.3px] ${isReportLiked ? "fill-rose-500 text-rose-600" : ""}`} />
+                            <Heart className={`w-3.5 h-3.5 stroke-[2.3px] ${isReportLiked ? "fill-rose-500 text-rose-600" : ""}`} />
                           </button>
                           
                           <button
@@ -6535,7 +7156,7 @@ App Link: ${window.location.origin}`;
                               }
                             }}
                             disabled={likesCount === 0}
-                            className={`text-[10px] font-black font-sans px-1.5 py-0.5 rounded cursor-pointer transition-all border-none ${
+                            className={`text-[10px] font-black font-sans px-1 py-0.5 rounded cursor-pointer transition-all border-none leading-none ${
                               likesCount > 0 
                                 ? "text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 hover:scale-105" 
                                 : "text-slate-400 bg-transparent cursor-default"
@@ -6550,33 +7171,19 @@ App Link: ${window.location.origin}`;
                     {(() => {
                       const badgeCount = report.badges?.length || 0;
                       return (
-                        <div className="flex items-center gap-1 bg-slate-50 border border-slate-100 rounded-lg py-0.5 px-1.5 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedBadgeReport(report);
-                            }}
-                            className="flex items-center justify-center p-1 transition-all hover:scale-115 active:scale-95 cursor-pointer border-none bg-transparent text-slate-400 hover:text-indigo-600"
-                            title="Trao tặng hoặc xem Huy hiệu"
-                          >
-                            <span className="text-[14px]">🏅</span>
-                          </button>
-                          
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedBadgeReport(report);
-                            }}
-                            className={`text-[10px] font-black font-sans px-1.5 py-0.5 rounded cursor-pointer transition-all border-none ${
-                              badgeCount > 0 
-                                ? "text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 hover:scale-105" 
-                                : "text-slate-400 bg-transparent cursor-default"
-                            }`}
-                            title={badgeCount > 0 ? "Xem danh sách huy hiệu được trao" : "Chưa có huy hiệu nào"}
-                          >
-                            <span translate="no" className="notranslate"><T>{badgeCount}</T></span>
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedBadgeReport(report);
+                          }}
+                          className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg py-1 px-1.5 shrink-0 shadow-3xs transition-all hover:scale-105 active:scale-95 cursor-pointer whitespace-nowrap flex-nowrap text-slate-400 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50/50"
+                          title="Trao tặng hoặc xem Huy hiệu"
+                        >
+                          <span className="text-[13px] leading-none">🏅</span>
+                          <span translate="no" className="notranslate text-[10px] font-black font-sans leading-none">
+                            <T>{badgeCount}</T>
+                          </span>
+                        </button>
                       );
                     })()}
                   </div>
