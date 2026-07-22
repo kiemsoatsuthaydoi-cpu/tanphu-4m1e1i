@@ -11,9 +11,10 @@ import {
   BarChart4,
   Calendar
 } from "lucide-react";
-import { User, UserStatus, Branch, Department } from "../types";
+import { User, UserStatus, Branch, Department, QualityReport, ChatMessage, ForumTopic, ForumReply } from "../types";
 import { T } from "./TranslateText";
 import { initialBranches, initialDepartments } from "../data";
+import { parseReportTimestamp } from "../utils/notificationHelper";
 
 // Helper to extract date components strictly in Vietnam timezone (ICT, GMT+7)
 const getVietnamTimeParts = (ts: number) => {
@@ -59,12 +60,20 @@ interface StatisticsDashboardProps {
   users: User[];
   branches?: Branch[];
   departments?: Department[];
+  reports?: QualityReport[];
+  chats?: ChatMessage[];
+  topics?: ForumTopic[];
+  topicReplies?: ForumReply[];
 }
 
 export default function StatisticsDashboard({ 
   users = [], 
   branches = initialBranches, 
-  departments = initialDepartments 
+  departments = initialDepartments,
+  reports = [],
+  chats = [],
+  topics = [],
+  topicReplies = []
 }: StatisticsDashboardProps) {
   // 1. Filter state for "SỐ CBNV ONLINE TRONG NGÀY"
   const [onlineBranchFilter, setOnlineBranchFilter] = useState<string>("TẤT CẢ");
@@ -233,30 +242,13 @@ export default function StatisticsDashboard({
       const dept = deptMap.get(deptName)!;
       dept.totalCount += 1;
 
-      // Extract all active session timestamps matching selected day and month (strictly in Vietnam Timezone)
-      const dayLogs = (u.activeLogs || []).filter(ts => {
-        const parts = getVietnamTimeParts(ts);
-        return parts.day === selectedDay && parts.month === selectedMonth;
-      });
-
       const formattedTimes: string[] = [];
       const seenMinutes = new Set<string>();
 
-      dayLogs.forEach(ts => {
+      const addTimeFromTs = (ts: number) => {
+        if (!ts || isNaN(ts)) return;
         const parts = getVietnamTimeParts(ts);
-        const hrs = parts.hours.toString().padStart(2, "0");
-        const mins = parts.minutes.toString().padStart(2, "0");
-        const timeStr = `${hrs}:${mins}`;
-        if (!seenMinutes.has(timeStr)) {
-          seenMinutes.add(timeStr);
-          formattedTimes.push(timeStr);
-        }
-      });
-
-      // Ensure lastActive is appended if it falls on the selected day and is not already listed (strictly in Vietnam Timezone)
-      if (u.lastActive) {
-        const parts = getVietnamTimeParts(u.lastActive);
-        if (parts.day === selectedDay && parts.month === selectedMonth) {
+        if (parts.day === selectedDay && parts.month === selectedMonth && parts.year === currentYear) {
           const hrs = parts.hours.toString().padStart(2, "0");
           const mins = parts.minutes.toString().padStart(2, "0");
           const timeStr = `${hrs}:${mins}`;
@@ -265,16 +257,89 @@ export default function StatisticsDashboard({
             formattedTimes.push(timeStr);
           }
         }
+      };
+
+      const addTimeFromDate = (d: Date) => {
+        if (d && !isNaN(d.getTime())) {
+          addTimeFromTs(d.getTime());
+        }
+      };
+
+      // 1. Extract from activeLogs
+      (u.activeLogs || []).forEach(ts => addTimeFromTs(ts));
+
+      // 2. Extract from lastActive
+      if (u.lastActive) {
+        addTimeFromTs(u.lastActive);
       }
+
+      // 3. Extract from Quality Reports uploaded or updated by user
+      const userPhoneClean = (u.phone || "").replace(/\s+/g, "");
+      const userNameUpper = (u.fullName || "").trim().toUpperCase();
+
+      (reports || []).forEach(r => {
+        const uploaderPhoneClean = (r.uploaderPhone || "").replace(/\s+/g, "");
+        const uploaderNameUpper = (r.uploaderName || "").trim().toUpperCase();
+        const isMatch = (u.id && r.uploaderId === u.id) ||
+                        (userPhoneClean && uploaderPhoneClean && userPhoneClean === uploaderPhoneClean) ||
+                        (userNameUpper && uploaderNameUpper && userNameUpper === uploaderNameUpper);
+        if (isMatch) {
+          if (r.timestamp) {
+            addTimeFromDate(parseReportTimestamp(r.timestamp));
+          }
+          if (r.resolutions) {
+            r.resolutions.forEach(res => {
+              if (res.updatedAt) {
+                addTimeFromDate(parseReportTimestamp(res.updatedAt));
+              }
+            });
+          }
+        }
+      });
+
+      // 4. Extract from Chats sent by user
+      (chats || []).forEach(c => {
+        const senderPhoneClean = (c.senderPhone || "").replace(/\s+/g, "");
+        const senderNameUpper = (c.senderName || "").trim().toUpperCase();
+        const isMatch = (userPhoneClean && senderPhoneClean && userPhoneClean === senderPhoneClean) ||
+                        (userNameUpper && senderNameUpper && userNameUpper === senderNameUpper);
+        if (isMatch && c.timestamp) {
+          addTimeFromDate(parseReportTimestamp(c.timestamp));
+        }
+      });
+
+      // 5. Extract from Forum Topics and Replies
+      (topics || []).forEach(t => {
+        const creatorPhoneClean = (t.creatorPhone || "").replace(/\s+/g, "");
+        const creatorNameUpper = (t.creatorName || "").trim().toUpperCase();
+        const isMatch = (userPhoneClean && creatorPhoneClean && userPhoneClean === creatorPhoneClean) ||
+                        (userNameUpper && creatorNameUpper && userNameUpper === creatorNameUpper);
+        if (isMatch && t.timestamp) {
+          addTimeFromDate(parseReportTimestamp(t.timestamp));
+        }
+      });
+
+      (topicReplies || []).forEach(tr => {
+        const senderPhoneClean = (tr.senderPhone || "").replace(/\s+/g, "");
+        const senderNameUpper = (tr.senderName || "").trim().toUpperCase();
+        const isMatch = (userPhoneClean && senderPhoneClean && userPhoneClean === senderPhoneClean) ||
+                        (userNameUpper && senderNameUpper && userNameUpper === senderNameUpper);
+        if (isMatch && tr.timestamp) {
+          addTimeFromDate(parseReportTimestamp(tr.timestamp));
+        }
+      });
+
+      // Sort formattedTimes chronologically
+      formattedTimes.sort((a, b) => a.localeCompare(b));
 
       // Determine active/online status based on the selected day & month
       let isUserOnlineOnSelectedDay = false;
 
       if (isTodaySelected) {
-        // Active today: is currently online OR updated heartbeat within last 12 hours
-        isUserOnlineOnSelectedDay = !!u.isOnline || (!!u.lastActive && (now - u.lastActive <= 12 * 60 * 60 * 1000));
+        // Active today: is currently online OR updated heartbeat within last 12 hours OR has activity timestamps today
+        isUserOnlineOnSelectedDay = formattedTimes.length > 0 || !!u.isOnline || (!!u.lastActive && (now - u.lastActive <= 12 * 60 * 60 * 1000));
       } else {
-        // Active on another day: has logged sessions for that day
+        // Active on another day: has logged sessions or activity for that day
         isUserOnlineOnSelectedDay = formattedTimes.length > 0;
       }
 

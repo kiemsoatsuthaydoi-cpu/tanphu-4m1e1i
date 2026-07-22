@@ -73,12 +73,20 @@ if (!isDummy) {
       firebaseApp = getApp();
     }
     
-    // Enable offline multiple-tab persistence to prevent connection timeouts and support full offline PWA capabilities
-    db = initializeFirestore(firebaseApp, {
-      localCache: persistentLocalCache({
-        tabManager: persistentMultipleTabManager()
-      })
-    });
+    // Enable offline multiple-tab persistence and auto-detect long polling for optimal connection handling
+    try {
+      db = initializeFirestore(firebaseApp, {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager()
+        }),
+        experimentalAutoDetectLongPolling: true
+      });
+    } catch (cacheErr) {
+      console.warn("Firestore persistent local cache setup failed, using default cache:", cacheErr);
+      db = initializeFirestore(firebaseApp, {
+        experimentalAutoDetectLongPolling: true
+      });
+    }
   } catch (error) {
     console.warn("Firebase/Firestore client initialization failed:", error);
     db = null;

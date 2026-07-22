@@ -1362,7 +1362,26 @@ export default function App() {
         fetchCollection<ForumReply>(COLLECTIONS.TOPIC_REPLIES)
       ]);
 
-      let finalUsers = fUsers.length > 0 ? fUsers : [...users];
+      let finalUsers = [...users];
+      if (fUsers.length > 0) {
+        fUsers.forEach((fu) => {
+          const idx = finalUsers.findIndex(u => u.id === fu.id || (u.phone && fu.phone && u.phone.replace(/\s+/g, "") === fu.phone.replace(/\s+/g, "")));
+          if (idx >= 0) {
+            const current = finalUsers[idx];
+            const mergedActiveLogs = Array.from(new Set([...(current.activeLogs || []), ...(fu.activeLogs || [])]));
+            finalUsers[idx] = {
+              ...current,
+              ...fu,
+              activeLogs: mergedActiveLogs.length > 0 ? mergedActiveLogs : current.activeLogs,
+              lastActive: fu.lastActive || current.lastActive,
+              password: fu.password || current.password
+            };
+          } else {
+            finalUsers.push(fu);
+          }
+        });
+      }
+
       finalUsers = sanitizeUsers(finalUsers.map((u) => {
         let userPwd = u.password;
         if (u.id === "2018.00281" && (!userPwd || userPwd === "123456")) {
@@ -1802,17 +1821,24 @@ export default function App() {
         
         const sanitizedLatest = sanitizeUsers(list);
         setUsers((prev) => {
-          return prev.map((u) => {
-            const fetched = sanitizedLatest.find((lu) => lu.id === u.id);
-            if (fetched) {
-              return {
-                ...u,
+          const next = [...prev];
+          sanitizedLatest.forEach((fetched) => {
+            const idx = next.findIndex(u => u.id === fetched.id || (u.phone && fetched.phone && u.phone.replace(/\s+/g, "") === fetched.phone.replace(/\s+/g, "")));
+            if (idx >= 0) {
+              const current = next[idx];
+              const mergedActiveLogs = Array.from(new Set([...(current.activeLogs || []), ...(fetched.activeLogs || [])]));
+              next[idx] = {
+                ...current,
                 ...fetched,
-                password: fetched.password || u.password
+                activeLogs: mergedActiveLogs.length > 0 ? mergedActiveLogs : current.activeLogs,
+                lastActive: fetched.lastActive || current.lastActive,
+                password: fetched.password || current.password
               };
+            } else {
+              next.push(fetched);
             }
-            return u;
           });
+          return next;
         });
       },
       (error) => {
@@ -2089,18 +2115,24 @@ export default function App() {
           if (latestUsers && latestUsers.length > 0) {
             const sanitizedLatest = sanitizeUsers(latestUsers);
             setUsers((prev) => {
-              // Đồng bộ toàn bộ các trường phân quyền (role, status, bypassApproval, canSpeciallyEditDelete) từ server
-              return prev.map((u) => {
-                const fetched = sanitizedLatest.find((lu) => lu.id === u.id);
-                if (fetched) {
-                  return {
-                    ...u,
+              const next = [...prev];
+              sanitizedLatest.forEach((fetched) => {
+                const idx = next.findIndex(u => u.id === fetched.id || (u.phone && fetched.phone && u.phone.replace(/\s+/g, "") === fetched.phone.replace(/\s+/g, "")));
+                if (idx >= 0) {
+                  const current = next[idx];
+                  const mergedActiveLogs = Array.from(new Set([...(current.activeLogs || []), ...(fetched.activeLogs || [])]));
+                  next[idx] = {
+                    ...current,
                     ...fetched,
-                    lastActive: fetched.lastActive || u.lastActive
+                    activeLogs: mergedActiveLogs.length > 0 ? mergedActiveLogs : current.activeLogs,
+                    lastActive: fetched.lastActive || current.lastActive,
+                    password: fetched.password || current.password
                   };
+                } else {
+                  next.push(fetched);
                 }
-                return u;
               });
+              return next;
             });
           }
         }

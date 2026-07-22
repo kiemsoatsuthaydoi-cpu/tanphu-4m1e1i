@@ -62,6 +62,51 @@ export const getBranchCodeSuffix = (brName: string | undefined | null) => {
   return ` (${code})`;
 };
 
+export const canUserManageDirective = (
+  currentUser: any,
+  reportFactory: string | undefined
+): boolean => {
+  if (!currentUser) return false;
+
+  // 1. Admin / Group Level Authority (Chủ tịch / Ban Tổng Giám đốc / Admin / Group HQ)
+  if (currentUser.role === "admin") return true;
+
+  const branchClean = (currentUser.branch || "").toUpperCase();
+  const deptClean = (currentUser.department || "").toUpperCase();
+  const posClean = (currentUser.position || "").toUpperCase();
+
+  // Ban TGĐ, Văn phòng Tập đoàn/Công ty (TPP-CTY), Chủ Tịch, HQ QC, Admin
+  const isHQ =
+    branchClean.includes("TPP-CTY") ||
+    branchClean.includes("VĂN PHÒNG CÔNG TY") ||
+    branchClean.includes("VĂN PHÒNG TẬP ĐOÀN") ||
+    branchClean.includes("CHỦ TỊCH") ||
+    branchClean.includes("BAN TGĐ") ||
+    deptClean.includes("BAN TỔNG GIÁM ĐỐC") ||
+    deptClean.includes("BAN TGĐ") ||
+    deptClean.includes("PHÒNG QUẢN LÝ CHẤT LƯỢNG (TPP-CTY)") ||
+    posClean.includes("CHỦ TỊCH") ||
+    posClean.includes("TỔNG GIÁM ĐỐC") ||
+    posClean.includes("BAN TGĐ");
+
+  if (isHQ) return true;
+
+  // 2. Local Branch Manager / Reviewer
+  const isLeaderOrReviewer =
+    currentUser.role === "approver" ||
+    currentUser.role === "reviewer" ||
+    currentUser.canSpeciallyEditDelete ||
+    posClean.includes("GIÁM ĐỐC") ||
+    posClean.includes("TRƯỞNG PHÒNG") ||
+    posClean.includes("QUẢN LÝ") ||
+    posClean.includes("QUẢN ĐỐC");
+
+  if (!isLeaderOrReviewer) return false;
+
+  // Compare currentUser.branch with reportFactory using isSameBranchOrFactory
+  return isSameBranchOrFactory(currentUser.branch, reportFactory);
+};
+
 export const formatNameCapitalized = (str: string | undefined | null): string => {
   if (!str) return "";
   
@@ -98,3 +143,5 @@ export const formatNameCapitalized = (str: string | undefined | null): string =>
     })
     .join(" ");
 };
+
+

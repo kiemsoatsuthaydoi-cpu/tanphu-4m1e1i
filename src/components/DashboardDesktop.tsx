@@ -114,7 +114,7 @@ import {
 import { parseReportTimestamp } from "../utils/notificationHelper";
 import { STANDARDIZED_QC_DEPT } from "../data";
 import { generateDailyReportPDF } from "../utils/pdfGenerator";
-import { formatNameCapitalized } from "../utils/branchHelpers";
+import { formatNameCapitalized, canUserManageDirective } from "../utils/branchHelpers";
 import OrderPipeline from "./OrderPipeline";
 import { MentionInput, MentionTextArea } from "./MentionTextArea";
 import FirebaseQuotaMonitor from "./FirebaseQuotaMonitor";
@@ -520,6 +520,24 @@ function DesktopDirectiveForm({
   onUpdateReport?: (report: QualityReport) => void;
 }) {
   const [text, setText] = useState("");
+  const canManage = canUserManageDirective(currentUser, r.factory);
+
+  if (!canManage) {
+    const isManagerRole = currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER;
+    if (!isManagerRole) return null;
+
+    const userBranchName = currentUser?.branch || "Chi nhánh khác";
+    const reportBranchName = r.factory || "Chi nhánh này";
+
+    return (
+      <div className="mt-2 p-2 bg-amber-50/90 border border-amber-200/90 rounded flex items-center gap-2 text-[10px] text-amber-900 font-medium select-none shadow-3xs">
+        <span className="text-xs shrink-0">🔒</span>
+        <span className="leading-snug">
+          <T>Tài khoản của bạn thuộc</T> <strong className="text-amber-950 font-bold">{userBranchName}</strong>. <T>Bạn chỉ có quyền xem chỉ đạo của</T> <strong className="text-amber-950 font-bold">{reportBranchName}</strong>.
+        </span>
+      </div>
+    );
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -5301,7 +5319,15 @@ export default function DashboardDesktop({
                 </div>
 
                 {statsSubTab === "NHAN_SU" ? (
-                  <StatisticsDashboard users={users} branches={branches} departments={departments} />
+                  <StatisticsDashboard 
+                    users={users} 
+                    branches={branches} 
+                    departments={departments} 
+                    reports={reports}
+                    chats={chats}
+                    topics={topics}
+                    topicReplies={replies}
+                  />
                 ) : statsSubTab === "TIEN_DO" ? (
                   <ProgressTrackingDashboard
                     reports={reports}

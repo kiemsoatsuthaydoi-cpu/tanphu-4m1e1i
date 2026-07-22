@@ -2,12 +2,12 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import html2canvas from "html2canvas";
 import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send, Award, Calendar, Clock } from "lucide-react";
-import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus, QualityReportBadge, AppNotification, ErrorCatalogItem, BadgePointConfigItem } from "../types";
+import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Department, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus, QualityReportBadge, AppNotification, ErrorCatalogItem, BadgePointConfigItem } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
 import { findMentionedUsers } from "../utils/notificationHelper";
 import { QRCodeSVG } from "qrcode.react";
-import { isSameBranchOrFactory, formatNameCapitalized } from "../utils/branchHelpers";
+import { isSameBranchOrFactory, formatNameCapitalized, canUserManageDirective } from "../utils/branchHelpers";
 import { AutoImageSlider } from "./AutoImageSlider";
 import { getCategoryFallbackImage } from "../utils/imageProcessor";
 import { findUser, resolveUploaderInfo, resolveBadgeGiverInfo, resolveEvaluatorInfo, resolveSenderInfo } from "../utils/userResolver";
@@ -231,6 +231,7 @@ interface MobileFrameProps {
   onUpdateMobileUIConfig?: (config: any) => void;
   onLogout?: () => void;
   branches?: Branch[];
+  departments?: Department[];
   onManualRefresh?: (isManual?: boolean) => void;
   users?: User[];
   companies?: Company[];
@@ -307,6 +308,24 @@ function MobileDirectiveForm({
   showToast: (msg: string) => void;
 }) {
   const [text, setText] = useState("");
+  const canManage = canUserManageDirective(currentUser, report.factory);
+
+  if (!canManage) {
+    const isManagerRole = currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER;
+    if (!isManagerRole) return null;
+
+    const userBranchName = currentUser?.branch || "Chi nhánh khác";
+    const reportBranchName = report.factory || "Chi nhánh này";
+
+    return (
+      <div className="mt-2.5 p-2 bg-amber-50/90 border border-amber-200/90 rounded-lg flex items-center gap-2 text-[10.5px] text-amber-900 font-medium select-none shadow-3xs">
+        <span className="text-xs shrink-0">🔒</span>
+        <span className="leading-snug">
+          <T>Tài khoản của bạn thuộc</T> <strong className="text-amber-950 font-bold">{userBranchName}</strong>. <T>Bạn chỉ có quyền xem chỉ đạo của</T> <strong className="text-amber-950 font-bold">{reportBranchName}</strong>.
+        </span>
+      </div>
+    );
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1378,6 +1397,7 @@ export default function MobileFrame({
   onUpdateMobileUIConfig,
   onLogout,
   branches,
+  departments = [],
   onManualRefresh,
   users,
   companies,
@@ -4733,7 +4753,15 @@ App Link: ${window.location.origin}`;
           </div>
 
           {mobileStatsSubTab === "NHAN_SU" ? (
-            <StatisticsDashboard users={users} branches={branches} />
+            <StatisticsDashboard 
+              users={users} 
+              branches={branches} 
+              departments={departments}
+              reports={reports}
+              chats={chats}
+              topics={topics}
+              topicReplies={replies}
+            />
           ) : mobileStatsSubTab === "TIEN_DO" ? (
             <ProgressTrackingDashboard
               reports={reports}
@@ -6135,7 +6163,7 @@ App Link: ${window.location.origin}`;
                                      <div className="flex justify-between items-start gap-2">
                                        <T className="block font-medium flex-1 break-words">{dir.text}</T>
                                        <div className="flex gap-1 shrink-0 select-none items-center mt-0.5">
-                                         {((dir.author === currentUser?.fullName) || currentUser?.role === UserRole.ADMIN) && (
+                                         {canUserManageDirective(currentUser, report.factory) && ((dir.author === currentUser?.fullName) || currentUser?.role === UserRole.ADMIN) && (
                                            <button
                                              type="button"
                                              onClick={() => {
@@ -6148,7 +6176,7 @@ App Link: ${window.location.origin}`;
                                              <Edit className="w-3 h-3" />
                                            </button>
                                          )}
-                                         {currentUser?.role === UserRole.ADMIN && (
+                                         {canUserManageDirective(currentUser, report.factory) && (currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) && (
                                            <button
                                              type="button"
                                              onClick={() => {
@@ -7083,9 +7111,10 @@ App Link: ${window.location.origin}`;
                       const totalHours = Math.floor(durationMs / (1000 * 60 * 60));
                       const totalMinutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
                       const totalSeconds = Math.floor((durationMs % (1000 * 60)) / 1000);
-                      const timeStr = `${String(totalHours).padStart(2, "0")}:${String(totalMinutes).padStart(2, "0")}:${String(totalSeconds).padStart(2, "0")}`;
                       
                       const isOver24h = totalHours >= 24;
+                      const days = isOver24h ? Math.floor(totalHours / 24) : 0;
+                      const remainingHours = isOver24h ? (totalHours % 24) : totalHours;
                       
                       return (
                         <div 
@@ -7096,8 +7125,16 @@ App Link: ${window.location.origin}`;
                           }`}
                           title={isProcessed ? "Thời gian xử lý xong sự cố" : "Thời gian trôi qua từ khi đăng tin"}
                         >
-                          <span translate="no" className="notranslate font-sans font-black tracking-wide text-[10px]">
-                            {timeStr}
+                          <span translate="no" className="notranslate font-sans font-black tracking-wide text-[10px] flex items-center">
+                            {isOver24h ? (
+                              <>
+                                <span>{days}D</span>
+                                <span className="mx-1 opacity-40 font-light select-none">|</span>
+                                <span>{String(remainingHours).padStart(2, "0")}:{String(totalMinutes).padStart(2, "0")}:{String(totalSeconds).padStart(2, "0")}</span>
+                              </>
+                            ) : (
+                              <span>{String(totalHours).padStart(2, "0")}:{String(totalMinutes).padStart(2, "0")}:{String(totalSeconds).padStart(2, "0")}</span>
+                            )}
                           </span>
                         </div>
                       );
