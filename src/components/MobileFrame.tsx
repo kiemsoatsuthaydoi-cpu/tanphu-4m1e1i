@@ -5,7 +5,7 @@ import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon,
 import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Department, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus, QualityReportBadge, AppNotification, ErrorCatalogItem, BadgePointConfigItem } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
-import { findMentionedUsers } from "../utils/notificationHelper";
+import { findMentionedUsers, parseReportTimestamp } from "../utils/notificationHelper";
 import { QRCodeSVG } from "qrcode.react";
 import { isSameBranchOrFactory, formatNameCapitalized, canUserManageDirective, canUserProcessOrResolveReport } from "../utils/branchHelpers";
 import { AutoImageSlider } from "./AutoImageSlider";
@@ -3092,39 +3092,7 @@ App Link: ${window.location.origin}`;
     setShareModalReport(null);
   };
 
-  const parseReportTimestamp = (ts: string): Date => {
-    try {
-      if (!ts) return new Date();
-      if (ts.includes("T") && ts.includes("-")) {
-        return new Date(ts);
-      }
-      
-      const parts = ts.trim().split(/\s+/);
-      if (parts.length < 2) return new Date(ts);
-      
-      const timePart = parts[0]; // "HH:mm:ss"
-      const datePart = parts[1]; // "DD/MM/YYYY"
-      
-      const timeSubparts = timePart.split(":");
-      const dateSubparts = datePart.split("/");
-      
-      if (timeSubparts.length >= 2 && dateSubparts.length === 3) {
-        const day = parseInt(dateSubparts[0], 10);
-        const month = parseInt(dateSubparts[1], 10) - 1;
-        const yearStr = dateSubparts[2].trim();
-        const year = yearStr.length === 2 ? 2000 + parseInt(yearStr, 10) : parseInt(yearStr, 10);
-        
-        const hours = parseInt(timeSubparts[0], 10);
-        const minutes = parseInt(timeSubparts[1], 10);
-        const seconds = timeSubparts[2] ? parseInt(timeSubparts[2], 10) : 0;
-        
-        return new Date(year, month, day, hours, minutes, seconds);
-      }
-    } catch (e) {
-      console.error("Error parsing timestamp:", ts, e);
-    }
-    return new Date();
-  };
+
 
   const isDeleteAllowed = (report: QualityReport): boolean => {
     if (!currentUser) return false;
@@ -7115,13 +7083,18 @@ App Link: ${window.location.origin}`;
                         processedResList.forEach(res => {
                           if (res.updatedAt) {
                             const t = parseReportTimestamp(res.updatedAt).getTime();
-                            if (t > latestMs) {
+                            if (!isNaN(t) && t > latestMs) {
                               latestMs = t;
                             }
                           }
                         });
                         if (latestMs > 0) {
                           endMs = latestMs;
+                        } else if (report.updatedAt) {
+                          const repU = parseReportTimestamp(report.updatedAt).getTime();
+                          if (!isNaN(repU) && repU > 0) {
+                            endMs = repU;
+                          }
                         }
                       }
                       
@@ -7139,13 +7112,16 @@ App Link: ${window.location.origin}`;
                       return (
                         <div 
                           className={`flex items-center gap-1 px-1.5 py-1 rounded-md text-[10px] font-black font-sans leading-none shadow-3xs select-none border shrink-0 whitespace-nowrap flex-nowrap ${
-                            isOver24h 
-                              ? "bg-red-600 text-white border-red-700 shadow-[0_0_8px_rgba(220,38,38,0.3)] animate-pulse" 
-                              : "bg-blue-600 text-white border-blue-700 shadow-[0_0_8px_rgba(37,99,235,0.3)]"
+                            isProcessed
+                              ? "bg-emerald-600 text-white border-emerald-700 shadow-[0_0_8px_rgba(16,185,129,0.3)]"
+                              : isOver24h 
+                                ? "bg-red-600 text-white border-red-700 shadow-[0_0_8px_rgba(220,38,38,0.3)] animate-pulse" 
+                                : "bg-blue-600 text-white border-blue-700 shadow-[0_0_8px_rgba(37,99,235,0.3)]"
                           }`}
-                          title={isProcessed ? "Thời gian xử lý xong sự cố" : "Thời gian trôi qua từ khi đăng tin"}
+                          title={isProcessed ? "Đã xử lý xong - Thời gian giải quyết sự cố" : "Thời gian trôi qua từ khi đăng tin"}
                         >
-                          <span translate="no" className="notranslate font-sans font-black tracking-wide text-[10px] flex items-center">
+                          <span translate="no" className="notranslate font-sans font-black tracking-wide text-[10px] flex items-center gap-1">
+                            {isProcessed && <span className="text-[11px] font-bold">✓</span>}
                             {isOver24h ? (
                               <>
                                 <span>{days}D</span>

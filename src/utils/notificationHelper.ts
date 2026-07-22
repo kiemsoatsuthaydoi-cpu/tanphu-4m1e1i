@@ -15,14 +15,18 @@ export function parseReportTimestamp(ts: string): Date {
   try {
     if (!ts) return new Date();
     if (ts.includes("T") && ts.includes("-")) {
-      return new Date(ts);
+      const parsed = new Date(ts);
+      if (!isNaN(parsed.getTime())) return parsed;
     }
     
     const parts = ts.trim().split(/\s+/);
-    if (parts.length < 2) return new Date(ts);
+    if (parts.length < 2) {
+      const parsed = new Date(ts);
+      return isNaN(parsed.getTime()) ? new Date() : parsed;
+    }
     
-    const timePart = parts[0]; // "HH:mm:ss"
-    const datePart = parts[1]; // "DD/MM/YYYY"
+    const datePart = parts.find((p) => p.includes("/")) || parts[1];
+    const timePart = parts.find((p) => p.includes(":")) || parts[0];
     
     const timeSubparts = timePart.split(":");
     const dateSubparts = datePart.split("/");
@@ -37,12 +41,16 @@ export function parseReportTimestamp(ts: string): Date {
       const minutes = parseInt(timeSubparts[1], 10);
       const seconds = timeSubparts[2] ? parseInt(timeSubparts[2], 10) : 0;
       
-      return new Date(year, month, day, hours, minutes, seconds);
+      const resDate = new Date(year, month, day, hours, minutes, seconds);
+      if (!isNaN(resDate.getTime())) {
+        return resDate;
+      }
     }
   } catch (e) {
     console.error("Error parsing timestamp:", ts, e);
   }
-  return new Date();
+  const fallback = new Date(ts);
+  return isNaN(fallback.getTime()) ? new Date() : fallback;
 }
 
 export function generateNotifications(
