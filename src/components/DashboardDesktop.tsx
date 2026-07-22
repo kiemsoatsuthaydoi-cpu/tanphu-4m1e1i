@@ -114,7 +114,7 @@ import {
 import { parseReportTimestamp } from "../utils/notificationHelper";
 import { STANDARDIZED_QC_DEPT } from "../data";
 import { generateDailyReportPDF } from "../utils/pdfGenerator";
-import { formatNameCapitalized, canUserManageDirective } from "../utils/branchHelpers";
+import { formatNameCapitalized, canUserManageDirective, isSameBranchOrFactory } from "../utils/branchHelpers";
 import OrderPipeline from "./OrderPipeline";
 import { MentionInput, MentionTextArea } from "./MentionTextArea";
 import FirebaseQuotaMonitor from "./FirebaseQuotaMonitor";
@@ -523,8 +523,17 @@ function DesktopDirectiveForm({
   const canManage = canUserManageDirective(currentUser, r.factory);
 
   if (!canManage) {
-    const isManagerRole = currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER;
+    const roleUpper = (currentUser?.role || "").toString().toUpperCase();
+    const isManagerRole =
+      currentUser?.role === UserRole.ADMIN ||
+      currentUser?.role === UserRole.REVIEWER ||
+      roleUpper.includes("DUYỆT") ||
+      roleUpper.includes("ADMIN");
+
     if (!isManagerRole) return null;
+
+    const isSameBranch = isSameBranchOrFactory(currentUser?.branch, r.factory);
+    if (isSameBranch) return null;
 
     const userBranchName = currentUser?.branch || "Chi nhánh khác";
     const reportBranchName = r.factory || "Chi nhánh này";

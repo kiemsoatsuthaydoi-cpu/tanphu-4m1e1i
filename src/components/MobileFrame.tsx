@@ -7,7 +7,7 @@ import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
 import { findMentionedUsers } from "../utils/notificationHelper";
 import { QRCodeSVG } from "qrcode.react";
-import { isSameBranchOrFactory, formatNameCapitalized, canUserManageDirective } from "../utils/branchHelpers";
+import { isSameBranchOrFactory, formatNameCapitalized, canUserManageDirective, canUserProcessOrResolveReport } from "../utils/branchHelpers";
 import { AutoImageSlider } from "./AutoImageSlider";
 import { getCategoryFallbackImage } from "../utils/imageProcessor";
 import { findUser, resolveUploaderInfo, resolveBadgeGiverInfo, resolveEvaluatorInfo, resolveSenderInfo } from "../utils/userResolver";
@@ -311,8 +311,17 @@ function MobileDirectiveForm({
   const canManage = canUserManageDirective(currentUser, report.factory);
 
   if (!canManage) {
-    const isManagerRole = currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER;
+    const roleUpper = (currentUser?.role || "").toString().toUpperCase();
+    const isManagerRole =
+      currentUser?.role === UserRole.ADMIN ||
+      currentUser?.role === UserRole.REVIEWER ||
+      roleUpper.includes("DUYỆT") ||
+      roleUpper.includes("ADMIN");
+
     if (!isManagerRole) return null;
+
+    const isSameBranch = isSameBranchOrFactory(currentUser?.branch, report.factory);
+    if (isSameBranch) return null;
 
     const userBranchName = currentUser?.branch || "Chi nhánh khác";
     const reportBranchName = report.factory || "Chi nhánh này";
@@ -2778,6 +2787,12 @@ export default function MobileFrame({
   const toggleAcknowledge = (reportId: string) => {
     const report = reports.find((r) => r.id === reportId);
     if (!report) return;
+
+    if (!canUserProcessOrResolveReport(currentUser, report.factory)) {
+      const userBranchName = currentUser?.branch || "Chi nhánh khác";
+      showToast(`🔒 Tài khoản thuộc ${userBranchName}. Bạn chỉ được tiếp nhận/xử lý bản tin của Chi nhánh mình hoặc Văn Phòng Công Ty!`);
+      return;
+    }
 
     const userName = currentUser?.fullName || "Kiểm soát viên";
     const userDept = currentUser?.department || "BP Liên Quan";
@@ -6329,6 +6344,11 @@ App Link: ${window.location.origin}`;
                                 <button
                                   type="button"
                                   onClick={() => {
+                                    if (!canUserProcessOrResolveReport(currentUser, report.factory)) {
+                                      const userBranchName = currentUser?.branch || "Chi nhánh khác";
+                                      showToast(`🔒 Tài khoản thuộc ${userBranchName}. Bạn chỉ được ghi nhận kết quả cho bản tin của Chi nhánh mình hoặc Văn Phòng Công Ty!`);
+                                      return;
+                                    }
                                     if (editingResolutionReportId === report.id) {
                                       setEditingResolutionReportId(null);
                                       setEditingResolutionId(null);

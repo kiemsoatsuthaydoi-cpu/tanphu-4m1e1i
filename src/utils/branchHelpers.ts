@@ -1,3 +1,5 @@
+import { UserRole } from "../types";
+
 export const isSameBranchOrFactory = (branchA?: string, branchB?: string): boolean => {
   if (!branchA || !branchB) return false;
   
@@ -68,16 +70,20 @@ export const canUserManageDirective = (
 ): boolean => {
   if (!currentUser) return false;
 
+  const roleUpper = (currentUser.role || "").toString().toUpperCase();
+  const isAdminRole = roleUpper === "CHỦ ADMIN" || roleUpper === "ADMIN" || currentUser.role === UserRole.ADMIN;
+
   // 1. Admin / Group Level Authority (Chủ tịch / Ban Tổng Giám đốc / Admin / Group HQ)
-  if (currentUser.role === "admin") return true;
+  if (isAdminRole) return true;
 
   const branchClean = (currentUser.branch || "").toUpperCase();
   const deptClean = (currentUser.department || "").toUpperCase();
   const posClean = (currentUser.position || "").toUpperCase();
 
-  // Ban TGĐ, Văn phòng Tập đoàn/Công ty (TPP-CTY), Chủ Tịch, HQ QC, Admin
+  // Ban TGĐ, Văn phòng Tập đoàn/Công ty (TPP-CTY / DNP-CTY), Chủ Tịch, HQ QC, Admin
   const isHQ =
     branchClean.includes("TPP-CTY") ||
+    branchClean.includes("DNP-CTY") ||
     branchClean.includes("VĂN PHÒNG CÔNG TY") ||
     branchClean.includes("VĂN PHÒNG TẬP ĐOÀN") ||
     branchClean.includes("CHỦ TỊCH") ||
@@ -92,9 +98,14 @@ export const canUserManageDirective = (
   if (isHQ) return true;
 
   // 2. Local Branch Manager / Reviewer
+  const isReviewerRole =
+    roleUpper === "DUYỆT VIÊN" ||
+    roleUpper === "REVIEWER" ||
+    roleUpper === "APPROVER" ||
+    currentUser.role === UserRole.REVIEWER;
+
   const isLeaderOrReviewer =
-    currentUser.role === "approver" ||
-    currentUser.role === "reviewer" ||
+    isReviewerRole ||
     currentUser.canSpeciallyEditDelete ||
     posClean.includes("GIÁM ĐỐC") ||
     posClean.includes("TRƯỞNG PHÒNG") ||
@@ -104,6 +115,53 @@ export const canUserManageDirective = (
   if (!isLeaderOrReviewer) return false;
 
   // Compare currentUser.branch with reportFactory using isSameBranchOrFactory
+  return isSameBranchOrFactory(currentUser.branch, reportFactory);
+};
+
+export const canUserProcessOrResolveReport = (
+  currentUser: any,
+  reportFactory: string | undefined
+): boolean => {
+  if (!currentUser) return false;
+
+  const roleUpper = (currentUser.role || "").toString().toUpperCase();
+  const isAdminRole = roleUpper === "CHỦ ADMIN" || roleUpper === "ADMIN" || currentUser.role === UserRole.ADMIN;
+
+  // 1. Admin / Group Level Authority (Chủ tịch / Ban Tổng Giám đốc / Admin / Group HQ)
+  if (isAdminRole) return true;
+
+  const userBranch = (currentUser.branch || "").toUpperCase();
+  const userDept = (currentUser.department || "").toUpperCase();
+  const userPos = (currentUser.position || "").toUpperCase();
+
+  // Ban TGĐ, Văn phòng Tập đoàn/Công ty (TPP-CTY / DNP-CTY), HQ Admin
+  const isHQUser =
+    userBranch.includes("TPP-CTY") ||
+    userBranch.includes("DNP-CTY") ||
+    userBranch.includes("VĂN PHÒNG CÔNG TY") ||
+    userBranch.includes("VĂN PHÒNG TẬP ĐOÀN") ||
+    userBranch.includes("CHỦ TỊCH") ||
+    userBranch.includes("BAN TGĐ") ||
+    userDept.includes("BAN TỔNG GIÁM ĐỐC") ||
+    userDept.includes("BAN TGĐ") ||
+    userDept.includes("PHÒNG QUẢN LÝ CHẤT LƯỢNG (TPP-CTY)") ||
+    userPos.includes("CHỦ TỊCH") ||
+    userPos.includes("TỔNG GIÁM ĐỐC") ||
+    userPos.includes("BAN TGĐ");
+
+  if (isHQUser) return true;
+
+  // 2. HQ Reports (Văn Phòng Công Ty TPP-CTY or DNP-CTY) can be received & processed by ANY branch!
+  const factoryUpper = (reportFactory || "").toUpperCase();
+  const isHQReport =
+    factoryUpper.includes("TPP-CTY") ||
+    factoryUpper.includes("DNP-CTY") ||
+    factoryUpper.includes("VĂN PHÒNG CÔNG TY") ||
+    factoryUpper.includes("VĂN PHÒNG TẬP ĐOÀN");
+
+  if (isHQReport) return true;
+
+  // 3. For local factory reports, user must belong to that same branch
   return isSameBranchOrFactory(currentUser.branch, reportFactory);
 };
 
