@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { T } from "./TranslateText";
 import { QualityReport, User, Branch } from "../types";
-import { Users, User as UserIcon, Cpu, Settings, FileText, Heart, Info } from "lucide-react";
+import { Users, User as UserIcon, Cpu, Settings, FileText, Heart, Info, Award } from "lucide-react";
 import { formatNameCapitalized } from "../utils/branchHelpers";
 import { getReportRatingsStats, renderSummaryStars, isEligibleEvaluator } from "./MobileReportRatingSection";
 
@@ -385,18 +385,44 @@ export function MobileListOnly({
                   {/* Resolutions/Kết quả xử lý chi tiết rendered clean */}
                   {report.resolutions && report.resolutions.length > 0 && (
                     <div className="mt-2.5 pt-2.5 border-t border-slate-100 space-y-1.5">
-                      <div className="text-[9px] text-indigo-800 font-extrabold uppercase flex items-center gap-1">
+                      <div className="text-[10px] text-indigo-800 font-extrabold uppercase flex items-center gap-1.5 flex-wrap">
                         <span>✅</span>
                         <span translate="no" className="notranslate">KẾT QUẢ XỬ LÝ CHI TIẾT (BP/ĐV PHẢN HỒI):</span>
                       </div>
                       {report.resolutions.map((res) => (
                         <div key={res.id} className="p-2 bg-slate-50 border border-slate-150 rounded">
-                          <div className="flex justify-between items-center text-[8.5px] font-bold text-slate-500 mb-1">
-                            <span className="text-indigo-800 font-extrabold">
-                              <span translate="no" className="notranslate">{res.departmentName}</span>
-                            </span>
+                          <div className="flex justify-between items-center text-[9.5px] font-bold text-slate-500 mb-1">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="text-indigo-800 font-extrabold">
+                                <span translate="no" className="notranslate">{res.departmentName}</span>
+                              </span>
+                              {res.badges && res.badges.length > 0 && (
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {res.badges.map((badge, bIdx) => {
+                                    const icon = badge.id === "BAC_SI_MAY_MOC" ? "🦾" :
+                                                 badge.id === "CHOT_CHAN_5WHY" ? "🔍" :
+                                                 badge.id === "HO_VE_DAY_CHUYEN" ? "🛡️" :
+                                                 badge.id === "CHIEN_BINH_PHAN_UNG_NHANH" ? "⚡" :
+                                                 badge.id === "BAC_THAY_DU_DOAN" ? "🔮" :
+                                                 badge.id === "CANH_BAO_KIP_THOI" ? "🚨" :
+                                                 badge.id === "CON_MAT_TINH_TUONG" ? "🔍" :
+                                                 badge.id === "CHOT_CHAN_RUI_RO" ? "🛡️" :
+                                                 badge.id === "THONG_TIN_CHUAN_MUC" ? "📊" : "🏅";
+                                    return (
+                                      <span
+                                        key={bIdx}
+                                        className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-50 border border-amber-300 text-[10px] shadow-3xs"
+                                        title={`Huy hiệu: ${badge.name} (Bởi ${badge.giverName})`}
+                                      >
+                                        <span>{icon}</span>
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
                             <div className="flex items-center gap-1.5">
-                              <span translate="no" className={`notranslate text-[7.5px] font-extrabold px-1 py-0.2 rounded border uppercase scale-90 ${
+                              <span translate="no" className={`notranslate text-[8.5px] font-extrabold px-1 py-0.2 rounded border uppercase ${
                                 res.status === "Đã xử lý"
                                   ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                                   : "bg-amber-50 text-amber-700 border-amber-200"
@@ -406,11 +432,22 @@ export function MobileListOnly({
                               <span translate="no" className="notranslate">{res.updatedAt}</span>
                             </div>
                           </div>
-                          <p className="text-[10px] text-slate-800 font-medium whitespace-pre-wrap">
+                          <p className="text-[11px] text-slate-800 font-medium whitespace-pre-wrap">
                             <span translate="no" className="notranslate">{res.resultText}</span>
                           </p>
-                          <div className="text-[8px] text-slate-400 mt-1 select-none">
+                          <div className="text-[9px] text-slate-400 mt-1 flex items-center justify-between select-none">
                             <span translate="no" className="notranslate">Đại diện: {res.handlerName}</span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span translate="no" className="notranslate">{res.updatedAt}</span>
+                              <span className="flex items-center gap-0.5 px-1 py-0.5 rounded border text-[8px] font-sans font-extrabold bg-slate-50 text-slate-500 border-slate-200">
+                                <Heart className={`w-2.5 h-2.5 ${res.likedBy?.length ? "fill-rose-500 stroke-rose-500 text-rose-500" : ""}`} />
+                                <span>{res.likedBy?.length || 0}</span>
+                              </span>
+                              <span className="flex items-center gap-0.5 px-1 py-0.5 rounded border text-[8px] font-sans font-extrabold bg-slate-50 text-slate-500 border-slate-200">
+                                <Award className="w-2.5 h-2.5 text-amber-500" />
+                                <span>{res.badges?.length || 0}</span>
+                              </span>
+                            </div>
                           </div>
                         </div>
                       ))}

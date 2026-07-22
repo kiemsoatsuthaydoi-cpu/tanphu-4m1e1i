@@ -7,12 +7,12 @@ import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
 import { findMentionedUsers, parseReportTimestamp } from "../utils/notificationHelper";
 import { QRCodeSVG } from "qrcode.react";
-import { isSameBranchOrFactory, formatNameCapitalized, canUserManageDirective, canUserProcessOrResolveReport } from "../utils/branchHelpers";
+import { isSameBranchOrFactory, formatNameCapitalized, canUserManageDirective, canUserProcessOrResolveReport, isHQOrManagerUser } from "../utils/branchHelpers";
 import { AutoImageSlider } from "./AutoImageSlider";
 import { getCategoryFallbackImage } from "../utils/imageProcessor";
 import { findUser, resolveUploaderInfo, resolveBadgeGiverInfo, resolveEvaluatorInfo, resolveSenderInfo } from "../utils/userResolver";
 import { MobileReportRatingContainer, isEligibleEvaluator, BADGE_PRAISE_MAP } from "./MobileReportRatingSection";
-import { RED_BADGES, GREEN_BADGES } from "../data";
+import { RED_BADGES, GREEN_BADGES, BadgeDefinition } from "../data";
 import FirebaseQuotaMonitor from "./FirebaseQuotaMonitor";
 import StatisticsDashboard from "./StatisticsDashboard";
 import ProgressTrackingDashboard from "./ProgressTrackingDashboard";
@@ -2522,6 +2522,9 @@ export default function MobileFrame({
   const [showLikesListReport, setShowLikesListReport] = useState<QualityReport | null>(null);
   const [showAcksListReport, setShowAcksListReport] = useState<QualityReport | null>(null);
   const [selectedBadgeReport, setSelectedBadgeReport] = useState<QualityReport | null>(null);
+  const [selectedResolutionBadge, setSelectedResolutionBadge] = useState<{ report: QualityReport; res: QualityReportResolution } | null>(null);
+  const [showAwardMenu, setShowAwardMenu] = useState<boolean>(false);
+  const [showAwardMenuForRes, setShowAwardMenuForRes] = useState<boolean>(false);
   const [showBadgeExplanations, setShowBadgeExplanations] = useState<boolean>(false);
   const [selectedInfoBadge, setSelectedInfoBadge] = useState<any | null>(null);
   const lastScrollTopRef = useRef(0);
@@ -2901,6 +2904,90 @@ export default function MobileFrame({
     }
 
     showToast(`${actionLabel} huy hiệu "${badgeName}"! 🏅`);
+  };
+
+  const handleToggleLikeResolution = (report: QualityReport, resId: string) => {
+    if (!currentUser) {
+      showToast("Vui lòng đăng nhập để bày tỏ cảm xúc! ⚠️");
+      return;
+    }
+    const userIdentifier = currentUser.fullName || currentUser.id || "Anonymous";
+    const updatedResolutions = (report.resolutions || []).map((res) => {
+      if (res.id !== resId) return res;
+      const currentLikes = res.likedBy || [];
+      const hasLiked = currentLikes.includes(userIdentifier);
+      const newLikes = hasLiked
+        ? currentLikes.filter((u) => u !== userIdentifier)
+        : [...currentLikes, userIdentifier];
+      return { ...res, likedBy: newLikes };
+    });
+
+    const updatedReport: QualityReport = {
+      ...report,
+      resolutions: updatedResolutions,
+    };
+
+    if (onUpdateReport) {
+      onUpdateReport(updatedReport);
+    }
+  };
+
+  const handleAwardBadgeToResolution = (report: QualityReport, resId: string, badgeDef: BadgeDefinition) => {
+    if (!currentUser) {
+      showToast("Vui lòng đăng nhập để trao huy hiệu! ⚠️");
+      return;
+    }
+
+    if (!isEligibleEvaluator(currentUser) && !isHQOrManagerUser(currentUser)) {
+      showToast("Chỉ các cấp quản lý, ban lãnh đạo mới có quyền trao huy hiệu! ⚠️");
+      return;
+    }
+
+    const updatedResolutions = (report.resolutions || []).map((res) => {
+      if (res.id !== resId) return res;
+      const currentBadges = res.badges ? [...res.badges] : [];
+      const existingIndex = currentBadges.findIndex(
+        (b) => b.id === badgeDef.id && (b.giverId === currentUser.id || b.giverName === currentUser.fullName)
+      );
+
+      const now = new Date();
+      const d = String(now.getDate()).padStart(2, "0");
+      const m = String(now.getMonth() + 1).padStart(2, "0");
+      const y = String(now.getFullYear()).slice(-2);
+      const dateStr = `${d}/${m}/${y}`;
+
+      let updatedBadges: QualityReportBadge[];
+      if (existingIndex >= 0) {
+        updatedBadges = currentBadges.filter((_, idx) => idx !== existingIndex);
+        showToast(`Đã thu hồi huy hiệu "${badgeDef.name}"! ℹ️`);
+      } else {
+        const newBadge: QualityReportBadge = {
+          id: badgeDef.id,
+          name: badgeDef.name,
+          category: badgeDef.category,
+          giverId: currentUser.id || "user",
+          giverName: currentUser.fullName || "Quản lý",
+          giverRole: currentUser.role === UserRole.ADMIN ? "Chủ Admin" : (currentUser.department || "Quản lý"),
+          giverPosition: currentUser.position || (currentUser.role === UserRole.ADMIN ? "Trưởng Phòng Quản Lý Chất Lượng" : "Quản lý"),
+          timestamp: dateStr
+        };
+        updatedBadges = [...currentBadges, newBadge];
+        showToast(`Đã trao tặng huy hiệu "${badgeDef.name}"! 🏅`);
+      }
+      return { ...res, badges: updatedBadges };
+    });
+
+    const updatedReport: QualityReport = {
+      ...report,
+      resolutions: updatedResolutions
+    };
+
+    if (onUpdateReport) {
+      onUpdateReport(updatedReport);
+    }
+
+    // Automatically collapse / close menu drawer after awarding
+    setSelectedResolutionBadge(null);
   };
 
   const showToast = (msg: string) => {
@@ -5624,8 +5711,8 @@ App Link: ${window.location.origin}`;
                             <T><span translate="no" className="notranslate">{shortName}</span></T>
                           </button>
                         );
-                      })}
-                    </div>
+                        })}
+                      </div>
                   </div>
                 </div>
 
@@ -5772,7 +5859,7 @@ App Link: ${window.location.origin}`;
       ) : (
         <>
           {/* Top segment control switcher for ADMIN and REVIEWER */}
-          {(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) && (
+          {(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER || isHQOrManagerUser(currentUser)) && (
             <div className={`transition-all duration-300 overflow-hidden shrink-0 bg-white border-b border-slate-200 px-3 select-none ${
               showFilters ? "max-h-[50px] py-2 opacity-100" : "max-h-0 py-0 opacity-0 pointer-events-none"
             }`}>
@@ -5896,7 +5983,7 @@ App Link: ${window.location.origin}`;
                     </div>
                     
                     {/* Reviewer / Admin Action Buttons directly on the mobile card! */}
-                    {(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) && (
+                    {(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER || isHQOrManagerUser(currentUser)) && (
                       <div className="flex items-center gap-1.5 shrink-0">
                         {/* Approve button */}
                         <button
@@ -6146,7 +6233,7 @@ App Link: ${window.location.origin}`;
                                      <div className="flex justify-between items-start gap-2">
                                        <T className="block font-medium flex-1 break-words">{dir.text}</T>
                                        <div className="flex gap-1 shrink-0 select-none items-center mt-0.5">
-                                         {canUserManageDirective(currentUser, report.factory) && ((dir.author === currentUser?.fullName) || currentUser?.role === UserRole.ADMIN) && (
+                                         {canUserManageDirective(currentUser, report.factory) && (
                                            <button
                                              type="button"
                                              onClick={() => {
@@ -6159,14 +6246,14 @@ App Link: ${window.location.origin}`;
                                              <Edit className="w-3 h-3" />
                                            </button>
                                          )}
-                                         {canUserManageDirective(currentUser, report.factory) && (currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) && (
+                                         {canUserManageDirective(currentUser, report.factory) && (
                                            <button
                                              type="button"
                                              onClick={() => {
                                                setDirectiveToDelete({ report, dirId: dir.id });
                                              }}
                                              className="text-slate-400 hover:text-rose-600 transition-colors cursor-pointer border-none bg-transparent p-0.5"
-                                             title="Xóa chỉ đạo (Admin)"
+                                             title="Xóa chỉ đạo"
                                            >
                                              <Trash2 className="w-3 h-3" />
                                            </button>
@@ -6233,7 +6320,7 @@ App Link: ${window.location.origin}`;
                     )}
 
                     {/* Input form to submit a new directive */}
-                    {(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) && (
+                    {currentUser && (
                       <MobileDirectiveForm
                         report={report}
                         currentUser={currentUser}
@@ -6357,9 +6444,9 @@ App Link: ${window.location.origin}`;
 
                       {/* Displaying detailed Resolution logs list */}
                       {!!expandedResolutions[report.id] && (report.isAbnormal || report.reportType === "KPH") && report.resolutions && report.resolutions.length > 0 && (
-                        <div className="mt-1.5 p-2 bg-slate-50 border border-slate-150 rounded-lg flex flex-col gap-1.5 max-h-36 overflow-y-auto">
-                          <div className="text-[8px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center justify-between select-none">
-                            <div className="flex items-center gap-1">
+                        <div className="mt-1.5 p-2 bg-slate-50 border border-slate-150 rounded-lg flex flex-col gap-1.5 max-h-48 overflow-y-auto">
+                          <div className="text-[9.5px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center justify-between select-none">
+                            <div className="flex items-center gap-1 flex-wrap">
                               <span className="w-1 h-1 rounded-full bg-slate-500"></span>
                               <span translate="no" className="notranslate">KẾT QUẢ XỬ LÝ CHI TIẾT:</span>
                             </div>
@@ -6402,13 +6489,45 @@ App Link: ${window.location.origin}`;
                             )}
                           </div>
                           {report.resolutions.map((res) => (
-                            <div key={res.id} className="text-[9px] bg-white p-1.5 rounded border border-slate-100 shadow-3xs relative">
+                            <div key={res.id} className="text-[10px] bg-white p-2 rounded-lg border border-slate-100 shadow-3xs relative">
                               <div className="flex items-center justify-between gap-1 mb-0.5">
-                                <span translate="no" className="notranslate font-bold text-slate-700">
-                                  {res.departmentName}
-                                </span>
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span translate="no" className="notranslate font-bold text-[10.5px] text-slate-700">
+                                    {res.departmentName}
+                                  </span>
+                                  {res.badges && res.badges.length > 0 && (
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      {res.badges.map((badge, bIdx) => {
+                                        const icon = badge.id === "BAC_SI_MAY_MOC" ? "🦾" :
+                                                     badge.id === "CHOT_CHAN_5WHY" ? "🔍" :
+                                                     badge.id === "HO_VE_DAY_CHUYEN" ? "🛡️" :
+                                                     badge.id === "CHIEN_BINH_PHAN_UNG_NHANH" ? "⚡" :
+                                                     badge.id === "BAC_THAY_DU_DOAN" ? "🔮" :
+                                                     badge.id === "CANH_BAO_KIP_THOI" ? "🚨" :
+                                                     badge.id === "CON_MAT_TINH_TUONG" ? "🔍" :
+                                                     badge.id === "CHOT_CHAN_RUI_RO" ? "🛡️" :
+                                                     badge.id === "THONG_TIN_CHUAN_MUC" ? "📊" : "🏅";
+                                        return (
+                                          <button
+                                            key={bIdx}
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setSelectedResolutionBadge({ report, res });
+                                              setShowAwardMenuForRes(false);
+                                            }}
+                                            className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-50 border border-amber-300 text-[11px] shadow-3xs hover:bg-amber-100 active:scale-90 transition-transform cursor-pointer"
+                                            title={`Huy hiệu: ${badge.name} (Bởi ${badge.giverName})`}
+                                          >
+                                            <span>{icon}</span>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
                                 <div className="flex items-center gap-1.5 shrink-0">
-                                  <span translate="no" className={`notranslate text-[8px] font-extrabold px-1 py-0.2 rounded border uppercase scale-90 ${
+                                  <span translate="no" className={`notranslate text-[9px] font-extrabold px-1.5 py-0.5 rounded border uppercase ${
                                     res.status === "Đã xử lý"
                                       ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                                       : "bg-amber-50 text-amber-700 border-amber-200"
@@ -6417,14 +6536,51 @@ App Link: ${window.location.origin}`;
                                   </span>
                                 </div>
                               </div>
-                              <p translate="no" className="notranslate text-slate-600 font-medium leading-relaxed whitespace-pre-wrap pl-1.5 border-l border-slate-200">
+                              <p translate="no" className="notranslate text-slate-600 font-medium text-[10px] leading-relaxed whitespace-pre-wrap pl-1.5 border-l border-slate-200">
                                 {res.resultText}
                               </p>
-                              <div className="mt-1 text-[7.5px] text-slate-400 font-mono flex items-center justify-between select-none">
+                              <div className="mt-1.5 text-[8.5px] text-slate-400 font-mono flex items-center justify-between select-none">
                                 <span translate="no" className="notranslate">
                                   Đại diện: {res.handlerName}
                                 </span>
-                                <span>{formatTimestampToDMY(res.updatedAt)}</span>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <span>{formatTimestampToDMY(res.updatedAt)}</span>
+                                  
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleToggleLikeResolution(report, res.id);
+                                    }}
+                                    className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[9px] font-sans font-extrabold transition-all cursor-pointer select-none ${
+                                      res.likedBy?.includes(currentUser?.fullName || currentUser?.id || "")
+                                        ? "bg-rose-50 text-rose-600 border-rose-200 shadow-3xs"
+                                        : "bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100"
+                                    }`}
+                                    title="Thích kết quả xử lý này"
+                                  >
+                                    <Heart className={`w-3 h-3 ${res.likedBy?.includes(currentUser?.fullName || currentUser?.id || "") ? "fill-rose-500 stroke-rose-500" : ""}`} />
+                                    <span>{res.likedBy?.length || 0}</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedResolutionBadge({ report, res });
+                                      setShowAwardMenuForRes(true);
+                                    }}
+                                    className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[9px] font-sans font-extrabold transition-all cursor-pointer select-none ${
+                                      (res.badges?.length || 0) > 0
+                                        ? "bg-amber-50 text-amber-700 border-amber-300 shadow-3xs"
+                                        : "bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100"
+                                    }`}
+                                    title="Trao/Xem huy hiệu cho kết quả xử lý này"
+                                  >
+                                    <Award className="w-3 h-3 text-amber-500" />
+                                    <span>{res.badges?.length || 0}</span>
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -6693,7 +6849,7 @@ App Link: ${window.location.origin}`;
 
                         {/* Detailed Replication logs list */}
                         {report.replications && report.replications.length > 0 && (
-                          <div className="mt-1.5 p-2 bg-emerald-50/20 border border-emerald-100 rounded-lg flex flex-col gap-1.5 max-h-36 overflow-y-auto">
+                          <div className="mt-1.5 p-2 bg-emerald-50/20 border border-emerald-100 rounded-lg flex flex-col gap-1.5 max-h-48 overflow-y-auto">
                             <div className="text-[8px] font-extrabold text-emerald-600 uppercase tracking-wider flex items-center gap-1 select-none">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
                               <span translate="no" className="notranslate">DANH SÁCH NHÂN RỘNG:</span>
@@ -6704,7 +6860,7 @@ App Link: ${window.location.origin}`;
                                   <span translate="no" className="notranslate font-bold text-slate-750">
                                     {rep.factoryName} - {rep.departmentName}
                                   </span>
-                                  <span translate="no" className={`notranslate text-[8px] font-extrabold px-1 py-0.2 rounded border uppercase scale-90 ${
+                                  <span translate="no" className={`notranslate text-[9px] font-extrabold px-1.5 py-0.5 rounded border uppercase ${
                                     rep.status === "Đã hoàn thành"
                                       ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                                       : rep.status === "Đang triển khai"
@@ -6729,7 +6885,7 @@ App Link: ${window.location.origin}`;
                                     {rep.notes}
                                   </p>
                                 )}
-                                <div className="mt-1 text-[7.5px] text-slate-400 font-mono flex items-center justify-between select-none">
+                                <div className="mt-1.5 text-[8.5px] text-slate-400 font-mono flex items-center justify-between select-none">
                                   <span translate="no" className="notranslate">
                                     Đăng ký bởi: {rep.registrantName} {rep.phoneNumber ? `- SĐT: ${rep.phoneNumber}` : ""}
                                   </span>
@@ -7208,6 +7364,7 @@ App Link: ${window.location.origin}`;
                           type="button"
                           onClick={() => {
                             setSelectedBadgeReport(report);
+                            setShowAwardMenu(true);
                           }}
                           className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg py-1 px-1.5 shrink-0 shadow-3xs transition-all hover:scale-105 active:scale-95 cursor-pointer whitespace-nowrap flex-nowrap text-slate-400 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50/50"
                           title="Trao tặng hoặc xem Huy hiệu"
@@ -7358,7 +7515,7 @@ App Link: ${window.location.origin}`;
       )}
 
       {/* Modern bottom navigation tab bar containing Phân Tích & Báo Cáo */}
-      <div id="mobile-bottom-nav" className={`bg-slate-50 border-t border-slate-200 grid ${(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) ? "grid-cols-5" : "grid-cols-4"} py-2 text-center text-[9.3px] font-bold select-none shrink-0 font-sans shadow-inner shrink-0`}>
+      <div id="mobile-bottom-nav" className={`bg-slate-50 border-t border-slate-200 grid ${(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER || isHQOrManagerUser(currentUser)) ? "grid-cols-5" : "grid-cols-4"} py-2 text-center text-[9.3px] font-bold select-none shrink-0 font-sans shadow-inner shrink-0`}>
         <button
           type="button"
           onClick={() => {
@@ -7407,7 +7564,7 @@ App Link: ${window.location.origin}`;
           <T><span translate="no" className="notranslate truncate w-full block text-center">Home</span></T>
         </button>
 
-        {(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) && (
+        {(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER || isHQOrManagerUser(currentUser)) && (
           <button
             type="button"
             onClick={() => setActiveBottomTab("PHE_DUYET")}
@@ -7837,303 +7994,200 @@ App Link: ${window.location.origin}`}
         const isDsaReport = activeReport.reportType === "DSA" || activeReport.isSpotlight;
         const eligible = isEligibleEvaluator(currentUser);
         const availableBadges = isDsaReport ? GREEN_BADGES : RED_BADGES;
-        
+
         return (
           <div 
             onClick={() => {
               setSelectedBadgeReport(null);
+              setShowAwardMenu(false);
               setShowBadgeExplanations(false);
             }}
-            className="fixed lg:absolute inset-0 bg-slate-900/65 backdrop-blur-xs flex items-end justify-center z-50 select-none animate-fadeIn cursor-pointer"
+            className="fixed lg:absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-50 select-none animate-fadeIn cursor-pointer"
           >
-            {!eligible ? (
-              <div 
-                onClick={(e) => e.stopPropagation()}
-                className="bg-white rounded-2xl w-[92%] max-w-sm overflow-hidden flex flex-col shadow-2xl border border-slate-150 animate-slideUp cursor-default p-4 mb-6 space-y-3 animate-fadeIn select-none"
-              >
-                {/* Compact Header */}
-                <div className="flex justify-between items-center pb-2 border-b border-slate-100 shrink-0">
-                  <div className="flex items-center gap-1.5 text-indigo-700">
-                    <span className="text-base">🏅</span>
-                    <span className="font-extrabold text-[12px] uppercase tracking-tight font-sans">
-                      <span translate="no" className="notranslate"><T>HUY HIỆU DANH GIÁ</T></span>
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedBadgeReport(null)}
-                    className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-xs border-none"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                {/* Warning Content */}
-                <div className="p-3.5 bg-amber-500/5 border border-amber-500/10 rounded-xl text-[10.5px] leading-relaxed text-slate-655 font-semibold">
-                  <span className="mr-1 text-base">⚠️</span>
-                  <T>Chỉ cấp quản lý trực tiếp (Trưởng/Phó đơn vị), Ban Giám đốc, Ban TGĐ và Admin mới có quyền trao tặng Huy hiệu cho bản tin.</T>
-                </div>
-              </div>
-            ) : (
-              <div 
-                onClick={(e) => e.stopPropagation()}
-                className="bg-white rounded-t-3xl w-full max-h-[85%] overflow-hidden flex flex-col shadow-2xl border-t border-slate-100 animate-slideUp cursor-default"
-              >
-                {showBadgeExplanations ? (
-                // Explanation View
-                <div className="flex-1 flex flex-col overflow-hidden">
-                  <div className="flex justify-between items-center px-4 py-3.5 border-b border-indigo-100 shrink-0 bg-indigo-50/50">
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl w-[92%] max-w-sm overflow-hidden flex flex-col shadow-2xl border border-amber-200/90 animate-scaleUp cursor-default"
+            >
+              {showBadgeExplanations ? (
+                /* Explanation View */
+                <div className="flex-1 flex flex-col overflow-hidden max-h-[85vh]">
+                  <div className="flex justify-between items-center px-4 py-3 border-b border-indigo-100 shrink-0 bg-indigo-50/50">
                     <button
                       type="button"
                       onClick={() => setShowBadgeExplanations(false)}
-                      className="flex items-center gap-1.5 text-indigo-700 font-extrabold text-[12px] uppercase bg-transparent border-none cursor-pointer"
+                      className="flex items-center gap-1 text-indigo-700 font-extrabold text-[11px] uppercase bg-transparent border-none cursor-pointer"
                     >
-                      <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
+                      <ArrowLeft className="w-3.5 h-3.5 stroke-[2.5]" />
                       <span translate="no" className="notranslate"><T>Quay lại</T></span>
                     </button>
-                    <span className="font-extrabold text-[12px] uppercase tracking-tight font-sans text-indigo-850">
+                    <span className="font-extrabold text-[11px] uppercase tracking-tight font-sans text-indigo-850">
                       <span translate="no" className="notranslate"><T>Ý NGHĨA HUY HIỆU</T></span>
                     </span>
                     <button
                       type="button"
                       onClick={() => {
                         setSelectedBadgeReport(null);
+                        setShowAwardMenu(false);
                         setShowBadgeExplanations(false);
                       }}
-                      className="w-7 h-7 rounded-full bg-slate-150 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-xs border-none"
+                      className="w-6 h-6 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-400 font-bold flex items-center justify-center cursor-pointer transition-colors text-xs border-none"
                     >
                       ✕
                     </button>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto p-4 bg-slate-50/50 space-y-4 pb-12 select-text text-slate-700">
-                    {/* Nhóm HUY HIỆU ĐỎ */}
-                    <div className="space-y-2.5">
-                      <div className="flex items-center gap-1.5 pb-1 border-b border-rose-150">
-                        <span className="text-base">🔴</span>
-                        <span className="font-black text-[11px] text-rose-700 tracking-wider font-sans uppercase">
-                          <span translate="no" className="notranslate"><T>NHÓM HUY HIỆU ĐỎ (CHO BẢN TIN KPH)</T></span>
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-1 gap-2.5">
-                        <div className="bg-white p-2.5 rounded-xl border border-rose-100 shadow-3xs flex flex-col gap-1">
+                  <div className="flex-1 overflow-y-auto p-3.5 bg-slate-50/50 space-y-3 text-slate-700">
+                    <div className="space-y-2">
+                      {availableBadges.map((bDef) => (
+                        <div key={bDef.id} className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-3xs flex flex-col gap-0.5">
                           <div className="flex items-center gap-1.5">
-                            <span className="text-lg">🚨</span>
-                            <span translate="no" className="notranslate font-extrabold text-[11px] text-rose-800 uppercase font-sans"><T>Cảnh báo kịp thời</T></span>
+                            <span className="text-base">{bDef.icon || "🏅"}</span>
+                            <span translate="no" className="notranslate font-extrabold text-[10.5px] text-slate-800 uppercase font-sans"><T>{bDef.name}</T></span>
                           </div>
-                          <p translate="no" className="notranslate text-[9.5px] text-slate-600 font-medium leading-relaxed">
-                            <T>Trao cho bản tin KPH được đăng ngay lập tức khi sự cố vừa xảy ra, giúp ngăn chặn hậu quả dây chuyền.</T>
-                          </p>
+                          <p translate="no" className="notranslate text-[9px] text-slate-600 leading-relaxed"><T>{bDef.description}</T></p>
                         </div>
-
-                        <div className="bg-white p-2.5 rounded-xl border border-rose-100 shadow-3xs flex flex-col gap-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-lg">🔍</span>
-                            <span translate="no" className="notranslate font-extrabold text-[11px] text-rose-800 uppercase font-sans"><T>Con mắt tinh tường</T></span>
-                          </div>
-                          <p translate="no" className="notranslate text-[9.5px] text-slate-600 font-medium leading-relaxed">
-                            <T>Trao cho bản tin mô tả những lỗi cực nhỏ, khó thấy bằng mắt thường hoặc những lỗi tiềm ẩn sâu trong quy trình.</T>
-                          </p>
-                        </div>
-
-                        <div className="bg-white p-2.5 rounded-xl border border-rose-100 shadow-3xs flex flex-col gap-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-lg">🛡️</span>
-                            <span translate="no" className="notranslate font-extrabold text-[11px] text-rose-800 uppercase font-sans"><T>Chốt chặn rủi ro</T></span>
-                          </div>
-                          <p translate="no" className="notranslate text-[9.5px] text-slate-600 font-medium leading-relaxed">
-                            <T>Trao cho bản tin KPH về những lỗi nghiêm trọng có thể gây hỏng lô hàng lớn hoặc ảnh hưởng trực tiếp đến an toàn.</T>
-                          </p>
-                        </div>
-
-                        <div className="bg-white p-2.5 rounded-xl border border-rose-100 shadow-3xs flex flex-col gap-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-lg">📊</span>
-                            <span translate="no" className="notranslate font-extrabold text-[11px] text-rose-800 uppercase font-sans"><T>Thông tin chuẩn mực</T></span>
-                          </div>
-                          <p translate="no" className="notranslate text-[9.5px] text-slate-600 font-medium leading-relaxed">
-                            <T>Trao cho bản tin có mô tả rõ ràng, đầy đủ thông tin, có hình ảnh chụp lỗi rất chi tiết, dễ hiểu, đóng vai trò như một bài học kinh nghiệm chuẩn mẫu cho các bộ phận khác học hỏi.</T>
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Nhóm HUY HIỆU XANH */}
-                    <div className="space-y-2.5 pt-2">
-                      <div className="flex items-center gap-1.5 pb-1 border-b border-emerald-150">
-                        <span className="text-base">🟢</span>
-                        <span className="font-black text-[11px] text-emerald-700 tracking-wider font-sans uppercase">
-                          <span translate="no" className="notranslate"><T>NHÓM HUY HIỆU XANH (CHO BẢN TIN DSA)</T></span>
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-1 gap-2.5">
-                        <div className="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-3xs flex flex-col gap-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-lg">🌟</span>
-                            <span translate="no" className="notranslate font-extrabold text-[11px] text-emerald-800 uppercase font-sans"><T>Điểm sáng tiêu biểu</T></span>
-                          </div>
-                          <p translate="no" className="notranslate text-[9.5px] text-slate-600 font-medium leading-relaxed">
-                            <T>Trao cho bản tin mô tả những cải tiến mang tính đột phá về chất lượng, năng suất hoặc an toàn lao động, có tính áp dụng thực tiễn cao tại một khu vực hoặc dây chuyền sản xuất.</T>
-                          </p>
-                        </div>
-
-                        <div className="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-3xs flex flex-col gap-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-lg">🤝</span>
-                            <span translate="no" className="notranslate font-extrabold text-[11px] text-emerald-800 uppercase font-sans"><T>Cơ hội vàng</T></span>
-                          </div>
-                          <p translate="no" className="notranslate text-[9.5px] text-slate-600 font-medium leading-relaxed">
-                            <T>Huy hiệu đặc biệt dành riêng cho các sáng kiến của TH WATER - ghi nhận nỗ lực tối ưu hóa chi phí hoặc gia tăng giá trị dịch vụ.</T>
-                          </p>
-                        </div>
-
-                        <div className="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-3xs flex flex-col gap-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-lg">🚀</span>
-                            <span translate="no" className="notranslate font-extrabold text-[11px] text-emerald-800 uppercase font-sans"><T>Sáng kiến lan tỏa</T></span>
-                          </div>
-                          <p translate="no" className="notranslate text-[9.5px] text-slate-600 font-medium leading-relaxed">
-                            <T>Trao cho các sáng kiến, điểm sáng có tính ứng dụng cao, khả năng nhân rộng dễ dàng và nhanh chóng sang các dây chuyền, tổ đội hoặc phòng ban khác trong toàn nhà máy.</T>
-                          </p>
-                        </div>
-
-                        <div className="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-3xs flex flex-col gap-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-lg">💎</span>
-                            <span translate="no" className="notranslate font-extrabold text-[11px] text-emerald-800 uppercase font-sans"><T>Vượt trội năng suất</T></span>
-                          </div>
-                          <p translate="no" className="notranslate text-[9.5px] text-slate-600 font-medium leading-relaxed">
-                            <T>Trao cho những sáng kiến cải tiến trực tiếp giúp gia tăng công suất thiết bị, rút ngắn thời gian chuẩn bị sản xuất hoặc tối ưu hóa hao hụt nguyên vật liệu một cách vượt trội.</T>
-                          </p>
-                        </div>
-                      </div>
+                      ))}
                     </div>
                   </div>
                 </div>
               ) : (
-                // Badge Admin/View List View
-                <div className="flex-1 flex flex-col overflow-hidden">
+                /* Main Badge Popup View */
+                <div>
                   {/* Header */}
-                  <div className="flex justify-between items-center px-4 py-3.5 border-b border-indigo-100 shrink-0 bg-indigo-50/50">
-                    <div className="flex items-center gap-1.5 text-indigo-700">
-                      <span className="text-base">🏅</span>
-                      <span className="font-extrabold text-[12px] uppercase tracking-tight font-sans">
-                        <span translate="no" className="notranslate"><T>HUY HIỆU DANH GIÁ BẢN TIN</T></span>
-                      </span>
+                  <div className="flex justify-between items-center px-4 py-3 border-b border-amber-100 bg-amber-50/50">
+                    <div className="flex items-center gap-1.5 text-amber-900 font-extrabold text-[12px] uppercase tracking-tight font-sans">
+                      <span className="text-base">🏆</span>
+                      <span translate="no" className="notranslate"><T>HUY HIỆU ĐÃ NHẬN</T></span>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setShowBadgeExplanations(true)}
-                        className="bg-indigo-600 text-white font-extrabold text-[9px] px-2 py-1 rounded-lg hover:bg-indigo-700 cursor-pointer active:scale-95 transition-all uppercase border-none"
-                      >
-                        <T>📖 Giải nghĩa</T>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedBadgeReport(null)}
-                        className="w-7 h-7 rounded-full bg-slate-150 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-xs border-none"
-                      >
-                        ✕
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedBadgeReport(null);
+                        setShowAwardMenu(false);
+                        setShowBadgeExplanations(false);
+                      }}
+                      className="w-6 h-6 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-400 font-bold flex items-center justify-center cursor-pointer transition-colors text-xs border-none"
+                    >
+                      ✕
+                    </button>
                   </div>
 
                   {/* Body Content */}
-                  <div className="flex-1 overflow-y-auto p-4 bg-slate-50/30 space-y-3 pb-8">
-                    {/* Small Report Info banner */}
-                    <div className="p-2.5 rounded-xl bg-white border border-slate-150 text-slate-700 flex flex-col gap-1 shadow-3xs select-text">
-                      <div className="flex items-center justify-between text-[8px] font-extrabold uppercase text-indigo-600 select-none">
-                        <span>{activeReport.factory} - {activeReport.category}</span>
-                        <span className={isDsaReport ? "text-emerald-600" : "text-rose-600"}>
-                          {isDsaReport ? "ĐIỂM SÁNG (DSA)" : "KHÔNG PHÙ HỢP (KPH)"}
-                        </span>
-                      </div>
-                      <p className="text-[10px] font-bold line-clamp-2 leading-relaxed"><T>{activeReport.content}</T></p>
-                    </div>
+                  <div className="p-4 space-y-3">
+                    {!showAwardMenu ? (
+                      /* Mode 1: Awarded badges list */
+                      <div className="space-y-3">
+                        {awardedBadges.length === 0 ? (
+                          <div className="p-4 bg-amber-50/30 rounded-xl border border-dashed border-amber-200 text-center text-[10px] text-slate-500 font-medium select-none">
+                            <T>Chưa có huy hiệu nào được trao cho bản tin này.</T>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {awardedBadges.map((badge, idx) => {
+                              const resolvedGiver = resolveBadgeGiverInfo(users, badge);
+                              const isMyAward = badge.giverId === currentUser?.id;
+                              const points = 30;
+                              const icon = badge.id === "CANH_BAO_KIP_THOI" ? "🚨" :
+                                           badge.id === "CON_MAT_TINH_TUONG" ? "🔍" :
+                                           badge.id === "CHOT_CHAN_RUI_RO" ? "🛡️" :
+                                           badge.id === "THONG_TIN_CHUAN_MUC" ? "📊" :
+                                           badge.id === "DIEM_SANG_TIEU_BIEU" ? "🌟" :
+                                           badge.id === "CO_HOI_VANG" ? "🤝" :
+                                           badge.id === "SANG_KIEN_LAN_TOA" ? "🚀" :
+                                           badge.id === "VUOT_TROI_NANG_SUAT" ? "💎" :
+                                           badge.id === "CHAT_LUONG_VUOT_TROI" ? "🛡️" :
+                                           badge.id === "MOI_TRUONG_5_SAO" ? "✨" :
+                                           badge.id === "THONG_TIN_RO_RANG" ? "📜" :
+                                           badge.id === "VAN_HANH_BEN_BI" ? "🦾" :
+                                           badge.id === "BAO_CHUNG_HE_THONG" ? "🔄" : "🏅";
 
-                    {/* Awarded Badges Section */}
-                    <div className="space-y-1.5">
-                      <div className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wide flex items-center gap-1 select-none">
-                        <span>🎖️</span>
-                        <span translate="no" className="notranslate"><T>Huy hiệu đã trao ({awardedBadges.length}):</T></span>
-                      </div>
+                              return (
+                                <div key={idx} className="bg-white border border-amber-200/80 rounded-xl p-2.5 shadow-3xs flex items-center justify-between gap-2.5">
+                                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                    <span className="text-2xl shrink-0 p-1 bg-amber-50 rounded-lg border border-amber-100">{icon}</span>
+                                    <div className="flex flex-col min-w-0">
+                                      <span translate="no" className="notranslate text-[11px] font-black text-slate-800 uppercase leading-snug truncate">
+                                        <T>{badge.name}</T>
+                                      </span>
+                                      <span translate="no" className="notranslate text-[9.5px] text-slate-400 font-medium truncate">
+                                        <T>Bởi: {resolvedGiver.fullName} ({resolvedGiver.position || resolvedGiver.role})</T>
+                                      </span>
+                                    </div>
+                                  </div>
 
-                      {awardedBadges.length === 0 ? (
-                        <div className="py-6 text-center text-slate-400 text-[10px] font-semibold bg-white rounded-xl border border-dashed border-slate-200 select-none">
-                          <T>Bản tin này chưa được trao huy hiệu nào.</T>
-                        </div>
-                      ) : (
-                        <div className="space-y-1.5">
-                          {awardedBadges.map((badge, idx) => {
-                            const resolvedGiver = resolveBadgeGiverInfo(users, badge);
-                            const icon = badge.id === "CANH_BAO_KIP_THOI" ? "🚨" :
-                                         badge.id === "CON_MAT_TINH_TUONG" ? "🔍" :
-                                         badge.id === "CHOT_CHAN_RUI_RO" ? "🛡️" :
-                                         badge.id === "THONG_TIN_CHUAN_MUC" ? "📊" :
-                                         badge.id === "DIEM_SANG_TIEU_BIEU" ? "🌟" :
-                                         badge.id === "CO_HOI_VANG" ? "🤝" :
-                                         badge.id === "SANG_KIEN_LAN_TOA" ? "🚀" :
-                                         badge.id === "VUOT_TROI_NANG_SUAT" ? "💎" :
-                                         badge.id === "CHAT_LUONG_VUOT_TROI" ? "🛡️" :
-                                         badge.id === "MOI_TRUONG_5_SAO" ? "✨" :
-                                         badge.id === "THONG_TIN_RO_RANG" ? "📜" :
-                                         badge.id === "VAN_HANH_BEN_BI" ? "🦾" :
-                                         badge.id === "BAO_CHUNG_HE_THONG" ? "🔄" : "🏅";
-                            
-                            const isMyAward = badge.giverId === currentUser?.id;
-
-                            return (
-                              <div
-                                key={idx}
-                                className="flex items-center justify-between p-2 rounded-xl bg-white border border-slate-150 shadow-3xs"
-                              >
-                                <div 
-                                  className="flex items-center gap-2 cursor-pointer hover:opacity-85 transition-opacity duration-200 flex-1"
-                                  onClick={() => {
-                                    const badgeMapItem = BADGE_PRAISE_MAP[badge.id] || { praises: ["Xin nhiệt liệt biểu dương đóng góp xuất sắc của bạn!"] };
-                                    const praisesList = badgeMapItem.praises;
-                                    const selectedPraise = praisesList[Math.floor(Math.random() * praisesList.length)];
-                                    setSelectedInfoBadge({ ...badge, icon, praise: selectedPraise });
-                                  }}
-                                >
-                                  <span className="text-xl shrink-0">{icon}</span>
-                                  <div className="flex flex-col">
-                                    <span translate="no" className="notranslate text-[10px] font-black text-slate-800 uppercase leading-tight">
-                                      <T>{badge.name}</T>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <span className="bg-amber-100 text-amber-900 border border-amber-300/80 font-black text-[10px] px-2 py-0.5 rounded-md shadow-3xs">
+                                      +{points}đ
                                     </span>
-                                    <span translate="no" className="notranslate text-[8.5px] text-slate-500 font-medium">
-                                      <T>Người trao: {resolvedGiver.fullName} ({resolvedGiver.position || resolvedGiver.role}) • {badge.timestamp}</T>
-                                    </span>
+                                    {isMyAward && eligible && (
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleBadge(activeReport.id, badge.id, badge.name, badge.category)}
+                                        className="text-[9px] font-extrabold text-rose-500 hover:text-rose-700 hover:bg-rose-50 p-1 rounded transition-colors"
+                                        title="Thu hồi huy hiệu"
+                                      >
+                                        ✕
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
-                                {isMyAward && eligible && (
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleBadge(activeReport.id, badge.id, badge.name, badge.category)}
-                                    className="text-[8.5px] font-extrabold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-100 rounded-md px-2 py-1 shrink-0 cursor-pointer active:scale-95 transition-all uppercase"
-                                  >
-                                    <T>Thu hồi</T>
-                                  </button>
-                                )}
-                              </div>
-                            );
-                          })}
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* Total Points Footer */}
+                        {awardedBadges.length > 0 && (
+                          <div className="pt-2.5 border-t border-amber-200/80 flex items-center justify-between px-1">
+                            <span translate="no" className="notranslate text-[11px] font-black text-amber-950 uppercase">
+                              <T>TỔNG ĐIỂM:</T>
+                            </span>
+                            <span className="bg-amber-200 text-amber-950 font-black text-[11px] px-2.5 py-0.5 rounded-lg border border-amber-300 shadow-3xs">
+                              {awardedBadges.length * 30}đ
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Action Buttons for Managers / Explanations */}
+                        <div className="pt-1 flex flex-col gap-1.5">
+                          {eligible && (
+                            <button
+                              type="button"
+                              onClick={() => setShowAwardMenu(true)}
+                              className="w-full py-2 px-3 rounded-xl bg-amber-100/80 hover:bg-amber-200 text-amber-900 font-extrabold text-[10px] border border-amber-300/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer uppercase shadow-3xs"
+                            >
+                              <span>🏅</span>
+                              <span translate="no" className="notranslate"><T>{awardedBadges.length > 0 ? "Trao thêm huy hiệu khác" : "Trao huy hiệu"}</T></span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setShowBadgeExplanations(true)}
+                            className="w-full py-1.5 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold text-[9.5px] border border-slate-200 transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <span>📖</span>
+                            <span translate="no" className="notranslate"><T>Xem ý nghĩa các huy hiệu</T></span>
+                          </button>
                         </div>
-                      )}
-                    </div>
-
-                    {/* Eligible Award Panel */}
-                    <div className="pt-2 border-t border-slate-200/50 space-y-2">
-                      <div className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wide flex items-center gap-1 select-none">
-                        <span>🎖️</span>
-                        <span translate="no" className="notranslate">
-                          <T>{eligible ? "BẢNG ĐIỀU HÀNH TRAO TẶNG HUY HIỆU:" : "QUYỀN TRAO HUY HIỆU:"}</T>
-                        </span>
                       </div>
+                    ) : (
+                      /* Mode 2: Award list for managers */
+                      <div className="space-y-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowAwardMenu(false)}
+                          className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-colors mb-2"
+                        >
+                          <span>←</span>
+                          <span translate="no" className="notranslate"><T>Quay lại xem huy hiệu đã trao ({awardedBadges.length})</T></span>
+                        </button>
 
-                      {eligible ? (
-                        <div className="grid grid-cols-1 gap-1.5 select-none">
+                        <div className="text-[10px] font-extrabold text-indigo-800 uppercase tracking-wide flex items-center gap-1 select-none">
+                          <span>🎖️</span>
+                          <span translate="no" className="notranslate"><T>BẢNG TRAO TẶNG HUY HIỆU:</T></span>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-1.5 max-h-[300px] overflow-y-auto pr-1">
                           {availableBadges.map((def) => {
                             const isAwardedByMe = awardedBadges.some(b => b.id === def.id && b.giverId === currentUser?.id);
                             const icon = def.id === "CANH_BAO_KIP_THOI" ? "🚨" :
@@ -8154,7 +8208,10 @@ App Link: ${window.location.origin}`}
                               <button
                                 key={def.id}
                                 type="button"
-                                onClick={() => toggleBadge(activeReport.id, def.id, def.name, def.category)}
+                                onClick={() => {
+                                  toggleBadge(activeReport.id, def.id, def.name, def.category);
+                                  setShowAwardMenu(false);
+                                }}
                                 className={`w-full p-2 rounded-xl border flex items-center justify-between text-left transition-all active:scale-98 cursor-pointer shadow-3xs ${
                                   isAwardedByMe
                                     ? isDsaReport
@@ -8191,18 +8248,219 @@ App Link: ${window.location.origin}`}
                             );
                           })}
                         </div>
-                      ) : (
-                        <div className="p-3 bg-amber-500/5 border border-amber-500/10 rounded-xl text-[9.5px] leading-relaxed text-slate-550 select-none">
-                          <span className="mr-1">⚠️</span>
-                          <T>Chỉ cấp quản lý trực tiếp (Trưởng/Phó đơn vị), Ban Giám đốc, Ban TGĐ và Admin mới có quyền trao tặng Huy hiệu cho bản tin.</T>
-                        </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
             </div>
-            )}
+          </div>
+        );
+      })()}
+
+      {/* Resolution Badge Popup Modal */}
+      {selectedResolutionBadge && (() => {
+        const activeReport = reports.find(r => r.id === selectedResolutionBadge.report.id) || selectedResolutionBadge.report;
+        const activeRes = activeReport.resolutions?.find(res => res.id === selectedResolutionBadge.res.id) || selectedResolutionBadge.res;
+        const awardedBadges = activeRes.badges || [];
+        const eligible = isEligibleEvaluator(currentUser) || isHQOrManagerUser(currentUser);
+        const resolutionBadges = RED_BADGES;
+
+        return (
+          <div 
+            onClick={() => {
+              setSelectedResolutionBadge(null);
+              setShowAwardMenuForRes(false);
+            }}
+            className="fixed lg:absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-50 select-none animate-fadeIn cursor-pointer"
+          >
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl w-[92%] max-w-sm overflow-hidden flex flex-col shadow-2xl border border-amber-200/90 animate-scaleUp cursor-default"
+            >
+              {/* Header */}
+              <div className="flex justify-between items-center px-4 py-3 border-b border-amber-100 bg-amber-50/50">
+                <div className="flex items-center gap-1.5 text-amber-900 font-extrabold text-[12px] uppercase tracking-tight font-sans">
+                  <span className="text-base">🏆</span>
+                  <span translate="no" className="notranslate"><T>HUY HIỆU ĐÃ NHẬN</T></span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedResolutionBadge(null);
+                    setShowAwardMenuForRes(false);
+                  }}
+                  className="w-6 h-6 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-400 font-bold flex items-center justify-center cursor-pointer transition-colors text-xs border-none"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Content Body */}
+              <div className="p-4 space-y-3">
+                {!showAwardMenuForRes ? (
+                  /* Mode 1: Awarded badges list */
+                  <div className="space-y-3">
+                    {awardedBadges.length === 0 ? (
+                      <div className="p-4 bg-amber-50/30 rounded-xl border border-dashed border-amber-200 text-center text-[10px] text-slate-500 font-medium select-none">
+                        <T>Chưa có huy hiệu nào được trao cho kết quả xử lý này.</T>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {awardedBadges.map((badge, idx) => {
+                          const resolvedGiver = resolveBadgeGiverInfo(users, badge);
+                          const isMyAward = badge.giverId === currentUser?.id || badge.giverName === currentUser?.fullName;
+                          const points = 30;
+                          const badgeDef = resolutionBadges.find(b => b.id === badge.id);
+                          const icon = badgeDef?.icon || (
+                            badge.id === "BAC_SI_MAY_MOC" ? "🦾" :
+                            badge.id === "CHOT_CHAN_5WHY" ? "🔍" :
+                            badge.id === "HO_VE_DAY_CHUYEN" ? "🛡️" :
+                            badge.id === "CHIEN_BINH_PHAN_UNG_NHANH" ? "⚡" :
+                            badge.id === "BAC_THAY_DU_DOAN" ? "🔮" :
+                            badge.id === "CANH_BAO_KIP_THOI" ? "🚨" :
+                            badge.id === "CON_MAT_TINH_TUONG" ? "🔍" :
+                            badge.id === "CHOT_CHAN_RUI_RO" ? "🛡️" :
+                            badge.id === "THONG_TIN_CHUAN_MUC" ? "📊" : "🏅"
+                          );
+
+                          return (
+                            <div key={idx} className="bg-white border border-amber-200/80 rounded-xl p-2.5 shadow-3xs flex items-center justify-between gap-2.5">
+                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                <span className="text-2xl shrink-0 p-1 bg-amber-50 rounded-lg border border-amber-100">{icon}</span>
+                                <div className="flex flex-col min-w-0">
+                                  <span translate="no" className="notranslate text-[11px] font-black text-slate-800 uppercase leading-snug truncate">
+                                    <T>{badge.name}</T>
+                                  </span>
+                                  <span translate="no" className="notranslate text-[9.5px] text-slate-400 font-medium truncate">
+                                    <T>Bởi: {resolvedGiver.fullName} ({resolvedGiver.position || resolvedGiver.role})</T>
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span className="bg-amber-100 text-amber-900 border border-amber-300/80 font-black text-[10px] px-2 py-0.5 rounded-md shadow-3xs">
+                                  +{points}đ
+                                </span>
+                                {isMyAward && eligible && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const def = badgeDef || {
+                                        id: badge.id,
+                                        name: badge.name,
+                                        category: badge.category,
+                                        icon,
+                                        description: "",
+                                        target: ""
+                                      };
+                                      handleAwardBadgeToResolution(activeReport, activeRes.id, def);
+                                    }}
+                                    className="text-[9px] font-extrabold text-rose-500 hover:text-rose-700 hover:bg-rose-50 p-1 rounded transition-colors"
+                                    title="Thu hồi huy hiệu"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Total Points Footer */}
+                    {awardedBadges.length > 0 && (
+                      <div className="pt-2.5 border-t border-amber-200/80 flex items-center justify-between px-1">
+                        <span translate="no" className="notranslate text-[11px] font-black text-amber-950 uppercase">
+                          <T>TỔNG ĐIỂM:</T>
+                        </span>
+                        <span className="bg-amber-200 text-amber-950 font-black text-[11px] px-2.5 py-0.5 rounded-lg border border-amber-300 shadow-3xs">
+                          {awardedBadges.length * 30}đ
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Award button for eligible managers */}
+                    {eligible && (
+                      <div className="pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowAwardMenuForRes(true)}
+                          className="w-full py-2 px-3 rounded-xl bg-amber-100/80 hover:bg-amber-200 text-amber-900 font-extrabold text-[10px] border border-amber-300/80 transition-all flex items-center justify-center gap-1.5 cursor-pointer uppercase shadow-3xs"
+                        >
+                          <span>🏅</span>
+                          <span translate="no" className="notranslate"><T>{awardedBadges.length > 0 ? "Trao thêm huy hiệu khác" : "Trao huy hiệu"}</T></span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* Mode 2: Award list for managers */
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAwardMenuForRes(false)}
+                      className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-colors mb-2"
+                    >
+                      <span>←</span>
+                      <span translate="no" className="notranslate"><T>Quay lại xem huy hiệu đã trao ({awardedBadges.length})</T></span>
+                    </button>
+
+                    <div className="text-[10px] font-extrabold text-indigo-800 uppercase tracking-wide flex items-center gap-1 select-none">
+                      <span>🎖️</span>
+                      <span translate="no" className="notranslate"><T>DANH MỤC HUY HIỆU TRAO TẶNG:</T></span>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-1.5 max-h-[300px] overflow-y-auto pr-1">
+                      {resolutionBadges.map((def) => {
+                        const isAwardedByMe = awardedBadges.some(b => b.id === def.id && (b.giverId === currentUser?.id || b.giverName === currentUser?.fullName));
+                        const icon = def.icon || "🏅";
+
+                        return (
+                          <button
+                            key={def.id}
+                            type="button"
+                            onClick={() => {
+                              handleAwardBadgeToResolution(activeReport, activeRes.id, def);
+                              setShowAwardMenuForRes(false);
+                            }}
+                            className={`w-full p-2 rounded-xl border flex items-center justify-between text-left transition-all active:scale-98 cursor-pointer shadow-3xs ${
+                              isAwardedByMe
+                                ? "bg-amber-50/75 border-amber-300 ring-1 ring-amber-200"
+                                : "bg-white hover:bg-slate-50 border-slate-200"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 pr-2">
+                              <span className="text-lg shrink-0">{icon}</span>
+                              <div className="flex flex-col gap-0.5">
+                                <span translate="no" className="notranslate text-[10px] font-extrabold text-slate-850 leading-tight uppercase">
+                                  <T>{def.name}</T>
+                                </span>
+                                <span translate="no" className="notranslate text-[8.5px] text-slate-500 font-medium leading-normal">
+                                  <T>{def.description}</T>
+                                </span>
+                              </div>
+                            </div>
+                            <div className="shrink-0">
+                              {isAwardedByMe ? (
+                                <span className="text-[8.5px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                                  <T>Đã trao</T>
+                                </span>
+                              ) : (
+                                <span className="text-[8.5px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 hover:bg-indigo-100">
+                                  <T>Trao</T>
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         );
       })()}
@@ -8519,7 +8777,7 @@ App Link: ${window.location.origin}`}
                             </div>
                           ) : (
                             <div className="space-y-2">
-                              <div className="bg-white p-3 rounded-xl border border-purple-200 text-xs text-slate-750 font-semibold leading-relaxed break-words whitespace-pre-wrap max-h-36 overflow-y-auto">
+                              <div className="bg-white p-3 rounded-xl border border-purple-200 text-xs text-slate-750 font-semibold leading-relaxed break-words whitespace-pre-wrap max-h-48 overflow-y-auto">
                                 {aiKnowledgeText ? aiKnowledgeText : <span className="text-slate-400 italic font-medium"><T>Chưa cung cấp tri thức tiêu chuẩn (AI dùng tri thức chung).</T></span>}
                               </div>
                               <button

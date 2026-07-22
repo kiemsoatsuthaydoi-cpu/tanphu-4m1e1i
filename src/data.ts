@@ -649,6 +649,46 @@ export const RED_BADGES: BadgeDefinition[] = [
     category: "RED",
     description: "Trao cho bản tin có mô tả 4M1E1I cực kỳ chi tiết, hình ảnh rõ nét, thông tin chính xác, không cần hỏi lại.",
     target: "Mục tiêu: Đánh giá tầm quan trọng của việc phát hiện vấn đề."
+  },
+  {
+    id: "BAC_SI_MAY_MOC",
+    icon: "🦾",
+    name: "BÁC SĨ MÁY MÓC",
+    category: "RED",
+    description: "Trao cho các ca sửa chữa máy \"thần tốc\", giúp dây chuyền hoạt động trở lại sớm hơn dự kiến.",
+    target: "Mục tiêu: Đánh giá hiệu quả sửa chữa & khôi phục máy móc."
+  },
+  {
+    id: "CHOT_CHAN_5WHY",
+    icon: "🔍",
+    name: "CHỐT CHẶN 5-WHY",
+    category: "RED",
+    description: "Trao cho bản tin KPH mà người xử lý đã tìm ra nguyên nhân gốc rễ (Root Cause) cực kỳ thuyết phục, giúp lỗi không bao giờ tái diễn.",
+    target: "Mục tiêu: Phân tích nguyên nhân gốc rễ để triệt tiêu lỗi."
+  },
+  {
+    id: "HO_VE_DAY_CHUYEN",
+    icon: "🛡️",
+    name: "HỘ VỆ DÂY CHUYỀN",
+    category: "RED",
+    description: "Trao cho những hành động bảo trì phòng ngừa (Maintenance) phát hiện ra nguy cơ hỏng máy trước khi nó thực sự xảy ra.",
+    target: "Mục tiêu: Bảo trì phòng ngừa & ngăn ngừa sự cố."
+  },
+  {
+    id: "CHIEN_BINH_PHAN_UNG_NHANH",
+    icon: "⚡",
+    name: "CHIẾN BINH PHẢN ỨNG NHANH",
+    category: "RED",
+    description: "Trao cho cá nhân hoặc đội ngũ có mặt và xử lý sự cố khẩn cấp tại dây chuyền trong thời gian ngắn nhất kể từ khi nhận tin báo.",
+    target: "Mục tiêu: Phản ứng nhanh & cấp cứu dây chuyền sản xuất."
+  },
+  {
+    id: "BAC_THAY_DU_DOAN",
+    icon: "🔮",
+    name: "BẬC THẦY DỰ ĐOÁN",
+    category: "RED",
+    description: "Trao cho người có kỹ năng vận hành hoặc bảo trì chuyên sâu, chỉ cần \"nghe tiếng máy, ngửi mùi nhiệt\" hoặc nhìn thông số là đoán chính xác bệnh của máy trước khi hệ thống cảnh báo.",
+    target: "Mục tiêu: Kỹ năng chẩn đoán & cảnh báo sớm sự cố máy."
   }
 ];
 

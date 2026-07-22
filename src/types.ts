@@ -56,6 +56,8 @@ export interface QualityReportResolution {
   status: "Đang xử lý" | "Đã xử lý";
   resultText: string;
   updatedAt: string;
+  likedBy?: string[];
+  badges?: QualityReportBadge[];
 }
 
 export interface QualityReportReplication {

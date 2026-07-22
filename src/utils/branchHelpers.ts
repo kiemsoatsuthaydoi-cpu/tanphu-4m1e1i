@@ -64,6 +64,47 @@ export const getBranchCodeSuffix = (brName: string | undefined | null) => {
   return ` (${code})`;
 };
 
+export const isHQOrManagerUser = (currentUser: any): boolean => {
+  if (!currentUser) return false;
+  const roleUpper = (currentUser.role || "").toString().toUpperCase();
+  if (roleUpper === "CHỦ ADMIN" || roleUpper === "ADMIN" || roleUpper.includes("ADMIN") || currentUser.role === UserRole.ADMIN) return true;
+  if (roleUpper === "DUYỆT VIÊN" || roleUpper === "REVIEWER" || roleUpper.includes("DUYỆT") || currentUser.role === UserRole.REVIEWER) return true;
+
+  const branchClean = (currentUser.branch || "").toUpperCase();
+  const deptClean = (currentUser.department || "").toUpperCase();
+  const posClean = (currentUser.position || "").toUpperCase();
+
+  return (
+    branchClean.includes("TPP-CTY") ||
+    branchClean.includes("DNP-CTY") ||
+    branchClean.includes("VĂN PHÒNG CÔNG TY") ||
+    branchClean.includes("VĂN PHÒNG TẬP ĐOÀN") ||
+    branchClean.includes("CHỦ TỊCH") ||
+    branchClean.includes("BAN TGĐ") ||
+    branchClean.includes("BAN TỔNG GIÁM ĐỐC") ||
+    branchClean.includes("TỔNG GIÁM ĐỐC") ||
+    branchClean.includes("TGĐ") ||
+    deptClean.includes("BAN TỔNG GIÁM ĐỐC") ||
+    deptClean.includes("BAN TGĐ") ||
+    deptClean.includes("TỔNG GIÁM ĐỐC") ||
+    deptClean.includes("TGĐ") ||
+    deptClean.includes("BAN GIÁM ĐỐC") ||
+    deptClean.includes("PHÒNG QUẢN LÝ CHẤT LƯỢNG (TPP-CTY)") ||
+    posClean.includes("CHỦ TỊCH") ||
+    posClean.includes("TỔNG GIÁM ĐỐC") ||
+    posClean.includes("TGĐ") ||
+    posClean.includes("BAN TGĐ") ||
+    posClean.includes("GIÁM ĐỐC") ||
+    posClean.includes("TRƯỞNG PHÒNG") ||
+    posClean.includes("QUẢN LÝ") ||
+    posClean.includes("QUẢN ĐỐC") ||
+    roleUpper.includes("TGĐ") ||
+    roleUpper.includes("TỔNG GIÁM ĐỐC") ||
+    roleUpper.includes("BAN TGĐ") ||
+    roleUpper.includes("CHỦ TỊCH")
+  );
+};
+
 export const canUserManageDirective = (
   currentUser: any,
   reportFactory: string | undefined
@@ -71,7 +112,11 @@ export const canUserManageDirective = (
   if (!currentUser) return false;
 
   const roleUpper = (currentUser.role || "").toString().toUpperCase();
-  const isAdminRole = roleUpper === "CHỦ ADMIN" || roleUpper === "ADMIN" || currentUser.role === UserRole.ADMIN;
+  const isAdminRole =
+    roleUpper === "CHỦ ADMIN" ||
+    roleUpper === "ADMIN" ||
+    roleUpper.includes("ADMIN") ||
+    currentUser.role === UserRole.ADMIN;
 
   // 1. Admin / Group Level Authority (Chủ tịch / Ban Tổng Giám đốc / Admin / Group HQ)
   if (isAdminRole) return true;
@@ -88,12 +133,23 @@ export const canUserManageDirective = (
     branchClean.includes("VĂN PHÒNG TẬP ĐOÀN") ||
     branchClean.includes("CHỦ TỊCH") ||
     branchClean.includes("BAN TGĐ") ||
+    branchClean.includes("BAN TỔNG GIÁM ĐỐC") ||
+    branchClean.includes("TỔNG GIÁM ĐỐC") ||
+    branchClean.includes("TGĐ") ||
     deptClean.includes("BAN TỔNG GIÁM ĐỐC") ||
     deptClean.includes("BAN TGĐ") ||
+    deptClean.includes("TỔNG GIÁM ĐỐC") ||
+    deptClean.includes("TGĐ") ||
+    deptClean.includes("BAN GIÁM ĐỐC") ||
     deptClean.includes("PHÒNG QUẢN LÝ CHẤT LƯỢNG (TPP-CTY)") ||
     posClean.includes("CHỦ TỊCH") ||
     posClean.includes("TỔNG GIÁM ĐỐC") ||
-    posClean.includes("BAN TGĐ");
+    posClean.includes("TGĐ") ||
+    posClean.includes("BAN TGĐ") ||
+    roleUpper.includes("TGĐ") ||
+    roleUpper.includes("TỔNG GIÁM ĐỐC") ||
+    roleUpper.includes("BAN TGĐ") ||
+    roleUpper.includes("CHỦ TỊCH");
 
   if (isHQ) return true;
 
