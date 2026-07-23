@@ -2523,6 +2523,15 @@ export default function MobileFrame({
   const [editingDirectiveText, setEditingDirectiveText] = useState("");
   const [showLikesListReport, setShowLikesListReport] = useState<QualityReport | null>(null);
   const [showAcksListReport, setShowAcksListReport] = useState<QualityReport | null>(null);
+  const [confirmAckModalData, setConfirmAckModalData] = useState<{
+    report: QualityReport;
+    isCancel: boolean;
+  } | null>(null);
+  const [confirmRemoveAckData, setConfirmRemoveAckData] = useState<{
+    report: QualityReport;
+    nameToRemove: string;
+    cleanName: string;
+  } | null>(null);
   const [selectedBadgeReport, setSelectedBadgeReport] = useState<QualityReport | null>(null);
   const [selectedResolutionBadge, setSelectedResolutionBadge] = useState<{ report: QualityReport; res: QualityReportResolution } | null>(null);
   const [showAwardMenu, setShowAwardMenu] = useState<boolean>(false);
@@ -6371,7 +6380,17 @@ App Link: ${window.location.origin}`;
                             }`}>
                               <button
                                 type="button"
-                                onClick={() => toggleAcknowledge(report.id)}
+                                onClick={() => {
+                                  if (!canUserProcessOrResolveReport(currentUser, report.factory)) {
+                                    const userBranchName = currentUser?.branch || "Chi nhánh khác";
+                                    showToast(`🔒 Tài khoản thuộc ${userBranchName}. Bạn chỉ được tiếp nhận/xử lý bản tin của Chi nhánh mình hoặc Văn Phòng Công Ty!`);
+                                    return;
+                                  }
+                                  setConfirmAckModalData({
+                                    report,
+                                    isCancel: isAcknowledged
+                                  });
+                                }}
                                 className="flex items-center gap-1.5 p-1 rounded transition-all cursor-pointer bg-transparent whitespace-nowrap shrink-0 border-none text-white font-extrabold"
                                 title={isAcknowledged ? (isDsa ? "Đã ghi nhận & biểu dương" : "Đã tiếp nhận") : (isDsa ? "Click để ghi nhận & biểu dương sáng kiến!" : "Click để tiếp nhận/ xử lý ngay!")}
                               >
@@ -7993,17 +8012,210 @@ App Link: ${window.location.origin}`}
                             )}
                           </div>
                         </div>
-                        <span className={`text-[9px] font-extrabold px-2.5 py-0.5 rounded-full border tracking-tight flex items-center gap-0.5 ${
-                          isDsaReport 
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-100" 
-                            : "bg-sky-50 text-sky-700 border-sky-100"
-                        }`}>
-                          ✓ <span translate="no" className="notranslate"><T>{isDsaReport ? "Biểu dương" : "Tiếp nhận"}</T></span>
-                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className={`text-[9px] font-extrabold px-2.5 py-0.5 rounded-full border tracking-tight flex items-center gap-0.5 ${
+                            isDsaReport 
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-100" 
+                              : "bg-sky-50 text-sky-700 border-sky-100"
+                          }`}>
+                            ✓ <span translate="no" className="notranslate"><T>{isDsaReport ? "Biểu dương" : "Tiếp nhận"}</T></span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmRemoveAckData({
+                                report: activeReport,
+                                nameToRemove: name,
+                                cleanName
+                              });
+                            }}
+                            className="w-6.5 h-6.5 rounded-full bg-rose-50 hover:bg-rose-100 active:scale-90 text-rose-600 border border-rose-200 flex items-center justify-center font-black text-xs cursor-pointer transition-all shadow-2xs hover:scale-105"
+                            title="Hủy lượt tiếp nhận/xử lý này"
+                          >
+                            ✕
+                          </button>
+                        </div>
                       </div>
                     );
                   })
                 )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Modal confirmation when clicking TIẾP NHẬN / XỬ LÝ button */}
+      {confirmAckModalData && (() => {
+        const { report, isCancel } = confirmAckModalData;
+        const isDsa = report.reportType === "DSA" || report.isSpotlight;
+        const titleText = isCancel
+          ? (isDsa ? "XÁC NHẬN HỦY GHI NHẬN & BIỂU DƯƠNG" : "XÁC NHẬN HỦY TIẾP NHẬN / XỬ LÝ")
+          : (isDsa ? "XÁC NHẬN GHI NHẬN & BIỂU DƯƠNG" : "XÁC NHẬN TIẾP NHẬN / XỬ LÝ BẢN TIN");
+
+        const messageText = isCancel
+          ? (isDsa ? "Bạn có chắc chắn muốn HỦY lượt ghi nhận & biểu dương sáng kiến này?" : "Bạn có chắc chắn muốn HỦY tiếp nhận / xử lý bản tin này?")
+          : (isDsa ? "Xác nhận bạn muốn GHI NHẬN & BIỂU DƯƠNG sáng kiến này?" : "Xác nhận bạn (hoặc bộ phận) sẽ TIẾP NHẬN & XỬ LÝ bản tin này?");
+
+        return (
+          <div
+            onClick={() => setConfirmAckModalData(null)}
+            className="fixed lg:absolute inset-0 bg-slate-900/65 backdrop-blur-xs flex items-center justify-center p-4 z-50 select-none animate-fadeIn cursor-pointer"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl w-full max-w-sm overflow-hidden flex flex-col shadow-2xl border border-slate-200 animate-scaleUp cursor-default"
+            >
+              {/* Header */}
+              <div className={`flex justify-between items-center px-4 py-3 border-b text-white ${
+                isCancel
+                  ? "bg-gradient-to-r from-amber-600 to-orange-600 border-amber-700"
+                  : isDsa
+                    ? "bg-gradient-to-r from-indigo-800 to-blue-900 border-indigo-900"
+                    : "bg-gradient-to-r from-emerald-600 to-teal-700 border-emerald-800"
+              }`}>
+                <div className="flex items-center gap-2 font-black text-xs uppercase tracking-tight font-sans">
+                  <span className="text-sm">{isCancel ? "⚠️" : isDsa ? "⭐" : "📋"}</span>
+                  <span translate="no" className="notranslate"><T>{titleText}</T></span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConfirmAckModalData(null)}
+                  className="w-6 h-6 rounded-full bg-black/20 hover:bg-black/30 text-white font-bold flex items-center justify-center cursor-pointer transition-colors text-xs border-none"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-4 space-y-3.5 bg-slate-50/50">
+                <p className="text-xs sm:text-sm text-slate-800 font-bold leading-relaxed">
+                  <span translate="no" className="notranslate"><T>{messageText}</T></span>
+                </p>
+
+                {/* Report Info Snippet */}
+                <div className="p-2.5 bg-white rounded-xl border border-slate-200/80 shadow-3xs text-[11px] space-y-1">
+                  <div className="flex items-center justify-between text-slate-500 font-semibold text-[10px]">
+                    <span translate="no" className="notranslate">Mã: #{report.reportCode || report.id}</span>
+                    <span translate="no" className="notranslate bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-bold">{report.factory}</span>
+                  </div>
+                  {report.uploaderDepartment && (
+                    <div className="text-slate-600 font-medium text-[10.5px]">
+                      <span translate="no" className="notranslate">{report.uploaderDepartment}</span>
+                    </div>
+                  )}
+                  <p className="text-slate-900 font-bold line-clamp-2 italic text-[11px] pt-0.5 border-t border-slate-100 mt-1">
+                    "{report.content}"
+                  </p>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-end gap-2 px-4 py-3 bg-white border-t border-slate-150">
+                <button
+                  type="button"
+                  onClick={() => setConfirmAckModalData(null)}
+                  className="px-3.5 py-2 rounded-xl bg-slate-150 hover:bg-slate-200 text-slate-700 font-extrabold text-xs cursor-pointer transition-colors border-none"
+                >
+                  <span translate="no" className="notranslate"><T>Hủy bỏ</T></span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    toggleAcknowledge(report.id);
+                    setConfirmAckModalData(null);
+                  }}
+                  className={`px-4 py-2 rounded-xl text-white font-black text-xs cursor-pointer transition-all active:scale-95 shadow-xs border-none ${
+                    isCancel
+                      ? "bg-amber-600 hover:bg-amber-700"
+                      : isDsa
+                        ? "bg-indigo-700 hover:bg-indigo-800"
+                        : "bg-emerald-600 hover:bg-emerald-700"
+                  }`}
+                >
+                  <span translate="no" className="notranslate">
+                    <T>{isCancel ? "Xác nhận Hủy" : "Xác nhận Ngay"}</T>
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Modal confirmation when clicking (X) in DANH SÁCH TIẾP NHẬN & XỬ LÝ */}
+      {confirmRemoveAckData && (() => {
+        const { report, nameToRemove, cleanName } = confirmRemoveAckData;
+        return (
+          <div
+            onClick={() => setConfirmRemoveAckData(null)}
+            className="fixed lg:absolute inset-0 bg-slate-900/65 backdrop-blur-xs flex items-center justify-center p-4 z-50 select-none animate-fadeIn cursor-pointer"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl w-full max-w-sm overflow-hidden flex flex-col shadow-2xl border border-rose-200 animate-scaleUp cursor-default"
+            >
+              {/* Header */}
+              <div className="flex justify-between items-center px-4 py-3 bg-gradient-to-r from-rose-600 to-red-700 text-white border-b border-rose-800">
+                <div className="flex items-center gap-2 font-black text-xs uppercase tracking-tight font-sans">
+                  <span className="text-sm">🗑️</span>
+                  <span translate="no" className="notranslate"><T>HỦY LƯỢT TIẾP NHẬN / XỬ LÝ</T></span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConfirmRemoveAckData(null)}
+                  className="w-6 h-6 rounded-full bg-black/20 hover:bg-black/30 text-white font-bold flex items-center justify-center cursor-pointer transition-colors text-xs border-none"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-4 space-y-3 bg-slate-50/50">
+                <p className="text-xs sm:text-sm text-slate-800 font-bold leading-relaxed">
+                  <span translate="no" className="notranslate"><T>Bạn có chắc chắn muốn HỦY lượt tiếp nhận / xử lý của người dùng này không?</T></span>
+                </p>
+                <div className="p-3 bg-white rounded-xl border border-rose-200/80 shadow-3xs flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-rose-100 text-rose-700 border border-rose-200 flex items-center justify-center text-xs font-black shrink-0">
+                    {cleanName.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-xs font-black text-slate-900 truncate">
+                      <span translate="no" className="notranslate">{cleanName}</span>
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-medium truncate">
+                      <span translate="no" className="notranslate">Bản tin #{report.reportCode || report.id}</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-end gap-2 px-4 py-3 bg-white border-t border-slate-150">
+                <button
+                  type="button"
+                  onClick={() => setConfirmRemoveAckData(null)}
+                  className="px-3.5 py-2 rounded-xl bg-slate-150 hover:bg-slate-200 text-slate-700 font-extrabold text-xs cursor-pointer transition-colors border-none"
+                >
+                  <span translate="no" className="notranslate"><T>Quay lại</T></span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const updatedShares = (report.sharedBy || []).filter(item => item !== nameToRemove);
+                    const updatedReport = { ...report, sharedBy: updatedShares };
+                    if (onUpdateReport) {
+                      onUpdateReport(updatedReport);
+                    }
+                    showToast(`Đã hủy lượt tiếp nhận/xử lý của ${cleanName}! ↩️`);
+                    setShowAcksListReport(updatedReport);
+                    setConfirmRemoveAckData(null);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs cursor-pointer transition-all active:scale-95 shadow-xs border-none"
+                >
+                  <span translate="no" className="notranslate"><T>Xác nhận Hủy</T></span>
+                </button>
               </div>
             </div>
           </div>

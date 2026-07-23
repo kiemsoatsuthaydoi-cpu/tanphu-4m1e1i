@@ -320,6 +320,10 @@ export default function ProgressTrackingDashboard({
     const report = reports.find((r) => r.id === reportId);
     if (!report) return;
 
+    if (!window.confirm("Xác nhận bạn muốn tiếp nhận xử lý sự cố này?")) {
+      return;
+    }
+
     const userName = currentUser?.fullName || "Kiểm soát viên";
     const userDept = currentUser?.department || "BP Liên Quan";
     const label = `${userName} (${userDept})`;
