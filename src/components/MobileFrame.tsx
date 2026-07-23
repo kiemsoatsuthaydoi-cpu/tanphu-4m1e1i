@@ -16,6 +16,7 @@ import { RED_BADGES, GREEN_BADGES, BadgeDefinition } from "../data";
 import FirebaseQuotaMonitor from "./FirebaseQuotaMonitor";
 import StatisticsDashboard from "./StatisticsDashboard";
 import ProgressTrackingDashboard from "./ProgressTrackingDashboard";
+import BadgeStatisticsDashboard from "./BadgeStatisticsDashboard";
 import MobileForumView from "./MobileForumView";
 import {
   ResponsiveContainer,
@@ -2008,7 +2009,7 @@ export default function MobileFrame({
   const [mobileForumReplyMessage, setMobileForumReplyMessage] = useState("");
   const [mobileForumSearchQuery, setMobileForumSearchQuery] = useState("");
   const [mobileForumCategoryFilter, setMobileForumCategoryFilter] = useState<string>("ALL");
-  const [mobileStatsSubTab, setMobileStatsSubTab] = useState<"NHAN_SU" | "CHAT_LUONG" | "TIEN_DO">("TIEN_DO");
+  const [mobileStatsSubTab, setMobileStatsSubTab] = useState<"NHAN_SU" | "CHAT_LUONG" | "TIEN_DO" | "HUY_HIEU">("TIEN_DO");
   const [mobileFeedSubTab, setMobileFeedSubTab] = useState<"FEED" | "PROPOSAL">("FEED");
   const [showTrash, setShowTrash] = useState(false);
   const [mobileBranchFilter, setMobileBranchFilter] = useState<string>("Tất cả");
@@ -2235,12 +2236,13 @@ export default function MobileFrame({
 
     // Phải là lướt ngang chủ đạo và vượt ngưỡng 50px
     if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
-      const tabs: ("NHAN_SU" | "TIEN_DO" | "CHAT_LUONG")[] = [];
+      const tabs: ("NHAN_SU" | "TIEN_DO" | "CHAT_LUONG" | "HUY_HIEU")[] = [];
       if (currentUser?.role === UserRole.ADMIN) {
         tabs.push("NHAN_SU");
       }
       tabs.push("TIEN_DO");
       tabs.push("CHAT_LUONG");
+      tabs.push("HUY_HIEU");
 
       const currentIndex = tabs.indexOf(mobileStatsSubTab);
       if (currentIndex !== -1) {
@@ -2250,7 +2252,7 @@ export default function MobileFrame({
           if (nextIndex !== currentIndex) {
             setMobileStatsSubTab(tabs[nextIndex]);
             showToast(`Chuyển sang tab: ${
-              tabs[nextIndex] === "NHAN_SU" ? "Nhân sự" : tabs[nextIndex] === "TIEN_DO" ? "Tiến độ cải tiến" : "Biểu đồ"
+              tabs[nextIndex] === "NHAN_SU" ? "Nhân sự" : tabs[nextIndex] === "TIEN_DO" ? "Tiến độ cải tiến" : tabs[nextIndex] === "HUY_HIEU" ? "Trao Huy Hiệu" : "Biểu đồ"
             } 📑`);
           }
         } else {
@@ -2259,7 +2261,7 @@ export default function MobileFrame({
           if (prevIndex !== currentIndex) {
             setMobileStatsSubTab(tabs[prevIndex]);
             showToast(`Chuyển sang tab: ${
-              tabs[prevIndex] === "NHAN_SU" ? "Nhân sự" : tabs[prevIndex] === "TIEN_DO" ? "Tiến độ cải tiến" : "Biểu đồ"
+              tabs[prevIndex] === "NHAN_SU" ? "Nhân sự" : tabs[prevIndex] === "TIEN_DO" ? "Tiến độ cải tiến" : tabs[prevIndex] === "HUY_HIEU" ? "Trao Huy Hiệu" : "Biểu đồ"
             } 📑`);
           }
         }
@@ -4805,7 +4807,7 @@ App Link: ${window.location.origin}`;
                 }`}
               >
                 <span>🎯</span>
-                <T><span translate="no" className="notranslate">TIẾN ĐỘ CẢI TIẾN</span></T>
+                <T><span translate="no" className="notranslate">TIẾN ĐỘ</span></T>
               </button>
               <button
                 type="button"
@@ -4818,6 +4820,18 @@ App Link: ${window.location.origin}`;
               >
                 <span>📊</span>
                 <T><span translate="no" className="notranslate">BIỂU ĐỒ</span></T>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileStatsSubTab("HUY_HIEU")}
+                className={`flex-1 py-2 rounded-lg transition-all cursor-pointer text-center flex items-center justify-center gap-1 border-none ${
+                  mobileStatsSubTab === "HUY_HIEU"
+                    ? "bg-amber-600 text-white shadow-xs font-extrabold"
+                    : "text-slate-600 hover:text-slate-800 bg-transparent"
+                }`}
+              >
+                <span>🏅</span>
+                <T><span translate="no" className="notranslate">HUY HIỆU</span></T>
               </button>
             </div>
           </div>
@@ -4840,6 +4854,14 @@ App Link: ${window.location.origin}`;
               onUpdateReport={onUpdateReport}
               onAddBroadcast={onAddBroadcast}
               showToast={showToast}
+              isMobile={true}
+            />
+          ) : mobileStatsSubTab === "HUY_HIEU" ? (
+            <BadgeStatisticsDashboard
+              reports={reports}
+              users={users}
+              branches={branches}
+              departments={departments}
               isMobile={true}
             />
           ) : (
@@ -6074,12 +6096,12 @@ App Link: ${window.location.origin}`;
                   />
 
                   {/* Body description text */}
-                  <div className={`pt-2 font-medium leading-relaxed text-slate-705 ${contentFontSizeClass}`}>
+                  <div className={`pt-2 font-black leading-relaxed text-slate-900 ${contentFontSizeClass}`}>
                     <T>{(report.content || "").toUpperCase()}</T>
                   </div>
 
                   {report.notes && (
-                    <div className="mt-2 bg-slate-50 rounded p-2 text-[10px] text-slate-500 italic border-l-2 border-blue-400">
+                    <div className="mt-2 bg-slate-50/90 rounded p-2 text-[10.5px] text-slate-800 font-medium italic border-l-2 border-blue-500">
                       <T>Ghi chú: {report.notes}</T>
                     </div>
                   )}
@@ -6800,7 +6822,7 @@ App Link: ${window.location.origin}`;
                                 setRepPhoneNumber(currentUser?.phone || "");
                               }
                             }}
-                            className="text-[9px] font-bold text-emerald-600 hover:text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-150 cursor-pointer active:scale-95 transition-all"
+                            className="text-[10.5px] font-extrabold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-md border border-emerald-300 shadow-3xs cursor-pointer active:scale-95 transition-all flex items-center gap-1"
                           >
                             <span translate="no" className="notranslate">➕ Đăng ký mới</span>
                           </button>

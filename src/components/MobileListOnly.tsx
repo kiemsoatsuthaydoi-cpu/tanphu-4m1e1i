@@ -277,12 +277,12 @@ export function MobileListOnly({
                     })()}
                   </div>
 
-                  <div className={`font-semibold text-slate-800 ${contentFontSizeClass}`}>
+                  <div className={`font-black text-slate-900 ${contentFontSizeClass}`}>
                     <span translate="no" className="notranslate">{(report.content || "").toUpperCase()}</span>
                   </div>
 
                   {report.notes && (
-                    <div className="p-2 bg-slate-50 rounded border-l-2 border-slate-300 text-[10px] italic text-slate-500">
+                    <div className="p-2 bg-slate-50/90 rounded border-l-2 border-slate-400 text-[10.5px] italic text-slate-800 font-medium">
                       <span translate="no" className="notranslate">Ghi chú: {report.notes}</span>
                     </div>
                   )}
