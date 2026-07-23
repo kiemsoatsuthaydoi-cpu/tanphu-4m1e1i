@@ -1417,7 +1417,16 @@ export default function DashboardDesktop({
   const [activeAiTab, setActiveAiTab] = useState<'analysis' | 'chat'>('analysis');
 
   const handleAIAnalyze = async (report: QualityReport) => {
-    setAiAnalysisReport(report);
+    const currentUserName = currentUser?.fullName || currentUser?.id || "";
+    let targetReport = report;
+    if (currentUserName && !report.aiUsedBy?.includes(currentUserName)) {
+      const updatedAiUsedBy = [...(report.aiUsedBy || []), currentUserName];
+      targetReport = { ...report, aiUsedBy: updatedAiUsedBy };
+      if (onUpdateReport) {
+        onUpdateReport(targetReport);
+      }
+    }
+    setAiAnalysisReport(targetReport);
     setAiAnalysisText("");
     setIsAnalyzing(true);
     setActiveAiTab('analysis');
@@ -1466,7 +1475,16 @@ export default function DashboardDesktop({
   };
 
   const handleAIDsaAnalyze = async (report: QualityReport) => {
-    setAiAnalysisReport(report);
+    const currentUserName = currentUser?.fullName || currentUser?.id || "";
+    let targetReport = report;
+    if (currentUserName && !report.aiUsedBy?.includes(currentUserName)) {
+      const updatedAiUsedBy = [...(report.aiUsedBy || []), currentUserName];
+      targetReport = { ...report, aiUsedBy: updatedAiUsedBy };
+      if (onUpdateReport) {
+        onUpdateReport(targetReport);
+      }
+    }
+    setAiAnalysisReport(targetReport);
     setAiAnalysisText("");
     setIsAnalyzing(true);
     setActiveAiTab('analysis');
@@ -1515,6 +1533,17 @@ export default function DashboardDesktop({
 
   const handleSendAiChatMessage = async () => {
     if (!aiChatInput.trim() || isAiSendingChat || !aiAnalysisReport) return;
+    const currentUserName = currentUser?.fullName || currentUser?.id || "";
+    if (currentUserName && !aiAnalysisReport.aiUsedBy?.includes(currentUserName)) {
+      const updatedReport = {
+        ...aiAnalysisReport,
+        aiUsedBy: [...(aiAnalysisReport.aiUsedBy || []), currentUserName]
+      };
+      setAiAnalysisReport(updatedReport);
+      if (onUpdateReport) {
+        onUpdateReport(updatedReport);
+      }
+    }
     const userText = aiChatInput.trim();
     setAiChatInput("");
     

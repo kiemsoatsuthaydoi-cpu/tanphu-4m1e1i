@@ -115,6 +115,7 @@ export interface QualityReport {
   assignedPersonId?: string;
   assignedPersonName?: string;
   assignedPersonRole?: string;
+  aiUsedBy?: string[];
 }
 
 export interface QualityReportBadge {

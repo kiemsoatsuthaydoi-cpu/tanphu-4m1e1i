@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import html2canvas from "html2canvas";
-import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send, Award, Calendar, Clock } from "lucide-react";
+import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, CheckCircle2, AlertCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send, Award, Calendar, Clock } from "lucide-react";
 import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Department, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus, QualityReportBadge, AppNotification, ErrorCatalogItem, BadgePointConfigItem } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
@@ -1815,7 +1815,16 @@ export default function MobileFrame({
   };
 
   const handleAIAnalyze = async (report: QualityReport) => {
-    setAiAnalysisReport(report);
+    const currentUserName = currentUser?.fullName || currentUser?.id || "";
+    let targetReport = report;
+    if (currentUserName && !report.aiUsedBy?.includes(currentUserName)) {
+      const updatedAiUsedBy = [...(report.aiUsedBy || []), currentUserName];
+      targetReport = { ...report, aiUsedBy: updatedAiUsedBy };
+      if (onUpdateReport) {
+        onUpdateReport(targetReport);
+      }
+    }
+    setAiAnalysisReport(targetReport);
     setAiAnalysisText("");
     setIsAnalyzing(true);
     setActiveAiTab('analysis');
@@ -1864,7 +1873,16 @@ export default function MobileFrame({
   };
 
   const handleAIDsaAnalyze = async (report: QualityReport) => {
-    setAiAnalysisReport(report);
+    const currentUserName = currentUser?.fullName || currentUser?.id || "";
+    let targetReport = report;
+    if (currentUserName && !report.aiUsedBy?.includes(currentUserName)) {
+      const updatedAiUsedBy = [...(report.aiUsedBy || []), currentUserName];
+      targetReport = { ...report, aiUsedBy: updatedAiUsedBy };
+      if (onUpdateReport) {
+        onUpdateReport(targetReport);
+      }
+    }
+    setAiAnalysisReport(targetReport);
     setAiAnalysisText("");
     setIsAnalyzing(true);
     setActiveAiTab('analysis');
@@ -1913,6 +1931,17 @@ export default function MobileFrame({
 
   const handleSendAiChatMessage = async () => {
     if (!aiChatInput.trim() || isAiSendingChat || !aiAnalysisReport) return;
+    const currentUserName = currentUser?.fullName || currentUser?.id || "";
+    if (currentUserName && !aiAnalysisReport.aiUsedBy?.includes(currentUserName)) {
+      const updatedReport = {
+        ...aiAnalysisReport,
+        aiUsedBy: [...(aiAnalysisReport.aiUsedBy || []), currentUserName]
+      };
+      setAiAnalysisReport(updatedReport);
+      if (onUpdateReport) {
+        onUpdateReport(updatedReport);
+      }
+    }
     const userText = aiChatInput.trim();
     setAiChatInput("");
 
@@ -6423,16 +6452,6 @@ App Link: ${window.location.origin}`;
                       </div>
                     )}
 
-                    {/* Input form to submit a new directive */}
-                    {currentUser && (
-                      <MobileDirectiveForm
-                        report={report}
-                        currentUser={currentUser}
-                        users={users}
-                        onUpdateReport={onUpdateReport}
-                        showToast={showToast}
-                      />
-                    )}
                     {/* BP/ĐV PHẢN HỒI & TIẾP NHẬN/ XỬ LÝ list display */}
                     {(report.isAbnormal || report.reportType === "KPH") && (
                       <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-col gap-1.5" id={`receivers-section-${report.id}`}>
@@ -6556,154 +6575,9 @@ App Link: ${window.location.origin}`;
                         )}
                       </div>
 
-                      {/* Displaying detailed Resolution logs list */}
-                      {!!expandedResolutions[report.id] && (report.isAbnormal || report.reportType === "KPH") && report.resolutions && report.resolutions.length > 0 && (
-                        <div className="mt-1.5 p-2 bg-slate-50 border border-slate-150 rounded-lg flex flex-col gap-1.5 max-h-48 overflow-y-auto">
-                          <div className="text-[9.5px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center justify-between select-none">
-                            <div className="flex items-center gap-1 flex-wrap">
-                              <span className="w-1 h-1 rounded-full bg-slate-500"></span>
-                              <span translate="no" className="notranslate">KẾT QUẢ XỬ LÝ CHI TIẾT:</span>
-                            </div>
-                            {currentUser?.role === UserRole.ADMIN && (
-                              <div className="flex items-center gap-1.5 bg-slate-100/80 px-1 py-0.5 rounded border border-slate-200">
-                                {report.resolutions.map((res, idx) => (
-                                  <div key={res.id} className="flex items-center gap-0.5 shrink-0 scale-90">
-                                    {report.resolutions.length > 1 && (
-                                      <span className="text-[7.5px] text-slate-600 font-extrabold select-none mr-0.5">
-                                        BP{idx + 1}
-                                      </span>
-                                    )}
-                                    <button
-                                      type="button"
-                                      title={`Sửa kết quả ${res.departmentName}`}
-                                      onClick={() => {
-                                        setEditingResolutionReportId(report.id);
-                                        setEditingResolutionId(res.id);
-                                        setResDeptName(res.departmentName);
-                                        setResResultText(res.resultText);
-                                        setResStatus(res.status);
-                                      }}
-                                      className="p-0.5 text-slate-500 hover:text-indigo-600 rounded transition-colors cursor-pointer border-none bg-transparent"
-                                    >
-                                      <Edit className="w-3 h-3" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      title={`Xóa kết quả ${res.departmentName}`}
-                                      onClick={() => {
-                                        setResolutionToDelete({ report, resId: res.id });
-                                      }}
-                                      className="p-0.5 text-slate-500 hover:text-rose-600 rounded transition-colors cursor-pointer border-none bg-transparent"
-                                    >
-                                      <Trash2 className="w-3 h-3" />
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          {report.resolutions.map((res) => (
-                            <div key={res.id} className="text-[10px] bg-white p-2 rounded-lg border border-slate-100 shadow-3xs relative">
-                              <div className="flex items-center justify-between gap-1 mb-0.5">
-                                <div className="flex items-center gap-1.5 min-w-0">
-                                  <span translate="no" className="notranslate font-bold text-[10.5px] text-slate-700">
-                                    {res.departmentName}
-                                  </span>
-                                  {res.badges && res.badges.length > 0 && (
-                                    <div className="flex items-center gap-1 shrink-0">
-                                      {res.badges.map((badge, bIdx) => {
-                                        const icon = badge.id === "BAC_SI_MAY_MOC" ? "🦾" :
-                                                     badge.id === "CHOT_CHAN_5WHY" ? "🔍" :
-                                                     badge.id === "HO_VE_DAY_CHUYEN" ? "🛡️" :
-                                                     badge.id === "CHIEN_BINH_PHAN_UNG_NHANH" ? "⚡" :
-                                                     badge.id === "BAC_THAY_DU_DOAN" ? "🔮" :
-                                                     badge.id === "CANH_BAO_KIP_THOI" ? "🚨" :
-                                                     badge.id === "CON_MAT_TINH_TUONG" ? "🔍" :
-                                                     badge.id === "CHOT_CHAN_RUI_RO" ? "🛡️" :
-                                                     badge.id === "THONG_TIN_CHUAN_MUC" ? "📊" : "🏅";
-                                        return (
-                                          <button
-                                            key={bIdx}
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setSelectedResolutionBadge({ report, res });
-                                              setShowAwardMenuForRes(false);
-                                            }}
-                                            className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-50 border border-amber-300 text-[11px] shadow-3xs hover:bg-amber-100 active:scale-90 transition-transform cursor-pointer"
-                                            title={`Huy hiệu: ${badge.name} (Bởi ${badge.giverName})`}
-                                          >
-                                            <span>{icon}</span>
-                                          </button>
-                                        );
-                                      })}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  <span translate="no" className={`notranslate text-[9px] font-extrabold px-1.5 py-0.5 rounded border uppercase ${
-                                    res.status === "Đã xử lý"
-                                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                      : "bg-amber-50 text-amber-700 border-amber-200"
-                                  }`}>
-                                    {res.status}
-                                  </span>
-                                </div>
-                              </div>
-                              <p translate="no" className="notranslate text-slate-600 font-medium text-[10px] leading-relaxed whitespace-pre-wrap pl-1.5 border-l border-slate-200">
-                                {res.resultText}
-                              </p>
-                              <div className="mt-1.5 text-[8.5px] text-slate-400 font-mono flex items-center justify-between select-none">
-                                <span translate="no" className="notranslate">
-                                  Đại diện: {res.handlerName}
-                                </span>
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  <span>{formatTimestampToDMY(res.updatedAt)}</span>
-                                  
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleToggleLikeResolution(report, res.id);
-                                    }}
-                                    className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[9px] font-sans font-extrabold transition-all cursor-pointer select-none ${
-                                      res.likedBy?.includes(currentUser?.fullName || currentUser?.id || "")
-                                        ? "bg-rose-50 text-rose-600 border-rose-200 shadow-3xs"
-                                        : "bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100"
-                                    }`}
-                                    title="Thích kết quả xử lý này"
-                                  >
-                                    <Heart className={`w-3 h-3 ${res.likedBy?.includes(currentUser?.fullName || currentUser?.id || "") ? "fill-rose-500 stroke-rose-500" : ""}`} />
-                                    <span>{res.likedBy?.length || 0}</span>
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedResolutionBadge({ report, res });
-                                      setShowAwardMenuForRes(true);
-                                    }}
-                                    className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[9px] font-sans font-extrabold transition-all cursor-pointer select-none ${
-                                      (res.badges?.length || 0) > 0
-                                        ? "bg-amber-50 text-amber-700 border-amber-300 shadow-3xs"
-                                        : "bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100"
-                                    }`}
-                                    title="Trao/Xem huy hiệu cho kết quả xử lý này"
-                                  >
-                                    <Award className="w-3 h-3 text-amber-500" />
-                                    <span>{res.badges?.length || 0}</span>
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Inline form to record or edit resolution */}
+                      {/* Inline form to record or edit resolution (Placed ABOVE Timeline) */}
                       {editingResolutionReportId === report.id && (
-                        <div className="mt-2 p-2.5 bg-indigo-50/50 border border-indigo-100 rounded-lg flex flex-col gap-2 transition-all duration-300">
+                        <div className="mt-2 mb-1 p-2.5 bg-indigo-50/50 border border-indigo-100 rounded-lg flex flex-col gap-2 transition-all duration-300">
                           <div className="text-[9.5px] font-bold text-indigo-800 flex items-center justify-between">
                             <span translate="no" className="notranslate">
                               {editingResolutionId ? "✏️ CẬP NHẬT KẾT QUẢ XỬ LÝ KPH:" : "✍️ GHI NHẬN KẾT QUẢ XỬ LÝ KPH:"}
@@ -6885,7 +6759,356 @@ App Link: ${window.location.origin}`;
                           </div>
                         </div>
                       )}
+
+                      {/* Incident Timeline Visual Progress Bar */}
+                      {(() => {
+                        const ackCount = report.sharedBy?.length || 0;
+                        const resCount = report.resolutions?.length || 0;
+                        const isResolved = resCount > 0 && (report.resolutions?.some(r => r.status === "Đã xử lý" || !!r.resultText) ?? true);
+
+                        const aiUsedList = report.aiUsedBy || [];
+                        const receiversAndHandlers = [
+                          ...(report.sharedBy || []),
+                          ...(report.resolutions?.map(r => r.handlerName) || [])
+                        ];
+                        const hasReceiverUsedAi = aiUsedList.some(aiUser =>
+                          receiversAndHandlers.length > 0
+                            ? receiversAndHandlers.some(rh =>
+                                rh.toLowerCase().includes(aiUser.toLowerCase()) ||
+                                aiUser.toLowerCase().includes(rh.toLowerCase())
+                              )
+                            : (ackCount > 0 || resCount > 0)
+                        );
+
+                        return (
+                          <div className="mt-2.5 mb-1 p-2 bg-gradient-to-b from-slate-50 to-white border border-slate-200/90 rounded-xl flex flex-col gap-1.5 shadow-2xs">
+                            <div className="flex items-center justify-between text-[9px] font-black text-slate-500 uppercase tracking-tight select-none px-0.5">
+                              <div className="flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
+                                <span translate="no" className="notranslate" style={{ color: "var(--color-primary, #1e3a8a)" }}>
+                                  <T>TIẾN TRÌNH XỬ LÝ (TIMELINE)</T>
+                                </span>
+                              </div>
+                              <div>
+                                {isResolved ? (
+                                  <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 flex items-center gap-1 text-[8.5px] font-bold">
+                                    <CheckCircle2 className="w-2.5 h-2.5 stroke-[3px] text-emerald-600" />
+                                    <span translate="no" className="notranslate"><T>Đã xử lý xong</T></span>
+                                  </span>
+                                ) : ackCount > 0 ? (
+                                  <span className="text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 flex items-center gap-1 text-[8.5px] font-bold">
+                                    <Clock className="w-2.5 h-2.5 stroke-[3px] text-amber-600" />
+                                    <span translate="no" className="notranslate"><T>Đang xử lý</T></span>
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 flex items-center gap-1 text-[8.5px] font-bold">
+                                    <AlertCircle className="w-2.5 h-2.5 stroke-[3px] text-slate-500" />
+                                    <span translate="no" className="notranslate"><T>Mới ghi nhận</T></span>
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="relative flex items-start justify-between mt-1 px-2 py-0.5">
+                              {/* Connector Line Background */}
+                              <div className="absolute top-3.5 left-8 right-8 h-1 bg-slate-200 rounded-full z-0 overflow-hidden">
+                                <div
+                                  className={`h-full transition-all duration-500 ${
+                                    isResolved
+                                      ? "bg-gradient-to-r from-blue-500 via-amber-500 to-emerald-500 w-full"
+                                      : ackCount > 0
+                                        ? hasReceiverUsedAi
+                                          ? "bg-gradient-to-r from-blue-500 via-purple-500 to-amber-500 w-1/2"
+                                          : "bg-gradient-to-r from-blue-500 to-amber-500 w-1/2"
+                                        : "bg-blue-500 w-0"
+                                  }`}
+                                />
+                              </div>
+
+                              {/* Step 1: Ghi nhận sự cố */}
+                              <div className="flex flex-col items-center text-center relative z-10 w-1/3">
+                                <div className="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold shadow-xs border-2 border-white text-[10px]" title="Bắt đầu ghi nhận sự cố">
+                                  <CheckCircle2 className="w-4 h-4 stroke-[2.5px]" />
+                                </div>
+                                <span className="text-[9.5px] font-black text-slate-800 mt-1 leading-tight">
+                                  <span translate="no" className="notranslate"><T>Ghi nhận sự cố</T></span>
+                                </span>
+                                <span className="text-[8px] font-semibold text-slate-500 mt-0.5">
+                                  {report.timestamp ? report.timestamp.split(' ')[0] || "Khởi tạo" : "Khởi tạo"}
+                                </span>
+                              </div>
+
+                              {/* Step 2: Tiếp nhận xử lý */}
+                              <div className="flex flex-col items-center text-center relative z-10 w-1/3">
+                                <div className="relative">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (ackCount > 0) {
+                                        setShowAcksListReport(report);
+                                      }
+                                    }}
+                                    disabled={ackCount === 0}
+                                    className={`relative w-7 h-7 rounded-full flex items-center justify-center font-bold shadow-xs border-2 border-white text-[10px] transition-all ${
+                                      ackCount > 0
+                                        ? hasReceiverUsedAi
+                                          ? "bg-gradient-to-tr from-amber-500 via-purple-600 to-indigo-600 text-white cursor-pointer hover:scale-110 active:scale-95 ring-2 ring-purple-400 shadow-purple-200"
+                                          : "bg-amber-500 text-white cursor-pointer hover:scale-110 active:scale-95 ring-2 ring-amber-300"
+                                        : "bg-slate-200 text-slate-400 cursor-default animate-pulse"
+                                    }`}
+                                    title={
+                                      hasReceiverUsedAi
+                                        ? `Người tiếp nhận/xử lý (${aiUsedList.join(', ')}) đã sử dụng AI hỗ trợ. Click xem danh sách ${ackCount} người tiếp nhận`
+                                        : ackCount > 0
+                                        ? `Click xem danh sách ${ackCount} người tiếp nhận`
+                                        : "Chưa có người tiếp nhận"
+                                    }
+                                  >
+                                    <Users className="w-4 h-4 stroke-[2.5px]" />
+                                    {ackCount > 0 && (
+                                      <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center border border-white shadow-2xs">
+                                        {ackCount}
+                                      </span>
+                                    )}
+                                  </button>
+                                </div>
+
+                                <span className={`text-[9.5px] font-black mt-1 leading-tight flex items-center gap-0.5 ${ackCount > 0 ? (hasReceiverUsedAi ? "text-purple-900" : "text-amber-800") : "text-slate-400"}`}>
+                                  <span translate="no" className="notranslate"><T>Tiếp nhận xử lý</T></span>
+                                </span>
+
+                                <div className="mt-0.5 flex flex-col items-center gap-0.5">
+                                  <span className="text-[8px] font-bold">
+                                    {ackCount > 0 ? (
+                                      <span className="text-amber-700 bg-amber-100/90 px-1.5 py-0.2 rounded-full font-extrabold border border-amber-200/60 inline-block">
+                                        {ackCount} <span translate="no" className="notranslate"><T>người</T></span>
+                                      </span>
+                                    ) : (
+                                      <span translate="no" className="notranslate text-slate-400"><T>Chờ tiếp nhận</T></span>
+                                    )}
+                                  </span>
+
+                                  {/* AI Badge on Timeline Step 2 if receiver/handler used AI */}
+                                  {hasReceiverUsedAi && (
+                                    <span
+                                      className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 text-white text-[8px] font-black shadow-xs tracking-tight border border-purple-200/80"
+                                      title={`Người tiếp nhận/xử lý (${aiUsedList.join(', ')}) đã sử dụng AI hỗ trợ phân tích`}
+                                    >
+                                      <Sparkles className="w-2.5 h-2.5 text-amber-300 stroke-[2.5px] animate-pulse" />
+                                      <span translate="no" className="notranslate"><T>Đã dùng AI</T></span>
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Step 3: Ghi nhận kết quả */}
+                              <div className="flex flex-col items-center text-center relative z-10 w-1/3">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (resCount > 0) {
+                                      toggleResolutionsExpand(report.id);
+                                    }
+                                  }}
+                                  disabled={resCount === 0}
+                                  className={`w-7 h-7 rounded-full flex items-center justify-center font-bold shadow-xs border-2 border-white text-[10px] transition-all ${
+                                    isResolved
+                                      ? "bg-emerald-600 text-white cursor-pointer hover:scale-110 active:scale-95 ring-2 ring-emerald-300"
+                                      : "bg-slate-200 text-slate-400 cursor-default"
+                                  }`}
+                                  title={resCount > 0 ? `Click xem ${resCount} kết quả xử lý` : "Chưa có kết quả xử lý"}
+                                >
+                                  <CheckCircle2 className="w-4 h-4 stroke-[2.5px]" />
+                                </button>
+                                <span className={`text-[9.5px] font-black mt-1 leading-tight ${isResolved ? "text-emerald-800" : "text-slate-400"}`}>
+                                  <span translate="no" className="notranslate"><T>Đã xử lý</T></span>
+                                </span>
+                                <span className="text-[8px] font-bold mt-0.5">
+                                  {isResolved ? (
+                                    <span className="text-emerald-700 bg-emerald-100/90 px-1.5 py-0.2 rounded-full font-extrabold border border-emerald-200/60">
+                                      {resCount > 0 ? `${resCount} kết quả` : "Hoàn thành"}
+                                    </span>
+                                  ) : (
+                                    <span translate="no" className="notranslate text-slate-400"><T>Chưa xong</T></span>
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Input form to submit a new directive (Placed BELOW Timeline) */}
+                      {currentUser && (
+                        <div className="mt-1.5 mb-0.5">
+                          <MobileDirectiveForm
+                            report={report}
+                            currentUser={currentUser}
+                            users={users}
+                            onUpdateReport={onUpdateReport}
+                            showToast={showToast}
+                          />
+                        </div>
+                      )}
+
+                      {/* Displaying detailed Resolution logs list */}
+                      {!!expandedResolutions[report.id] && (report.isAbnormal || report.reportType === "KPH") && report.resolutions && report.resolutions.length > 0 && (
+                        <div className="mt-1.5 p-2 bg-slate-50 border border-slate-150 rounded-lg flex flex-col gap-1.5 max-h-48 overflow-y-auto">
+                          <div className="text-[9.5px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center justify-between select-none">
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <span className="w-1 h-1 rounded-full bg-slate-500"></span>
+                              <span translate="no" className="notranslate">KẾT QUẢ XỬ LÝ CHI TIẾT:</span>
+                            </div>
+                            {currentUser?.role === UserRole.ADMIN && (
+                              <div className="flex items-center gap-1.5 bg-slate-100/80 px-1 py-0.5 rounded border border-slate-200">
+                                {report.resolutions.map((res, idx) => (
+                                  <div key={res.id} className="flex items-center gap-0.5 shrink-0 scale-90">
+                                    {report.resolutions.length > 1 && (
+                                      <span className="text-[7.5px] text-slate-600 font-extrabold select-none mr-0.5">
+                                        BP{idx + 1}
+                                      </span>
+                                    )}
+                                    <button
+                                      type="button"
+                                      title={`Sửa kết quả ${res.departmentName}`}
+                                      onClick={() => {
+                                        setEditingResolutionReportId(report.id);
+                                        setEditingResolutionId(res.id);
+                                        setResDeptName(res.departmentName);
+                                        setResResultText(res.resultText);
+                                        setResStatus(res.status);
+                                      }}
+                                      className="p-0.5 text-slate-500 hover:text-indigo-600 rounded transition-colors cursor-pointer border-none bg-transparent"
+                                    >
+                                      <Edit className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      title={`Xóa kết quả ${res.departmentName}`}
+                                      onClick={() => {
+                                        setResolutionToDelete({ report, resId: res.id });
+                                      }}
+                                      className="p-0.5 text-slate-500 hover:text-rose-600 rounded transition-colors cursor-pointer border-none bg-transparent"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          {report.resolutions.map((res) => (
+                            <div key={res.id} className="text-[10px] bg-white p-2 rounded-lg border border-slate-100 shadow-3xs relative">
+                              <div className="flex items-center justify-between gap-1 mb-0.5">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span translate="no" className="notranslate font-bold text-[10.5px] text-slate-700">
+                                    {res.departmentName}
+                                  </span>
+                                  {res.badges && res.badges.length > 0 && (
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      {res.badges.map((badge, bIdx) => {
+                                        const icon = badge.id === "BAC_SI_MAY_MOC" ? "🦾" :
+                                                     badge.id === "CHOT_CHAN_5WHY" ? "🔍" :
+                                                     badge.id === "HO_VE_DAY_CHUYEN" ? "🛡️" :
+                                                     badge.id === "CHIEN_BINH_PHAN_UNG_NHANH" ? "⚡" :
+                                                     badge.id === "BAC_THAY_DU_DOAN" ? "🔮" :
+                                                     badge.id === "CANH_BAO_KIP_THOI" ? "🚨" :
+                                                     badge.id === "CON_MAT_TINH_TUONG" ? "🔍" :
+                                                     badge.id === "CHOT_CHAN_RUI_RO" ? "🛡️" :
+                                                     badge.id === "THONG_TIN_CHUAN_MUC" ? "📊" : "🏅";
+                                        return (
+                                          <button
+                                            key={bIdx}
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setSelectedResolutionBadge({ report, res });
+                                              setShowAwardMenuForRes(false);
+                                            }}
+                                            className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-50 border border-amber-300 text-[11px] shadow-3xs hover:bg-amber-100 active:scale-90 transition-transform cursor-pointer"
+                                            title={`Huy hiệu: ${badge.name} (Bởi ${badge.giverName})`}
+                                          >
+                                            <span>{icon}</span>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <span translate="no" className={`notranslate text-[9px] font-extrabold px-1.5 py-0.5 rounded border uppercase ${
+                                    res.status === "Đã xử lý"
+                                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                      : "bg-amber-50 text-amber-700 border-amber-200"
+                                  }`}>
+                                    {res.status}
+                                  </span>
+                                </div>
+                              </div>
+                              <p translate="no" className="notranslate text-slate-600 font-medium text-[10px] leading-relaxed whitespace-pre-wrap pl-1.5 border-l border-slate-200">
+                                {res.resultText}
+                              </p>
+                              <div className="mt-1.5 text-[8.5px] text-slate-400 font-mono flex items-center justify-between select-none">
+                                <span translate="no" className="notranslate">
+                                  Đại diện: {res.handlerName}
+                                </span>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <span>{formatTimestampToDMY(res.updatedAt)}</span>
+                                  
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleToggleLikeResolution(report, res.id);
+                                    }}
+                                    className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[9px] font-sans font-extrabold transition-all cursor-pointer select-none ${
+                                      res.likedBy?.includes(currentUser?.fullName || currentUser?.id || "")
+                                        ? "bg-rose-50 text-rose-600 border-rose-200 shadow-3xs"
+                                        : "bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100"
+                                    }`}
+                                    title="Thích kết quả xử lý này"
+                                  >
+                                    <Heart className={`w-3 h-3 ${res.likedBy?.includes(currentUser?.fullName || currentUser?.id || "") ? "fill-rose-500 stroke-rose-500" : ""}`} />
+                                    <span>{res.likedBy?.length || 0}</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedResolutionBadge({ report, res });
+                                      setShowAwardMenuForRes(true);
+                                    }}
+                                    className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[9px] font-sans font-extrabold transition-all cursor-pointer select-none ${
+                                      (res.badges?.length || 0) > 0
+                                        ? "bg-amber-50 text-amber-700 border-amber-300 shadow-3xs"
+                                        : "bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100"
+                                    }`}
+                                    title="Trao/Xem huy hiệu cho kết quả xử lý này"
+                                  >
+                                    <Award className="w-3 h-3 text-amber-500" />
+                                    <span>{res.badges?.length || 0}</span>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
+                    )}
+
+                    {!(report.isAbnormal || report.reportType === "KPH") && currentUser && (
+                      <div className="mt-2">
+                        <MobileDirectiveForm
+                          report={report}
+                          currentUser={currentUser}
+                          users={users}
+                          onUpdateReport={onUpdateReport}
+                          showToast={showToast}
+                        />
+                      </div>
                     )}
 
                     {/* ĐĂNG KÝ NHÂN RỘNG list display */}
