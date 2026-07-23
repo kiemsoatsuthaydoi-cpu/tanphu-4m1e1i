@@ -176,6 +176,274 @@ export function formatNameOrDepartment(str: string): string {
     .join("");
 }
 
+// Helper Sub-component for Department Personnel Row
+function DepartmentPersonnelRow({ person }: { 
+  person: {
+    recipientName: string;
+    badgeCount: number;
+    totalPoints: number;
+    badgeItems: ExtractedBadgeItem[];
+  };
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <div className="bg-slate-50/90 p-3 rounded-xl border border-slate-200/80 space-y-2">
+      <div 
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center justify-between text-xs border-b border-slate-200/60 pb-1.5 cursor-pointer select-none group"
+      >
+        <div className="flex items-center gap-2">
+          <span className="font-black text-slate-900 text-xs group-hover:text-amber-800 transition-colors">
+            👤 <span translate="no" className="notranslate">{person.recipientName}</span>
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-bold text-amber-800">
+            <span translate="no" className="notranslate">{person.badgeCount}</span> huy hiệu
+          </span>
+          <span className="text-[11px] font-black text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded border border-emerald-200">
+            <span translate="no" className="notranslate">+{person.totalPoints}</span>đ
+          </span>
+          <button 
+            type="button" 
+            className="text-[10px] font-bold text-amber-800 bg-amber-100/80 hover:bg-amber-200/80 px-2 py-0.5 rounded flex items-center gap-1 border-none cursor-pointer"
+          >
+            <span>{isExpanded ? "▲ Thu gọn" : "▼ Xem huy hiệu"}</span>
+          </button>
+        </div>
+      </div>
+
+      {isExpanded && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+          {person.badgeItems.map((bItem, bIdx) => (
+            <div key={bIdx} className="bg-white p-2.5 rounded-lg border border-slate-200 text-[11px] space-y-1 shadow-3xs">
+              <div className="flex items-center justify-between">
+                <span className="font-black text-amber-950 flex items-center gap-1">
+                  🏅 <span translate="no" className="notranslate">{bItem.badgeName}</span>
+                </span>
+                <span className="font-bold text-emerald-700 text-[10px]">
+                  +<span translate="no" className="notranslate">{bItem.points}</span>đ
+                </span>
+              </div>
+              <p className="text-slate-600 font-medium line-clamp-2 italic text-[10.5px]">
+                "<span translate="no">{bItem.content}</span>"
+              </p>
+              <div className="text-[9.5px] text-slate-500 flex items-center justify-between pt-0.5 border-t border-slate-100">
+                <span>Trao bởi: <span className="font-bold text-slate-700" translate="no">{bItem.giverName}</span> (<span translate="no">{bItem.giverPosition}</span>)</span>
+                <span translate="no">{bItem.badgeTimestamp}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Helper Sub-component for Department Card
+function DepartmentCard({ dept }: { 
+  dept: {
+    factory: string;
+    department: string;
+    badgeCount: number;
+    totalPoints: number;
+    personnelList: Array<{
+      recipientName: string;
+      badgeCount: number;
+      totalPoints: number;
+      badgeItems: ExtractedBadgeItem[];
+    }>;
+  };
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <div className="bg-white p-4 sm:p-4.5 rounded-2xl border border-slate-200 shadow-2xs hover:shadow-md transition-all space-y-3">
+      {/* Dept Header */}
+      <div 
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-150 cursor-pointer select-none group"
+      >
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 bg-amber-50 text-amber-700 rounded-xl border border-amber-200/80 font-black text-base group-hover:bg-amber-100 transition-colors">
+            🏢
+          </div>
+          <div>
+            <h3 className="font-extrabold text-slate-900 text-sm sm:text-base flex items-center gap-2 group-hover:text-amber-800 transition-colors">
+              <span translate="no" className="notranslate">{dept.department}</span>
+            </h3>
+            <p className="text-xs text-slate-500 font-medium">
+              Chi nhánh / Nhà máy: <span translate="no" className="font-bold text-slate-700">{dept.factory}</span>
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs">
+          <span className="bg-amber-50 text-amber-900 font-black px-3 py-1 rounded-xl border border-amber-200">
+            <span translate="no" className="notranslate">{dept.badgeCount}</span> huy hiệu
+          </span>
+          <span className="bg-emerald-50 text-emerald-800 font-black px-3 py-1 rounded-xl border border-emerald-200 text-sm">
+            <span translate="no" className="notranslate">+{dept.totalPoints}</span> <span className="text-xs font-normal">điểm</span>
+          </span>
+          <button
+            type="button"
+            className="p-1.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-all flex items-center gap-1 font-extrabold text-xs border-none cursor-pointer"
+          >
+            <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
+            <span className="hidden sm:inline">{isExpanded ? "Thu gọn" : "Xem chi tiết"}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Personnel List in Department */}
+      {isExpanded ? (
+        <div className="space-y-2.5 pt-1">
+          <p className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+            <span>👥</span> <T><span translate="no" className="notranslate">DANH SÁCH NHÂN SỰ ĐƯỢC KHEN THƯỞNG IN BỘ PHẬN:</span></T>
+          </p>
+
+          <div className="space-y-2.5">
+            {dept.personnelList.map((p, pIdx) => (
+              <DepartmentPersonnelRow key={pIdx} person={p} />
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div 
+          onClick={() => setIsExpanded(true)}
+          className="flex items-center justify-between px-3 py-2 bg-amber-50/40 hover:bg-amber-50 rounded-xl border border-dashed border-amber-200/80 text-xs font-semibold text-amber-950 cursor-pointer transition-all"
+        >
+          <span className="flex items-center gap-1.5 text-[11px]">
+            👥 <T>Danh sách nhân sự khen thưởng:</T> <strong>{dept.personnelList.length} nhân sự</strong>
+          </span>
+          <span className="text-amber-700 font-bold text-[11px] flex items-center gap-1">
+            <T>Bấm để mở danh sách</T> ▼
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Helper Sub-component for Manager Card
+function ManagerCard({ mgr }: { 
+  mgr: {
+    giverName: string;
+    giverPosition: string;
+    giverId: string;
+    badgeCount: number;
+    totalConferredPoints: number;
+    badgeItems: ExtractedBadgeItem[];
+  };
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <div className="bg-white p-4 sm:p-4.5 rounded-2xl border border-indigo-100 shadow-2xs hover:shadow-md transition-all space-y-3">
+      {/* Manager Header */}
+      <div 
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-150 cursor-pointer select-none group"
+      >
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 bg-indigo-50 text-indigo-700 rounded-xl border border-indigo-200/80 font-black text-base group-hover:bg-indigo-100 transition-colors">
+            🎖️
+          </div>
+          <div>
+            <h3 className="font-extrabold text-slate-900 text-sm sm:text-base flex items-center gap-2 group-hover:text-indigo-900 transition-colors">
+              <span translate="no" className="notranslate">{mgr.giverName}</span>
+            </h3>
+            <p className="text-xs text-indigo-700 font-bold">
+              Chức vụ / Vị trí: <span translate="no" className="notranslate">{mgr.giverPosition}</span>
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs">
+          <span className="bg-indigo-50 text-indigo-900 font-black px-3 py-1 rounded-xl border border-indigo-200">
+            <span translate="no" className="notranslate">{mgr.badgeCount}</span> lượt trao
+          </span>
+          <span className="bg-emerald-50 text-emerald-800 font-black px-3 py-1 rounded-xl border border-emerald-200 text-sm">
+            <span translate="no" className="notranslate">+{mgr.totalConferredPoints}</span> <span className="text-xs font-normal">điểm trao</span>
+          </span>
+          <button
+            type="button"
+            className="p-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-all flex items-center gap-1 font-extrabold text-xs border-none cursor-pointer"
+          >
+            <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
+            <span className="hidden sm:inline">{isExpanded ? "Thu gọn" : "Chi tiết"}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* List of badges given by manager */}
+      {isExpanded ? (
+        <div className="space-y-2 pt-1">
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+              <span>📋</span> <T><span translate="no" className="notranslate">CHI TIẾT CÁC BẢN TIN & NHÂN SỰ ĐƯỢC TRAO HUY HIỆU:</span></T>
+            </p>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsExpanded(false);
+              }}
+              className="text-[11px] font-bold text-indigo-700 hover:underline cursor-pointer border-none bg-transparent"
+            >
+              ▲ Thu gọn
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {mgr.badgeItems.map((bItem, bIdx) => (
+              <div key={bIdx} className="bg-slate-50 p-3 rounded-xl border border-slate-200/80 space-y-1.5 shadow-3xs">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-black text-amber-950 flex items-center gap-1">
+                    🏅 <span translate="no" className="notranslate">{bItem.badgeName}</span>
+                  </span>
+                  <span className="font-bold text-emerald-700 text-[11px] bg-emerald-100/80 px-2 py-0.5 rounded border border-emerald-200">
+                    +<span translate="no" className="notranslate">{bItem.points}</span>đ
+                  </span>
+                </div>
+
+                <div className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5 flex-wrap">
+                  <span>👤 Trao cho:</span>
+                  <span className="text-indigo-900 font-extrabold" translate="no">{bItem.recipientName}</span>
+                  <span className="text-slate-400">|</span>
+                  <span className="text-slate-600 font-medium" translate="no">{bItem.recipientDepartment} ({bItem.recipientFactory})</span>
+                </div>
+
+                <p className="text-[11px] text-slate-700 font-medium leading-tight italic bg-white p-2 rounded-lg border border-slate-200/70 line-clamp-2">
+                  "<span translate="no">{bItem.content}</span>"
+                </p>
+
+                <div className="flex items-center justify-between text-[10px] text-slate-500 pt-0.5">
+                  <span className="font-mono bg-slate-200/60 px-1.5 py-0.5 rounded text-slate-700 font-bold" translate="no">Mã: #{bItem.reportCode}</span>
+                  <span translate="no">{bItem.badgeTimestamp}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div 
+          onClick={() => setIsExpanded(true)}
+          className="flex items-center justify-between px-3 py-2 bg-indigo-50/40 hover:bg-indigo-50 rounded-xl border border-dashed border-indigo-200/80 text-xs font-semibold text-indigo-900 cursor-pointer transition-all"
+        >
+          <span className="flex items-center gap-1.5 text-[11px]">
+            📋 <T>Chi tiết các bản tin được trao:</T> <strong>{mgr.badgeItems.length} bản tin & huy hiệu</strong>
+          </span>
+          <span className="text-indigo-700 font-bold text-[11px] flex items-center gap-1">
+            <T>Bấm để xem danh sách</T> ▼
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function BadgeStatisticsDashboard({
   reports = [],
   users = [],
@@ -205,6 +473,7 @@ export default function BadgeStatisticsDashboard({
   const [selectedBadgeType, setSelectedBadgeType] = useState<string>("ALL");
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [activeTab, setActiveTab] = useState<"LEADERBOARD" | "LIST">("LEADERBOARD");
+  const [listSubTab, setListSubTab] = useState<"REPORTS" | "DEPARTMENTS" | "MANAGERS">("REPORTS");
 
   // Helper: Format YYYY-MM-DD into dd/mm/yy
   const selectedDateFormatted = useMemo(() => {
@@ -643,6 +912,102 @@ export default function BadgeStatisticsDashboard({
     return Array.from(map.values()).sort((a, b) => b.totalReportPoints - a.totalReportPoints);
   }, [filteredBadges]);
 
+  // Detailed Department List for Sub-tab 🏢 BỘ PHẬN
+  const detailedDepartmentList = useMemo(() => {
+    const map = new Map<string, {
+      factory: string;
+      department: string;
+      badgeCount: number;
+      totalPoints: number;
+      personnelMap: Map<string, {
+        recipientName: string;
+        badgeCount: number;
+        totalPoints: number;
+        badgeItems: ExtractedBadgeItem[];
+      }>;
+    }>();
+
+    filteredBadges.forEach((b) => {
+      const deptKey = `${b.recipientFactory} - ${b.recipientDepartment}`;
+      const existingDept = map.get(deptKey) || {
+        factory: b.recipientFactory,
+        department: b.recipientDepartment,
+        badgeCount: 0,
+        totalPoints: 0,
+        personnelMap: new Map()
+      };
+
+      existingDept.badgeCount += 1;
+      existingDept.totalPoints += b.points;
+
+      const personKey = b.recipientName.trim().toLowerCase();
+      const existingPerson = existingDept.personnelMap.get(personKey) || {
+        recipientName: b.recipientName,
+        badgeCount: 0,
+        totalPoints: 0,
+        badgeItems: []
+      };
+
+      existingPerson.badgeCount += 1;
+      existingPerson.totalPoints += b.points;
+      existingPerson.badgeItems.push(b);
+
+      existingDept.personnelMap.set(personKey, existingPerson);
+      map.set(deptKey, existingDept);
+    });
+
+    return Array.from(map.values())
+      .map((dept) => ({
+        ...dept,
+        personnelList: Array.from(dept.personnelMap.values()).sort(
+          (a, b) => b.totalPoints - a.totalPoints || b.badgeCount - a.badgeCount
+        )
+      }))
+      .sort((a, b) => b.totalPoints - a.totalPoints || b.badgeCount - a.badgeCount);
+  }, [filteredBadges]);
+
+  // Detailed Manager List for Sub-tab 🎖️ QUẢN LÝ
+  const detailedManagerList = useMemo(() => {
+    const map = new Map<string, {
+      giverName: string;
+      giverPosition: string;
+      giverId: string;
+      badgeCount: number;
+      totalConferredPoints: number;
+      badgeItems: ExtractedBadgeItem[];
+    }>();
+
+    filteredBadges.forEach((b) => {
+      const key = (b.giverId && b.giverId !== "unknown" && b.giverId !== "")
+        ? `id_${b.giverId}`
+        : `name_${b.giverName.trim().toLowerCase()}`;
+
+      const existing = map.get(key) || {
+        giverName: b.giverName,
+        giverPosition: formatNameOrDepartment(b.giverPosition || "Quản lý"),
+        giverId: b.giverId,
+        badgeCount: 0,
+        totalConferredPoints: 0,
+        badgeItems: []
+      };
+
+      existing.badgeCount += 1;
+      existing.totalConferredPoints += b.points;
+      existing.badgeItems.push(b);
+
+      const formattedPos = formatNameOrDepartment(b.giverPosition || "");
+      if (formattedPos && (!existing.giverPosition || formattedPos.length > existing.giverPosition.length)) {
+        existing.giverPosition = formattedPos;
+      }
+
+      map.set(key, existing);
+    });
+
+    return Array.from(map.values()).sort(
+      (a, b) => b.badgeCount - a.badgeCount || b.totalConferredPoints - a.totalConferredPoints
+    );
+  }, [filteredBadges]);
+
   return (
     <div className="w-full bg-slate-50 min-h-[500px] p-3 md:p-6 rounded-2xl text-slate-800 space-y-6 border border-slate-200/80 shadow-xs">
       {/* Header Bar */}
@@ -898,23 +1263,23 @@ export default function BadgeStatisticsDashboard({
                 <T><span translate="no" className="notranslate">Không tìm thấy dữ liệu trao huy hiệu nào phù hợp với bộ lọc hiện tại.</span></T>
               </div>
             ) : (
-              <div className="overflow-x-auto -mx-1 sm:mx-0">
+              <div className="overflow-x-auto w-full">
                 <table className="w-full text-left border-collapse text-xs sm:text-sm">
                   <thead>
                     <tr className="bg-slate-100/90 text-slate-700 font-extrabold border-b border-slate-200">
-                      <th className="py-2 px-1 text-center font-black text-[10px] sm:text-xs uppercase tracking-tight w-8 sm:w-12 leading-tight">
+                      <th className="py-2.5 pl-2 sm:pl-4 pr-1 text-center font-black text-[10px] sm:text-xs uppercase tracking-tight w-8 sm:w-12 leading-tight">
                         <T><span translate="no" className="notranslate">HẠNG</span></T>
                       </th>
-                      <th className="py-2 px-1.5 sm:px-2.5 font-black text-[10px] sm:text-xs uppercase tracking-tight leading-tight">
+                      <th className="py-2.5 px-2 sm:px-3 font-black text-[10px] sm:text-xs uppercase tracking-tight leading-tight">
                         <T><span translate="no" className="notranslate">HỌ VÀ TÊN</span></T>
                       </th>
-                      <th className="py-2 px-1.5 sm:px-2.5 font-black text-[10px] sm:text-xs uppercase tracking-tight leading-tight">
+                      <th className="py-2.5 px-2 sm:px-3 font-black text-[10px] sm:text-xs uppercase tracking-tight leading-tight">
                         <T><span translate="no" className="notranslate">BỘ PHẬN</span></T>
                       </th>
-                      <th className="py-2 px-1 sm:px-2 text-center font-black text-[10px] sm:text-xs uppercase tracking-tight leading-tight w-16 sm:w-24">
+                      <th className="py-2.5 px-1.5 sm:px-3 text-center font-black text-[10px] sm:text-xs uppercase tracking-tight leading-tight w-16 sm:w-24">
                         <T><span translate="no" className="notranslate">HUY HIỆU</span></T>
                       </th>
-                      <th className="py-2 px-1.5 sm:px-3 text-right font-black text-[10px] sm:text-xs uppercase tracking-tight leading-tight w-20 sm:w-32">
+                      <th className="py-2.5 pl-2 pr-4 sm:pr-6 text-right font-black text-[10px] sm:text-xs uppercase tracking-tight leading-tight w-24 sm:w-36">
                         <T><span translate="no" className="notranslate">TỔNG ĐIỂM</span></T>
                       </th>
                     </tr>
@@ -932,19 +1297,19 @@ export default function BadgeStatisticsDashboard({
                             isTop3 ? "bg-amber-50/20 font-medium" : ""
                           }`}
                         >
-                          <td className="py-2 px-1 text-center font-black text-xs sm:text-sm whitespace-nowrap">
+                          <td className="py-2.5 pl-2 sm:pl-4 pr-1 text-center font-black text-xs sm:text-sm whitespace-nowrap">
                             <span translate="no" className="notranslate">{rankBadge}</span>
                           </td>
-                          <td className="py-2 px-1.5 sm:px-2.5 font-bold text-slate-900 text-[11px] sm:text-xs leading-tight">
+                          <td className="py-2.5 px-2 sm:px-3 font-bold text-slate-900 text-[11px] sm:text-xs leading-tight">
                             <span translate="no" className="notranslate">{item.recipientName}</span>
                           </td>
-                          <td className="py-2 px-1.5 sm:px-2.5 text-slate-700 font-medium text-[10.5px] sm:text-xs leading-tight">
+                          <td className="py-2.5 px-2 sm:px-3 text-slate-700 font-medium text-[10.5px] sm:text-xs leading-tight">
                             <span translate="no" className="notranslate">{item.recipientDepartment}</span>
                           </td>
-                          <td className="py-2 px-1 sm:px-2 text-center font-black text-amber-700 text-xs sm:text-sm whitespace-nowrap">
+                          <td className="py-2.5 px-1.5 sm:px-3 text-center font-black text-amber-700 text-xs sm:text-sm whitespace-nowrap">
                             <span translate="no" className="notranslate">{item.badgeCount}</span> 🏅
                           </td>
-                          <td className="py-2 px-1.5 sm:px-3 text-right font-black text-emerald-700 text-xs sm:text-sm whitespace-nowrap">
+                          <td className="py-2.5 pl-2 pr-4 sm:pr-6 text-right font-black text-emerald-700 text-xs sm:text-sm whitespace-nowrap">
                             <span translate="no" className="notranslate">+{item.totalPoints}</span><span className="text-[9px] sm:text-[10px] font-semibold text-emerald-600 ml-0.5">đ</span>
                           </td>
                         </tr>
@@ -1056,99 +1421,198 @@ export default function BadgeStatisticsDashboard({
       {/* SUB-VIEW 2: DETAILED ITEM LIST */}
       {activeTab === "LIST" && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between bg-white px-4 py-3 rounded-xl border border-slate-200 text-xs font-bold text-slate-700">
-            <span>
-              <T><span translate="no" className="notranslate">DANH SÁCH BẢN TIN & KẾT QUẢ ĐƯỢC TRAO HUY HIỆU</span></T>
-            </span>
-            <span className="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-lg border border-indigo-200">
-              <span translate="no" className="notranslate">{groupedReportList.length}</span> <T><span translate="no" className="notranslate">mục được vinh danh</span></T>
-            </span>
+          {/* Sub-tabs for DANH SÁCH CHI TIẾT */}
+          <div className="flex flex-wrap items-center gap-2 bg-slate-200/70 p-1.5 rounded-2xl border border-slate-300/60 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setListSubTab("REPORTS")}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer border-none ${
+                listSubTab === "REPORTS"
+                  ? "bg-white text-indigo-950 shadow-sm border border-slate-200 scale-[1.01]"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/80"
+              }`}
+            >
+              <span>📄</span>
+              <span translate="no" className="notranslate"><T>BẢN TIN ({groupedReportList.length})</T></span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setListSubTab("DEPARTMENTS")}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer border-none ${
+                listSubTab === "DEPARTMENTS"
+                  ? "bg-white text-indigo-950 shadow-sm border border-slate-200 scale-[1.01]"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/80"
+              }`}
+            >
+              <span>🏢</span>
+              <span translate="no" className="notranslate"><T>BỘ PHẬN ({detailedDepartmentList.length})</T></span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setListSubTab("MANAGERS")}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer border-none ${
+                listSubTab === "MANAGERS"
+                  ? "bg-white text-indigo-950 shadow-sm border border-slate-200 scale-[1.01]"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/80"
+              }`}
+            >
+              <span>🎖️</span>
+              <span translate="no" className="notranslate"><T>QUẢN LÝ ({detailedManagerList.length})</T></span>
+            </button>
           </div>
 
-          {groupedReportList.length === 0 ? (
-            <div className="bg-white p-12 text-center text-slate-500 text-xs italic rounded-2xl border border-slate-200">
-              <T><span translate="no" className="notranslate">Không tìm thấy bản tin/kết quả nào được trao huy hiệu phù hợp với điều kiện tìm kiếm.</span></T>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-4">
-              {groupedReportList.map((item, idx) => (
-                <div 
-                  key={idx} 
-                  className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs hover:shadow-md transition-all space-y-3"
-                >
-                  {/* Top Bar of item card */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-100 text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-[11px] font-black bg-slate-900 text-white px-2 py-0.5 rounded">
-                        <span translate="no" className="notranslate">ID: {item.reportCode}</span>
-                      </span>
-                      <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
-                        item.targetType === "Kết quả xử lý"
-                          ? "bg-purple-100 text-purple-800 border border-purple-200"
-                          : "bg-amber-100 text-amber-800 border border-amber-200"
-                      }`}>
-                        <T><span translate="no" className="notranslate">{item.targetType}</span></T>
-                      </span>
-                    </div>
+          {/* SUB-VIEW 1: BẢN TIN (Default) */}
+          {listSubTab === "REPORTS" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between bg-white px-4 py-3 rounded-xl border border-slate-200 text-xs font-bold text-slate-700">
+                <span>
+                  <T><span translate="no" className="notranslate">DANH SÁCH BẢN TIN & KẾT QUẢ ĐƯỢC TRAO HUY HIỆU</span></T>
+                </span>
+                <span className="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-lg border border-indigo-200 font-extrabold">
+                  <span translate="no" className="notranslate">{groupedReportList.length}</span> <T><span translate="no" className="notranslate">mục được vinh danh</span></T>
+                </span>
+              </div>
 
-                    <div className="text-right">
-                      <span className="text-sm font-black text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
-                        <span translate="no" className="notranslate">+{item.totalReportPoints}</span> <span className="text-[10px] font-normal">điểm thưởng</span>
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Recipient info & Content */}
-                  <div className="space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="font-extrabold text-slate-900">
-                        👤 <span translate="no" className="notranslate">{item.recipientName}</span>
-                      </span>
-                      <span className="text-slate-400">|</span>
-                      <span className="text-slate-700 font-medium">
-                        <span translate="no" className="notranslate">{item.recipientDepartment}</span>
-                      </span>
-                      <span className="text-slate-400">|</span>
-                      <span className="text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-[10.5px]">
-                        🏢 <span translate="no" className="notranslate">{item.recipientFactory}</span>
-                      </span>
-                    </div>
-
-                    <div className="text-xs text-slate-800 font-black leading-relaxed bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
-                      <T><span translate="no" className="notranslate">"{(item.content || "").toUpperCase()}"</span></T>
-                    </div>
-                  </div>
-
-                  {/* Badges List on this item */}
-                  <div className="pt-2 border-t border-slate-100">
-                    <p className="text-[10px] font-extrabold text-amber-800 uppercase tracking-wider mb-2">
-                      <T><span translate="no" className="notranslate">HUY HIỆU ĐƯỢC TRAO TẶNG:</span></T>
-                    </p>
-
-                    <div className="flex flex-wrap gap-2">
-                      {item.badges.map((b, bIdx) => (
-                        <div 
-                          key={bIdx}
-                          className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/90 rounded-xl p-2 text-xs flex items-center gap-2 shadow-2xs"
-                        >
-                          <span className="text-base">🏅</span>
-                          <div>
-                            <p className="font-black text-amber-950 text-[11px]">
-                              <T><span translate="no" className="notranslate">{b.badgeName}</span></T>
-                              <span className="ml-1 text-emerald-700 text-[10px] font-bold">
-                                (+<span translate="no" className="notranslate">{b.points}</span>đ)
-                              </span>
-                            </p>
-                            <p className="text-[9.5px] text-slate-600 font-medium">
-                              Trao bởi: <span className="font-bold text-slate-800" translate="no">{b.giverName}</span> (<span translate="no">{b.giverPosition}</span>) • <span translate="no">{b.badgeTimestamp}</span>
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+              {groupedReportList.length === 0 ? (
+                <div className="bg-white p-12 text-center text-slate-500 text-xs italic rounded-2xl border border-slate-200">
+                  <T><span translate="no" className="notranslate">Không tìm thấy bản tin/kết quả nào được trao huy hiệu phù hợp với điều kiện tìm kiếm.</span></T>
                 </div>
-              ))}
+              ) : (
+                <div className="grid grid-cols-1 gap-4">
+                  {groupedReportList.map((item, idx) => (
+                    <div 
+                      key={idx} 
+                      className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs hover:shadow-md transition-all space-y-3"
+                    >
+                      {/* Top Bar of item card */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-100 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-[11px] font-black bg-slate-900 text-white px-2 py-0.5 rounded">
+                            <span translate="no" className="notranslate">ID: {item.reportCode}</span>
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                            item.targetType === "Kết quả xử lý"
+                              ? "bg-purple-100 text-purple-800 border border-purple-200"
+                              : "bg-amber-100 text-amber-800 border border-amber-200"
+                          }`}>
+                            <T><span translate="no" className="notranslate">{item.targetType}</span></T>
+                          </span>
+                        </div>
+
+                        <div className="text-right">
+                          <span className="text-sm font-black text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                            <span translate="no" className="notranslate">+{item.totalReportPoints}</span> <span className="text-[10px] font-normal">điểm thưởng</span>
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Recipient info & Content */}
+                      <div className="space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className="font-extrabold text-slate-900">
+                            👤 <span translate="no" className="notranslate">{item.recipientName}</span>
+                          </span>
+                          <span className="text-slate-400">|</span>
+                          <span className="text-slate-700 font-medium">
+                            <span translate="no" className="notranslate">{item.recipientDepartment}</span>
+                          </span>
+                          <span className="text-slate-400">|</span>
+                          <span className="text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-[10.5px]">
+                            🏢 <span translate="no" className="notranslate">{item.recipientFactory}</span>
+                          </span>
+                        </div>
+
+                        <div className="text-xs text-slate-800 font-black leading-relaxed bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
+                          <T><span translate="no" className="notranslate">"{(item.content || "").toUpperCase()}"</span></T>
+                        </div>
+                      </div>
+
+                      {/* Badges List on this item */}
+                      <div className="pt-2 border-t border-slate-100">
+                        <p className="text-[10px] font-extrabold text-amber-800 uppercase tracking-wider mb-2">
+                          <T><span translate="no" className="notranslate">HUY HIỆU ĐƯỢC TRAO TẶNG:</span></T>
+                        </p>
+
+                        <div className="flex flex-wrap gap-2">
+                          {item.badges.map((b, bIdx) => (
+                            <div 
+                              key={bIdx}
+                              className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/90 rounded-xl p-2 text-xs flex items-center gap-2 shadow-2xs"
+                            >
+                              <span className="text-base">🏅</span>
+                              <div>
+                                <p className="font-black text-amber-950 text-[11px]">
+                                  <T><span translate="no" className="notranslate">{b.badgeName}</span></T>
+                                  <span className="ml-1 text-emerald-700 text-[10px] font-bold">
+                                    (+<span translate="no" className="notranslate">{b.points}</span>đ)
+                                  </span>
+                                </p>
+                                <p className="text-[9.5px] text-slate-600 font-medium">
+                                  Trao bởi: <span className="font-bold text-slate-800" translate="no">{b.giverName}</span> (<span translate="no">{b.giverPosition}</span>) • <span translate="no">{b.badgeTimestamp}</span>
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* SUB-VIEW 2: BỘ PHẬN */}
+          {listSubTab === "DEPARTMENTS" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between bg-white px-4 py-3 rounded-xl border border-slate-200 text-xs font-bold text-slate-700">
+                <span>
+                  <T><span translate="no" className="notranslate">DANH SÁCH BỘ PHẬN ĐƯỢC KHEN THƯỞNG HUY HIỆU</span></T>
+                </span>
+                <span className="bg-amber-50 text-amber-800 px-2.5 py-1 rounded-lg border border-amber-200 font-extrabold">
+                  <span translate="no" className="notranslate">{detailedDepartmentList.length}</span> <T><span translate="no" className="notranslate">bộ phận</span></T>
+                </span>
+              </div>
+
+              {detailedDepartmentList.length === 0 ? (
+                <div className="bg-white p-12 text-center text-slate-500 text-xs italic rounded-2xl border border-slate-200">
+                  <T><span translate="no" className="notranslate">Chưa có dữ liệu bộ phận nào được trao huy hiệu phù hợp với điều kiện tìm kiếm.</span></T>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4">
+                  {detailedDepartmentList.map((dept, idx) => (
+                    <DepartmentCard key={idx} dept={dept} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* SUB-VIEW 3: QUẢN LÝ */}
+          {listSubTab === "MANAGERS" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between bg-white px-4 py-3 rounded-xl border border-slate-200 text-xs font-bold text-slate-700">
+                <span>
+                  <T><span translate="no" className="notranslate">DANH SÁCH CẤP QUẢN LÝ TRAO HUY HIỆU</span></T>
+                </span>
+                <span className="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-lg border border-indigo-200 font-extrabold">
+                  <span translate="no" className="notranslate">{detailedManagerList.length}</span> <T><span translate="no" className="notranslate">quản lý đã khen thưởng</span></T>
+                </span>
+              </div>
+
+              {detailedManagerList.length === 0 ? (
+                <div className="bg-white p-12 text-center text-slate-500 text-xs italic rounded-2xl border border-slate-200">
+                  <T><span translate="no" className="notranslate">Chưa có dữ liệu cấp quản lý trao huy hiệu phù hợp với điều kiện tìm kiếm.</span></T>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4">
+                  {detailedManagerList.map((mgr, idx) => (
+                    <ManagerCard key={idx} mgr={mgr} />
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

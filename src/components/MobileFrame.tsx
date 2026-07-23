@@ -9,7 +9,7 @@ import { findMentionedUsers, parseReportTimestamp } from "../utils/notificationH
 import { QRCodeSVG } from "qrcode.react";
 import { isSameBranchOrFactory, formatNameCapitalized, canUserManageDirective, canUserProcessOrResolveReport, isHQOrManagerUser } from "../utils/branchHelpers";
 import { AutoImageSlider } from "./AutoImageSlider";
-import { getCategoryFallbackImage } from "../utils/imageProcessor";
+import { getCategoryFallbackImage, compressAvatar } from "../utils/imageProcessor";
 import { findUser, resolveUploaderInfo, resolveBadgeGiverInfo, resolveEvaluatorInfo, resolveSenderInfo } from "../utils/userResolver";
 import { MobileReportRatingContainer, isEligibleEvaluator, BADGE_PRAISE_MAP } from "./MobileReportRatingSection";
 import { RED_BADGES, GREEN_BADGES, BadgeDefinition } from "../data";
@@ -245,6 +245,8 @@ interface MobileFrameProps {
     threadTitle?: string,
     threadCategory?: string
   ) => void;
+  onEditChatMessage?: (chatId: string, newMessage: string) => void;
+  onDeleteChatMessage?: (chatId: string) => void;
   onUpdateUserStatus?: (id: string, status: UserStatus) => void;
   onUpdateUserRole?: (id: string, role: UserRole) => void;
   isNativeScrollActive?: boolean;
@@ -1414,6 +1416,8 @@ export default function MobileFrame({
   onSwitchToDesktop,
   chats,
   onAddChatMessage,
+  onEditChatMessage,
+  onDeleteChatMessage,
   onUpdateUserStatus,
   onUpdateUserRole,
   isNativeScrollActive,
@@ -1718,6 +1722,19 @@ export default function MobileFrame({
   const [showQrCodeView, setShowQrCodeView] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [openChatReportId, setOpenChatReportId] = useState<string | null>(null);
+  const [editingChatId, setEditingChatId] = useState<string | null>(null);
+  const [editChatText, setEditChatText] = useState<string>("");
+  const [deletingChatId, setDeletingChatId] = useState<string | null>(null);
+
+  const [headerLogoAvatar, setHeaderLogoAvatar] = useState<string>(() => {
+    try {
+      return window.localStorage.getItem("4m1e1i_header_logo_avatar") || "";
+    } catch {
+      return "";
+    }
+  });
+  const [showLogoAvatarModal, setShowLogoAvatarModal] = useState<boolean>(false);
+  const [logoAvatarUrlInput, setLogoAvatarUrlInput] = useState<string>("");
 
   const [aiAnalysisReport, setAiAnalysisReport] = useState<QualityReport | null>(null);
   const [aiAnalysisText, setAiAnalysisText] = useState<string>("");
@@ -4255,12 +4272,37 @@ App Link: ${window.location.origin}`;
         {/* Row 1: Brand & Icons */}
         <div className="flex items-center justify-between w-full">
           <div className="flex items-center gap-2">
-            {/* TANPHU simulated logo block */}
-            <div className="relative">
-              <div className="bg-white text-[9px] font-black px-1.5 py-0.5 rounded flex items-center justify-center font-sans tracking-tighter" style={{ color: "var(--color-primary, #1e3a8a)" }}>
-                <T>TANPHU</T>
-              </div>
-            </div>
+            {/* Customizable TANPHU logo avatar block */}
+            <button
+              type="button"
+              onClick={() => setShowLogoAvatarModal(true)}
+              className="relative group cursor-pointer focus:outline-none transition-transform active:scale-95 shrink-0"
+              title="Nhấp để thay đổi Logo Avatar"
+            >
+              {headerLogoAvatar ? (
+                <div className="relative w-8 h-8 rounded-lg overflow-hidden border border-white/80 shadow-xs bg-white flex items-center justify-center">
+                  <img
+                    src={headerLogoAvatar}
+                    alt="Logo Avatar"
+                    className="w-full h-full object-cover"
+                    onError={() => {
+                      setHeaderLogoAvatar("");
+                      window.localStorage.removeItem("4m1e1i_header_logo_avatar");
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-black/35 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <Camera className="w-3.5 h-3.5 text-white drop-shadow" />
+                  </div>
+                </div>
+              ) : (
+                <div className="relative bg-white text-[9px] font-black px-1.5 py-0.5 rounded flex items-center justify-center font-sans tracking-tighter shadow-xs group-hover:bg-amber-50 transition-colors" style={{ color: "var(--color-primary, #1e3a8a)" }}>
+                  <span translate="no" className="notranslate"><T>TANPHU</T></span>
+                  <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 text-slate-900 rounded-full flex items-center justify-center opacity-80 group-hover:opacity-100 shadow-2xs">
+                    <Camera className="w-1.5 h-1.5" />
+                  </div>
+                </div>
+              )}
+            </button>
             <div className="flex flex-col justify-center select-none">
               <T className="font-bold text-[13.2px] tracking-wide whitespace-nowrap leading-none block text-left">META ANDON</T>
               <T className="text-[8px] font-bold tracking-[-0.015em] opacity-90 whitespace-nowrap block text-left leading-none mt-1">Mỗi nhân viên là một QC</T>
@@ -7455,10 +7497,13 @@ App Link: ${window.location.origin}`;
                         return reportChats.map((msg) => {
                           const resolvedSender = resolveSenderInfo(users, msg.senderPhone, msg.senderName, msg.senderRole);
                           const isMyself = resolvedSender.fullName === currentUser?.fullName || msg.senderPhone === currentUser?.phone;
+                          const isAdmin = currentUser?.role === UserRole.ADMIN;
+                          const isEditingThis = editingChatId === msg.id;
+
                           return (
                             <div 
                               key={msg.id} 
-                              className={`flex flex-col max-w-[85%] ${isMyself ? "self-end items-end" : "self-start items-start"}`}
+                              className={`flex flex-col max-w-[88%] ${isMyself ? "self-end items-end" : "self-start items-start"}`}
                             >
                               {/* Metadata block containing sender title and role details */}
                               <div className="text-[8.5px] font-bold text-slate-500 mb-0.5 px-0.5 select-none flex items-center gap-1 flex-wrap">
@@ -7466,21 +7511,111 @@ App Link: ${window.location.origin}`;
                                 <span className="opacity-60 text-[7px] font-normal font-mono">({resolvedSender.position || resolvedSender.role || msg.senderRole})</span>
                               </div>
 
-                              {/* Rich comment bubble text styled blue for myself and white for others */}
-                              <div 
-                                className={`rounded-xl px-2.5 py-1.5 text-xs font-semibold leading-normal shadow-xs ${
-                                  isMyself 
-                                    ? "bg-blue-600 text-white rounded-tr-none text-right" 
-                                    : "bg-white text-slate-800 border border-slate-200 rounded-tl-none text-left"
-                                }`}
-                              >
-                                <span translate="no" className="notranslate">{msg.message}</span>
-                              </div>
+                              {isEditingThis ? (
+                                <div className="flex flex-col gap-1.5 w-full bg-amber-50/90 p-2 rounded-xl border border-amber-300 shadow-xs">
+                                  <textarea
+                                    value={editChatText}
+                                    onChange={(e) => setEditChatText(e.target.value)}
+                                    className="w-full text-xs p-1.5 border border-amber-300 rounded-lg bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500 font-sans"
+                                    rows={2}
+                                    autoFocus
+                                  />
+                                  <div className="flex justify-end gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingChatId(null);
+                                        setEditChatText("");
+                                      }}
+                                      className="px-2 py-0.5 text-[9px] font-bold text-slate-600 bg-slate-200 hover:bg-slate-300 rounded cursor-pointer"
+                                    >
+                                      <span translate="no" className="notranslate"><T>Hủy</T></span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const val = editChatText.trim();
+                                        if (val && onEditChatMessage) {
+                                          onEditChatMessage(msg.id, val);
+                                        }
+                                        setEditingChatId(null);
+                                        setEditChatText("");
+                                      }}
+                                      className="px-2 py-0.5 text-[9px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded cursor-pointer flex items-center gap-0.5"
+                                    >
+                                      <Check className="w-2.5 h-2.5" />
+                                      <span translate="no" className="notranslate"><T>Lưu</T></span>
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  {/* Rich comment bubble text styled blue for myself and white for others */}
+                                  <div 
+                                    className={`rounded-xl px-2.5 py-1.5 text-xs font-semibold leading-normal shadow-xs ${
+                                      isMyself 
+                                        ? "bg-blue-600 text-white rounded-tr-none text-right" 
+                                        : "bg-white text-slate-800 border border-slate-200 rounded-tl-none text-left"
+                                    }`}
+                                  >
+                                    <span translate="no" className="notranslate">{msg.message}</span>
+                                  </div>
 
-                              {/* Formatted Date value displayed as dd/mm/yy */}
-                              <div className="text-[7.5px] font-mono text-slate-400 mt-0.5 px-0.5 select-none">
-                                {formatTimestampToDMY(msg.timestamp)}
-                              </div>
+                                  {/* Formatted Date value displayed as dd/mm/yy + Admin controls */}
+                                  <div className="flex items-center gap-1.5 mt-0.5 px-0.5 select-none">
+                                    <span className="text-[7.5px] font-mono text-slate-400">
+                                      {formatTimestampToDMY(msg.timestamp)}
+                                    </span>
+                                    {isAdmin && (
+                                      deletingChatId === msg.id ? (
+                                        <div className="flex items-center gap-1.5 ml-1 bg-rose-50/95 border border-rose-300 px-2 py-0.5 rounded-md text-[9px] font-bold text-rose-700 animate-fadeIn shadow-xs">
+                                          <span translate="no" className="notranslate"><T>Xóa tin nhắn này?</T></span>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              onDeleteChatMessage?.(msg.id);
+                                              setDeletingChatId(null);
+                                            }}
+                                            className="px-1.5 py-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-[8.5px] font-bold cursor-pointer"
+                                          >
+                                            <span translate="no" className="notranslate"><T>Xóa</T></span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setDeletingChatId(null)}
+                                            className="px-1.5 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-[8.5px] font-bold cursor-pointer"
+                                          >
+                                            <span translate="no" className="notranslate"><T>Hủy</T></span>
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center gap-1 ml-1 bg-slate-100/90 px-1 py-0.5 rounded border border-slate-200">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setEditingChatId(msg.id);
+                                              setEditChatText(msg.message);
+                                              setDeletingChatId(null);
+                                            }}
+                                            className="p-0.5 text-amber-600 hover:text-amber-800 transition-colors cursor-pointer"
+                                            title="Chỉnh sửa tin nhắn (Admin)"
+                                          >
+                                            <Edit className="w-2.5 h-2.5" />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setDeletingChatId(msg.id)}
+                                            className="p-0.5 text-rose-500 hover:text-rose-700 transition-colors cursor-pointer"
+                                            title="Xóa tin nhắn (Admin)"
+                                          >
+                                            <Trash2 className="w-2.5 h-2.5" />
+                                          </button>
+                                        </div>
+                                      )
+                                    )}
+                                  </div>
+                                </>
+                              )}
                             </div>
                           );
                         });
@@ -10095,6 +10230,137 @@ App Link: ${window.location.origin}`}
                 className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-black text-[10px] py-2 rounded-xl shadow-md cursor-pointer transition-all uppercase border-none"
               >
                 <T>Đăng Xuất</T>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Logo Avatar Management Modal */}
+      {showLogoAvatarModal && (
+        <div className="fixed lg:absolute inset-0 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 z-[70] select-none animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-100 flex flex-col gap-4 text-slate-800">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
+                  <Camera className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-black text-slate-900 uppercase tracking-tight">
+                    <span translate="no" className="notranslate"><T>TÙY CHỈNH LOGO AVATAR</T></span>
+                  </h3>
+                  <p className="text-[9.5px] text-slate-500 font-medium">
+                    <span translate="no" className="notranslate"><T>Thay đổi Logo Avatar ở vị trí góc trên thanh tiêu đề</T></span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowLogoAvatarModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Current Avatar Preview */}
+            <div className="flex flex-col items-center justify-center bg-slate-900 rounded-xl p-4 border border-slate-800 gap-2">
+              <span className="text-[10px] font-bold text-slate-300">
+                <span translate="no" className="notranslate"><T>Xem trước biểu tượng hiển thị:</T></span>
+              </span>
+              <div className="p-2.5 bg-blue-900/90 rounded-xl shadow-inner flex items-center justify-center border border-white/20">
+                {headerLogoAvatar ? (
+                  <img src={headerLogoAvatar} alt="Logo Preview" className="w-10 h-10 rounded-lg object-cover border border-white shadow" />
+                ) : (
+                  <div className="bg-white text-xs font-black px-2 py-1 rounded text-blue-900 font-sans tracking-tighter shadow">
+                    TANPHU
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Upload from file */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                <Upload className="w-3.5 h-3.5 text-blue-600" />
+                <span translate="no" className="notranslate"><T>Tải hình ảnh từ thiết bị:</T></span>
+              </label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    try {
+                      const compressedDataUrl = await compressAvatar(file);
+                      setHeaderLogoAvatar(compressedDataUrl);
+                      window.localStorage.setItem("4m1e1i_header_logo_avatar", compressedDataUrl);
+                      setShowLogoAvatarModal(false);
+                      showToast("Đã cập nhật Logo Avatar thành công!");
+                    } catch (err) {
+                      alert("Lỗi khi nén ảnh: " + (err as Error).message);
+                    }
+                  }
+                }}
+                className="block w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-extrabold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer border border-slate-200 rounded-xl bg-slate-50"
+              />
+            </div>
+
+            {/* Paste URL */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                <ExternalLink className="w-3.5 h-3.5 text-indigo-600" />
+                <span translate="no" className="notranslate"><T>Hoặc dán liên kết URL ảnh:</T></span>
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="https://example.com/avatar.jpg"
+                  value={logoAvatarUrlInput}
+                  onChange={(e) => setLogoAvatarUrlInput(e.target.value)}
+                  className="flex-1 text-xs px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = logoAvatarUrlInput.trim();
+                    if (url) {
+                      setHeaderLogoAvatar(url);
+                      window.localStorage.setItem("4m1e1i_header_logo_avatar", url);
+                      setLogoAvatarUrlInput("");
+                      setShowLogoAvatarModal(false);
+                      showToast("Đã lưu Logo Avatar từ URL!");
+                    }
+                  }}
+                  className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shrink-0 cursor-pointer"
+                >
+                  <span translate="no" className="notranslate"><T>Lưu</T></span>
+                </button>
+              </div>
+            </div>
+
+            {/* Reset to default TANPHU */}
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  setHeaderLogoAvatar("");
+                  window.localStorage.removeItem("4m1e1i_header_logo_avatar");
+                  setShowLogoAvatarModal(false);
+                  showToast("Đã khôi phục biểu tượng chữ TANPHU mặc định!");
+                }}
+                className="text-xs font-bold text-rose-600 hover:text-rose-800 flex items-center gap-1 cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span translate="no" className="notranslate"><T>Đặt lại TANPHU mặc định</T></span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowLogoAvatarModal(false)}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer"
+              >
+                <span translate="no" className="notranslate"><T>Đóng</T></span>
               </button>
             </div>
           </div>

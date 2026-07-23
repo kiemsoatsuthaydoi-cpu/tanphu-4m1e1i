@@ -3028,6 +3028,33 @@ export default function App() {
     }
   };
 
+  const handleEditChatMessage = (chatId: string, newMessage: string) => {
+    if (!currentUser || currentUser.role !== UserRole.ADMIN) return;
+    setChats((prev) =>
+      prev.map((c) => (c.id === chatId ? { ...c, message: newMessage } : c))
+    );
+    if (dbConnected) {
+      const target = chats.find((c) => c.id === chatId);
+      if (target) {
+        saveDocument(COLLECTIONS.CHATS, chatId, { ...target, message: newMessage }).catch((err) => {
+          console.error("Lỗi khi cập nhật tin nhắn trên Firestore:", err);
+        });
+      }
+    }
+    showToast("Đã sửa tin nhắn thảo luận!", "success");
+  };
+
+  const handleDeleteChatMessage = (chatId: string) => {
+    if (!currentUser || currentUser.role !== UserRole.ADMIN) return;
+    setChats((prev) => prev.filter((c) => c.id !== chatId));
+    if (dbConnected) {
+      deleteDocument(COLLECTIONS.CHATS, chatId).catch((err) => {
+        console.error("Lỗi khi xóa tin nhắn trên Firestore:", err);
+      });
+    }
+    showToast("Đã xóa tin nhắn thảo luận!", "success");
+  };
+
   // Report Submission Handler
   const handleSubmitReport = async (payload: Omit<QualityReport, "id" | "googleDrivePath">) => {
     // Force uppercase format for description/content by default
@@ -4194,6 +4221,8 @@ export default function App() {
             onSwitchToDesktop={() => {}}
             chats={chats}
             onAddChatMessage={handleAddChatMessage}
+            onEditChatMessage={handleEditChatMessage}
+            onDeleteChatMessage={handleDeleteChatMessage}
             onUpdateUserStatus={handleUpdateStatus}
             onUpdateUserRole={handleUpdateRole}
             isNativeScrollActive={isNativeScrollActive}
@@ -4315,6 +4344,8 @@ export default function App() {
             onSwitchToDesktop={() => {}}
             chats={chats}
             onAddChatMessage={handleAddChatMessage}
+            onEditChatMessage={handleEditChatMessage}
+            onDeleteChatMessage={handleDeleteChatMessage}
             onUpdateUserStatus={handleUpdateStatus}
             onUpdateUserRole={handleUpdateRole}
             isNativeScrollActive={isNativeScrollActive}
@@ -4629,6 +4660,8 @@ export default function App() {
                 onUpdateAiKnowledge={handleUpdateAiKnowledge}
                 chats={chats}
                 onAddChatMessage={handleAddChatMessage}
+                onEditChatMessage={handleEditChatMessage}
+                onDeleteChatMessage={handleDeleteChatMessage}
                 onUpdateUserStatus={handleUpdateStatus}
                 onUpdateUserRole={handleUpdateRole}
                 isNativeScrollActive={isNativeScrollActive}
