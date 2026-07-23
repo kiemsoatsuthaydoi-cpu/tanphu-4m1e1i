@@ -815,6 +815,14 @@ export default function App() {
     return safeGetItem("4m1e1i_ai_knowledge_text") || "";
   });
 
+  const [headerLogoAvatar, setHeaderLogoAvatar] = useState(() => {
+    return safeGetItem("4m1e1i_header_logo_avatar") || "";
+  });
+
+  useEffect(() => {
+    safeSetItem("4m1e1i_header_logo_avatar", headerLogoAvatar);
+  }, [headerLogoAvatar]);
+
   useEffect(() => {
     safeSetItem("4m1e1i_qc_feature_enabled", String(isQcFeatureEnabled));
   }, [isQcFeatureEnabled]);
@@ -894,6 +902,14 @@ export default function App() {
     setIsQcFeatureEnabled(enabled);
     if (dbConnected) {
       saveDocument("config", "qc_feature", { enabled }).catch(console.error);
+    }
+  }, [dbConnected]);
+
+  const handleUpdateHeaderLogoAvatar = useCallback((url: string) => {
+    setHeaderLogoAvatar(url);
+    safeSetItem("4m1e1i_header_logo_avatar", url);
+    if (dbConnected) {
+      saveDocument("config", "header_logo_avatar", { url }).catch(console.error);
     }
   }, [dbConnected]);
 
@@ -1782,6 +1798,12 @@ export default function App() {
             const data = doc.data();
             if (data && typeof data.enabled === "boolean") {
               setIsQcFeatureEnabled(data.enabled);
+            }
+          } else if (doc.id === "header_logo_avatar") {
+            const data = doc.data();
+            if (data && typeof data.url === "string") {
+              setHeaderLogoAvatar(data.url);
+              safeSetItem("4m1e1i_header_logo_avatar", data.url);
             }
           }
         });
@@ -4199,6 +4221,8 @@ export default function App() {
           />
         ) : (
           <MobileFrame
+            headerLogoAvatar={headerLogoAvatar}
+            onUpdateHeaderLogoAvatar={handleUpdateHeaderLogoAvatar}
             errorCatalog={errorCatalog}
             onAddErrorCatalogItem={handleAddErrorCatalogItem}
             isQcFeatureEnabled={isQcFeatureEnabled}
@@ -4322,6 +4346,8 @@ export default function App() {
           />
         ) : (
           <MobileFrame
+            headerLogoAvatar={headerLogoAvatar}
+            onUpdateHeaderLogoAvatar={handleUpdateHeaderLogoAvatar}
             errorCatalog={errorCatalog}
             onAddErrorCatalogItem={handleAddErrorCatalogItem}
             isQcFeatureEnabled={isQcFeatureEnabled}
@@ -4560,6 +4586,8 @@ export default function App() {
               />
             ) : (
               <MobileFrame
+                headerLogoAvatar={headerLogoAvatar}
+                onUpdateHeaderLogoAvatar={handleUpdateHeaderLogoAvatar}
                 errorCatalog={errorCatalog}
                 onAddErrorCatalogItem={handleAddErrorCatalogItem}
                 isQcFeatureEnabled={isQcFeatureEnabled}
@@ -4636,6 +4664,8 @@ export default function App() {
               />
             ) : (
               <MobileFrame
+                headerLogoAvatar={headerLogoAvatar}
+                onUpdateHeaderLogoAvatar={handleUpdateHeaderLogoAvatar}
                 errorCatalog={errorCatalog}
                 onAddErrorCatalogItem={handleAddErrorCatalogItem}
                 isQcFeatureEnabled={isQcFeatureEnabled}

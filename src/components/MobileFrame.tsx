@@ -265,6 +265,8 @@ interface MobileFrameProps {
   setReadNotifIds?: React.Dispatch<React.SetStateAction<string[]>>;
   onExportBackup?: () => void;
   onImportBackup?: (jsonData: string) => Promise<boolean>;
+  headerLogoAvatar?: string;
+  onUpdateHeaderLogoAvatar?: (url: string) => void;
 
   // Forum props
   topics?: ForumTopic[];
@@ -1436,6 +1438,8 @@ export default function MobileFrame({
   setReadNotifIds: setReadNotifIdsProp,
   onExportBackup,
   onImportBackup,
+  headerLogoAvatar: headerLogoAvatarProp,
+  onUpdateHeaderLogoAvatar,
 
   // Forum props
   topics = [],
@@ -1726,13 +1730,31 @@ export default function MobileFrame({
   const [editChatText, setEditChatText] = useState<string>("");
   const [deletingChatId, setDeletingChatId] = useState<string | null>(null);
 
-  const [headerLogoAvatar, setHeaderLogoAvatar] = useState<string>(() => {
+  const [localHeaderLogoAvatar, setLocalHeaderLogoAvatar] = useState<string>(() => {
     try {
       return window.localStorage.getItem("4m1e1i_header_logo_avatar") || "";
     } catch {
       return "";
     }
   });
+
+  const headerLogoAvatar = headerLogoAvatarProp !== undefined ? headerLogoAvatarProp : localHeaderLogoAvatar;
+
+  const handleSaveHeaderLogoAvatar = (newUrl: string) => {
+    setLocalHeaderLogoAvatar(newUrl);
+    try {
+      if (newUrl) {
+        window.localStorage.setItem("4m1e1i_header_logo_avatar", newUrl);
+      } else {
+        window.localStorage.removeItem("4m1e1i_header_logo_avatar");
+      }
+    } catch {
+      // ignore
+    }
+    if (onUpdateHeaderLogoAvatar) {
+      onUpdateHeaderLogoAvatar(newUrl);
+    }
+  };
   const [showLogoAvatarModal, setShowLogoAvatarModal] = useState<boolean>(false);
   const [logoAvatarUrlInput, setLogoAvatarUrlInput] = useState<string>("");
 
@@ -4275,9 +4297,15 @@ App Link: ${window.location.origin}`;
             {/* Customizable TANPHU logo avatar block */}
             <button
               type="button"
-              onClick={() => setShowLogoAvatarModal(true)}
+              onClick={() => {
+                if (currentUser?.role !== UserRole.ADMIN) {
+                  showToast("Chỉ tài khoản Admin mới có quyền thay đổi Logo Avatar!");
+                  return;
+                }
+                setShowLogoAvatarModal(true);
+              }}
               className="relative group cursor-pointer focus:outline-none transition-transform active:scale-95 shrink-0"
-              title="Nhấp để thay đổi Logo Avatar"
+              title={currentUser?.role === UserRole.ADMIN ? "Nhấp để thay đổi Logo Avatar (Dành cho Admin)" : "Logo Avatar ứng dụng"}
             >
               {headerLogoAvatar ? (
                 <div className="relative w-8 h-8 rounded-lg overflow-hidden border border-white/80 shadow-xs bg-white flex items-center justify-center">
@@ -4286,20 +4314,23 @@ App Link: ${window.location.origin}`;
                     alt="Logo Avatar"
                     className="w-full h-full object-cover"
                     onError={() => {
-                      setHeaderLogoAvatar("");
-                      window.localStorage.removeItem("4m1e1i_header_logo_avatar");
+                      handleSaveHeaderLogoAvatar("");
                     }}
                   />
-                  <div className="absolute inset-0 bg-black/35 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <Camera className="w-3.5 h-3.5 text-white drop-shadow" />
-                  </div>
+                  {currentUser?.role === UserRole.ADMIN && (
+                    <div className="absolute inset-0 bg-black/35 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <Camera className="w-3.5 h-3.5 text-white drop-shadow" />
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="relative bg-white text-[9px] font-black px-1.5 py-0.5 rounded flex items-center justify-center font-sans tracking-tighter shadow-xs group-hover:bg-amber-50 transition-colors" style={{ color: "var(--color-primary, #1e3a8a)" }}>
                   <span translate="no" className="notranslate"><T>TANPHU</T></span>
-                  <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 text-slate-900 rounded-full flex items-center justify-center opacity-80 group-hover:opacity-100 shadow-2xs">
-                    <Camera className="w-1.5 h-1.5" />
-                  </div>
+                  {currentUser?.role === UserRole.ADMIN && (
+                    <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 text-slate-900 rounded-full flex items-center justify-center opacity-80 group-hover:opacity-100 shadow-2xs">
+                      <Camera className="w-1.5 h-1.5" />
+                    </div>
+                  )}
                 </div>
               )}
             </button>
@@ -10250,7 +10281,7 @@ App Link: ${window.location.origin}`}
                     <span translate="no" className="notranslate"><T>TÙY CHỈNH LOGO AVATAR</T></span>
                   </h3>
                   <p className="text-[9.5px] text-slate-500 font-medium">
-                    <span translate="no" className="notranslate"><T>Thay đổi Logo Avatar ở vị trí góc trên thanh tiêu đề</T></span>
+                    <span translate="no" className="notranslate"><T>Thay đổi Logo Avatar áp dụng cho tất cả người dùng (Dành riêng cho Admin)</T></span>
                   </p>
                 </div>
               </div>
@@ -10293,10 +10324,9 @@ App Link: ${window.location.origin}`}
                   if (file) {
                     try {
                       const compressedDataUrl = await compressAvatar(file);
-                      setHeaderLogoAvatar(compressedDataUrl);
-                      window.localStorage.setItem("4m1e1i_header_logo_avatar", compressedDataUrl);
+                      handleSaveHeaderLogoAvatar(compressedDataUrl);
                       setShowLogoAvatarModal(false);
-                      showToast("Đã cập nhật Logo Avatar thành công!");
+                      showToast("Đã cập nhật và đồng bộ Logo Avatar cho toàn hệ thống!");
                     } catch (err) {
                       alert("Lỗi khi nén ảnh: " + (err as Error).message);
                     }
@@ -10325,11 +10355,10 @@ App Link: ${window.location.origin}`}
                   onClick={() => {
                     const url = logoAvatarUrlInput.trim();
                     if (url) {
-                      setHeaderLogoAvatar(url);
-                      window.localStorage.setItem("4m1e1i_header_logo_avatar", url);
+                      handleSaveHeaderLogoAvatar(url);
                       setLogoAvatarUrlInput("");
                       setShowLogoAvatarModal(false);
-                      showToast("Đã lưu Logo Avatar từ URL!");
+                      showToast("Đã lưu và đồng bộ Logo Avatar từ URL!");
                     }
                   }}
                   className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shrink-0 cursor-pointer"
@@ -10344,8 +10373,7 @@ App Link: ${window.location.origin}`}
               <button
                 type="button"
                 onClick={() => {
-                  setHeaderLogoAvatar("");
-                  window.localStorage.removeItem("4m1e1i_header_logo_avatar");
+                  handleSaveHeaderLogoAvatar("");
                   setShowLogoAvatarModal(false);
                   showToast("Đã khôi phục biểu tượng chữ TANPHU mặc định!");
                 }}
