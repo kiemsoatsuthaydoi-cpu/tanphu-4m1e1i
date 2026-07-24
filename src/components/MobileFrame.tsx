@@ -2593,6 +2593,7 @@ export default function MobileFrame({
   const [editingDirectiveText, setEditingDirectiveText] = useState("");
   const [showLikesListReport, setShowLikesListReport] = useState<QualityReport | null>(null);
   const [showAcksListReport, setShowAcksListReport] = useState<QualityReport | null>(null);
+  const [showAiUsersReport, setShowAiUsersReport] = useState<QualityReport | null>(null);
   const [confirmAckModalData, setConfirmAckModalData] = useState<{
     report: QualityReport;
     isCancel: boolean;
@@ -2767,6 +2768,7 @@ export default function MobileFrame({
   const [directiveToDelete, setDirectiveToDelete] = useState<{ report: QualityReport; dirId: string } | null>(null);
 
   // Resolution editor states for KPH items
+  const resolutionFormRef = useRef<HTMLDivElement>(null);
   const [editingResolutionReportId, setEditingResolutionReportId] = useState<string | null>(null);
   const [editingResolutionId, setEditingResolutionId] = useState<string | null>(null);
   const [resolutionToDelete, setResolutionToDelete] = useState<{ report: QualityReport; resId: string } | null>(null);
@@ -2781,6 +2783,37 @@ export default function MobileFrame({
       [reportId]: !prev[reportId],
     }));
   };
+
+  // Auto-collapse resolution form when clicking/interacting outside of form
+  useEffect(() => {
+    if (!editingResolutionReportId) return;
+
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target) return;
+
+      if (target.closest(".fixed") || target.closest(".z-50")) {
+        return;
+      }
+
+      if (
+        resolutionFormRef.current &&
+        !resolutionFormRef.current.contains(target) &&
+        !target.closest(".resolution-form-trigger")
+      ) {
+        setEditingResolutionReportId(null);
+        setEditingResolutionId(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [editingResolutionReportId]);
 
   useEffect(() => {
     const handleDocumentClick = (e: MouseEvent) => {
@@ -6479,7 +6512,7 @@ App Link: ${window.location.origin}`;
 
                     {/* BP/ĐV PHẢN HỒI & TIẾP NHẬN/ XỬ LÝ list display */}
                     {(report.isAbnormal || report.reportType === "KPH") && (
-                      <div className="mt-2 pt-2 border-t border-slate-100 flex flex-col gap-1.5" id={`receivers-section-${report.id}`}>
+                      <div className="mt-1 pt-1 border-t border-slate-100 flex flex-col gap-1" id={`receivers-section-${report.id}`}>
 
                       {/* Incident Timeline Visual Progress Bar (Main Interactive Control Hub - Option 1) */}
                       {(() => {
@@ -6504,7 +6537,7 @@ App Link: ${window.location.origin}`;
                         );
 
                         return (
-                          <div className="mt-2.5 mb-1 p-2.5 bg-gradient-to-b from-slate-50 to-white border border-slate-200/90 rounded-xl flex flex-col gap-2 shadow-2xs">
+                          <div className="mt-1 mb-1 p-2.5 bg-gradient-to-b from-slate-50 to-white border border-slate-200/90 rounded-xl flex flex-col gap-2 shadow-2xs">
                             <div className="flex items-center justify-between text-[9px] font-black text-slate-500 uppercase tracking-tight select-none px-0.5">
                               <div className="flex items-center gap-1">
                                 <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
@@ -6532,7 +6565,7 @@ App Link: ${window.location.origin}`;
                               </div>
                             </div>
 
-                            <div className="relative flex items-start justify-between mt-1 px-1 py-0.5">
+                            <div className="relative flex items-start justify-between mt-4 px-1 py-0.5">
                               {/* Connector Line Background */}
                               <div className="absolute top-4 left-8 right-8 h-1 bg-slate-200 rounded-full z-0 overflow-hidden">
                                 <div
@@ -6540,13 +6573,33 @@ App Link: ${window.location.origin}`;
                                     isResolved
                                       ? "bg-gradient-to-r from-blue-500 via-amber-500 to-emerald-500 w-full"
                                       : ackCount > 0
-                                        ? hasReceiverUsedAi
-                                          ? "bg-gradient-to-r from-blue-500 via-purple-500 to-amber-500 w-1/2"
-                                          : "bg-gradient-to-r from-blue-500 to-amber-500 w-1/2"
+                                        ? aiUsedList.length > 0
+                                          ? "bg-gradient-to-r from-blue-500 via-purple-500 to-emerald-500 w-1/2"
+                                          : "bg-gradient-to-r from-blue-500 to-emerald-500 w-1/2"
                                         : "bg-blue-500 w-0"
                                   }`}
                                 />
                               </div>
+
+                              {/* "AI" Badge Button floating above Timeline bar segment */}
+                              {aiUsedList.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowAiUsersReport(report);
+                                  }}
+                                  className={`absolute -top-3.5 z-20 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-[8.5px] font-black shadow-xs border border-emerald-500/80 cursor-pointer hover:scale-105 active:scale-95 transition-all ${
+                                    ackCount > 0 
+                                      ? "left-2/3 -translate-x-1/2" 
+                                      : "left-1/3 -translate-x-1/2"
+                                  }`}
+                                  title={`Click xem danh sách ${aiUsedList.length} nhân sự đã dùng AI`}
+                                >
+                                  <Sparkles className="w-2.5 h-2.5 text-white stroke-[2.5px] animate-pulse" />
+                                  <span translate="no" className="notranslate"><T>AI</T></span>
+                                </button>
+                              )}
 
                               {/* Step 1: Ghi nhận sự cố */}
                               <div className="flex flex-col items-center text-center relative z-10 w-1/3">
@@ -6578,21 +6631,21 @@ App Link: ${window.location.origin}`;
                                       });
                                     }}
                                     className={`relative w-8 h-8 rounded-full flex items-center justify-center font-bold shadow-sm border-2 border-white text-[10px] transition-all cursor-pointer active:scale-90 ${
-                                      isAcknowledged
-                                        ? "bg-emerald-600 text-white ring-2 ring-emerald-300 hover:bg-emerald-700"
-                                        : ackCount > 0
-                                          ? hasReceiverUsedAi
-                                            ? "bg-gradient-to-tr from-amber-500 via-purple-600 to-indigo-600 text-white hover:scale-105 ring-2 ring-purple-400"
-                                            : "bg-amber-500 text-white hover:scale-105 ring-2 ring-amber-300"
-                                          : "bg-gradient-to-r from-amber-500 to-orange-500 text-white animate-pulse hover:scale-105 ring-2 ring-orange-300 shadow-orange-200"
+                                      ackCount > 0
+                                        ? hasReceiverUsedAi
+                                          ? "bg-emerald-600 text-white ring-2 ring-purple-400 hover:bg-emerald-700"
+                                          : "bg-emerald-600 text-white ring-2 ring-emerald-300 hover:bg-emerald-700"
+                                        : "bg-gradient-to-r from-amber-500 to-orange-500 text-white animate-pulse hover:scale-105 ring-2 ring-orange-300 shadow-orange-200"
                                     }`}
                                     title={
                                       isAcknowledged
                                         ? (isDsa ? "Đã ghi nhận & biểu dương! Click để quản lý" : "Bạn đã tiếp nhận bản tin này! Click để thay đổi")
-                                        : (isDsa ? "Click để GHI NHẬN & BIỂU DƯƠNG ngay!" : "Click để TIẾP NHẬN / XỬ LÝ ngay!")
+                                        : ackCount > 0
+                                          ? (isDsa ? "Đã biểu dương! Click để tiếp nhận/biểu dương thêm" : `Đã có ${ackCount} người tiếp nhận! Click để tiếp nhận thêm`)
+                                          : (isDsa ? "Click để GHI NHẬN & BIỂU DƯƠNG ngay!" : "Click để TIẾP NHẬN / XỬ LÝ ngay!")
                                     }
                                   >
-                                    {isAcknowledged ? (
+                                    {ackCount > 0 ? (
                                       <Check className="w-4 h-4 stroke-[3px] text-white" />
                                     ) : (
                                       <Users className="w-4 h-4 stroke-[2.5px]" />
@@ -6630,15 +6683,13 @@ App Link: ${window.location.origin}`;
                                     });
                                   }}
                                   className={`mt-1 text-[9.5px] font-black leading-tight flex items-center gap-0.5 border-none bg-transparent cursor-pointer hover:underline ${
-                                    isAcknowledged 
+                                    ackCount > 0 
                                       ? "text-emerald-700" 
-                                      : ackCount > 0 
-                                        ? (hasReceiverUsedAi ? "text-purple-900" : "text-amber-800") 
-                                        : "text-amber-600"
+                                      : "text-amber-600"
                                   }`}
                                 >
                                   <span translate="no" className="notranslate">
-                                    <T>{isAcknowledged ? (isDsa ? "Đã biểu dương" : "Đã tiếp nhận") : (isDsa ? "Biểu dương" : "Tiếp nhận/ Xử lý")}</T>
+                                    <T>{ackCount > 0 ? (isDsa ? "Đã biểu dương" : "Đã tiếp nhận") : (isDsa ? "Biểu dương" : "Tiếp nhận/ Xử lý")}</T>
                                   </span>
                                 </button>
 
@@ -6647,7 +6698,7 @@ App Link: ${window.location.origin}`;
                                     <button
                                       type="button"
                                       onClick={() => setShowAcksListReport(report)}
-                                      className="text-[8px] text-amber-700 bg-amber-100/90 hover:bg-amber-200/90 px-1.5 py-0.2 rounded-full font-extrabold border border-amber-200/60 inline-block cursor-pointer active:scale-95 transition-all"
+                                      className="text-[8px] text-emerald-800 bg-emerald-100/90 hover:bg-emerald-200/90 px-1.5 py-0.2 rounded-full font-extrabold border border-emerald-200/60 inline-block cursor-pointer active:scale-95 transition-all"
                                       title="Click xem danh sách chi tiết"
                                     >
                                       <span translate="no" className="notranslate">{ackCount} <T>người</T></span>
@@ -6670,17 +6721,6 @@ App Link: ${window.location.origin}`;
                                     >
                                       <span translate="no" className="notranslate"><T>+ Tiếp nhận ngay</T></span>
                                     </button>
-                                  )}
-
-                                  {/* AI Badge on Timeline Step 2 */}
-                                  {hasReceiverUsedAi && (
-                                    <span
-                                      className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 text-white text-[8px] font-black shadow-xs tracking-tight border border-purple-200/80"
-                                      title={`Người tiếp nhận/xử lý (${aiUsedList.join(', ')}) đã sử dụng AI hỗ trợ phân tích`}
-                                    >
-                                      <Sparkles className="w-2.5 h-2.5 text-amber-300 stroke-[2.5px] animate-pulse" />
-                                      <span translate="no" className="notranslate"><T>Đã dùng AI</T></span>
-                                    </span>
                                   )}
                                 </div>
                               </div>
@@ -6708,12 +6748,14 @@ App Link: ${window.location.origin}`;
                                         setExpandedResolutions(prev => ({ ...prev, [report.id]: true }));
                                       }
                                     }}
-                                    className={`relative w-8 h-8 rounded-full flex items-center justify-center font-bold shadow-sm border-2 border-white text-[10px] transition-all cursor-pointer active:scale-90 ${
+                                    className={`relative w-8 h-8 rounded-full flex items-center justify-center font-bold shadow-sm border-2 border-white text-[10px] transition-all cursor-pointer active:scale-90 resolution-form-trigger ${
                                       isResolved
                                         ? "bg-emerald-600 text-white hover:bg-emerald-700 ring-2 ring-emerald-300"
-                                        : resCount > 0
-                                          ? "bg-indigo-600 text-white hover:bg-indigo-700 ring-2 ring-indigo-300"
-                                          : "bg-indigo-50 text-indigo-700 border-indigo-300 hover:bg-indigo-100 ring-2 ring-indigo-200"
+                                        : (ackCount > 0 || isAcknowledged)
+                                          ? "bg-indigo-600 text-white hover:bg-indigo-700 ring-2 ring-indigo-300 animate-pulse hover:scale-105 shadow-indigo-200"
+                                          : resCount > 0
+                                            ? "bg-indigo-600 text-white hover:bg-indigo-700 ring-2 ring-indigo-300"
+                                            : "bg-indigo-50 text-indigo-700 border-indigo-300 hover:bg-indigo-100 ring-2 ring-indigo-200"
                                     }`}
                                     title={
                                       resCount > 0
@@ -6807,7 +6849,11 @@ App Link: ${window.location.origin}`;
                                         setResStatus("Đang xử lý");
                                         setExpandedResolutions(prev => ({ ...prev, [report.id]: true }));
                                       }}
-                                      className="text-[8px] text-indigo-700 font-extrabold bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.2 rounded-full border border-indigo-200 cursor-pointer active:scale-95 transition-all border-none"
+                                      className={`text-[8px] font-extrabold px-1.5 py-0.2 rounded-full cursor-pointer active:scale-95 transition-all border-none ${
+                                        (ackCount > 0 || isAcknowledged)
+                                          ? "text-indigo-800 bg-indigo-100 hover:bg-indigo-200 border border-indigo-300 animate-pulse"
+                                          : "text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200"
+                                      }`}
                                     >
                                       <span translate="no" className="notranslate"><T>+ Ghi nhận ngay</T></span>
                                     </button>
@@ -7768,8 +7814,8 @@ App Link: ${window.location.origin}`;
                           } chat-btn-${report.id}`}
                           title="Thảo luận / Hỏi đáp"
                         >
-                          <MessageSquare className={`w-3.5 h-3.5 stroke-[2.3px] ${isOpen ? "fill-blue-500 text-blue-600" : ""}`} />
-                          <span className="text-[10px] font-black font-sans leading-none">
+                          <MessageSquare className={`w-4 h-4 stroke-[2.3px] ${isOpen ? "fill-blue-500 text-blue-600" : ""}`} />
+                          <span className="text-[11px] font-black font-sans leading-none">
                             <T>{chatCount}</T>
                           </span>
                         </button>
@@ -7778,7 +7824,7 @@ App Link: ${window.location.origin}`;
                     {(() => {
                       const isReportLiked = report.likedBy?.includes(currentUser?.fullName || "Kiểm soát viên") || false;
                       const likesCount = report.likedBy?.length || 0;
- 
+
                       return (
                         <div className="flex items-center gap-0.5 bg-white border border-slate-200 rounded-lg py-0.5 px-1 shrink-0 shadow-3xs whitespace-nowrap flex-nowrap">
                           <button
@@ -7789,7 +7835,7 @@ App Link: ${window.location.origin}`;
                             }`}
                             title={isReportLiked ? "Bỏ thích" : "Thích"}
                           >
-                            <Heart className={`w-3.5 h-3.5 stroke-[2.3px] ${isReportLiked ? "fill-rose-500 text-rose-600" : ""}`} />
+                            <Heart className={`w-4 h-4 stroke-[2.3px] ${isReportLiked ? "fill-rose-500 text-rose-600" : ""}`} />
                           </button>
                           
                           <button
@@ -7800,7 +7846,7 @@ App Link: ${window.location.origin}`;
                               }
                             }}
                             disabled={likesCount === 0}
-                            className={`text-[10px] font-black font-sans px-1 py-0.5 rounded cursor-pointer transition-all border-none leading-none ${
+                            className={`text-[11px] font-black font-sans px-1 py-0.5 rounded cursor-pointer transition-all border-none leading-none ${
                               likesCount > 0 
                                 ? "text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 hover:scale-105" 
                                 : "text-slate-400 bg-transparent cursor-default"
@@ -7824,8 +7870,8 @@ App Link: ${window.location.origin}`;
                           className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg py-1 px-1.5 shrink-0 shadow-3xs transition-all hover:scale-105 active:scale-95 cursor-pointer whitespace-nowrap flex-nowrap text-slate-400 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50/50"
                           title="Trao tặng hoặc xem Huy hiệu"
                         >
-                          <span className="text-[13px] leading-none">🏅</span>
-                          <span translate="no" className="notranslate text-[10px] font-black font-sans leading-none">
+                          <span className="text-[14px] leading-none">🏅</span>
+                          <span translate="no" className="notranslate text-[11px] font-black font-sans leading-none">
                             <T>{badgeCount}</T>
                           </span>
                         </button>
@@ -8593,6 +8639,74 @@ App Link: ${window.location.origin}`}
                       </div>
                     );
                   })
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+       {showAiUsersReport && (() => {
+        const activeReport = reports.find(r => r.id === showAiUsersReport.id) || showAiUsersReport;
+        const displayAiUsers = activeReport.aiUsedBy || [];
+        return (
+          <div 
+            onClick={() => setShowAiUsersReport(null)}
+            className="fixed lg:absolute inset-0 bg-slate-900/65 backdrop-blur-xs flex items-end justify-center z-50 select-none animate-fadeIn cursor-pointer"
+          >
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-t-3xl w-full max-h-[70%] overflow-hidden flex flex-col shadow-2xl border-t border-slate-100 animate-slideUp cursor-default"
+            >
+              {/* Header */}
+              <div className="flex justify-between items-center px-4 py-3.5 border-b border-purple-100 shrink-0 bg-purple-50/60">
+                <div className="flex items-center gap-2 text-purple-900">
+                  <Sparkles className="w-4 h-4 text-purple-600 stroke-[2.5px] animate-pulse" />
+                  <span className="font-extrabold text-[12px] uppercase tracking-tight font-sans">
+                    <span translate="no" className="notranslate">
+                      <T>{`DANH SÁCH NHÂN SỰ ĐÃ DÙNG AI (${displayAiUsers.length})`}</T>
+                    </span>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAiUsersReport(null)}
+                  className="w-7 h-7 rounded-full bg-slate-150 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-xs border-none"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* List of Who Used AI */}
+              <div className="flex-1 overflow-y-auto p-4 bg-slate-50/30 space-y-2 pb-8">
+                {displayAiUsers.length === 0 ? (
+                  <div className="py-10 text-center text-slate-400 text-xs font-medium">
+                    <span translate="no" className="notranslate">
+                      <T>Chưa có dữ liệu nhân sự dùng AI cho bản tin này.</T>
+                    </span>
+                  </div>
+                ) : (
+                  displayAiUsers.map((name, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between p-3 rounded-xl border border-purple-100 bg-white shadow-3xs"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center font-extrabold text-xs shadow-xs shrink-0">
+                          {name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-xs font-extrabold text-slate-800 truncate">
+                            <span translate="no" className="notranslate"><T>{name}</T></span>
+                          </span>
+                          <span className="text-[9.5px] text-purple-700 font-semibold flex items-center gap-1">
+                            <Sparkles className="w-2.5 h-2.5 text-amber-500 stroke-[2px]" />
+                            <span translate="no" className="notranslate"><T>Đã sử dụng Trợ lý AI hỗ trợ phân tích / xử lý</T></span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
                 )}
               </div>
             </div>
