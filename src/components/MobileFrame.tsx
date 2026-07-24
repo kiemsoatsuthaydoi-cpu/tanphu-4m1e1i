@@ -6760,6 +6760,151 @@ App Link: ${window.location.origin}`;
                         </div>
                       )}
 
+                      {/* Displaying detailed Resolution logs list */}
+                      {!!expandedResolutions[report.id] && (report.isAbnormal || report.reportType === "KPH") && report.resolutions && report.resolutions.length > 0 && (
+                        <div className="mt-1.5 p-2 bg-slate-50 border border-slate-150 rounded-lg flex flex-col gap-1.5 max-h-48 overflow-y-auto">
+                          <div className="text-[9.5px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center justify-between select-none">
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <span className="w-1 h-1 rounded-full bg-slate-500"></span>
+                              <span translate="no" className="notranslate">KẾT QUẢ XỬ LÝ CHI TIẾT:</span>
+                            </div>
+                            {currentUser?.role === UserRole.ADMIN && (
+                              <div className="flex items-center gap-1.5 bg-slate-100/80 px-1 py-0.5 rounded border border-slate-200">
+                                {report.resolutions.map((res, idx) => (
+                                  <div key={res.id} className="flex items-center gap-0.5 shrink-0 scale-90">
+                                    {report.resolutions.length > 1 && (
+                                      <span className="text-[7.5px] text-slate-600 font-extrabold select-none mr-0.5">
+                                        BP{idx + 1}
+                                      </span>
+                                    )}
+                                    <button
+                                      type="button"
+                                      title={`Sửa kết quả ${res.departmentName}`}
+                                      onClick={() => {
+                                        setEditingResolutionReportId(report.id);
+                                        setEditingResolutionId(res.id);
+                                        setResDeptName(res.departmentName);
+                                        setResResultText(res.resultText);
+                                        setResStatus(res.status);
+                                      }}
+                                      className="p-0.5 text-slate-500 hover:text-indigo-600 rounded transition-colors cursor-pointer border-none bg-transparent"
+                                    >
+                                      <Edit className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      title={`Xóa kết quả ${res.departmentName}`}
+                                      onClick={() => {
+                                        setResolutionToDelete({ report, resId: res.id });
+                                      }}
+                                      className="p-0.5 text-slate-500 hover:text-rose-600 rounded transition-colors cursor-pointer border-none bg-transparent"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          {report.resolutions.map((res) => (
+                            <div key={res.id} className="text-[10px] bg-white p-2 rounded-lg border border-slate-100 shadow-3xs relative">
+                              <div className="flex items-center justify-between gap-1 mb-0.5">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span translate="no" className="notranslate font-bold text-[10.5px] text-slate-700">
+                                    {res.departmentName}
+                                  </span>
+                                  {res.badges && res.badges.length > 0 && (
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      {res.badges.map((badge, bIdx) => {
+                                        const icon = badge.id === "BAC_SI_MAY_MOC" ? "🦾" :
+                                                     badge.id === "CHOT_CHAN_5WHY" ? "🔍" :
+                                                     badge.id === "HO_VE_DAY_CHUYEN" ? "🛡️" :
+                                                     badge.id === "CHIEN_BINH_PHAN_UNG_NHANH" ? "⚡" :
+                                                     badge.id === "BAC_THAY_DU_DOAN" ? "🔮" :
+                                                     badge.id === "CANH_BAO_KIP_THOI" ? "🚨" :
+                                                     badge.id === "CON_MAT_TINH_TUONG" ? "🔍" :
+                                                     badge.id === "CHOT_CHAN_RUI_RO" ? "🛡️" :
+                                                     badge.id === "THONG_TIN_CHUAN_MUC" ? "📊" : "🏅";
+                                        return (
+                                          <button
+                                            key={bIdx}
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setSelectedResolutionBadge({ report, res });
+                                              setShowAwardMenuForRes(false);
+                                            }}
+                                            className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-50 border border-amber-300 text-[11px] shadow-3xs hover:bg-amber-100 active:scale-90 transition-transform cursor-pointer"
+                                            title={`Huy hiệu: ${badge.name} (Bởi ${badge.giverName})`}
+                                          >
+                                            <span>{icon}</span>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <span translate="no" className={`notranslate text-[9px] font-extrabold px-1.5 py-0.5 rounded border uppercase ${
+                                    res.status === "Đã xử lý"
+                                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                      : "bg-amber-50 text-amber-700 border-amber-200"
+                                  }`}>
+                                    {res.status}
+                                  </span>
+                                </div>
+                              </div>
+                              <p translate="no" className="notranslate text-slate-600 font-medium text-[10px] leading-relaxed whitespace-pre-wrap pl-1.5 border-l border-slate-200">
+                                {res.resultText}
+                              </p>
+                              <div className="mt-1.5 text-[8.5px] text-slate-400 font-mono flex items-center justify-between select-none">
+                                <span translate="no" className="notranslate">
+                                  Đại diện: {res.handlerName}
+                                </span>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <span>{formatTimestampToDMY(res.updatedAt)}</span>
+                                  
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleToggleLikeResolution(report, res.id);
+                                    }}
+                                    className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[9px] font-sans font-extrabold transition-all cursor-pointer select-none ${
+                                      res.likedBy?.includes(currentUser?.fullName || currentUser?.id || "")
+                                        ? "bg-rose-50 text-rose-600 border-rose-200 shadow-3xs"
+                                        : "bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100"
+                                    }`}
+                                    title="Thích kết quả xử lý này"
+                                  >
+                                    <Heart className={`w-3 h-3 ${res.likedBy?.includes(currentUser?.fullName || currentUser?.id || "") ? "fill-rose-500 stroke-rose-500" : ""}`} />
+                                    <span>{res.likedBy?.length || 0}</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedResolutionBadge({ report, res });
+                                      setShowAwardMenuForRes(true);
+                                    }}
+                                    className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[9px] font-sans font-extrabold transition-all cursor-pointer select-none ${
+                                      (res.badges?.length || 0) > 0
+                                        ? "bg-amber-50 text-amber-700 border-amber-300 shadow-3xs"
+                                        : "bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100"
+                                    }`}
+                                    title="Trao/Xem huy hiệu cho kết quả xử lý này"
+                                  >
+                                    <Award className="w-3 h-3 text-amber-500" />
+                                    <span>{res.badges?.length || 0}</span>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
                       {/* Incident Timeline Visual Progress Bar */}
                       {(() => {
                         const ackCount = report.sharedBy?.length || 0;
@@ -6949,151 +7094,6 @@ App Link: ${window.location.origin}`;
                             onUpdateReport={onUpdateReport}
                             showToast={showToast}
                           />
-                        </div>
-                      )}
-
-                      {/* Displaying detailed Resolution logs list */}
-                      {!!expandedResolutions[report.id] && (report.isAbnormal || report.reportType === "KPH") && report.resolutions && report.resolutions.length > 0 && (
-                        <div className="mt-1.5 p-2 bg-slate-50 border border-slate-150 rounded-lg flex flex-col gap-1.5 max-h-48 overflow-y-auto">
-                          <div className="text-[9.5px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center justify-between select-none">
-                            <div className="flex items-center gap-1 flex-wrap">
-                              <span className="w-1 h-1 rounded-full bg-slate-500"></span>
-                              <span translate="no" className="notranslate">KẾT QUẢ XỬ LÝ CHI TIẾT:</span>
-                            </div>
-                            {currentUser?.role === UserRole.ADMIN && (
-                              <div className="flex items-center gap-1.5 bg-slate-100/80 px-1 py-0.5 rounded border border-slate-200">
-                                {report.resolutions.map((res, idx) => (
-                                  <div key={res.id} className="flex items-center gap-0.5 shrink-0 scale-90">
-                                    {report.resolutions.length > 1 && (
-                                      <span className="text-[7.5px] text-slate-600 font-extrabold select-none mr-0.5">
-                                        BP{idx + 1}
-                                      </span>
-                                    )}
-                                    <button
-                                      type="button"
-                                      title={`Sửa kết quả ${res.departmentName}`}
-                                      onClick={() => {
-                                        setEditingResolutionReportId(report.id);
-                                        setEditingResolutionId(res.id);
-                                        setResDeptName(res.departmentName);
-                                        setResResultText(res.resultText);
-                                        setResStatus(res.status);
-                                      }}
-                                      className="p-0.5 text-slate-500 hover:text-indigo-600 rounded transition-colors cursor-pointer border-none bg-transparent"
-                                    >
-                                      <Edit className="w-3 h-3" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      title={`Xóa kết quả ${res.departmentName}`}
-                                      onClick={() => {
-                                        setResolutionToDelete({ report, resId: res.id });
-                                      }}
-                                      className="p-0.5 text-slate-500 hover:text-rose-600 rounded transition-colors cursor-pointer border-none bg-transparent"
-                                    >
-                                      <Trash2 className="w-3 h-3" />
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          {report.resolutions.map((res) => (
-                            <div key={res.id} className="text-[10px] bg-white p-2 rounded-lg border border-slate-100 shadow-3xs relative">
-                              <div className="flex items-center justify-between gap-1 mb-0.5">
-                                <div className="flex items-center gap-1.5 min-w-0">
-                                  <span translate="no" className="notranslate font-bold text-[10.5px] text-slate-700">
-                                    {res.departmentName}
-                                  </span>
-                                  {res.badges && res.badges.length > 0 && (
-                                    <div className="flex items-center gap-1 shrink-0">
-                                      {res.badges.map((badge, bIdx) => {
-                                        const icon = badge.id === "BAC_SI_MAY_MOC" ? "🦾" :
-                                                     badge.id === "CHOT_CHAN_5WHY" ? "🔍" :
-                                                     badge.id === "HO_VE_DAY_CHUYEN" ? "🛡️" :
-                                                     badge.id === "CHIEN_BINH_PHAN_UNG_NHANH" ? "⚡" :
-                                                     badge.id === "BAC_THAY_DU_DOAN" ? "🔮" :
-                                                     badge.id === "CANH_BAO_KIP_THOI" ? "🚨" :
-                                                     badge.id === "CON_MAT_TINH_TUONG" ? "🔍" :
-                                                     badge.id === "CHOT_CHAN_RUI_RO" ? "🛡️" :
-                                                     badge.id === "THONG_TIN_CHUAN_MUC" ? "📊" : "🏅";
-                                        return (
-                                          <button
-                                            key={bIdx}
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setSelectedResolutionBadge({ report, res });
-                                              setShowAwardMenuForRes(false);
-                                            }}
-                                            className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-50 border border-amber-300 text-[11px] shadow-3xs hover:bg-amber-100 active:scale-90 transition-transform cursor-pointer"
-                                            title={`Huy hiệu: ${badge.name} (Bởi ${badge.giverName})`}
-                                          >
-                                            <span>{icon}</span>
-                                          </button>
-                                        );
-                                      })}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  <span translate="no" className={`notranslate text-[9px] font-extrabold px-1.5 py-0.5 rounded border uppercase ${
-                                    res.status === "Đã xử lý"
-                                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                      : "bg-amber-50 text-amber-700 border-amber-200"
-                                  }`}>
-                                    {res.status}
-                                  </span>
-                                </div>
-                              </div>
-                              <p translate="no" className="notranslate text-slate-600 font-medium text-[10px] leading-relaxed whitespace-pre-wrap pl-1.5 border-l border-slate-200">
-                                {res.resultText}
-                              </p>
-                              <div className="mt-1.5 text-[8.5px] text-slate-400 font-mono flex items-center justify-between select-none">
-                                <span translate="no" className="notranslate">
-                                  Đại diện: {res.handlerName}
-                                </span>
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  <span>{formatTimestampToDMY(res.updatedAt)}</span>
-                                  
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleToggleLikeResolution(report, res.id);
-                                    }}
-                                    className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[9px] font-sans font-extrabold transition-all cursor-pointer select-none ${
-                                      res.likedBy?.includes(currentUser?.fullName || currentUser?.id || "")
-                                        ? "bg-rose-50 text-rose-600 border-rose-200 shadow-3xs"
-                                        : "bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100"
-                                    }`}
-                                    title="Thích kết quả xử lý này"
-                                  >
-                                    <Heart className={`w-3 h-3 ${res.likedBy?.includes(currentUser?.fullName || currentUser?.id || "") ? "fill-rose-500 stroke-rose-500" : ""}`} />
-                                    <span>{res.likedBy?.length || 0}</span>
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedResolutionBadge({ report, res });
-                                      setShowAwardMenuForRes(true);
-                                    }}
-                                    className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[9px] font-sans font-extrabold transition-all cursor-pointer select-none ${
-                                      (res.badges?.length || 0) > 0
-                                        ? "bg-amber-50 text-amber-700 border-amber-300 shadow-3xs"
-                                        : "bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100"
-                                    }`}
-                                    title="Trao/Xem huy hiệu cho kết quả xử lý này"
-                                  >
-                                    <Award className="w-3 h-3 text-amber-500" />
-                                    <span>{res.badges?.length || 0}</span>
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
                         </div>
                       )}
                     </div>
