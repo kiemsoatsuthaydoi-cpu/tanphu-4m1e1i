@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { ArrowLeft, Camera, RotateCw, Check, Scissors, AlertTriangle, RefreshCw, ChevronDown, X } from "lucide-react";
 import { T } from "./TranslateText";
 import { Category4M1E1I, QualityReport, User, Branch, UserRole, UserStatus, ErrorCatalogItem } from "../types";
@@ -377,48 +377,113 @@ export default function ReportForm({
     }
   };
 
-  // Manual File input trigger
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Batch File/Paste/Drop image handler
+  const addFilesToImages = useCallback(async (filesToProcess: File[]) => {
+    if (!filesToProcess || filesToProcess.length === 0) return;
 
     if (images.length >= 3) {
       triggerNotification("Quý khách chỉ được chọn tối đa 3 hình ảnh.", "warning");
       return;
     }
 
+    const imageFiles = filesToProcess.filter(f => f.type && f.type.startsWith("image/"));
+    if (imageFiles.length === 0) {
+      triggerNotification("Tệp dán/tải lên không phải là định dạng hình ảnh hợp lệ.", "warning");
+      return;
+    }
+
+    const availableSlots = 3 - images.length;
+    const filesToTake = imageFiles.slice(0, availableSlots);
+
+    if (imageFiles.length > availableSlots) {
+      triggerNotification(`Đã nhận ${availableSlots} ảnh đầu tiên (giới hạn tối đa 3 ảnh).`, "info");
+    }
+
     setIsCompressing(true);
     try {
-      const img = await loadImage(file);
-      const res = await processImage(img, {
-        rotationAngle: 0,
-        cropState: null,
-        targetMinKb: 100,
-        targetMaxKb: 200
-      });
+      const newItems: ProcessedImage[] = [];
+      for (const file of filesToTake) {
+        const img = await loadImage(file);
+        const res = await processImage(img, {
+          rotationAngle: 0,
+          cropState: null,
+          targetMinKb: 100,
+          targetMaxKb: 200
+        });
 
-      const newImageItem: ProcessedImage = {
-        id: `upload-${Date.now()}-${Math.random()}`,
-        base64: res.compressedBase64,
-        compressedSizeKb: res.compressedSizeKb,
-        originalSizeKb: res.originalSizeKb,
-        rotationAngle: 0,
-        cropBox: null,
-        originalImage: img,
-        qualitySlider: 85
-      };
+        newItems.push({
+          id: `upload-${Date.now()}-${Math.random()}`,
+          base64: res.compressedBase64,
+          compressedSizeKb: res.compressedSizeKb,
+          originalSizeKb: res.originalSizeKb,
+          rotationAngle: 0,
+          cropBox: null,
+          originalImage: img,
+          qualitySlider: 85
+        });
+      }
 
-      setImages(prev => {
-        const updated = [...prev, newImageItem];
-        setActiveImageIndex(updated.length - 1);
-        return updated;
-      });
+      if (newItems.length > 0) {
+        setImages(prev => {
+          const updated = [...prev, ...newItems];
+          setActiveImageIndex(updated.length - 1);
+          return updated;
+        });
+        triggerNotification(`Đã dán/tải thành công ${newItems.length} hình ảnh!`, "success");
+      }
     } catch (err) {
+      console.error("Lỗi nén ảnh:", err);
       triggerNotification("Không kham nạp được file hình ảnh do lỗi bộ giải mã.", "error");
     } finally {
       setIsCompressing(false);
     }
+  }, [images, triggerNotification]);
+
+  // Manual File input trigger
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+    await addFilesToImages(Array.from(fileList));
+    e.target.value = "";
   };
+
+  // Clipboard Paste Event (Ctrl+V / Cmd+V) - chỉ áp dụng trên giao diện Máy tính
+  useEffect(() => {
+    if (isRealMobile) return;
+
+    const handleGlobalPaste = async (e: ClipboardEvent) => {
+      if (!e.clipboardData) return;
+
+      const items = Array.from(e.clipboardData.items || []);
+      const files: File[] = [];
+
+      for (const item of items) {
+        if (item.type && item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) files.push(file);
+        }
+      }
+
+      if (files.length === 0 && e.clipboardData.files && e.clipboardData.files.length > 0) {
+        for (let i = 0; i < e.clipboardData.files.length; i++) {
+          const file = e.clipboardData.files[i];
+          if (file.type && file.type.startsWith("image/")) {
+            files.push(file);
+          }
+        }
+      }
+
+      if (files.length > 0) {
+        e.preventDefault();
+        await addFilesToImages(files);
+      }
+    };
+
+    window.addEventListener("paste", handleGlobalPaste);
+    return () => {
+      window.removeEventListener("paste", handleGlobalPaste);
+    };
+  }, [isRealMobile, addFilesToImages]);
 
   // Rotation trigger
   const rotateLeft = () => {
@@ -709,15 +774,47 @@ export default function ReportForm({
             )}
           </div>
 
+          {!isRealMobile && images.length > 0 && images.length < 3 && (
+            <div className="flex items-center gap-1.5 text-[9.5px] text-indigo-700 font-bold bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200/80 shadow-3xs">
+              <span>📋</span>
+              <span translate="no" className="notranslate">
+                <T>GIAO DIỆN MÁY TÍNH: Bấm Ctrl + V để dán thêm ảnh vừa CUT / COPY từ bộ nhớ tạm!</T>
+              </span>
+            </div>
+          )}
+
           {images.length === 0 ? (
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="w-full h-24 border-2 border-dashed border-slate-200 rounded-xl hover:border-blue-400 active:bg-slate-50 transition-colors flex flex-col items-center justify-center text-slate-400"
+              onDragOver={(e) => {
+                if (!isRealMobile) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }
+              }}
+              onDrop={async (e) => {
+                if (!isRealMobile) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    await addFilesToImages(Array.from(e.dataTransfer.files));
+                  }
+                }
+              }}
+              className="w-full h-28 border-2 border-dashed border-slate-200 rounded-xl hover:border-blue-400 active:bg-slate-50 transition-colors flex flex-col items-center justify-center text-slate-400 p-2 relative group cursor-pointer"
             >
               <Camera className="w-8 h-8 mb-1 text-slate-400 stroke-[1.5]" />
               <T className="text-xs font-semibold">TẢI HOẶC CHỤP HÌNH ẢNH</T>
               <T className="text-[8px] text-slate-400">Hỗ trợ tối đa 3 ảnh, nén nạp WebP thông minh</T>
+              {!isRealMobile && (
+                <div className="mt-2 px-2.5 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-[9.5px] font-bold flex items-center gap-1 shadow-2xs">
+                  <span>📋</span>
+                  <span translate="no" className="notranslate">
+                    <T>GIAO DIỆN MÁY TÍNH: Bấm Ctrl + V để DÁN ngay ảnh vừa CUT / COPY!</T>
+                  </span>
+                </div>
+              )}
             </button>
           ) : (
             activeImageIndex >= 0 && activeImageIndex < images.length && (

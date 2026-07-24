@@ -53,6 +53,41 @@ export function parseReportTimestamp(ts: string): Date {
   return isNaN(fallback.getTime()) ? new Date() : fallback;
 }
 
+export function calculateTimeDurationText(startTimestampStr: string, endTimestampStr: string): { text: string; days: number; hours: number; minutes: number; seconds: number; ms: number } {
+  if (!startTimestampStr || !endTimestampStr) {
+    return { text: "0 giây", days: 0, hours: 0, minutes: 0, seconds: 0, ms: 0 };
+  }
+  const startMs = parseReportTimestamp(startTimestampStr).getTime();
+  const endMs = parseReportTimestamp(endTimestampStr).getTime();
+  
+  if (isNaN(startMs) || isNaN(endMs)) {
+    return { text: "0 giây", days: 0, hours: 0, minutes: 0, seconds: 0, ms: 0 };
+  }
+
+  const diffMs = Math.max(0, endMs - startMs);
+  const totalSeconds = Math.floor(diffMs / 1000);
+  
+  const days = Math.floor(totalSeconds / (3600 * 24));
+  const hours = Math.floor((totalSeconds % (3600 * 24)) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days} ngày`);
+  if (hours > 0) parts.push(`${hours} giờ`);
+  if (minutes > 0) parts.push(`${minutes} phút`);
+  if (seconds > 0 || parts.length === 0) parts.push(`${seconds} giây`);
+
+  return {
+    text: parts.join(" "),
+    days,
+    hours,
+    minutes,
+    seconds,
+    ms: diffMs
+  };
+}
+
 export function generateNotifications(
   reports: QualityReport[],
   deletedNotifIds: string[],

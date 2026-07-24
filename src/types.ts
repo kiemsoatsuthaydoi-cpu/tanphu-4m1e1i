@@ -96,6 +96,7 @@ export interface QualityReport {
   directives?: QualityReportDirective[];
   likedBy?: string[];
   sharedBy?: string[];
+  receiverTimestamps?: Record<string, string>;
   updatedAt?: string;
   updateLogs?: string[];
   isDeleted?: boolean;
@@ -241,6 +242,8 @@ export interface ChatMessage {
   threadId?: string; // Reference to a forum topic/thread
   threadTitle?: string; // If thread starter, the title of the topic
   threadCategory?: string; // Category of the thread (e.g. "Góp ý", "Cải tiến")
+  likes?: number;
+  likedBy?: string[];
 }
 
 export interface OfflineQueueItem {

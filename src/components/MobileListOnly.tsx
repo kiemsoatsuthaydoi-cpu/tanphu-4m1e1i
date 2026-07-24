@@ -3,6 +3,7 @@ import { T } from "./TranslateText";
 import { QualityReport, User, Branch } from "../types";
 import { Users, User as UserIcon, Cpu, Settings, FileText, Heart, Info, Award } from "lucide-react";
 import { formatNameCapitalized } from "../utils/branchHelpers";
+import { calculateTimeDurationText } from "../utils/notificationHelper";
 import { getReportRatingsStats, renderSummaryStars, isEligibleEvaluator } from "./MobileReportRatingSection";
 
 interface MobileListOnlyProps {
@@ -302,16 +303,20 @@ export function MobileListOnly({
                               key={dir.id}
                               data-directive-container-list="true"
                               onClick={() => setExpandedDirectiveIdsList(prev => ({ ...prev, [dir.id]: true }))}
-                              className="bg-amber-50/70 hover:bg-amber-100/70 border border-amber-100/60 rounded p-1 flex items-center justify-between text-[10px] text-amber-900 cursor-pointer transition-all select-none shadow-3xs active:scale-[0.98]"
+                              className="bg-amber-50/70 hover:bg-amber-100/70 border border-amber-100/60 rounded p-1 flex items-center justify-between text-[9px] text-amber-900 cursor-pointer transition-all select-none shadow-3xs active:scale-[0.98] gap-1.5"
                             >
-                              <span className="flex items-center gap-1 font-bold text-[9.5px]">
-                                <span>🛡️</span>
-                                <T>Chỉ đạo từ: {dir.author}</T>
-                              </span>
-                              <span className="text-[8.5px] text-slate-400 font-bold flex items-center gap-0.5 shrink-0">
-                                <T>Xem chỉ đạo</T>
-                                <span>➔</span>
-                              </span>
+                              <div className="flex-1 min-w-0">
+                                <span className="font-extrabold text-[9px] text-amber-950 block leading-tight break-words">
+                                  <T>Chỉ đạo từ:</T> <span className="text-amber-900">{dir.author}</span>
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0 select-none">
+                                <span className="text-[8.5px] text-slate-500 font-bold flex items-center gap-1">
+                                  <T>Xem chỉ đạo</T>
+                                  <span className="text-[11px] leading-none">🛡️</span>
+                                  <span className="text-[10px] text-amber-700">➔</span>
+                                </span>
+                              </div>
                             </div>
                           );
                         }
@@ -327,9 +332,9 @@ export function MobileListOnly({
                         return (
                           <div key={dir.id} data-directive-container-list="true" className="p-2 bg-amber-50/70 border border-amber-100 rounded">
                             <div className="flex justify-between text-[8px] text-slate-400 font-bold mb-1 border-b border-amber-200/40 pb-0.5 select-none">
-                              <span className="text-amber-800 font-extrabold flex items-center gap-0.5">
-                                <span>🛡️</span>
-                                <T>{dir.author}</T>
+                              <span className="text-amber-800 font-extrabold flex items-center gap-1 text-[9px]">
+                                <span><T>Chỉ đạo từ:</T> {dir.author}</span>
+                                <span className="text-[11px] leading-none">🛡️</span>
                               </span>
                               <div className="flex items-center gap-2">
                                 <span>{dir.timestamp}</span>
@@ -389,68 +394,121 @@ export function MobileListOnly({
                         <span>✅</span>
                         <span translate="no" className="notranslate">KẾT QUẢ XỬ LÝ CHI TIẾT (BP/ĐV PHẢN HỒI):</span>
                       </div>
-                      {report.resolutions.map((res) => (
-                        <div key={res.id} className="p-2 bg-slate-50 border border-slate-150 rounded">
-                          <div className="flex justify-between items-center text-[9.5px] font-bold text-slate-500 mb-1">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <span className="text-indigo-800 font-extrabold">
-                                <span translate="no" className="notranslate">{res.departmentName}</span>
-                              </span>
-                              {res.badges && res.badges.length > 0 && (
-                                <div className="flex items-center gap-1 shrink-0">
-                                  {res.badges.map((badge, bIdx) => {
-                                    const icon = badge.id === "BAC_SI_MAY_MOC" ? "🦾" :
-                                                 badge.id === "CHOT_CHAN_5WHY" ? "🔍" :
-                                                 badge.id === "HO_VE_DAY_CHUYEN" ? "🛡️" :
-                                                 badge.id === "CHIEN_BINH_PHAN_UNG_NHANH" ? "⚡" :
-                                                 badge.id === "BAC_THAY_DU_DOAN" ? "🔮" :
-                                                 badge.id === "CANH_BAO_KIP_THOI" ? "🚨" :
-                                                 badge.id === "CON_MAT_TINH_TUONG" ? "🔍" :
-                                                 badge.id === "CHOT_CHAN_RUI_RO" ? "🛡️" :
-                                                 badge.id === "THONG_TIN_CHUAN_MUC" ? "📊" : "🏅";
-                                    return (
-                                      <span
-                                        key={bIdx}
-                                        className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-50 border border-amber-300 text-[10px] shadow-3xs"
-                                        title={`Huy hiệu: ${badge.name} (Bởi ${badge.giverName})`}
-                                      >
-                                        <span>{icon}</span>
-                                      </span>
-                                    );
-                                  })}
-                                </div>
-                              )}
+                      {report.resolutions.map((res) => {
+                        const getReceptionTimeForRes = (reportItem: QualityReport, resItem: any) => {
+                          if (reportItem.receiverTimestamps && Object.keys(reportItem.receiverTimestamps).length > 0) {
+                            for (const [key, val] of Object.entries(reportItem.receiverTimestamps)) {
+                              if (
+                                (resItem.handlerName && key.toLowerCase().includes(resItem.handlerName.toLowerCase())) ||
+                                (resItem.departmentName && key.toLowerCase().includes(resItem.departmentName.toLowerCase()))
+                              ) {
+                                return val;
+                              }
+                            }
+                            const firstVal = Object.values(reportItem.receiverTimestamps)[0];
+                            if (firstVal) return firstVal;
+                          }
+                          if (reportItem.sharedBy && reportItem.sharedBy.length > 0) {
+                            return reportItem.updatedAt || reportItem.timestamp;
+                          }
+                          return reportItem.timestamp;
+                        };
+
+                        const recTime = getReceptionTimeForRes(report, res);
+                        const isDone = res.status === "Đã xử lý";
+                        const getNowStr = () => {
+                          const now = new Date();
+                          const d = String(now.getDate()).padStart(2, '0');
+                          const m = String(now.getMonth() + 1).padStart(2, '0');
+                          const y = String(now.getFullYear()).slice(-2);
+                          const h = String(now.getHours()).padStart(2, '0');
+                          const min = String(now.getMinutes()).padStart(2, '0');
+                          const sec = String(now.getSeconds()).padStart(2, '0');
+                          return `${d}/${m}/${y} ${h}:${min}:${sec}`;
+                        };
+                        const endTime = isDone ? res.updatedAt : getNowStr();
+                        const durationFromReception = calculateTimeDurationText(recTime, endTime);
+
+                        return (
+                          <div key={res.id} className="p-2 bg-slate-50 border border-slate-150 rounded">
+                            <div className="flex justify-between items-center text-[9.5px] font-bold text-slate-500 mb-1">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="text-indigo-800 font-extrabold">
+                                  <span translate="no" className="notranslate">{res.departmentName}</span>
+                                </span>
+                                {res.badges && res.badges.length > 0 && (
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    {res.badges.map((badge, bIdx) => {
+                                      const icon = badge.id === "BAC_SI_MAY_MOC" ? "🦾" :
+                                                   badge.id === "CHOT_CHAN_5WHY" ? "🔍" :
+                                                   badge.id === "HO_VE_DAY_CHUYEN" ? "🛡️" :
+                                                   badge.id === "CHIEN_BINH_PHAN_UNG_NHANH" ? "⚡" :
+                                                   badge.id === "BAC_THAY_DU_DOAN" ? "🔮" :
+                                                   badge.id === "CANH_BAO_KIP_THOI" ? "🚨" :
+                                                   badge.id === "CON_MAT_TINH_TUONG" ? "🔍" :
+                                                   badge.id === "CHOT_CHAN_RUI_RO" ? "🛡️" :
+                                                   badge.id === "THONG_TIN_CHUAN_MUC" ? "📊" : "🏅";
+                                      return (
+                                        <span
+                                          key={bIdx}
+                                          className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-50 border border-amber-300 text-[10px] shadow-3xs"
+                                          title={`Huy hiệu: ${badge.name} (Bởi ${badge.giverName})`}
+                                        >
+                                          <span>{icon}</span>
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span translate="no" className={`notranslate text-[8.5px] font-extrabold px-1 py-0.2 rounded border uppercase ${
+                                  res.status === "Đã xử lý"
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                    : "bg-amber-50 text-amber-700 border-amber-200"
+                                }`}>
+                                  {res.status}
+                                </span>
+                                <span translate="no" className="notranslate">{res.updatedAt}</span>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-1.5">
-                              <span translate="no" className={`notranslate text-[8.5px] font-extrabold px-1 py-0.2 rounded border uppercase ${
-                                res.status === "Đã xử lý"
-                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                  : "bg-amber-50 text-amber-700 border-amber-200"
-                              }`}>
-                                {res.status}
+                            <p className="text-[11px] text-slate-800 font-medium whitespace-pre-wrap">
+                              <span translate="no" className="notranslate">{res.resultText}</span>
+                            </p>
+                            <div className="text-[9px] text-slate-400 mt-1 flex items-center justify-between select-none">
+                              <span translate="no" className="notranslate">Đại diện: {res.handlerName}</span>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span translate="no" className="notranslate">{res.updatedAt}</span>
+                                <span className="flex items-center gap-0.5 px-1 py-0.5 rounded border text-[8px] font-sans font-extrabold bg-slate-50 text-slate-500 border-slate-200">
+                                  <Heart className={`w-2.5 h-2.5 ${res.likedBy?.length ? "fill-rose-500 stroke-rose-500 text-rose-500" : ""}`} />
+                                  <span>{res.likedBy?.length || 0}</span>
+                                </span>
+                                <span className="flex items-center gap-0.5 px-1 py-0.5 rounded border text-[8px] font-sans font-extrabold bg-slate-50 text-slate-500 border-slate-200">
+                                  <Award className="w-2.5 h-2.5 text-amber-500" />
+                                  <span>{res.badges?.length || 0}</span>
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Duration from reception to resolution */}
+                            <div className={`mt-1.5 flex items-center justify-between gap-1 px-2 py-0.5 rounded border text-[8px] font-medium select-none ${
+                              isDone 
+                                ? "bg-emerald-50/90 text-emerald-800 border-emerald-200/80" 
+                                : "bg-amber-50/90 text-amber-800 border-amber-200/80"
+                            }`}>
+                              <span className="flex items-center gap-1 font-bold">
+                                <span>⏱️</span>
+                                <span translate="no" className="notranslate">
+                                  {isDone ? "Thời gian từ tiếp nhận đến xử lý xong:" : "Thời gian từ tiếp nhận (đang xử lý):"}
+                                </span>
                               </span>
-                              <span translate="no" className="notranslate">{res.updatedAt}</span>
+                              <span translate="no" className="notranslate font-black font-mono">
+                                {durationFromReception.text}
+                              </span>
                             </div>
                           </div>
-                          <p className="text-[11px] text-slate-800 font-medium whitespace-pre-wrap">
-                            <span translate="no" className="notranslate">{res.resultText}</span>
-                          </p>
-                          <div className="text-[9px] text-slate-400 mt-1 flex items-center justify-between select-none">
-                            <span translate="no" className="notranslate">Đại diện: {res.handlerName}</span>
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <span translate="no" className="notranslate">{res.updatedAt}</span>
-                              <span className="flex items-center gap-0.5 px-1 py-0.5 rounded border text-[8px] font-sans font-extrabold bg-slate-50 text-slate-500 border-slate-200">
-                                <Heart className={`w-2.5 h-2.5 ${res.likedBy?.length ? "fill-rose-500 stroke-rose-500 text-rose-500" : ""}`} />
-                                <span>{res.likedBy?.length || 0}</span>
-                              </span>
-                              <span className="flex items-center gap-0.5 px-1 py-0.5 rounded border text-[8px] font-sans font-extrabold bg-slate-50 text-slate-500 border-slate-200">
-                                <Award className="w-2.5 h-2.5 text-amber-500" />
-                                <span>{res.badges?.length || 0}</span>
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
 

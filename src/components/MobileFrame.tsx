@@ -5,7 +5,7 @@ import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon,
 import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Department, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus, QualityReportBadge, AppNotification, ErrorCatalogItem, BadgePointConfigItem } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
-import { findMentionedUsers, parseReportTimestamp } from "../utils/notificationHelper";
+import { findMentionedUsers, parseReportTimestamp, calculateTimeDurationText } from "../utils/notificationHelper";
 import { QRCodeSVG } from "qrcode.react";
 import { isSameBranchOrFactory, formatNameCapitalized, canUserManageDirective, canUserProcessOrResolveReport, isHQOrManagerUser } from "../utils/branchHelpers";
 import { AutoImageSlider } from "./AutoImageSlider";
@@ -247,6 +247,7 @@ interface MobileFrameProps {
   ) => void;
   onEditChatMessage?: (chatId: string, newMessage: string) => void;
   onDeleteChatMessage?: (chatId: string) => void;
+  onToggleLikeChatMessage?: (chatId: string) => void;
   onUpdateUserStatus?: (id: string, status: UserStatus) => void;
   onUpdateUserRole?: (id: string, role: UserRole) => void;
   isNativeScrollActive?: boolean;
@@ -1420,6 +1421,7 @@ export default function MobileFrame({
   onAddChatMessage,
   onEditChatMessage,
   onDeleteChatMessage,
+  onToggleLikeChatMessage,
   onUpdateUserStatus,
   onUpdateUserRole,
   isNativeScrollActive,
@@ -2880,19 +2882,38 @@ export default function MobileFrame({
     const userDept = currentUser?.department || "BP Liên Quan";
     const label = `${userName} (${userDept})`;
 
+    const getFormattedNow = () => {
+      const now = new Date();
+      const d = String(now.getDate()).padStart(2, '0');
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const y = String(now.getFullYear()).slice(-2);
+      const h = String(now.getHours()).padStart(2, '0');
+      const min = String(now.getMinutes()).padStart(2, '0');
+      const sec = String(now.getSeconds()).padStart(2, '0');
+      return `${d}/${m}/${y} ${h}:${min}:${sec}`;
+    };
+
     const currentShares = report.sharedBy || [];
     const isNowAcknowledged = !currentShares.some(name => name.startsWith(userName));
+    const nowStr = getFormattedNow();
+    const currentTimestamps = { ...(report.receiverTimestamps || {}) };
 
     let updatedShares: string[];
     if (isNowAcknowledged) {
       updatedShares = [...currentShares, label];
+      currentTimestamps[label] = nowStr;
     } else {
       updatedShares = currentShares.filter((name) => !name.startsWith(userName));
+      delete currentTimestamps[label];
+      Object.keys(currentTimestamps).forEach(k => {
+        if (k.startsWith(userName)) delete currentTimestamps[k];
+      });
     }
 
     const updatedReport: QualityReport = {
       ...report,
       sharedBy: updatedShares,
+      receiverTimestamps: currentTimestamps,
     };
 
     if (onUpdateReport) {
@@ -4178,10 +4199,10 @@ App Link: ${window.location.origin}`;
         } ${theme.bg}`}>
           <button
             onClick={() => setShowQrCodeView(false)}
-            className="flex items-center gap-1.5 text-xs text-white/90 hover:text-white font-black bg-transparent border-none cursor-pointer transition-all active:scale-95"
+            className="w-8 h-8 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shrink-0 cursor-pointer transition-all active:scale-95 shadow-2xs border-none"
+            title="Quay lại"
           >
-            <ArrowLeft className="w-4 h-4 stroke-[2.5px]" />
-            <T>Sảnh chính</T>
+            <ArrowLeft className="w-4.5 h-4.5 stroke-[2.5px] text-white" />
           </button>
           
           <T className="font-extrabold text-[12.5px] uppercase tracking-wider">MÃ QR TRUY CẬP</T>
@@ -6267,16 +6288,20 @@ App Link: ${window.location.origin}`;
                                    key={dir.id}
                                    data-directive-container="true"
                                    onClick={() => setExpandedDirectiveIds(prev => ({ ...prev, [dir.id]: true }))}
-                                   className="bg-amber-50 hover:bg-amber-100/70 border border-amber-100 rounded p-1.5 flex items-center justify-between text-[11px] text-amber-900 cursor-pointer transition-all select-none shadow-3xs active:scale-[0.98]"
+                                   className="bg-amber-50 hover:bg-amber-100/70 border border-amber-100 rounded p-1.5 flex items-center justify-between text-[9px] text-amber-900 cursor-pointer transition-all select-none shadow-3xs active:scale-[0.98] gap-1.5"
                                  >
-                                   <span className="flex items-center gap-1 font-extrabold text-[10px]">
-                                     <span>🛡️</span>
-                                     <T>Chỉ đạo từ: {dir.author}</T>
-                                   </span>
-                                   <span className="text-[9px] text-slate-400 font-bold flex items-center gap-0.5 select-none shrink-0">
-                                     <T>Xem chỉ đạo</T>
-                                     <span>➔</span>
-                                   </span>
+                                   <div className="flex-1 min-w-0">
+                                     <span className="font-extrabold text-[9px] text-amber-950 block leading-tight break-words">
+                                       <T>Chỉ đạo từ:</T> <span className="text-amber-900">{dir.author}</span>
+                                     </span>
+                                   </div>
+                                   <div className="flex items-center gap-1 shrink-0 select-none">
+                                     <span className="text-[8.5px] text-slate-500 font-bold flex items-center gap-1">
+                                       <T>Xem chỉ đạo</T>
+                                       <span className="text-[11px] leading-none">🛡️</span>
+                                       <span className="text-[10px] text-amber-700">➔</span>
+                                     </span>
+                                   </div>
                                  </div>
                                );
                              }
@@ -6294,9 +6319,9 @@ App Link: ${window.location.origin}`;
                              return (
                                <div key={dir.id} data-directive-container="true" className="bg-amber-50 border border-amber-100 rounded p-2 block text-[11px] leading-relaxed text-amber-900 shadow-3xs">
                                  <div className="flex justify-between items-center text-[9px] text-slate-400 font-bold mb-1 select-none border-b border-amber-200/40 pb-1">
-                                   <span className="text-amber-800 font-extrabold flex items-center gap-0.5 animate-shimmer">
-                                     <span>🛡️</span>
-                                     <T>{dir.author}</T>
+                                   <span className="text-amber-800 font-extrabold flex items-center gap-1 animate-shimmer text-[9px]">
+                                     <span><T>Chỉ đạo từ:</T> {dir.author}</span>
+                                     <span className="text-[11px] leading-none">🛡️</span>
                                    </span>
                                    <div className="flex items-center gap-2">
                                      <span>{dir.timestamp}</span>
@@ -6454,81 +6479,272 @@ App Link: ${window.location.origin}`;
 
                     {/* BP/ĐV PHẢN HỒI & TIẾP NHẬN/ XỬ LÝ list display */}
                     {(report.isAbnormal || report.reportType === "KPH") && (
-                      <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-col gap-1.5" id={`receivers-section-${report.id}`}>
-                      <div className="flex items-center justify-between gap-1.5 flex-wrap sm:flex-nowrap">
-                        {/* Left side: TIẾP NHẬN/ XỬ LÝ (or GHI NHẬN & BIỂU DƯƠNG) button */}
-                        {(() => {
-                          const isDsa = report.reportType === "DSA" || report.isSpotlight;
-                          const isAcknowledged = report.sharedBy?.some(name => name.startsWith(currentUser?.fullName || "Kiểm soát viên")) || false;
-                          const ackCount = report.sharedBy?.length || 0;
-                          const hasAcknowledge = ackCount > 0;
-                          return (
-                            <div className={`flex items-center gap-1.5 rounded-lg py-0.5 px-2 shrink-0 transition-all duration-300 shadow-3xs ${
-                              hasAcknowledge
-                                ? "bg-emerald-600 border border-emerald-700 text-white shadow-[0_0_8px_rgba(16,185,129,0.35)] hover:scale-105 active:scale-95"
-                                : isDsa
-                                  ? "bg-gradient-to-r from-[#1e3a8a] to-[#1a306c] hover:from-[#1a306c] hover:to-[#12224f] border border-[#1e3a8a] text-white shadow-[0_0_8px_rgba(30,58,138,0.35)] hover:scale-105 active:scale-95"
-                                  : "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 border border-orange-500 text-white shadow-[0_0_8px_rgba(249,115,22,0.35)] hover:scale-105 active:scale-95"
-                            }`}>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (!canUserProcessOrResolveReport(currentUser, report.factory)) {
-                                    const userBranchName = currentUser?.branch || "Chi nhánh khác";
-                                    showToast(`🔒 Tài khoản thuộc ${userBranchName}. Bạn chỉ được tiếp nhận/xử lý bản tin của Chi nhánh mình hoặc Văn Phòng Công Ty!`);
-                                    return;
-                                  }
-                                  setConfirmAckModalData({
-                                    report,
-                                    isCancel: isAcknowledged
-                                  });
-                                }}
-                                className="flex items-center gap-1.5 p-1 rounded transition-all cursor-pointer bg-transparent whitespace-nowrap shrink-0 border-none text-white font-extrabold"
-                                title={isAcknowledged ? (isDsa ? "Đã ghi nhận & biểu dương" : "Đã tiếp nhận") : (isDsa ? "Click để ghi nhận & biểu dương sáng kiến!" : "Click để tiếp nhận/ xử lý ngay!")}
-                              >
-                                {isAcknowledged ? (
-                                  <Check className="w-3.5 h-3.5 shrink-0 stroke-[3px] text-white" />
+                      <div className="mt-2 pt-2 border-t border-slate-100 flex flex-col gap-1.5" id={`receivers-section-${report.id}`}>
+
+                      {/* Incident Timeline Visual Progress Bar (Main Interactive Control Hub - Option 1) */}
+                      {(() => {
+                        const ackCount = report.sharedBy?.length || 0;
+                        const resCount = report.resolutions?.length || 0;
+                        const isResolved = resCount > 0 && (report.resolutions?.some(r => r.status === "Đã xử lý" || !!r.resultText) ?? true);
+                        const isDsa = report.reportType === "DSA" || report.isSpotlight;
+                        const isAcknowledged = report.sharedBy?.some(name => name.startsWith(currentUser?.fullName || "Kiểm soát viên")) || false;
+
+                        const aiUsedList = report.aiUsedBy || [];
+                        const receiversAndHandlers = [
+                          ...(report.sharedBy || []),
+                          ...(report.resolutions?.map(r => r.handlerName) || [])
+                        ];
+                        const hasReceiverUsedAi = aiUsedList.some(aiUser =>
+                          receiversAndHandlers.length > 0
+                            ? receiversAndHandlers.some(rh =>
+                                rh.toLowerCase().includes(aiUser.toLowerCase()) ||
+                                aiUser.toLowerCase().includes(rh.toLowerCase())
+                              )
+                            : (ackCount > 0 || resCount > 0)
+                        );
+
+                        return (
+                          <div className="mt-2.5 mb-1 p-2.5 bg-gradient-to-b from-slate-50 to-white border border-slate-200/90 rounded-xl flex flex-col gap-2 shadow-2xs">
+                            <div className="flex items-center justify-between text-[9px] font-black text-slate-500 uppercase tracking-tight select-none px-0.5">
+                              <div className="flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
+                                <span translate="no" className="notranslate" style={{ color: "var(--color-primary, #1e3a8a)" }}>
+                                  <T>TIẾN TRÌNH XỬ LÝ (TIMELINE)</T>
+                                </span>
+                              </div>
+                              <div>
+                                {isResolved ? (
+                                  <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 flex items-center gap-1 text-[8.5px] font-bold">
+                                    <CheckCircle2 className="w-2.5 h-2.5 stroke-[3px] text-emerald-600" />
+                                    <span translate="no" className="notranslate"><T>Đã xử lý xong</T></span>
+                                  </span>
+                                ) : ackCount > 0 ? (
+                                  <span className="text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 flex items-center gap-1 text-[8.5px] font-bold">
+                                    <Clock className="w-2.5 h-2.5 stroke-[3px] text-amber-600" />
+                                    <span translate="no" className="notranslate"><T>Đang xử lý</T></span>
+                                  </span>
                                 ) : (
-                                  <span className="relative flex h-2 w-2 mr-0.5 shrink-0">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                                  <span className="text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 flex items-center gap-1 text-[8.5px] font-bold">
+                                    <AlertCircle className="w-2.5 h-2.5 stroke-[3px] text-slate-500" />
+                                    <span translate="no" className="notranslate"><T>Mới ghi nhận</T></span>
                                   </span>
                                 )}
-                                <span className="text-[10px] font-black font-sans uppercase tracking-tight whitespace-nowrap">
-                                  <span translate="no" className="notranslate">
-                                    <T>{isDsa ? "Ghi nhận & Biểu dương" : "Tiếp nhận/ Xử lý"}</T>
-                                  </span>
-                                </span>
-                              </button>
-                              
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (ackCount > 0) {
-                                    setShowAcksListReport(report);
-                                  }
-                                }}
-                                disabled={ackCount === 0}
-                                className={`text-[10px] font-black font-sans px-1.5 py-0.5 rounded cursor-pointer transition-all border-none ${
-                                  ackCount > 0 
-                                    ? "text-white hover:text-emerald-100 bg-white/20 hover:bg-white/30"
-                                    : "text-white/50 bg-transparent cursor-default"
-                                }`}
-                                title={ackCount > 0 ? (isDsa ? "Xem danh sách đã ghi nhận & biểu dương" : "Xem danh sách đã tiếp nhận/ xử lý") : (isDsa ? "Chưa có lượt biểu dương" : "Chưa có lượt tiếp nhận")}
-                              >
-                                <span translate="no" className="notranslate"><T>{ackCount}</T></span>
-                              </button>
+                              </div>
                             </div>
-                          );
-                        })()}
 
-                        {/* Right side: Ghi nhận kết quả ({resCount}) button (Only for abnormal or KPH reports) */}
-                        {(report.isAbnormal || report.reportType === "KPH") && (
-                          (() => {
-                            const resCount = report.resolutions?.length || 0;
-                            return (
-                              <div className="flex items-center gap-1 shrink-0">
+                            <div className="relative flex items-start justify-between mt-1 px-1 py-0.5">
+                              {/* Connector Line Background */}
+                              <div className="absolute top-4 left-8 right-8 h-1 bg-slate-200 rounded-full z-0 overflow-hidden">
+                                <div
+                                  className={`h-full transition-all duration-500 ${
+                                    isResolved
+                                      ? "bg-gradient-to-r from-blue-500 via-amber-500 to-emerald-500 w-full"
+                                      : ackCount > 0
+                                        ? hasReceiverUsedAi
+                                          ? "bg-gradient-to-r from-blue-500 via-purple-500 to-amber-500 w-1/2"
+                                          : "bg-gradient-to-r from-blue-500 to-amber-500 w-1/2"
+                                        : "bg-blue-500 w-0"
+                                  }`}
+                                />
+                              </div>
+
+                              {/* Step 1: Ghi nhận sự cố */}
+                              <div className="flex flex-col items-center text-center relative z-10 w-1/3">
+                                <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold shadow-xs border-2 border-white text-[10px]" title="Thời điểm khởi tạo bản tin">
+                                  <CheckCircle2 className="w-4 h-4 stroke-[2.5px]" />
+                                </div>
+                                <span className="text-[9.5px] font-black text-slate-800 mt-1 leading-tight">
+                                  <span translate="no" className="notranslate"><T>Ghi nhận sự cố</T></span>
+                                </span>
+                                <span className="text-[8px] font-semibold text-slate-500 mt-0.5">
+                                  {report.timestamp ? report.timestamp.split(' ')[0] || "Khởi tạo" : "Khởi tạo"}
+                                </span>
+                              </div>
+
+                              {/* Step 2: Tiếp nhận / Xử lý (Interactive Action) */}
+                              <div className="flex flex-col items-center text-center relative z-10 w-1/3">
+                                <div className="relative flex items-center justify-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (!canUserProcessOrResolveReport(currentUser, report.factory)) {
+                                        const userBranchName = currentUser?.branch || "Chi nhánh khác";
+                                        showToast(`🔒 Tài khoản thuộc ${userBranchName}. Bạn chỉ được tiếp nhận/xử lý bản tin của Chi nhánh mình hoặc Văn Phòng Công Ty!`);
+                                        return;
+                                      }
+                                      setConfirmAckModalData({
+                                        report,
+                                        isCancel: isAcknowledged
+                                      });
+                                    }}
+                                    className={`relative w-8 h-8 rounded-full flex items-center justify-center font-bold shadow-sm border-2 border-white text-[10px] transition-all cursor-pointer active:scale-90 ${
+                                      isAcknowledged
+                                        ? "bg-emerald-600 text-white ring-2 ring-emerald-300 hover:bg-emerald-700"
+                                        : ackCount > 0
+                                          ? hasReceiverUsedAi
+                                            ? "bg-gradient-to-tr from-amber-500 via-purple-600 to-indigo-600 text-white hover:scale-105 ring-2 ring-purple-400"
+                                            : "bg-amber-500 text-white hover:scale-105 ring-2 ring-amber-300"
+                                          : "bg-gradient-to-r from-amber-500 to-orange-500 text-white animate-pulse hover:scale-105 ring-2 ring-orange-300 shadow-orange-200"
+                                    }`}
+                                    title={
+                                      isAcknowledged
+                                        ? (isDsa ? "Đã ghi nhận & biểu dương! Click để quản lý" : "Bạn đã tiếp nhận bản tin này! Click để thay đổi")
+                                        : (isDsa ? "Click để GHI NHẬN & BIỂU DƯƠNG ngay!" : "Click để TIẾP NHẬN / XỬ LÝ ngay!")
+                                    }
+                                  >
+                                    {isAcknowledged ? (
+                                      <Check className="w-4 h-4 stroke-[3px] text-white" />
+                                    ) : (
+                                      <Users className="w-4 h-4 stroke-[2.5px]" />
+                                    )}
+                                  </button>
+
+                                  {/* Acknowledgment Counter Badge */}
+                                  {ackCount > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setShowAcksListReport(report);
+                                      }}
+                                      className="absolute -top-1.5 -right-2 bg-rose-600 hover:bg-rose-700 text-white text-[8.5px] font-black px-1.5 py-0.2 rounded-full border border-white shadow-xs cursor-pointer active:scale-95 transition-transform select-none"
+                                      title={`Xem danh sách ${ackCount} người đã tiếp nhận`}
+                                    >
+                                      {ackCount}
+                                    </button>
+                                  )}
+                                </div>
+
+                                {/* Step 2 Label / Quick Trigger */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (!canUserProcessOrResolveReport(currentUser, report.factory)) {
+                                      const userBranchName = currentUser?.branch || "Chi nhánh khác";
+                                      showToast(`🔒 Tài khoản thuộc ${userBranchName}. Bạn chỉ được tiếp nhận/xử lý bản tin của Chi nhánh mình hoặc Văn Phòng Công Ty!`);
+                                      return;
+                                    }
+                                    setConfirmAckModalData({
+                                      report,
+                                      isCancel: isAcknowledged
+                                    });
+                                  }}
+                                  className={`mt-1 text-[9.5px] font-black leading-tight flex items-center gap-0.5 border-none bg-transparent cursor-pointer hover:underline ${
+                                    isAcknowledged 
+                                      ? "text-emerald-700" 
+                                      : ackCount > 0 
+                                        ? (hasReceiverUsedAi ? "text-purple-900" : "text-amber-800") 
+                                        : "text-amber-600"
+                                  }`}
+                                >
+                                  <span translate="no" className="notranslate">
+                                    <T>{isAcknowledged ? (isDsa ? "Đã biểu dương" : "Đã tiếp nhận") : (isDsa ? "Biểu dương" : "Tiếp nhận/ Xử lý")}</T>
+                                  </span>
+                                </button>
+
+                                <div className="mt-0.5 flex flex-col items-center gap-0.5">
+                                  {ackCount > 0 ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowAcksListReport(report)}
+                                      className="text-[8px] text-amber-700 bg-amber-100/90 hover:bg-amber-200/90 px-1.5 py-0.2 rounded-full font-extrabold border border-amber-200/60 inline-block cursor-pointer active:scale-95 transition-all"
+                                      title="Click xem danh sách chi tiết"
+                                    >
+                                      <span translate="no" className="notranslate">{ackCount} <T>người</T></span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (!canUserProcessOrResolveReport(currentUser, report.factory)) {
+                                          const userBranchName = currentUser?.branch || "Chi nhánh khác";
+                                          showToast(`🔒 Tài khoản thuộc ${userBranchName}. Bạn chỉ được tiếp nhận/xử lý bản tin của Chi nhánh mình hoặc Văn Phòng Công Ty!`);
+                                          return;
+                                        }
+                                        setConfirmAckModalData({
+                                          report,
+                                          isCancel: isAcknowledged
+                                        });
+                                      }}
+                                      className="text-[8px] text-amber-700 font-extrabold bg-amber-50 hover:bg-amber-100 px-1.5 py-0.2 rounded-full border border-amber-200 cursor-pointer active:scale-95 transition-all border-none"
+                                    >
+                                      <span translate="no" className="notranslate"><T>+ Tiếp nhận ngay</T></span>
+                                    </button>
+                                  )}
+
+                                  {/* AI Badge on Timeline Step 2 */}
+                                  {hasReceiverUsedAi && (
+                                    <span
+                                      className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 text-white text-[8px] font-black shadow-xs tracking-tight border border-purple-200/80"
+                                      title={`Người tiếp nhận/xử lý (${aiUsedList.join(', ')}) đã sử dụng AI hỗ trợ phân tích`}
+                                    >
+                                      <Sparkles className="w-2.5 h-2.5 text-amber-300 stroke-[2.5px] animate-pulse" />
+                                      <span translate="no" className="notranslate"><T>Đã dùng AI</T></span>
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Step 3: Ghi nhận kết quả (Interactive Action - Extended Suggestion) */}
+                              <div className="flex flex-col items-center text-center relative z-10 w-1/3">
+                                <div className="relative flex items-center justify-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (!canUserProcessOrResolveReport(currentUser, report.factory)) {
+                                        const userBranchName = currentUser?.branch || "Chi nhánh khác";
+                                        showToast(`🔒 Tài khoản thuộc ${userBranchName}. Bạn chỉ được ghi nhận kết quả cho bản tin của Chi nhánh mình hoặc Văn Phòng Công Ty!`);
+                                        return;
+                                      }
+                                      if (editingResolutionReportId === report.id) {
+                                        setEditingResolutionReportId(null);
+                                        setEditingResolutionId(null);
+                                      } else {
+                                        setEditingResolutionReportId(report.id);
+                                        setEditingResolutionId(null);
+                                        setResDeptName(currentUser?.department || "");
+                                        setResResultText("");
+                                        setResStatus("Đang xử lý");
+                                        setExpandedResolutions(prev => ({ ...prev, [report.id]: true }));
+                                      }
+                                    }}
+                                    className={`relative w-8 h-8 rounded-full flex items-center justify-center font-bold shadow-sm border-2 border-white text-[10px] transition-all cursor-pointer active:scale-90 ${
+                                      isResolved
+                                        ? "bg-emerald-600 text-white hover:bg-emerald-700 ring-2 ring-emerald-300"
+                                        : resCount > 0
+                                          ? "bg-indigo-600 text-white hover:bg-indigo-700 ring-2 ring-indigo-300"
+                                          : "bg-indigo-50 text-indigo-700 border-indigo-300 hover:bg-indigo-100 ring-2 ring-indigo-200"
+                                    }`}
+                                    title={
+                                      resCount > 0
+                                        ? `Đã có ${resCount} kết quả xử lý. Click để ghi nhận thêm hoặc cập nhật`
+                                        : "Click để GHI NHẬN KẾT QUẢ XỬ LÝ ngay!"
+                                    }
+                                  >
+                                    {isResolved ? (
+                                      <CheckCircle2 className="w-4 h-4 stroke-[2.5px]" />
+                                    ) : (
+                                      <span className="text-[12px] leading-none">✍️</span>
+                                    )}
+                                  </button>
+
+                                  {/* Resolution count badge */}
+                                  {resCount > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleResolutionsExpand(report.id);
+                                      }}
+                                      className="absolute -top-1.5 -right-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[8.5px] font-black px-1.5 py-0.2 rounded-full border border-white shadow-xs cursor-pointer active:scale-95 transition-transform select-none"
+                                      title="Click xem/ẩn chi tiết kết quả xử lý"
+                                    >
+                                      {resCount}
+                                    </button>
+                                  )}
+                                </div>
+
+                                {/* Step 3 Label / Action Button */}
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -6546,36 +6762,64 @@ App Link: ${window.location.origin}`;
                                       setResDeptName(currentUser?.department || "");
                                       setResResultText("");
                                       setResStatus("Đang xử lý");
+                                      setExpandedResolutions(prev => ({ ...prev, [report.id]: true }));
                                     }
                                   }}
-                                  className="text-[10px] font-extrabold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100/70 px-2 py-1.5 rounded-lg border border-indigo-150 cursor-pointer active:scale-95 transition-all flex items-center gap-1.5 shadow-3xs"
+                                  className={`mt-1 text-[9.5px] font-black leading-tight flex items-center gap-0.5 border-none bg-transparent cursor-pointer hover:underline ${
+                                    isResolved ? "text-emerald-800" : resCount > 0 ? "text-indigo-800" : "text-indigo-600"
+                                  }`}
                                 >
-                                  <span>✍️</span>
                                   <span translate="no" className="notranslate">
-                                    <T>Ghi nhận kết quả</T> ({resCount})
+                                    <T>{isResolved ? "Đã xử lý" : "Ghi nhận kết quả"}</T>
                                   </span>
                                 </button>
-                                {resCount > 0 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleResolutionsExpand(report.id)}
-                                    className="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-150 text-indigo-600 cursor-pointer active:scale-95 transition-all"
-                                    title="Click để ẩn/hiện kết quả xử lý chi tiết"
-                                  >
-                                    {expandedResolutions[report.id] ? (
-                                      <ChevronDown className="w-3.5 h-3.5 stroke-[3px]" />
-                                    ) : (
-                                      <ChevronRight className="w-3.5 h-3.5 stroke-[3px]" />
-                                    )}
-                                  </button>
-                                )}
-                              </div>
-                            );
-                          })()
-                        )}
-                      </div>
 
-                      {/* Inline form to record or edit resolution (Placed ABOVE Timeline) */}
+                                <div className="mt-0.5 flex flex-col items-center gap-0.5">
+                                  {resCount > 0 ? (
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleResolutionsExpand(report.id)}
+                                        className="text-[8px] text-emerald-700 bg-emerald-100/90 hover:bg-emerald-200/90 px-1.5 py-0.2 rounded-full font-extrabold border border-emerald-200/60 inline-flex items-center gap-0.5 cursor-pointer active:scale-95 transition-all"
+                                        title="Click để ẩn/hiện danh sách kết quả xử lý"
+                                      >
+                                        <span>{resCount} kết quả</span>
+                                        {expandedResolutions[report.id] ? (
+                                          <ChevronDown className="w-2.5 h-2.5 stroke-[3px]" />
+                                        ) : (
+                                          <ChevronRight className="w-2.5 h-2.5 stroke-[3px]" />
+                                        )}
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (!canUserProcessOrResolveReport(currentUser, report.factory)) {
+                                          const userBranchName = currentUser?.branch || "Chi nhánh khác";
+                                          showToast(`🔒 Tài khoản thuộc ${userBranchName}. Bạn chỉ được ghi nhận kết quả cho bản tin của Chi nhánh mình hoặc Văn Phòng Công Ty!`);
+                                          return;
+                                        }
+                                        setEditingResolutionReportId(report.id);
+                                        setEditingResolutionId(null);
+                                        setResDeptName(currentUser?.department || "");
+                                        setResResultText("");
+                                        setResStatus("Đang xử lý");
+                                        setExpandedResolutions(prev => ({ ...prev, [report.id]: true }));
+                                      }}
+                                      className="text-[8px] text-indigo-700 font-extrabold bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.2 rounded-full border border-indigo-200 cursor-pointer active:scale-95 transition-all border-none"
+                                    >
+                                      <span translate="no" className="notranslate"><T>+ Ghi nhận ngay</T></span>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Inline form to record or edit resolution (Placed BELOW Timeline) */}
                       {editingResolutionReportId === report.id && (
                         <div className="mt-2 mb-1 p-2.5 bg-indigo-50/50 border border-indigo-100 rounded-lg flex flex-col gap-2 transition-all duration-300">
                           <div className="text-[9.5px] font-bold text-indigo-800 flex items-center justify-between">
@@ -6806,8 +7050,43 @@ App Link: ${window.location.origin}`;
                               </div>
                             )}
                           </div>
-                          {report.resolutions.map((res) => (
-                            <div key={res.id} className="text-[10px] bg-white p-2 rounded-lg border border-slate-100 shadow-3xs relative">
+                          {report.resolutions.map((res) => {
+                            const getReceptionTimeForRes = (reportItem: QualityReport, resItem: QualityReportResolution) => {
+                              if (reportItem.receiverTimestamps && Object.keys(reportItem.receiverTimestamps).length > 0) {
+                                for (const [key, val] of Object.entries(reportItem.receiverTimestamps)) {
+                                  if (
+                                    (resItem.handlerName && key.toLowerCase().includes(resItem.handlerName.toLowerCase())) ||
+                                    (resItem.departmentName && key.toLowerCase().includes(resItem.departmentName.toLowerCase()))
+                                  ) {
+                                    return val;
+                                  }
+                                }
+                                const firstVal = Object.values(reportItem.receiverTimestamps)[0];
+                                if (firstVal) return firstVal;
+                              }
+                              if (reportItem.sharedBy && reportItem.sharedBy.length > 0) {
+                                return reportItem.updatedAt || reportItem.timestamp;
+                              }
+                              return reportItem.timestamp;
+                            };
+
+                            const recTime = getReceptionTimeForRes(report, res);
+                            const isDone = res.status === "Đã xử lý";
+                            const getNowStr = () => {
+                              const now = new Date();
+                              const d = String(now.getDate()).padStart(2, '0');
+                              const m = String(now.getMonth() + 1).padStart(2, '0');
+                              const y = String(now.getFullYear()).slice(-2);
+                              const h = String(now.getHours()).padStart(2, '0');
+                              const min = String(now.getMinutes()).padStart(2, '0');
+                              const sec = String(now.getSeconds()).padStart(2, '0');
+                              return `${d}/${m}/${y} ${h}:${min}:${sec}`;
+                            };
+                            const endTime = isDone ? res.updatedAt : getNowStr();
+                            const durationFromReception = calculateTimeDurationText(recTime, endTime);
+
+                            return (
+                             <div key={res.id} className="text-[10px] bg-white p-2 rounded-lg border border-slate-100 shadow-3xs relative">
                               <div className="flex items-center justify-between gap-1 mb-0.5">
                                 <div className="flex items-center gap-1.5 min-w-0">
                                   <span translate="no" className="notranslate font-bold text-[10.5px] text-slate-700">
@@ -6900,189 +7179,28 @@ App Link: ${window.location.origin}`;
                                   </button>
                                 </div>
                               </div>
+
+                              {/* Duration from reception to resolution */}
+                              <div className={`mt-1.5 flex items-center justify-between gap-1 px-2 py-0.5 rounded border text-[8.5px] font-medium select-none ${
+                                isDone 
+                                  ? "bg-emerald-50/90 text-emerald-800 border-emerald-200/80" 
+                                  : "bg-amber-50/90 text-amber-800 border-amber-200/80"
+                              }`}>
+                                <span className="flex items-center gap-1 font-bold">
+                                  <span>⏱️</span>
+                                  <span translate="no" className="notranslate">
+                                    {isDone ? "Thời gian từ tiếp nhận đến khi xử lý xong:" : "Thời gian từ tiếp nhận (đang xử lý):"}
+                                  </span>
+                                </span>
+                                <span translate="no" className="notranslate font-black font-mono">
+                                  {durationFromReception.text}
+                                </span>
+                              </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
-
-                      {/* Incident Timeline Visual Progress Bar */}
-                      {(() => {
-                        const ackCount = report.sharedBy?.length || 0;
-                        const resCount = report.resolutions?.length || 0;
-                        const isResolved = resCount > 0 && (report.resolutions?.some(r => r.status === "Đã xử lý" || !!r.resultText) ?? true);
-
-                        const aiUsedList = report.aiUsedBy || [];
-                        const receiversAndHandlers = [
-                          ...(report.sharedBy || []),
-                          ...(report.resolutions?.map(r => r.handlerName) || [])
-                        ];
-                        const hasReceiverUsedAi = aiUsedList.some(aiUser =>
-                          receiversAndHandlers.length > 0
-                            ? receiversAndHandlers.some(rh =>
-                                rh.toLowerCase().includes(aiUser.toLowerCase()) ||
-                                aiUser.toLowerCase().includes(rh.toLowerCase())
-                              )
-                            : (ackCount > 0 || resCount > 0)
-                        );
-
-                        return (
-                          <div className="mt-2.5 mb-1 p-2 bg-gradient-to-b from-slate-50 to-white border border-slate-200/90 rounded-xl flex flex-col gap-1.5 shadow-2xs">
-                            <div className="flex items-center justify-between text-[9px] font-black text-slate-500 uppercase tracking-tight select-none px-0.5">
-                              <div className="flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
-                                <span translate="no" className="notranslate" style={{ color: "var(--color-primary, #1e3a8a)" }}>
-                                  <T>TIẾN TRÌNH XỬ LÝ (TIMELINE)</T>
-                                </span>
-                              </div>
-                              <div>
-                                {isResolved ? (
-                                  <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 flex items-center gap-1 text-[8.5px] font-bold">
-                                    <CheckCircle2 className="w-2.5 h-2.5 stroke-[3px] text-emerald-600" />
-                                    <span translate="no" className="notranslate"><T>Đã xử lý xong</T></span>
-                                  </span>
-                                ) : ackCount > 0 ? (
-                                  <span className="text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 flex items-center gap-1 text-[8.5px] font-bold">
-                                    <Clock className="w-2.5 h-2.5 stroke-[3px] text-amber-600" />
-                                    <span translate="no" className="notranslate"><T>Đang xử lý</T></span>
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 flex items-center gap-1 text-[8.5px] font-bold">
-                                    <AlertCircle className="w-2.5 h-2.5 stroke-[3px] text-slate-500" />
-                                    <span translate="no" className="notranslate"><T>Mới ghi nhận</T></span>
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="relative flex items-start justify-between mt-1 px-2 py-0.5">
-                              {/* Connector Line Background */}
-                              <div className="absolute top-3.5 left-8 right-8 h-1 bg-slate-200 rounded-full z-0 overflow-hidden">
-                                <div
-                                  className={`h-full transition-all duration-500 ${
-                                    isResolved
-                                      ? "bg-gradient-to-r from-blue-500 via-amber-500 to-emerald-500 w-full"
-                                      : ackCount > 0
-                                        ? hasReceiverUsedAi
-                                          ? "bg-gradient-to-r from-blue-500 via-purple-500 to-amber-500 w-1/2"
-                                          : "bg-gradient-to-r from-blue-500 to-amber-500 w-1/2"
-                                        : "bg-blue-500 w-0"
-                                  }`}
-                                />
-                              </div>
-
-                              {/* Step 1: Ghi nhận sự cố */}
-                              <div className="flex flex-col items-center text-center relative z-10 w-1/3">
-                                <div className="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold shadow-xs border-2 border-white text-[10px]" title="Bắt đầu ghi nhận sự cố">
-                                  <CheckCircle2 className="w-4 h-4 stroke-[2.5px]" />
-                                </div>
-                                <span className="text-[9.5px] font-black text-slate-800 mt-1 leading-tight">
-                                  <span translate="no" className="notranslate"><T>Ghi nhận sự cố</T></span>
-                                </span>
-                                <span className="text-[8px] font-semibold text-slate-500 mt-0.5">
-                                  {report.timestamp ? report.timestamp.split(' ')[0] || "Khởi tạo" : "Khởi tạo"}
-                                </span>
-                              </div>
-
-                              {/* Step 2: Tiếp nhận xử lý */}
-                              <div className="flex flex-col items-center text-center relative z-10 w-1/3">
-                                <div className="relative">
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (ackCount > 0) {
-                                        setShowAcksListReport(report);
-                                      }
-                                    }}
-                                    disabled={ackCount === 0}
-                                    className={`relative w-7 h-7 rounded-full flex items-center justify-center font-bold shadow-xs border-2 border-white text-[10px] transition-all ${
-                                      ackCount > 0
-                                        ? hasReceiverUsedAi
-                                          ? "bg-gradient-to-tr from-amber-500 via-purple-600 to-indigo-600 text-white cursor-pointer hover:scale-110 active:scale-95 ring-2 ring-purple-400 shadow-purple-200"
-                                          : "bg-amber-500 text-white cursor-pointer hover:scale-110 active:scale-95 ring-2 ring-amber-300"
-                                        : "bg-slate-200 text-slate-400 cursor-default animate-pulse"
-                                    }`}
-                                    title={
-                                      hasReceiverUsedAi
-                                        ? `Người tiếp nhận/xử lý (${aiUsedList.join(', ')}) đã sử dụng AI hỗ trợ. Click xem danh sách ${ackCount} người tiếp nhận`
-                                        : ackCount > 0
-                                        ? `Click xem danh sách ${ackCount} người tiếp nhận`
-                                        : "Chưa có người tiếp nhận"
-                                    }
-                                  >
-                                    <Users className="w-4 h-4 stroke-[2.5px]" />
-                                    {ackCount > 0 && (
-                                      <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center border border-white shadow-2xs">
-                                        {ackCount}
-                                      </span>
-                                    )}
-                                  </button>
-                                </div>
-
-                                <span className={`text-[9.5px] font-black mt-1 leading-tight flex items-center gap-0.5 ${ackCount > 0 ? (hasReceiverUsedAi ? "text-purple-900" : "text-amber-800") : "text-slate-400"}`}>
-                                  <span translate="no" className="notranslate"><T>Tiếp nhận xử lý</T></span>
-                                </span>
-
-                                <div className="mt-0.5 flex flex-col items-center gap-0.5">
-                                  <span className="text-[8px] font-bold">
-                                    {ackCount > 0 ? (
-                                      <span className="text-amber-700 bg-amber-100/90 px-1.5 py-0.2 rounded-full font-extrabold border border-amber-200/60 inline-block">
-                                        {ackCount} <span translate="no" className="notranslate"><T>người</T></span>
-                                      </span>
-                                    ) : (
-                                      <span translate="no" className="notranslate text-slate-400"><T>Chờ tiếp nhận</T></span>
-                                    )}
-                                  </span>
-
-                                  {/* AI Badge on Timeline Step 2 if receiver/handler used AI */}
-                                  {hasReceiverUsedAi && (
-                                    <span
-                                      className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 text-white text-[8px] font-black shadow-xs tracking-tight border border-purple-200/80"
-                                      title={`Người tiếp nhận/xử lý (${aiUsedList.join(', ')}) đã sử dụng AI hỗ trợ phân tích`}
-                                    >
-                                      <Sparkles className="w-2.5 h-2.5 text-amber-300 stroke-[2.5px] animate-pulse" />
-                                      <span translate="no" className="notranslate"><T>Đã dùng AI</T></span>
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Step 3: Ghi nhận kết quả */}
-                              <div className="flex flex-col items-center text-center relative z-10 w-1/3">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (resCount > 0) {
-                                      toggleResolutionsExpand(report.id);
-                                    }
-                                  }}
-                                  disabled={resCount === 0}
-                                  className={`w-7 h-7 rounded-full flex items-center justify-center font-bold shadow-xs border-2 border-white text-[10px] transition-all ${
-                                    isResolved
-                                      ? "bg-emerald-600 text-white cursor-pointer hover:scale-110 active:scale-95 ring-2 ring-emerald-300"
-                                      : "bg-slate-200 text-slate-400 cursor-default"
-                                  }`}
-                                  title={resCount > 0 ? `Click xem ${resCount} kết quả xử lý` : "Chưa có kết quả xử lý"}
-                                >
-                                  <CheckCircle2 className="w-4 h-4 stroke-[2.5px]" />
-                                </button>
-                                <span className={`text-[9.5px] font-black mt-1 leading-tight ${isResolved ? "text-emerald-800" : "text-slate-400"}`}>
-                                  <span translate="no" className="notranslate"><T>Đã xử lý</T></span>
-                                </span>
-                                <span className="text-[8px] font-bold mt-0.5">
-                                  {isResolved ? (
-                                    <span className="text-emerald-700 bg-emerald-100/90 px-1.5 py-0.2 rounded-full font-extrabold border border-emerald-200/60">
-                                      {resCount > 0 ? `${resCount} kết quả` : "Hoàn thành"}
-                                    </span>
-                                  ) : (
-                                    <span translate="no" className="notranslate text-slate-400"><T>Chưa xong</T></span>
-                                  )}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })()}
 
                       {/* Input form to submit a new directive (Placed BELOW Timeline) */}
                       {currentUser && (
@@ -7815,11 +7933,30 @@ App Link: ${window.location.origin}`;
                                     <span translate="no" className="notranslate">{msg.message}</span>
                                   </div>
 
-                                  {/* Formatted Date value displayed as dd/mm/yy + Admin controls */}
+                                  {/* Formatted Date value displayed as dd/mm/yy + Like button + Admin controls */}
                                   <div className="flex items-center gap-1.5 mt-0.5 px-0.5 select-none">
                                     <span className="text-[7.5px] font-mono text-slate-400">
                                       {formatTimestampToDMY(msg.timestamp)}
                                     </span>
+
+                                    {/* Like button for chat message */}
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onToggleLikeChatMessage?.(msg.id);
+                                      }}
+                                      className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[8.5px] font-extrabold border transition-all cursor-pointer select-none active:scale-90 ${
+                                        msg.likedBy?.includes(currentUser?.fullName || currentUser?.id || "")
+                                          ? "bg-rose-50 text-rose-600 border-rose-200 shadow-3xs"
+                                          : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200"
+                                      }`}
+                                      title="Thích tin nhắn này"
+                                    >
+                                      <Heart className={`w-2.5 h-2.5 ${msg.likedBy?.includes(currentUser?.fullName || currentUser?.id || "") ? "fill-rose-500 stroke-rose-500 text-rose-500" : ""}`} />
+                                      <span>{msg.likedBy?.length || msg.likes || 0}</span>
+                                    </button>
+
                                     {isAdmin && (
                                       deletingChatId === msg.id ? (
                                         <div className="flex items-center gap-1.5 ml-1 bg-rose-50/95 border border-rose-300 px-2 py-0.5 rounded-md text-[9px] font-bold text-rose-700 animate-fadeIn shadow-xs">
@@ -8381,49 +8518,77 @@ App Link: ${window.location.origin}`}
                       }
                     }
                     
+                    const recAt = activeReport.receiverTimestamps?.[name] || activeReport.updatedAt || activeReport.timestamp;
+                    const durationInfo = calculateTimeDurationText(activeReport.timestamp, recAt);
+
                     return (
                       <div
                         key={i}
-                        className="flex items-center justify-between p-2.5 rounded-xl border border-slate-150 bg-white shadow-3xs"
+                        className="flex flex-col p-2.5 rounded-xl border border-slate-150 bg-white shadow-3xs gap-2"
                       >
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-7.5 h-7.5 rounded-full bg-sky-50 border border-sky-100 flex items-center justify-center text-sky-600 text-xs font-extrabold select-none">
-                            {cleanName.charAt(0).toUpperCase()}
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="text-xs font-extrabold text-slate-800">
-                              <span translate="no" className="notranslate"><T>{cleanName}</T></span>
-                            </span>
-                            {deptName && (
-                              <span className="text-[9px] text-slate-500 font-medium">
-                                <span translate="no" className="notranslate">{deptName}</span>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-7.5 h-7.5 rounded-full bg-sky-50 border border-sky-100 flex items-center justify-center text-sky-600 text-xs font-extrabold select-none shrink-0">
+                              {cleanName.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-xs font-extrabold text-slate-800 truncate">
+                                <span translate="no" className="notranslate"><T>{cleanName}</T></span>
                               </span>
-                            )}
+                              {deptName && (
+                                <span className="text-[9px] text-slate-500 font-medium truncate">
+                                  <span translate="no" className="notranslate">{deptName}</span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 ml-1">
+                            <span className={`text-[9px] font-extrabold px-2.5 py-0.5 rounded-full border tracking-tight flex items-center gap-0.5 ${
+                              isDsaReport 
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-100" 
+                                : "bg-sky-50 text-sky-700 border-sky-100"
+                            }`}>
+                              ✓ <span translate="no" className="notranslate"><T>{isDsaReport ? "Biểu dương" : "Tiếp nhận"}</T></span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setConfirmRemoveAckData({
+                                  report: activeReport,
+                                  nameToRemove: name,
+                                  cleanName
+                                });
+                              }}
+                              className="w-6.5 h-6.5 rounded-full bg-rose-50 hover:bg-rose-100 active:scale-90 text-rose-600 border border-rose-200 flex items-center justify-center font-black text-xs cursor-pointer transition-all shadow-2xs hover:scale-105"
+                              title="Hủy lượt tiếp nhận/xử lý này"
+                            >
+                              ✕
+                            </button>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <span className={`text-[9px] font-extrabold px-2.5 py-0.5 rounded-full border tracking-tight flex items-center gap-0.5 ${
-                            isDsaReport 
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-100" 
-                              : "bg-sky-50 text-sky-700 border-sky-100"
-                          }`}>
-                            ✓ <span translate="no" className="notranslate"><T>{isDsaReport ? "Biểu dương" : "Tiếp nhận"}</T></span>
-                          </span>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setConfirmRemoveAckData({
-                                report: activeReport,
-                                nameToRemove: name,
-                                cleanName
-                              });
-                            }}
-                            className="w-6.5 h-6.5 rounded-full bg-rose-50 hover:bg-rose-100 active:scale-90 text-rose-600 border border-rose-200 flex items-center justify-center font-black text-xs cursor-pointer transition-all shadow-2xs hover:scale-105"
-                            title="Hủy lượt tiếp nhận/xử lý này"
-                          >
-                            ✕
-                          </button>
+
+                        {/* Date Time Received & Elapsed Time calculation */}
+                        <div className="flex flex-col gap-1 pt-1.5 border-t border-slate-100 text-[9.5px]">
+                          <div className="flex items-center justify-between gap-1 text-slate-600 font-medium">
+                            <span className="flex items-center gap-1 font-semibold text-slate-500">
+                              <Clock className="w-3 h-3 text-sky-600" />
+                              <span translate="no" className="notranslate">Thời gian tiếp nhận:</span>
+                            </span>
+                            <span translate="no" className="notranslate font-extrabold text-slate-800 font-mono">
+                              {recAt}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-1 bg-amber-50/90 text-amber-800 px-2 py-1 rounded-lg border border-amber-200/80 font-medium">
+                            <span className="flex items-center gap-1 font-bold">
+                              <span>⏱️</span>
+                              <span translate="no" className="notranslate">Từ phát sinh đến tiếp nhận:</span>
+                            </span>
+                            <span translate="no" className="notranslate font-black text-amber-900 font-mono">
+                              {durationInfo.text}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     );
@@ -8593,7 +8758,9 @@ App Link: ${window.location.origin}`}
                   type="button"
                   onClick={() => {
                     const updatedShares = (report.sharedBy || []).filter(item => item !== nameToRemove);
-                    const updatedReport = { ...report, sharedBy: updatedShares };
+                    const updatedTimestamps = { ...(report.receiverTimestamps || {}) };
+                    delete updatedTimestamps[nameToRemove];
+                    const updatedReport = { ...report, sharedBy: updatedShares, receiverTimestamps: updatedTimestamps };
                     if (onUpdateReport) {
                       onUpdateReport(updatedReport);
                     }
@@ -9164,70 +9331,41 @@ App Link: ${window.location.origin}`}
         <div className="fixed lg:absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-end justify-center z-50 select-none animate-fadeIn">
           <div className="bg-white w-full h-full max-h-full overflow-hidden flex flex-col shadow-2xl animate-slideUp">
             {/* Header */}
-            {currentUser?.role === UserRole.ADMIN ? (
-              <div className="flex justify-between items-center px-4 py-4 border-b border-slate-100 shrink-0 bg-slate-50">
+            <div className="flex justify-between items-center px-3.5 py-3 border-b border-slate-100 shrink-0 bg-slate-50 gap-2 whitespace-nowrap overflow-x-auto select-none">
+              <div className="flex items-center gap-2 min-w-0">
                 <button
                   onClick={() => setShowNotifDrawer(false)}
-                  className="flex items-center gap-1.5 text-slate-600 hover:text-slate-800 text-[12px] font-extrabold bg-transparent border-none cursor-pointer p-1"
+                  className="w-8 h-8 rounded-full bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white flex items-center justify-center shrink-0 cursor-pointer shadow-2xs transition-all border-none"
+                  title="Quay lại"
                 >
-                  <ArrowLeft className="w-4 h-4" />
-                  <T>Sảnh chính</T>
+                  <ArrowLeft className="w-4.5 h-4.5 stroke-[2.5px] text-white" />
                 </button>
-                <div className="flex items-center gap-1.5">
-                  <span className="font-extrabold text-[12px] text-slate-850 tracking-tight uppercase">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="font-extrabold text-[12px] text-slate-850 tracking-tight uppercase flex items-center gap-1">
                     🔔 <span translate="no" className="notranslate"><T>THÔNG BÁO</T></span>
                   </span>
                   {unreadCount > 0 && (
-                    <span className="bg-rose-100 text-rose-700 text-[10px] font-black px-2 py-0.5 rounded-full ml-1">
+                    <span className="bg-rose-100 text-rose-700 text-[10px] font-black px-2 py-0.5 rounded-full shrink-0">
                       <T>MỚI</T> <span translate="no" className="font-mono">{unreadCount}</span>
                     </span>
                   )}
-                </div>
-                <div className="flex items-center gap-2">
-                  {unreadCount > 0 && (
-                    <button
-                      onClick={handleMarkAllAsRead}
-                      className="text-blue-600 hover:text-blue-800 text-[10px] font-extrabold transition-colors cursor-pointer mr-2"
-                    >
-                      <T>ĐỌC TẤT CẢ</T>
-                    </button>
-                  )}
-                  <div className="bg-amber-100 border border-amber-200 text-amber-800 px-2 py-0.5 rounded-full text-[9.5px] font-mono font-black shrink-0">
-                    <span translate="no" className="notranslate">{notifications.length} <T>tin</T></span>
-                  </div>
                 </div>
               </div>
-            ) : (
-              <div className="flex justify-between items-center px-4 py-4 border-b border-slate-100 shrink-0 bg-slate-50">
-                <div className="flex items-center gap-2">
-                  <Bell className="w-5 h-5 text-[#1e3a8a] animate-bounce" />
-                  <span className="font-extrabold text-[13px] text-[#1e3a8a] tracking-tight uppercase">
-                    <span translate="no" className="notranslate"><T>THÔNG BÁO</T></span>
-                  </span>
-                  {unreadCount > 0 && (
-                    <span className="bg-rose-100 text-rose-700 text-[10px] font-black px-2 py-0.5 rounded-full ml-1">
-                      <T>MỚI</T> <span translate="no" className="font-mono">{unreadCount}</span>
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2.5">
-                  {unreadCount > 0 && (
-                    <button
-                      onClick={handleMarkAllAsRead}
-                      className="text-blue-600 hover:text-blue-800 text-[10px] font-extrabold transition-colors cursor-pointer mr-1"
-                    >
-                      <T>ĐỌC TẤT CẢ</T>
-                    </button>
-                  )}
+
+              <div className="flex items-center gap-2 shrink-0">
+                {unreadCount > 0 && (
                   <button
-                    onClick={() => setShowNotifDrawer(false)}
-                    className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-xs"
+                    onClick={handleMarkAllAsRead}
+                    className="text-blue-600 hover:text-blue-800 text-[10px] font-extrabold transition-colors cursor-pointer px-1.5 py-1 rounded hover:bg-blue-50 border-none bg-transparent"
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <T>ĐỌC TẤT CẢ</T>
                   </button>
+                )}
+                <div className="bg-amber-100 border border-amber-200 text-amber-800 px-2 py-0.5 rounded-full text-[9.5px] font-mono font-black shrink-0">
+                  <span translate="no" className="notranslate">{notifications.length} <T>tin</T></span>
                 </div>
               </div>
-            )}
+            </div>
 
             {/* Notifications scroll list */}
             <div 
