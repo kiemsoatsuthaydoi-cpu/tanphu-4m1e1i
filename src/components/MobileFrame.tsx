@@ -6849,7 +6849,7 @@ App Link: ${window.location.origin}`;
                                         setResStatus("Đang xử lý");
                                         setExpandedResolutions(prev => ({ ...prev, [report.id]: true }));
                                       }}
-                                      className={`text-[8px] font-extrabold px-1.5 py-0.2 rounded-full cursor-pointer active:scale-95 transition-all border-none ${
+                                      className={`text-[8px] font-extrabold px-1.5 py-0.2 rounded-full cursor-pointer active:scale-95 transition-all border-none resolution-form-trigger ${
                                         (ackCount > 0 || isAcknowledged)
                                           ? "text-indigo-800 bg-indigo-100 hover:bg-indigo-200 border border-indigo-300 animate-pulse"
                                           : "text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200"
@@ -6867,7 +6867,7 @@ App Link: ${window.location.origin}`;
 
                       {/* Inline form to record or edit resolution (Placed BELOW Timeline) */}
                       {editingResolutionReportId === report.id && (
-                        <div className="mt-2 mb-1 p-2.5 bg-indigo-50/50 border border-indigo-100 rounded-lg flex flex-col gap-2 transition-all duration-300">
+                        <div ref={resolutionFormRef} className="mt-2 mb-1 p-2.5 bg-indigo-50/50 border border-indigo-100 rounded-lg flex flex-col gap-2 transition-all duration-300">
                           <div className="text-[9.5px] font-bold text-indigo-800 flex items-center justify-between">
                             <span translate="no" className="notranslate">
                               {editingResolutionId ? "✏️ CẬP NHẬT KẾT QUẢ XỬ LÝ KPH:" : "✍️ GHI NHẬN KẾT QUẢ XỬ LÝ KPH:"}
@@ -7077,7 +7077,7 @@ App Link: ${window.location.origin}`;
                                         setResResultText(res.resultText);
                                         setResStatus(res.status);
                                       }}
-                                      className="p-0.5 text-slate-500 hover:text-indigo-600 rounded transition-colors cursor-pointer border-none bg-transparent"
+                                      className="p-0.5 text-slate-500 hover:text-indigo-600 rounded transition-colors cursor-pointer border-none bg-transparent resolution-form-trigger"
                                     >
                                       <Edit className="w-3 h-3" />
                                     </button>

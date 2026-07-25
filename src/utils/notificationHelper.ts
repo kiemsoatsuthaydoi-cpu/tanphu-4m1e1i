@@ -1,10 +1,33 @@
 import { QualityReport, AppNotification, BroadcastNotice, User, ChatMessage, ForumTopic, ForumReply } from "../types";
+import { isLeadershipUser, canUserTagLeadership } from "./tagHelpers";
 
-export function findMentionedUsers(text: string | undefined | null, users?: User[]): User[] {
+export function findMentionedUsers(
+  text: string | undefined | null,
+  users?: User[],
+  senderUser?: User | null
+): User[] {
   if (!text || !users || users.length === 0) return [];
+
+  let activeSender = senderUser;
+  if (!activeSender) {
+    try {
+      const stored = localStorage.getItem("4m1e1i_current_user");
+      if (stored) {
+        activeSender = JSON.parse(stored);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  const canTagLeaders = canUserTagLeadership(activeSender);
+
   const matched: User[] = [];
   users.forEach((u) => {
     if (u.fullName && text.includes(`@${u.fullName}`)) {
+      if (isLeadershipUser(u) && !canTagLeaders) {
+        return;
+      }
       matched.push(u);
     }
   });

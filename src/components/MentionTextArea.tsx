@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { User, UserRole } from "../types";
 import { T } from "./TranslateText";
+import { isLeadershipUser, canUserTagLeadership } from "../utils/tagHelpers";
 
 // Accent remover helper for intuitive Vietnamese typing
 export function removeVietnameseTones(str: string): string {
@@ -64,6 +65,7 @@ export function formatVietnameseInputText(text: string): string {
 
 interface MentionControlsProps {
   users?: User[];
+  currentUser?: User | null;
   value: string;
   onChange: (val: string) => void;
   placeholder?: string;
@@ -77,6 +79,7 @@ interface MentionControlsProps {
 
 export function MentionTextArea({
   users = [],
+  currentUser,
   value,
   onChange,
   placeholder,
@@ -94,14 +97,35 @@ export function MentionTextArea({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Filter active users on matching searchQuery
-  const filteredUsers = users.filter((u) => {
-    if (!searchQuery) return true;
-    const normalizedName = removeVietnameseTones(u.fullName.toLowerCase());
-    const normalizedDept = removeVietnameseTones((u.department || "").toLowerCase());
-    const normalizedQuery = removeVietnameseTones(searchQuery.toLowerCase());
-    return normalizedName.includes(normalizedQuery) || normalizedDept.includes(normalizedQuery);
-  }).slice(0, 8); // Top 8 suggestions
+  // Determine active user
+  let activeUser = currentUser;
+  if (!activeUser) {
+    try {
+      const stored = localStorage.getItem("4m1e1i_current_user");
+      if (stored) {
+        activeUser = JSON.parse(stored);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  const userCanTagLeaders = canUserTagLeadership(activeUser);
+
+  // Filter active users on matching searchQuery and tag authority
+  const filteredUsers = users
+    .filter((u) => {
+      // Rule: Only manager level or above can tag Executive Leadership
+      if (isLeadershipUser(u) && !userCanTagLeaders) {
+        return false;
+      }
+      if (!searchQuery) return true;
+      const normalizedName = removeVietnameseTones(u.fullName.toLowerCase());
+      const normalizedDept = removeVietnameseTones((u.department || "").toLowerCase());
+      const normalizedQuery = removeVietnameseTones(searchQuery.toLowerCase());
+      return normalizedName.includes(normalizedQuery) || normalizedDept.includes(normalizedQuery);
+    })
+    .slice(0, 8); // Top 8 suggestions
 
   const handleSelectUser = (user: User) => {
     if (!textareaRef.current) return;
@@ -217,45 +241,78 @@ export function MentionTextArea({
         style={style}
       />
 
-      {showDropdown && filteredUsers.length > 0 && (
-        <div
-          ref={dropdownRef}
-          className="absolute left-0 right-0 bottom-full mb-1 sm:bottom-auto sm:top-full sm:mt-1 max-h-48 overflow-y-auto bg-white border border-slate-250 rounded-xl shadow-xl z-[999999] p-1.5 space-y-0.5"
-        >
-          <div className="px-2 py-1 text-[9px] text-slate-400 font-bold uppercase tracking-wider border-b border-slate-50 mb-1">
-            <T><span translate="no" className="notranslate">Nhấn phím lên/xuống & Enter để Tag nhanh:</span></T>
+      {showDropdown && (
+        filteredUsers.length > 0 ? (
+          <div
+            ref={dropdownRef}
+            className="absolute left-0 right-0 bottom-full mb-1 sm:bottom-auto sm:top-full sm:mt-1 max-h-48 overflow-y-auto bg-white border border-slate-250 rounded-xl shadow-xl z-[999999] p-1.5 space-y-0.5"
+          >
+            <div className="px-2 py-1 text-[9px] text-slate-400 font-bold uppercase tracking-wider border-b border-slate-50 mb-1 flex items-center justify-between">
+              <span><T><span translate="no" className="notranslate">Nhấn phím lên/xuống & Enter để Tag nhanh:</span></T></span>
+              {userCanTagLeaders && (
+                <span className="text-[8px] text-indigo-600 bg-indigo-50 px-1 py-0.2 rounded font-extrabold">
+                  <span translate="no" className="notranslate">⚡ Quyền Tag Lãnh Đạo</span>
+                </span>
+              )}
+            </div>
+            {filteredUsers.map((u, i) => {
+              const isLeader = isLeadershipUser(u);
+              return (
+                <button
+                  key={u.id || i}
+                  type="button"
+                  onClick={() => handleSelectUser(u)}
+                  className={`w-full flex items-center gap-2.5 px-2.5 py-2 text-left rounded-lg transition-all ${
+                    i === selectedIndex
+                      ? "bg-amber-100 text-amber-900 font-semibold"
+                      : "hover:bg-slate-50 text-slate-700"
+                  }`}
+                >
+                  <div className={`w-6 h-6 rounded-full text-[10px] font-black flex items-center justify-center ${
+                    isLeader
+                      ? "bg-purple-600 text-white ring-2 ring-purple-200"
+                      : i === selectedIndex ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-600"
+                  }`}>
+                    <span translate="no" className="notranslate">
+                      {u.fullName.split(" ").pop()?.slice(0, 2).toUpperCase() || "NV"}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs truncate flex items-center gap-1.5">
+                      <span translate="no" className="notranslate">{u.fullName}</span>
+                      {isLeader && (
+                        <span className="text-[8px] bg-purple-100 text-purple-700 font-extrabold px-1 py-0.2 rounded border border-purple-200">
+                          <span translate="no" className="notranslate">LÃNH ĐẠO</span>
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[9px] opacity-75 truncate">
+                      <span translate="no" className="notranslate">
+                        {u.position ? `${u.position} • ` : ""}{u.department || "QC"} • {u.role === UserRole.ADMIN ? "Quản trị" : u.role}
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
-          {filteredUsers.map((u, i) => (
-            <button
-              key={u.id || i}
-              type="button"
-              onClick={() => handleSelectUser(u)}
-              className={`w-full flex items-center gap-2.5 px-2.5 py-2 text-left rounded-lg transition-all ${
-                i === selectedIndex
-                  ? "bg-amber-100 text-amber-900 font-semibold"
-                  : "hover:bg-slate-50 text-slate-700"
-              }`}
+        ) : (
+          !userCanTagLeaders && users.some((u) => isLeadershipUser(u)) ? (
+            <div
+              ref={dropdownRef}
+              className="absolute left-0 right-0 bottom-full mb-1 sm:bottom-auto sm:top-full sm:mt-1 bg-amber-50 border border-amber-200 rounded-xl shadow-xl z-[999999] p-2.5 text-center space-y-1"
             >
-              <div className={`w-6 h-6 rounded-full text-[10px] font-black flex items-center justify-center ${
-                i === selectedIndex ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-600"
-              }`}>
+              <div className="text-amber-900 font-extrabold text-[10.5px] flex items-center justify-center gap-1">
+                <span translate="no" className="notranslate">🔒 GIỚI HẠN QUYỀN TAG LÃNH ĐẠO</span>
+              </div>
+              <div className="text-amber-800 text-[9.5px] leading-snug">
                 <span translate="no" className="notranslate">
-                  {u.fullName.split(" ").pop()?.slice(0, 2).toUpperCase() || "NV"}
+                  Chỉ Trưởng phòng, Phó phòng trở lên hoặc cấp tương đương mới được quyền Tag Ban TGĐ, Chủ tịch, Phó TGĐ...
                 </span>
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-xs truncate">
-                  <span translate="no" className="notranslate">{u.fullName}</span>
-                </div>
-                <div className="text-[9px] opacity-75 truncate">
-                  <span translate="no" className="notranslate">
-                    {u.department || "QC"} • {u.role === UserRole.ADMIN ? "Quản trị" : u.role}
-                  </span>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
+            </div>
+          ) : null
+        )
       )}
     </div>
   );
@@ -263,6 +320,7 @@ export function MentionTextArea({
 
 interface MentionInputProps {
   users?: User[];
+  currentUser?: User | null;
   value: string;
   onChange: (val: string) => void;
   placeholder?: string;
@@ -274,6 +332,7 @@ interface MentionInputProps {
 
 export function MentionInput({
   users = [],
+  currentUser,
   value,
   onChange,
   placeholder,
@@ -289,13 +348,33 @@ export function MentionInput({
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const filteredUsers = users.filter((u) => {
-    if (!searchQuery) return true;
-    const normalizedName = removeVietnameseTones(u.fullName.toLowerCase());
-    const normalizedDept = removeVietnameseTones((u.department || "").toLowerCase());
-    const normalizedQuery = removeVietnameseTones(searchQuery.toLowerCase());
-    return normalizedName.includes(normalizedQuery) || normalizedDept.includes(normalizedQuery);
-  }).slice(0, 8);
+  // Determine active user
+  let activeUser = currentUser;
+  if (!activeUser) {
+    try {
+      const stored = localStorage.getItem("4m1e1i_current_user");
+      if (stored) {
+        activeUser = JSON.parse(stored);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  const userCanTagLeaders = canUserTagLeadership(activeUser);
+
+  const filteredUsers = users
+    .filter((u) => {
+      if (isLeadershipUser(u) && !userCanTagLeaders) {
+        return false;
+      }
+      if (!searchQuery) return true;
+      const normalizedName = removeVietnameseTones(u.fullName.toLowerCase());
+      const normalizedDept = removeVietnameseTones((u.department || "").toLowerCase());
+      const normalizedQuery = removeVietnameseTones(searchQuery.toLowerCase());
+      return normalizedName.includes(normalizedQuery) || normalizedDept.includes(normalizedQuery);
+    })
+    .slice(0, 8);
 
   const handleSelectUser = (user: User) => {
     if (!inputRef.current) return;
@@ -405,45 +484,78 @@ export function MentionInput({
         style={style}
       />
 
-      {showDropdown && filteredUsers.length > 0 && (
-        <div
-          ref={dropdownRef}
-          className="absolute left-0 right-0 bottom-full mb-1 sm:bottom-auto sm:top-full sm:mt-1 max-h-48 overflow-y-auto bg-white border border-slate-250 rounded-xl shadow-xl z-[999999] p-1.5 space-y-0.5"
-        >
-          <div className="px-2 py-1 text-[9px] text-slate-400 font-bold uppercase tracking-wider border-b border-slate-50 mb-1">
-            <T><span translate="no" className="notranslate">Nhấn phím lên/xuống & Enter để Tag nhanh:</span></T>
+      {showDropdown && (
+        filteredUsers.length > 0 ? (
+          <div
+            ref={dropdownRef}
+            className="absolute left-0 right-0 bottom-full mb-1 sm:bottom-auto sm:top-full sm:mt-1 max-h-48 overflow-y-auto bg-white border border-slate-250 rounded-xl shadow-xl z-[999999] p-1.5 space-y-0.5"
+          >
+            <div className="px-2 py-1 text-[9px] text-slate-400 font-bold uppercase tracking-wider border-b border-slate-50 mb-1 flex items-center justify-between">
+              <span><T><span translate="no" className="notranslate">Nhấn phím lên/xuống & Enter để Tag nhanh:</span></T></span>
+              {userCanTagLeaders && (
+                <span className="text-[8px] text-indigo-600 bg-indigo-50 px-1 py-0.2 rounded font-extrabold">
+                  <span translate="no" className="notranslate">⚡ Quyền Tag Lãnh Đạo</span>
+                </span>
+              )}
+            </div>
+            {filteredUsers.map((u, i) => {
+              const isLeader = isLeadershipUser(u);
+              return (
+                <button
+                  key={u.id || i}
+                  type="button"
+                  onClick={() => handleSelectUser(u)}
+                  className={`w-full flex items-center gap-2.5 px-2.5 py-2 text-left rounded-lg transition-all ${
+                    i === selectedIndex
+                      ? "bg-amber-100 text-amber-900 font-semibold"
+                      : "hover:bg-slate-50 text-slate-700"
+                  }`}
+                >
+                  <div className={`w-6 h-6 rounded-full text-[10px] font-black flex items-center justify-center ${
+                    isLeader
+                      ? "bg-purple-600 text-white ring-2 ring-purple-200"
+                      : i === selectedIndex ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-600"
+                  }`}>
+                    <span translate="no" className="notranslate">
+                      {u.fullName.split(" ").pop()?.slice(0, 2).toUpperCase() || "NV"}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs truncate flex items-center gap-1.5">
+                      <span translate="no" className="notranslate">{u.fullName}</span>
+                      {isLeader && (
+                        <span className="text-[8px] bg-purple-100 text-purple-700 font-extrabold px-1 py-0.2 rounded border border-purple-200">
+                          <span translate="no" className="notranslate">LÃNH ĐẠO</span>
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[9px] opacity-75 truncate">
+                      <span translate="no" className="notranslate">
+                        {u.position ? `${u.position} • ` : ""}{u.department || "QC"} • {u.role === UserRole.ADMIN ? "Quản trị" : u.role}
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
-          {filteredUsers.map((u, i) => (
-            <button
-              key={u.id || i}
-              type="button"
-              onClick={() => handleSelectUser(u)}
-              className={`w-full flex items-center gap-2.5 px-2.5 py-2 text-left rounded-lg transition-all ${
-                i === selectedIndex
-                  ? "bg-amber-100 text-amber-900 font-semibold"
-                  : "hover:bg-slate-50 text-slate-700"
-              }`}
+        ) : (
+          !userCanTagLeaders && users.some((u) => isLeadershipUser(u)) ? (
+            <div
+              ref={dropdownRef}
+              className="absolute left-0 right-0 bottom-full mb-1 sm:bottom-auto sm:top-full sm:mt-1 bg-amber-50 border border-amber-200 rounded-xl shadow-xl z-[999999] p-2.5 text-center space-y-1"
             >
-              <div className={`w-6 h-6 rounded-full text-[10px] font-black flex items-center justify-center ${
-                i === selectedIndex ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-600"
-              }`}>
+              <div className="text-amber-900 font-extrabold text-[10.5px] flex items-center justify-center gap-1">
+                <span translate="no" className="notranslate">🔒 GIỚI HẠN QUYỀN TAG LÃNH ĐẠO</span>
+              </div>
+              <div className="text-amber-800 text-[9.5px] leading-snug">
                 <span translate="no" className="notranslate">
-                  {u.fullName.split(" ").pop()?.slice(0, 2).toUpperCase() || "NV"}
+                  Chỉ Trưởng phòng, Phó phòng trở lên hoặc cấp tương đương mới được quyền Tag Ban TGĐ, Chủ tịch, Phó TGĐ...
                 </span>
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-xs truncate">
-                  <span translate="no" className="notranslate">{u.fullName}</span>
-                </div>
-                <div className="text-[9px] opacity-75 truncate">
-                  <span translate="no" className="notranslate">
-                    {u.department || "QC"} • {u.role === UserRole.ADMIN ? "Quản trị" : u.role}
-                  </span>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
+            </div>
+          ) : null
+        )
       )}
     </div>
   );
