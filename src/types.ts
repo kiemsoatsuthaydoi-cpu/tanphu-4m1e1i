@@ -89,9 +89,10 @@ export interface QualityReport {
   uploaderId: string;
   uploaderDepartment: string;
   notes?: string;
-  isAbnormal: boolean; // Is abnormal/alert report (Không phù hợp - KPH)
+  isAbnormal: boolean; // Is abnormal/alert report (Không phù hợp - KPH / RRO)
   isSpotlight?: boolean; // Is spotlight (Điểm sáng - DSA)
-  reportType?: "KPH" | "DSA" | "KNN" | "NORMAL"; // Classification of the report
+  reportType?: "KPH" | "DSA" | "KNN" | "RRO" | "NORMAL"; // Classification of the report
+  kphSubtype?: "NB" | "BN"; // Subtype for KPH: "NB" = Nội bộ (Orange), "BN" = Bên ngoài / Khiếu nại KH (Red)
   googleDrivePath?: string;
   directives?: QualityReportDirective[];
   likedBy?: string[];

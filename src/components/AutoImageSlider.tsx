@@ -7,7 +7,7 @@ interface AutoImageSliderProps {
   fallbackUrl: string;
   isAbnormal?: boolean;
   isSpotlight?: boolean;
-  reportType?: "KPH" | "DSA" | "KNN" | "NORMAL";
+  reportType?: "KPH" | "DSA" | "KNN" | "RRO" | "NORMAL";
 }
 
 export function AutoImageSlider({ imageUrls, fallbackUrl, isAbnormal, isSpotlight, reportType }: AutoImageSliderProps) {

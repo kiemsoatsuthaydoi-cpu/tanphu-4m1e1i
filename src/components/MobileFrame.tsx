@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import html2canvas from "html2canvas";
-import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, CheckCircle2, AlertCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send, Award, Calendar, Clock } from "lucide-react";
+import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, BellRing, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, CheckCircle2, AlertCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send, Award, Calendar, Clock } from "lucide-react";
 import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Department, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus, QualityReportBadge, AppNotification, ErrorCatalogItem, BadgePointConfigItem } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
@@ -2036,7 +2036,9 @@ export default function MobileFrame({
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedFactoryFilter, setSelectedFactoryFilter] = useState<string | null>(null);
   const [selectedWeekFilter, setSelectedWeekFilter] = useState<string>("ALL");
-  const [selectedReportTypeFilter, setSelectedReportTypeFilter] = useState<"KPH" | "DSA" | "KNN" | null>(null);
+  const [selectedReportTypeFilter, setSelectedReportTypeFilter] = useState<"KPH" | "KPH_NB" | "KPH_BN" | "RRO" | "DSA" | "KNN" | null>(null);
+  const [showKphPopover, setShowKphPopover] = useState(false);
+  const isKphActive = selectedReportTypeFilter === "KPH" || selectedReportTypeFilter === "KPH_NB" || selectedReportTypeFilter === "KPH_BN";
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [activeFilterSheet, setActiveFilterSheet] = useState<"BRANCH" | "CATEGORY" | "WEEK" | null>(null);
   const [onboardingStep, setOnboardingStep] = useState<number | null>(null);
@@ -2459,10 +2461,10 @@ export default function MobileFrame({
   };
 
   const getMobileBranchComparisonData = (targetReports?: QualityReport[]) => {
-    const map: Record<string, { kph: number; dsa: number }> = {};
+    const map: Record<string, { kphNb: number; kphBn: number; dsa: number; rro: number }> = {};
     branches.forEach((b) => {
       if (b.isScoring) {
-        map[b.id] = { kph: 0, dsa: 0 };
+        map[b.id] = { kphNb: 0, kphBn: 0, dsa: 0, rro: 0 };
       }
     });
 
@@ -2471,10 +2473,14 @@ export default function MobileFrame({
     activeReports.filter((r) => !r.isDeleted).forEach((r) => {
       const matchedBranch = branches.find(b => b.isScoring && matchSelectedFactory(r.factory, b.id));
       if (matchedBranch && map[matchedBranch.id]) {
-        if (r.reportType === "KPH" || r.isAbnormal) {
-          map[matchedBranch.id].kph++;
+        if (r.reportType === "RRO") {
+          map[matchedBranch.id].rro++;
         } else if (r.reportType === "DSA" || r.isSpotlight) {
           map[matchedBranch.id].dsa++;
+        } else if (r.reportType === "KNN" || (r.reportType === "KPH" && r.kphSubtype === "BN")) {
+          map[matchedBranch.id].kphBn++;
+        } else if (r.reportType === "KPH" || r.isAbnormal) {
+          map[matchedBranch.id].kphNb++;
         }
       }
     });
@@ -2484,7 +2490,9 @@ export default function MobileFrame({
       const shortName = match ? match[1] : b.name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn phòng ", "VP ");
       return {
         name: shortName,
-        "Không Phù Hợp (KPH)": map[b.id].kph,
+        "KPH (Nội Bộ)": map[b.id].kphNb,
+        "KPH (Bên Ngoài)": map[b.id].kphBn,
+        "Cảnh Báo (RRO)": map[b.id].rro,
         "Điểm Sáng (DSA)": map[b.id].dsa,
         branchId: b.id,
         fullName: b.name
@@ -3569,10 +3577,14 @@ App Link: ${window.location.origin}`;
     const matchesWeek = isDateInWeekFilter(rDate, selectedWeekFilter);
     const matchesType = !selectedReportTypeFilter
       ? true
-      : selectedReportTypeFilter === "KNN"
-      ? r.reportType === "KNN"
+      : selectedReportTypeFilter === "KPH_NB"
+      ? (r.reportType === "KPH" || r.isAbnormal) && (r.kphSubtype === "NB" || !r.kphSubtype) && r.reportType !== "KNN" && r.reportType !== "RRO"
+      : selectedReportTypeFilter === "KPH_BN"
+      ? (r.reportType === "KPH" && r.kphSubtype === "BN") || r.reportType === "KNN"
+      : selectedReportTypeFilter === "RRO"
+      ? r.reportType === "RRO"
       : selectedReportTypeFilter === "KPH"
-      ? (r.reportType === "KPH" || r.isAbnormal) && r.reportType !== "KNN"
+      ? (r.reportType === "KPH" || r.isAbnormal) && r.reportType !== "RRO"
       : (r.reportType === "DSA" || r.isSpotlight);
     
     return matchesSearch && matchesCategory && matchesFactoryFilter && matchesWeek && matchesType;
@@ -4659,43 +4671,52 @@ App Link: ${window.location.origin}`;
             {/* KPH Filter Button */}
             <button
               type="button"
-              onClick={() => setSelectedReportTypeFilter(prev => prev === "KPH" ? null : "KPH")}
-              className={`h-[26px] px-1.5 rounded-lg text-[9.5px] font-black shrink-0 border transition-all cursor-pointer flex items-center justify-center gap-1 shadow-xs ${
-                selectedReportTypeFilter === "KPH"
-                  ? "border-white ring-1 ring-red-600 font-extrabold z-10 opacity-100"
+              onClick={() => {
+                setShowKphPopover(prev => !prev);
+              }}
+              className={`h-[26px] px-1.5 rounded-lg text-[9.5px] font-black shrink-0 border transition-all cursor-pointer flex items-center justify-center gap-0.5 shadow-xs ${
+                isKphActive
+                  ? "border-white ring-1 font-extrabold z-10 opacity-100"
                   : "border-transparent opacity-85"
               }`}
               style={{
-                minWidth: "36px",
-                backgroundColor: "#dc2626",
+                minWidth: "40px",
+                backgroundColor: selectedReportTypeFilter === "KPH_NB" ? "#d97706" : "#dc2626",
                 color: "#ffffff"
               }}
             >
-              {selectedReportTypeFilter === "KPH" && (
+              {isKphActive && (
                 <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block shrink-0" />
               )}
-              <span translate="no" className="notranslate">KPH</span>
+              <span translate="no" className="notranslate">
+                {selectedReportTypeFilter === "KPH_NB"
+                  ? "KPH (NB)"
+                  : selectedReportTypeFilter === "KPH_BN"
+                  ? "KPH (BN)"
+                  : "KPH"}
+              </span>
+              <span className="text-[7px] opacity-80 leading-none">▼</span>
             </button>
 
-            {/* KNN Filter Button */}
+            {/* RRO Filter Button */}
             <button
               type="button"
-              onClick={() => setSelectedReportTypeFilter(prev => prev === "KNN" ? null : "KNN")}
+              onClick={() => setSelectedReportTypeFilter(prev => prev === "RRO" ? null : "RRO")}
               className={`h-[26px] px-1.5 rounded-lg text-[9.5px] font-black shrink-0 border transition-all cursor-pointer flex items-center justify-center gap-1 shadow-xs ${
-                selectedReportTypeFilter === "KNN"
-                  ? "border-white ring-1 ring-amber-600 font-extrabold z-10 opacity-100"
+                selectedReportTypeFilter === "RRO" || selectedReportTypeFilter === "KNN"
+                  ? "border-white ring-1 ring-blue-400 font-extrabold z-10 opacity-100"
                   : "border-transparent opacity-85"
               }`}
               style={{
                 minWidth: "36px",
-                backgroundColor: "#d97706",
+                backgroundColor: "#2563eb",
                 color: "#ffffff"
               }}
             >
-              {selectedReportTypeFilter === "KNN" && (
+              {(selectedReportTypeFilter === "RRO" || selectedReportTypeFilter === "KNN") && (
                 <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block shrink-0" />
               )}
-              <span translate="no" className="notranslate">KNN</span>
+              <span translate="no" className="notranslate">RRO</span>
             </button>
 
             {/* DSA Filter Button */}
@@ -4719,6 +4740,111 @@ App Link: ${window.location.origin}`;
               <span translate="no" className="notranslate">DSA</span>
             </button>
             <div className="w-2 shrink-0" />
+          </div>
+        </div>
+      )}
+
+      {/* Fixed Popover Menu for KPH Sub-classification */}
+      {showKphPopover && (
+        <div 
+          onClick={() => setShowKphPopover(false)}
+          className="fixed lg:absolute inset-0 bg-slate-900/50 backdrop-blur-2xs flex items-center justify-center p-4 z-[80] select-none animate-fadeIn cursor-pointer"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl w-full max-w-[280px] p-4 shadow-2xl border border-slate-150 flex flex-col gap-2.5 animate-in fade-in zoom-in-95 duration-150 cursor-default"
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <span className="text-[11px] font-black text-slate-800 flex items-center gap-1.5 uppercase">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-600 inline-block animate-pulse" />
+                <span translate="no" className="notranslate">LỌC ĐIỂM KHÔNG PHÙ HỢP</span>
+              </span>
+              <button 
+                type="button" 
+                onClick={() => setShowKphPopover(false)}
+                className="w-5 h-5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-[9px] border-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedReportTypeFilter("KPH");
+                  setShowKphPopover(false);
+                }}
+                className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
+                  selectedReportTypeFilter === "KPH"
+                    ? "bg-red-50 text-red-900 border-red-300 font-black shadow-xs ring-2 ring-red-200"
+                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50 font-bold"
+                }`}
+              >
+                <div className="flex flex-col">
+                  <span className="text-xs font-black"><span translate="no" className="notranslate">Tất cả KPH (NB & BN)</span></span>
+                  <span className="text-[9.5px] text-slate-500 font-normal"><span translate="no" className="notranslate">Hiển thị toàn bộ KPH Nội Bộ & Bên Ngoài</span></span>
+                </div>
+                {selectedReportTypeFilter === "KPH" && (
+                  <span className="w-5 h-5 rounded-full bg-red-600 text-white flex items-center justify-center text-xs font-black shrink-0">✓</span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedReportTypeFilter("KPH_NB");
+                  setShowKphPopover(false);
+                }}
+                className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
+                  selectedReportTypeFilter === "KPH_NB"
+                    ? "bg-amber-50 text-amber-900 border-amber-300 font-black shadow-xs ring-2 ring-amber-200"
+                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50 font-bold"
+                }`}
+              >
+                <div className="flex flex-col">
+                  <span className="text-xs font-black text-amber-700"><span translate="no" className="notranslate">KPH (NB) - Nội Bộ</span></span>
+                  <span className="text-[9.5px] text-slate-500 font-normal"><span translate="no" className="notranslate">Chỉ các điểm KPH phát hiện nội bộ</span></span>
+                </div>
+                {selectedReportTypeFilter === "KPH_NB" && (
+                  <span className="w-5 h-5 rounded-full bg-amber-600 text-white flex items-center justify-center text-xs font-black shrink-0">✓</span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedReportTypeFilter("KPH_BN");
+                  setShowKphPopover(false);
+                }}
+                className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
+                  selectedReportTypeFilter === "KPH_BN"
+                    ? "bg-red-50 text-red-900 border-red-300 font-black shadow-xs ring-2 ring-red-200"
+                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50 font-bold"
+                }`}
+              >
+                <div className="flex flex-col">
+                  <span className="text-xs font-black text-red-700"><span translate="no" className="notranslate">KPH (BN) - Bên Ngoài</span></span>
+                  <span className="text-[9.5px] text-slate-500 font-normal"><span translate="no" className="notranslate">Chỉ khiếu nại khách hàng / Bên ngoài</span></span>
+                </div>
+                {selectedReportTypeFilter === "KPH_BN" && (
+                  <span className="w-5 h-5 rounded-full bg-red-600 text-white flex items-center justify-center text-xs font-black shrink-0">✓</span>
+                )}
+              </button>
+
+              {isKphActive && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedReportTypeFilter(null);
+                    setShowKphPopover(false);
+                  }}
+                  className="w-full mt-1 py-1.5 text-center text-[10px] font-bold text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer border-none"
+                >
+                  <span translate="no" className="notranslate">✕ Bỏ lọc KPH</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -4861,13 +4987,17 @@ App Link: ${window.location.origin}`;
                         </span>
                       </div>
                       <div className="flex flex-col items-end gap-1">
-                        {report.reportType === "KNN" ? (
-                          <span className="text-[8px] font-black bg-amber-600 text-white px-2 py-0.5 rounded-md leading-none select-none">
-                            <T><span translate="no" className="notranslate">⚠️ ĐIỂM KNN</span></T>
+                        {report.reportType === "RRO" ? (
+                          <span className="text-[8px] font-black bg-blue-600 text-white px-2 py-0.5 rounded-md leading-none select-none">
+                            <T><span translate="no" className="notranslate">⚠️ ĐIỂM RRO</span></T>
+                          </span>
+                        ) : report.reportType === "KNN" || (report.reportType === "KPH" && report.kphSubtype === "BN") ? (
+                          <span className="text-[8px] font-black bg-red-600 text-white px-2 py-0.5 rounded-md leading-none select-none">
+                            <T><span translate="no" className="notranslate">🚨 ĐIỂM KPH (BN)</span></T>
                           </span>
                         ) : report.reportType === "KPH" || report.isAbnormal ? (
-                          <span className="text-[8px] font-black bg-red-600 text-white px-2 py-0.5 rounded-md leading-none select-none">
-                            <T><span translate="no" className="notranslate">⚠️ ĐIỂM KPH</span></T>
+                          <span className="text-[8px] font-black bg-amber-600 text-white px-2 py-0.5 rounded-md leading-none select-none">
+                            <T><span translate="no" className="notranslate">⚠️ ĐIỂM KPH (NB)</span></T>
                           </span>
                         ) : report.reportType === "DSA" || report.isSpotlight ? (
                           <span className="text-[8px] font-black bg-emerald-600 text-white px-2 py-0.5 rounded-md leading-none select-none">
@@ -5746,7 +5876,7 @@ App Link: ${window.location.origin}`;
                 <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-3xs space-y-2">
                   <div>
                     <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 block">
-                      <T><span translate="no" className="notranslate">3. So Sánh Hiệu Suất Chất Lượng: Điểm Sáng (DSA) vs Điểm Lỗi (KPH) (Bấm chọn lọc)</span></T>
+                      <T><span translate="no" className="notranslate">3. So Sánh Hiệu Suất Chất Lượng: DSA vs KPH (Nội Bộ / Bên Ngoài) vs RRO (Bấm chọn lọc)</span></T>
                     </span>
                     <p className="text-[8px] text-slate-500 leading-normal mt-0.5">
                       <T><span translate="no" className="notranslate">Bấm vào cột hoặc nhãn chi nhánh trên biểu đồ để lọc danh sách sự kiện theo chi nhánh tương ứng.</span></T>
@@ -5809,7 +5939,7 @@ App Link: ${window.location.origin}`;
                         <Bar 
                           dataKey="Điểm Sáng (DSA)" 
                           fill="#10b981" 
-                          barSize={12} 
+                          barSize={10} 
                           radius={[2, 2, 0, 0]} 
                           className="cursor-pointer"
                           onClick={(data: any) => {
@@ -5828,9 +5958,52 @@ App Link: ${window.location.origin}`;
                           }}
                         />
                         <Bar 
-                          dataKey="Không Phù Hợp (KPH)" 
-                          fill="#ef4444" 
-                          barSize={12} 
+                          dataKey="KPH (Nội Bộ)" 
+                          stackId="kph"
+                          fill="#f97316" 
+                          barSize={10} 
+                          className="cursor-pointer"
+                          onClick={(data: any) => {
+                            if (data && data.branchId) {
+                              const foundBranch = (branches || []).find(b => b.id === data.branchId);
+                              if (foundBranch) {
+                                if (mobileBranchFilter === foundBranch.id) {
+                                  setMobileBranchFilter("Tất cả");
+                                  showToast("Đã bỏ lọc chi nhánh");
+                                } else {
+                                  setMobileBranchFilter(foundBranch.id);
+                                  showToast(`Đã lọc nhật ký theo chi nhánh: ${getFactoryDisplayName(foundBranch.name)} 🏭`);
+                                }
+                              }
+                            }
+                          }}
+                        />
+                        <Bar 
+                          dataKey="KPH (Bên Ngoài)" 
+                          stackId="kph"
+                          fill="#dc2626" 
+                          barSize={10} 
+                          radius={[2, 2, 0, 0]} 
+                          className="cursor-pointer"
+                          onClick={(data: any) => {
+                            if (data && data.branchId) {
+                              const foundBranch = (branches || []).find(b => b.id === data.branchId);
+                              if (foundBranch) {
+                                if (mobileBranchFilter === foundBranch.id) {
+                                  setMobileBranchFilter("Tất cả");
+                                  showToast("Đã bỏ lọc chi nhánh");
+                                } else {
+                                  setMobileBranchFilter(foundBranch.id);
+                                  showToast(`Đã lọc nhật ký theo chi nhánh: ${getFactoryDisplayName(foundBranch.name)} 🏭`);
+                                }
+                              }
+                            }
+                          }}
+                        />
+                        <Bar 
+                          dataKey="Cảnh Báo (RRO)" 
+                          fill="#2563eb" 
+                          barSize={10} 
                           radius={[2, 2, 0, 0]} 
                           className="cursor-pointer"
                           onClick={(data: any) => {
@@ -6115,10 +6288,12 @@ App Link: ${window.location.origin}`;
                 id={`report-card-${report.id}`}
                 key={report.id}
                 className={`bg-white rounded-xl shadow-lg border-2 overflow-hidden transition-all duration-200 hover:-translate-y-0.5 ${
-                  report.reportType === "KNN"
+                  report.reportType === "RRO"
                     ? "border-amber-400"
+                    : report.reportType === "KNN" || (report.reportType === "KPH" && report.kphSubtype === "BN")
+                    ? "border-red-500"
                     : report.reportType === "KPH" || report.isAbnormal
-                    ? "border-red-400"
+                    ? "border-amber-500"
                     : report.reportType === "DSA" || report.isSpotlight
                     ? "border-emerald-400"
                     : "border-blue-500"
@@ -6135,15 +6310,20 @@ App Link: ${window.location.origin}`;
                     </T>
                   </div>
                   <div className="shrink-0 flex flex-col items-end gap-1">
-                    {report.reportType === "KNN" ? (
-                      <span className="text-[9px] font-black text-white flex items-center gap-1 bg-amber-600 border border-amber-700 px-2 py-1 rounded-md leading-none shadow-3xs shrink-0 select-none">
+                    {report.reportType === "RRO" ? (
+                      <span className="text-[9px] font-black text-white flex items-center gap-1 bg-blue-600 border border-blue-700 px-2 py-1 rounded-md leading-none shadow-3xs shrink-0 select-none">
                         <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block" />
-                        <T><span translate="no" className="notranslate">⚠️ ĐIỂM KNN</span></T>
+                        <T><span translate="no" className="notranslate">⚠️ RỦI RO (RRO)</span></T>
                       </span>
-                    ) : report.reportType === "KPH" || report.isAbnormal ? (
+                    ) : report.reportType === "KNN" || (report.reportType === "KPH" && report.kphSubtype === "BN") ? (
                       <span className="text-[9px] font-black text-white flex items-center gap-1 bg-red-600 border border-red-700 px-2 py-1 rounded-md leading-none shadow-3xs shrink-0 select-none">
                         <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block" />
-                        <T><span translate="no" className="notranslate">⚠️ ĐIỂM KPH</span></T>
+                        <T><span translate="no" className="notranslate">🚨 ĐIỂM KPH (BN)</span></T>
+                      </span>
+                    ) : report.reportType === "KPH" || report.isAbnormal ? (
+                      <span className="text-[9px] font-black text-white flex items-center gap-1 bg-amber-600 border border-amber-700 px-2 py-1 rounded-md leading-none shadow-3xs shrink-0 select-none">
+                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block" />
+                        <T><span translate="no" className="notranslate">⚠️ ĐIỂM KPH (NB)</span></T>
                       </span>
                     ) : report.reportType === "DSA" || report.isSpotlight ? (
                       <span className="text-[9px] font-black text-white flex items-center gap-1 bg-emerald-600 border border-emerald-700 px-2 py-1 rounded-md leading-none shadow-3xs shrink-0 select-none">
@@ -6511,7 +6691,7 @@ App Link: ${window.location.origin}`;
                     )}
 
                     {/* BP/ĐV PHẢN HỒI & TIẾP NHẬN/ XỬ LÝ list display */}
-                    {(report.isAbnormal || report.reportType === "KPH") && (
+                    {(report.isAbnormal || report.reportType === "KPH" || report.reportType === "RRO" || report.reportType === "KNN") && (
                       <div className="mt-1 pt-1 border-t border-slate-100 flex flex-col gap-1" id={`receivers-section-${report.id}`}>
 
                       {/* Incident Timeline Visual Progress Bar (Main Interactive Control Hub - Option 1) */}
@@ -6536,6 +6716,10 @@ App Link: ${window.location.origin}`;
                             : (ackCount > 0 || resCount > 0)
                         );
 
+                        const reportDateObj = parseReportTimestamp(report.timestamp);
+                        const elapsedHours = (new Date().getTime() - reportDateObj.getTime()) / (1000 * 60 * 60);
+                        const isOver48h = elapsedHours > 48;
+
                         return (
                           <div className="mt-1 mb-1 p-2.5 bg-gradient-to-b from-slate-50 to-white border border-slate-200/90 rounded-xl flex flex-col gap-2 shadow-2xs">
                             <div className="flex items-center justify-between text-[9px] font-black text-slate-500 uppercase tracking-tight select-none px-0.5">
@@ -6552,14 +6736,25 @@ App Link: ${window.location.origin}`;
                                     <span translate="no" className="notranslate"><T>Đã xử lý xong</T></span>
                                   </span>
                                 ) : ackCount > 0 ? (
-                                  <span className="text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 flex items-center gap-1 text-[8.5px] font-bold">
-                                    <Clock className="w-2.5 h-2.5 stroke-[3px] text-amber-600" />
-                                    <span translate="no" className="notranslate"><T>Đang xử lý</T></span>
+                                  <span className={`px-1.5 py-0.5 rounded border flex items-center gap-1 text-[8.5px] font-bold ${
+                                    isOver48h 
+                                      ? "text-amber-900 bg-amber-100 border-amber-300 ring-1 ring-amber-400" 
+                                      : "text-amber-700 bg-amber-50 border-amber-200"
+                                  }`}>
+                                    <Clock className="w-2.5 h-2.5 stroke-[3px] text-amber-600 animate-pulse" />
+                                    <span translate="no" className="notranslate">
+                                      <T>Đang xử lý</T>
+                                    </span>
+                                  </span>
+                                ) : isOver48h ? (
+                                  <span className="text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300 flex items-center gap-1 text-[8.5px] font-extrabold ring-2 ring-amber-400/60 shadow-3xs">
+                                    <BellRing className="w-3 h-3 text-amber-600 animate-bell-shake stroke-[2.5px]" />
+                                    <span translate="no" className="notranslate"><T>{"(>48H CHƯA TIẾP NHẬN)"}</T></span>
                                   </span>
                                 ) : (
-                                  <span className="text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 flex items-center gap-1 text-[8.5px] font-bold">
-                                    <AlertCircle className="w-2.5 h-2.5 stroke-[3px] text-slate-500" />
-                                    <span translate="no" className="notranslate"><T>Mới ghi nhận</T></span>
+                                  <span className="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 flex items-center gap-1 text-[8.5px] font-bold">
+                                    <Bell className="w-3 h-3 text-blue-600 animate-bell-gentle stroke-[2.5px]" />
+                                    <span translate="no" className="notranslate"><T>{"Mới ghi nhận (<48h)"}</T></span>
                                   </span>
                                 )}
                               </div>
@@ -7051,7 +7246,7 @@ App Link: ${window.location.origin}`;
                       )}
 
                       {/* Displaying detailed Resolution logs list */}
-                      {!!expandedResolutions[report.id] && (report.isAbnormal || report.reportType === "KPH") && report.resolutions && report.resolutions.length > 0 && (
+                      {!!expandedResolutions[report.id] && (report.isAbnormal || report.reportType === "KPH" || report.reportType === "RRO" || report.reportType === "KNN") && report.resolutions && report.resolutions.length > 0 && (
                         <div className="mt-1.5 p-2 bg-slate-50 border border-slate-150 rounded-lg flex flex-col gap-1.5 max-h-48 overflow-y-auto">
                           <div className="text-[9.5px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center justify-between select-none">
                             <div className="flex items-center gap-1 flex-wrap">
@@ -7263,7 +7458,7 @@ App Link: ${window.location.origin}`;
                     </div>
                     )}
 
-                    {!(report.isAbnormal || report.reportType === "KPH") && currentUser && (
+                    {!(report.isAbnormal || report.reportType === "KPH" || report.reportType === "RRO" || report.reportType === "KNN") && currentUser && (
                       <div className="mt-2">
                         <MobileDirectiveForm
                           report={report}
@@ -7729,7 +7924,7 @@ App Link: ${window.location.origin}`;
                   </div>
 
                   {/* Digital Clock count [hh:mm:ss] from report uploader timestamp to "Đã xử lý" */}
-                  {(report.reportType === "KPH" || report.reportType === "KNN") && (
+                  {(report.reportType === "KPH" || report.reportType === "KNN" || report.reportType === "RRO" || report.isAbnormal) && (
                     (() => {
                       const processedResList = report.resolutions?.filter(res => res.status === "Đã xử lý") || [];
                       const isProcessed = processedResList.length > 0;

@@ -2570,22 +2570,26 @@ export default function DashboardDesktop({
     }));
   };
 
-  // 2. So sánh các Chi nhánh: số lượng DSA (Điểm Sáng) vs KPH (Không Phù Hợp)
+  // 2. So sánh các Chi nhánh: số lượng DSA (Điểm Sáng) vs KPH (Không Phù Hợp) vs RRO
   const getBranchComparisonData = () => {
-    const map: Record<string, { kph: number; dsa: number }> = {};
+    const map: Record<string, { kphNb: number; kphBn: number; dsa: number; rro: number }> = {};
     branches.forEach((b) => {
       if (b.isScoring) {
-        map[b.id] = { kph: 0, dsa: 0 };
+        map[b.id] = { kphNb: 0, kphBn: 0, dsa: 0, rro: 0 };
       }
     });
 
     reports.filter((r) => !r.isDeleted).forEach((r) => {
       const matchedBranch = branches.find(b => b.isScoring && matchFactory(r.factory, b.id));
       if (matchedBranch && map[matchedBranch.id]) {
-        if (r.reportType === "KPH" || r.isAbnormal) {
-          map[matchedBranch.id].kph++;
+        if (r.reportType === "RRO") {
+          map[matchedBranch.id].rro++;
         } else if (r.reportType === "DSA" || r.isSpotlight) {
           map[matchedBranch.id].dsa++;
+        } else if (r.reportType === "KNN" || (r.reportType === "KPH" && r.kphSubtype === "BN")) {
+          map[matchedBranch.id].kphBn++;
+        } else if (r.reportType === "KPH" || r.isAbnormal) {
+          map[matchedBranch.id].kphNb++;
         }
       }
     });
@@ -2595,7 +2599,9 @@ export default function DashboardDesktop({
       const shortName = match ? match[1] : b.name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn phòng ", "VP ");
       return {
         name: shortName,
-        "Không Phù Hợp (KPH)": map[b.id].kph,
+        "KPH (Nội Bộ)": map[b.id].kphNb,
+        "KPH (Bên Ngoài)": map[b.id].kphBn,
+        "Cảnh Báo (RRO)": map[b.id].rro,
         "Điểm Sáng (DSA)": map[b.id].dsa,
         branchId: b.id,
         fullName: b.name
@@ -5555,10 +5561,10 @@ export default function DashboardDesktop({
                   <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between lg:col-span-2">
                     <div>
                       <span className="text-xs font-black uppercase tracking-widest text-[#0d9488] pb-2 border-b border-slate-100 block mb-4">
-                        <T><span translate="no" className="notranslate">3. So Sánh Hiệu Suất Chất Lũơng: Điểm Sáng (DSA) Vs Điểm Lỗi (KPH) Giữa Các Chi Nhánh</span></T>
+                        <T><span translate="no" className="notranslate">3. So Sánh Hiệu Suất Chất Lượng: DSA vs KPH (Nội Bộ / Bên Ngoài) vs RRO Giữa Các Chi Nhánh</span></T>
                       </span>
                       <p className="text-[10px] text-slate-500 mb-2 leading-relaxed">
-                        <T><span translate="no" className="notranslate">Biểu hiện của tính đối sáng thi đua giữa tất cả xưởng và văn phòng toàn bộ lãnh thổ Tân Phú. Cho thấy ngay đơn vị nào đang có tỷ lệ cải tiến DSA xuất sắc đột phá và đơn vị nào còn tồn vướng nhiều điểm Không Phù Hợp KPH để ban giám đốc QC giám sát chỉ đạo.</span></T>
+                        <T><span translate="no" className="notranslate">Biểu hiện của tính đối sáng thi đua giữa tất cả xưởng và văn phòng toàn bộ lãnh thổ Tân Phú. Cho thấy ngay đơn vị nào đang có tỷ lệ cải tiến DSA xuất sắc đột phá, điểm Không Phù Hợp KPH và các điểm Cảnh Báo Phòng Ngừa Rủi Ro (RRO).</span></T>
                       </p>
                     </div>
                     <div className="h-72 mt-4">
@@ -5569,8 +5575,10 @@ export default function DashboardDesktop({
                           <YAxis tick={{ fill: '#64748b', fontSize: 9 }} />
                           <Tooltip />
                           <Legend wrapperStyle={{ fontSize: "10px" }} />
-                          <Bar dataKey="Điểm Sáng (DSA)" fill="#10b981" barSize={35} radius={[4, 4, 0, 0]} />
-                          <Bar dataKey="Không Phù Hợp (KPH)" fill="#ef4444" barSize={35} radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="Điểm Sáng (DSA)" fill="#10b981" barSize={28} radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="KPH (Nội Bộ)" stackId="kph" fill="#f97316" barSize={28} />
+                          <Bar dataKey="KPH (Bên Ngoài)" stackId="kph" fill="#dc2626" barSize={28} radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="Cảnh Báo (RRO)" fill="#2563eb" barSize={28} radius={[4, 4, 0, 0]} />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
@@ -6303,13 +6311,17 @@ export default function DashboardDesktop({
                                   </td>
                                   <td className="p-4 text-center select-none whitespace-nowrap font-mono font-bold text-xs font-black border border-slate-200">
                                     <div className="flex flex-col items-center justify-center gap-1">
-                                      {r.reportType === "KNN" ? (
-                                        <span className="bg-amber-50 text-amber-700 border border-amber-200 font-extrabold text-[9px] px-2 py-0.5 rounded uppercase block">
-                                          <T><span translate="no" className="notranslate">KNN</span></T>
+                                      {r.reportType === "RRO" ? (
+                                        <span className="bg-amber-100 text-amber-900 border border-amber-300 font-extrabold text-[9px] px-2 py-0.5 rounded uppercase block">
+                                          <T><span translate="no" className="notranslate">RRO</span></T>
+                                        </span>
+                                      ) : r.reportType === "KNN" || (r.reportType === "KPH" && r.kphSubtype === "BN") ? (
+                                        <span className="bg-red-100 text-red-800 border border-red-300 font-extrabold text-[9px] px-2 py-0.5 rounded uppercase block">
+                                          <T><span translate="no" className="notranslate">KPH (BN)</span></T>
                                         </span>
                                       ) : r.reportType === "KPH" || r.isAbnormal ? (
-                                        <span className="bg-red-50 text-red-700 border border-red-200 font-extrabold text-[9px] px-2 py-0.5 rounded uppercase block">
-                                          <T><span translate="no" className="notranslate">KPH</span></T>
+                                        <span className="bg-amber-100 text-amber-800 border border-amber-300 font-extrabold text-[9px] px-2 py-0.5 rounded uppercase block">
+                                          <T><span translate="no" className="notranslate">KPH (NB)</span></T>
                                         </span>
                                       ) : r.reportType === "DSA" || r.isSpotlight ? (
                                         <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[9px] px-2 py-0.5 rounded uppercase block">
@@ -6686,21 +6698,25 @@ export default function DashboardDesktop({
                                 </td>
                                 <td className="p-4 text-center select-none whitespace-nowrap font-mono font-bold text-xs font-black border border-slate-200">
                                   <div className="flex flex-col items-center justify-center gap-1.5">
-                                    {r.reportType === "KNN" ? (
-                                      <span className="bg-amber-100 text-amber-900 border border-amber-200 font-black text-[10px] px-2.5 py-1 rounded tracking-wider">
-                                        <T>KNN</T>
+                                    {r.reportType === "RRO" ? (
+                                      <span className="bg-amber-100 text-amber-900 border border-amber-300 font-black text-[10px] px-2.5 py-1 rounded tracking-wider">
+                                        <T><span translate="no" className="notranslate">RRO</span></T>
+                                      </span>
+                                    ) : r.reportType === "KNN" || (r.reportType === "KPH" && r.kphSubtype === "BN") ? (
+                                      <span className="bg-red-100 text-red-800 border border-red-300 font-black text-[10px] px-2.5 py-1 rounded tracking-wider">
+                                        <T><span translate="no" className="notranslate">KPH (BN)</span></T>
                                       </span>
                                     ) : r.reportType === "KPH" || r.isAbnormal ? (
-                                      <span className="bg-red-100 text-red-800 border border-red-200 font-black text-[10px] px-2.5 py-1 rounded tracking-wider">
-                                        <T>KPH</T>
+                                      <span className="bg-amber-100 text-amber-800 border border-amber-300 font-black text-[10px] px-2.5 py-1 rounded tracking-wider">
+                                        <T><span translate="no" className="notranslate">KPH (NB)</span></T>
                                       </span>
                                     ) : r.reportType === "DSA" || r.isSpotlight ? (
                                       <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 font-black text-[10px] px-2.5 py-1 rounded tracking-wider">
-                                        <T>DSA</T>
+                                        <T><span translate="no" className="notranslate">DSA</span></T>
                                       </span>
                                     ) : (
                                       <span className="bg-slate-100 text-slate-600 border border-slate-205 font-bold text-[10px] px-2.5 py-1 rounded tracking-wide">
-                                        <T>NORMAL</T>
+                                        <T><span translate="no" className="notranslate">NORMAL</span></T>
                                       </span>
                                     )}
                                     {r.reportCode && (

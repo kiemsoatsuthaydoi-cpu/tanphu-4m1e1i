@@ -84,3 +84,34 @@ body {
 .animate-slideDown {
   animation: slideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* Bell Ringing Animations */
+@keyframes bellGentle {
+  0%, 100% { transform: rotate(0deg); }
+  20% { transform: rotate(-12deg); }
+  40% { transform: rotate(12deg); }
+  60% { transform: rotate(-6deg); }
+  80% { transform: rotate(6deg); }
+}
+
+.animate-bell-gentle {
+  animation: bellGentle 2.5s ease-in-out infinite;
+  transform-origin: top center;
+}
+
+@keyframes bellShake {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  10% { transform: rotate(-28deg) scale(1.2); }
+  20% { transform: rotate(28deg) scale(1.2); }
+  30% { transform: rotate(-24deg) scale(1.2); }
+  40% { transform: rotate(24deg) scale(1.2); }
+  50% { transform: rotate(-16deg) scale(1.1); }
+  60% { transform: rotate(16deg) scale(1.1); }
+  70% { transform: rotate(-8deg) scale(1.05); }
+  80% { transform: rotate(8deg) scale(1.05); }
+}
+
+.animate-bell-shake {
+  animation: bellShake 0.9s cubic-bezier(0.36, 0.07, 0.19, 0.97) infinite;
+  transform-origin: top center;
+}

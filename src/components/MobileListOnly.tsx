@@ -191,8 +191,12 @@ export function MobileListOnly({
               <div 
                 key={report.id}
                 className={`p-4 bg-white rounded-xl border-2 ${
-                  report.reportType === "KPH" || report.isAbnormal
+                  report.reportType === "RRO"
+                    ? "border-amber-400 bg-amber-50/10"
+                    : report.reportType === "KNN" || (report.reportType === "KPH" && report.kphSubtype === "BN")
                     ? "border-red-500 bg-red-50/10"
+                    : report.reportType === "KPH" || report.isAbnormal
+                    ? "border-amber-500 bg-amber-50/10"
                     : report.reportType === "DSA" || report.isSpotlight
                     ? "border-emerald-500 bg-emerald-50/10"
                     : "border-slate-200"
@@ -209,9 +213,17 @@ export function MobileListOnly({
                     </p>
                   </div>
                   <div className="flex flex-col items-end gap-1">
-                    {report.reportType === "KPH" || report.isAbnormal ? (
+                    {report.reportType === "RRO" ? (
+                      <span className="text-[9px] font-black bg-amber-500 text-white px-2 py-0.5 rounded uppercase">
+                        <span translate="no" className="notranslate">⚠️ RỦI RO (RRO)</span>
+                      </span>
+                    ) : report.reportType === "KNN" || (report.reportType === "KPH" && report.kphSubtype === "BN") ? (
                       <span className="text-[9px] font-black bg-red-600 text-white px-2 py-0.5 rounded uppercase">
-                        <span translate="no" className="notranslate">⚠️ ĐIỂM KPH</span>
+                        <span translate="no" className="notranslate">🚨 ĐIỂM KPH (BN)</span>
+                      </span>
+                    ) : report.reportType === "KPH" || report.isAbnormal ? (
+                      <span className="text-[9px] font-black bg-amber-600 text-white px-2 py-0.5 rounded uppercase">
+                        <span translate="no" className="notranslate">⚠️ ĐIỂM KPH (NB)</span>
                       </span>
                     ) : report.reportType === "DSA" || report.isSpotlight ? (
                       <span className="text-[9px] font-black bg-emerald-600 text-white px-2 py-0.5 rounded uppercase">

@@ -237,13 +237,19 @@ export default function ReportForm({
   const [timestamp, setTimestamp] = useState("");
   const [content, setContent] = useState(editingReport?.content || "");
   const [notes, setNotes] = useState(editingReport?.notes || "");
-  const [localReportType, setLocalReportType] = useState<"KPH" | "DSA" | "KNN" | "NORMAL">(() => {
-    if (editingReport?.reportType === "KNN") return "KNN";
+  const [localReportType, setLocalReportType] = useState<"KPH" | "DSA" | "KNN" | "RRO" | "NORMAL">(() => {
+    if (editingReport?.reportType === "RRO") return "RRO";
+    if (editingReport?.reportType === "KNN") return "RRO";
     if (editingReport?.reportType === "DSA" || editingReport?.isSpotlight) return "DSA";
     if (editingReport?.isAbnormal || editingReport?.reportType === "KPH") return "KPH";
     return "NORMAL";
   });
-  const isAbnormal = localReportType === "KPH" || localReportType === "KNN";
+  const [kphSubtype, setKphSubtype] = useState<"NB" | "BN">(() => {
+    if (editingReport?.kphSubtype === "BN") return "BN";
+    if (editingReport?.reportType === "KNN") return "BN";
+    return "NB";
+  });
+  const isAbnormal = localReportType === "KPH" || localReportType === "RRO" || localReportType === "KNN";
   const isSpotlight = localReportType === "DSA";
   const [errorCode, setErrorCode] = useState(editingReport?.errorCode || "");
 
@@ -534,7 +540,7 @@ export default function ReportForm({
     }
 
     if (!isAbnormal && !isSpotlight) {
-      triggerNotification("Điểm KPH, Điểm KNN hoặc Điểm sáng bắt buộc phải chọn một.", "warning");
+      triggerNotification("Điểm KPH, Cảnh báo rủi ro hoặc Điểm sáng bắt buộc phải chọn một.", "warning");
       return;
     }
 
@@ -558,6 +564,7 @@ export default function ReportForm({
       isAbnormal,
       isSpotlight,
       reportType: localReportType,
+      kphSubtype: localReportType === "KPH" ? kphSubtype : undefined,
       assignedPersonId: isAbnormal ? assignedPersonId : undefined,
       assignedPersonName: isAbnormal ? assignedPersonName : undefined,
       assignedPersonRole: isAbnormal ? assignedPersonRole : undefined,
@@ -911,79 +918,128 @@ export default function ReportForm({
           )}
         </div>
 
-        {/* 5. Classification controls (KPH / KNN / DSA) */}
-        <div className="grid grid-cols-3 gap-2">
-          {/* Left panel: Điểm Không Phù Hợp */}
-          <button
-            type="button"
-            onClick={() => {
-              setLocalReportType("KPH");
-            }}
-            className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all h-[80px] cursor-pointer ${
-              localReportType === "KPH"
-                ? "bg-red-50 border-red-500 text-red-900 ring-2 ring-red-200 font-extrabold"
-                : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-            }`}
-          >
-            <div className="flex items-center justify-between w-full">
-              <span className="text-xs font-black flex items-center gap-1.5 text-red-700">
-                <X size={14} className="stroke-[3.5] text-red-600" />
-                <T>KPH</T>
-              </span>
-              <div className={`w-4 h-4 rounded-full flex items-center justify-center transition-all ${localReportType === "KPH" ? "bg-red-600 text-white shadow-sm ring-2 ring-red-350" : "bg-slate-100 border border-slate-300 text-slate-400"}`}>
-                <X size={10} className="stroke-[4]" />
+        {/* 5. Classification controls (KPH / RRO / DSA) */}
+        <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-3 gap-2">
+            {/* Left panel: Điểm Không Phù Hợp */}
+            <button
+              type="button"
+              onClick={() => {
+                setLocalReportType("KPH");
+              }}
+              className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all h-[80px] cursor-pointer ${
+                localReportType === "KPH"
+                  ? "bg-red-50 border-red-500 text-red-900 ring-2 ring-red-200 font-extrabold"
+                  : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              <div className="flex items-center justify-between w-full">
+                <span className="text-xs font-black flex items-center gap-1.5 text-red-700">
+                  <X size={14} className="stroke-[3.5] text-red-600" />
+                  <T><span translate="no" className="notranslate">KPH</span></T>
+                </span>
+                <div className={`w-4 h-4 rounded-full flex items-center justify-center transition-all ${localReportType === "KPH" ? "bg-red-600 text-white shadow-sm ring-2 ring-red-350" : "bg-slate-100 border border-slate-300 text-slate-400"}`}>
+                  <X size={10} className="stroke-[4]" />
+                </div>
               </div>
-            </div>
-            <span className="text-[9px] text-slate-500 block leading-tight font-bold mt-auto"><T>Điểm Không Phù Hợp</T></span>
-          </button>
+              <span className="text-[9px] text-slate-500 block leading-tight font-bold mt-auto"><T><span translate="no" className="notranslate">Điểm Không Phù Hợp</span></T></span>
+            </button>
 
-          {/* Middle panel: Điểm KNN */}
-          <button
-            type="button"
-            onClick={() => {
-              setLocalReportType("KNN");
-            }}
-            className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all h-[80px] cursor-pointer ${
-              localReportType === "KNN"
-                ? "bg-amber-50 border-amber-500 text-amber-950 ring-2 ring-amber-200 font-extrabold"
-                : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-            }`}
-          >
-            <div className="flex items-center justify-between w-full">
-              <span className="text-xs font-black flex items-center gap-1.5 text-amber-700">
-                <AlertTriangle size={14} className="stroke-[3] text-amber-600" />
-                <T>KNN</T>
-              </span>
-              <div className={`w-4 h-4 rounded-full flex items-center justify-center transition-all ${localReportType === "KNN" ? "bg-amber-600 text-white shadow-sm ring-2 ring-amber-350" : "bg-slate-100 border border-slate-300 text-slate-400"}`}>
-                <AlertTriangle size={10} className="stroke-[4]" />
+            {/* Middle panel: Cảnh Báo Rủi Ro (RRO) */}
+            <button
+              type="button"
+              onClick={() => {
+                setLocalReportType("RRO");
+              }}
+              className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all h-[80px] cursor-pointer ${
+                localReportType === "RRO" || localReportType === "KNN"
+                  ? "bg-blue-50 border-blue-500 text-blue-950 ring-2 ring-blue-200 font-extrabold"
+                  : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              <div className="flex items-center justify-between w-full">
+                <span className="text-xs font-black flex items-center gap-1.5 text-blue-700">
+                  <AlertTriangle size={14} className="stroke-[3] text-blue-600" />
+                  <T><span translate="no" className="notranslate">RRO</span></T>
+                </span>
+                <div className={`w-4 h-4 rounded-full flex items-center justify-center transition-all ${localReportType === "RRO" || localReportType === "KNN" ? "bg-blue-600 text-white shadow-sm ring-2 ring-blue-300" : "bg-slate-100 border border-slate-300 text-slate-400"}`}>
+                  <AlertTriangle size={10} className="stroke-[4]" />
+                </div>
               </div>
-            </div>
-            <span className="text-[9px] text-slate-500 block leading-tight font-bold mt-auto"><T>Điểm KNN (Khiếu nại KH)</T></span>
-          </button>
+              <span className="text-[9px] text-slate-500 block leading-tight font-bold mt-auto"><T><span translate="no" className="notranslate">RỦI RO (RRO)</span></T></span>
+            </button>
 
-          {/* Right panel: Điểm Sáng */}
-          <button
-            type="button"
-            onClick={() => {
-              setLocalReportType("DSA");
-            }}
-            className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all h-[80px] cursor-pointer ${
-              localReportType === "DSA"
-                ? "bg-emerald-50 border-emerald-500 text-emerald-950 ring-2 ring-emerald-200 font-extrabold"
-                : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-            }`}
-          >
-            <div className="flex items-center justify-between w-full">
-              <span className="text-xs font-black flex items-center gap-1.5 text-emerald-700">
-                <Check size={14} className="stroke-[3.5] text-emerald-600" />
-                <T>DSA</T>
-              </span>
-              <div className={`w-4 h-4 rounded-full flex items-center justify-center transition-all ${localReportType === "DSA" ? "bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-350" : "bg-slate-100 border border-slate-300 text-slate-400"}`}>
-                <Check size={10} className="stroke-[4]" />
+            {/* Right panel: Điểm Sáng */}
+            <button
+              type="button"
+              onClick={() => {
+                setLocalReportType("DSA");
+              }}
+              className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all h-[80px] cursor-pointer ${
+                localReportType === "DSA"
+                  ? "bg-emerald-50 border-emerald-500 text-emerald-950 ring-2 ring-emerald-200 font-extrabold"
+                  : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              <div className="flex items-center justify-between w-full">
+                <span className="text-xs font-black flex items-center gap-1.5 text-emerald-700">
+                  <Check size={14} className="stroke-[3.5] text-emerald-600" />
+                  <T><span translate="no" className="notranslate">DSA</span></T>
+                </span>
+                <div className={`w-4 h-4 rounded-full flex items-center justify-center transition-all ${localReportType === "DSA" ? "bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-350" : "bg-slate-100 border border-slate-300 text-slate-400"}`}>
+                  <Check size={10} className="stroke-[4]" />
+                </div>
+              </div>
+              <span className="text-[9px] text-slate-500 block leading-tight font-bold mt-auto"><T><span translate="no" className="notranslate">Điểm Sáng (Tin tốt)</span></T></span>
+            </button>
+          </div>
+
+          {/* Sub-classification choices when KPH is selected */}
+          {localReportType === "KPH" && (
+            <div className="p-2.5 bg-red-50/80 border border-red-200 rounded-xl flex flex-col gap-1.5 animate-fadeIn mt-1">
+              <div className="text-[10px] font-black text-red-900 flex items-center justify-between">
+                <T><span translate="no" className="notranslate">PHÂN LOẠI CHI TIẾT KPH:</span></T>
+                <span className="text-[9px] font-medium text-red-600"><T><span translate="no" className="notranslate">(Chọn 1 trong 2)</span></T></span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setKphSubtype("NB")}
+                  className={`p-2 rounded-lg border text-left flex items-center justify-between transition-all cursor-pointer ${
+                    kphSubtype === "NB"
+                      ? "bg-amber-600 text-white border-amber-700 shadow-xs font-black ring-2 ring-amber-300"
+                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50 font-bold"
+                  }`}
+                >
+                  <div className="flex flex-col">
+                    <span className="text-xs font-black"><T><span translate="no" className="notranslate">KPH (NB)</span></T></span>
+                    <span className={`text-[8.5px] leading-tight ${kphSubtype === "NB" ? "text-amber-100" : "text-slate-500"}`}><T><span translate="no" className="notranslate">KPH Nội Bộ (Huy hiệu Cam)</span></T></span>
+                  </div>
+                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${kphSubtype === "NB" ? "bg-white text-amber-600 border-white" : "border-slate-300"}`}>
+                    {kphSubtype === "NB" && <div className="w-2 h-2 rounded-full bg-amber-600" />}
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setKphSubtype("BN")}
+                  className={`p-2 rounded-lg border text-left flex items-center justify-between transition-all cursor-pointer ${
+                    kphSubtype === "BN"
+                      ? "bg-red-600 text-white border-red-700 shadow-xs font-black ring-2 ring-red-300"
+                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50 font-bold"
+                  }`}
+                >
+                  <div className="flex flex-col">
+                    <span className="text-xs font-black"><T><span translate="no" className="notranslate">KPH (BN)</span></T></span>
+                    <span className={`text-[8.5px] leading-tight ${kphSubtype === "BN" ? "text-red-100" : "text-slate-500"}`}><T><span translate="no" className="notranslate">KPH Bên Ngoài (Khiếu nại KH)</span></T></span>
+                  </div>
+                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${kphSubtype === "BN" ? "bg-white text-red-600 border-white" : "border-slate-300"}`}>
+                    {kphSubtype === "BN" && <div className="w-2 h-2 rounded-full bg-red-600" />}
+                  </div>
+                </button>
               </div>
             </div>
-            <span className="text-[9px] text-slate-500 block leading-tight font-bold mt-auto"><T>Điểm Sáng (Tin tốt)</T></span>
-          </button>
+          )}
         </div>
 
         {isAbnormal && isQcFeatureEnabled && (
