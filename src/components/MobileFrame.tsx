@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import html2canvas from "html2canvas";
-import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, BellRing, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, CheckCircle2, AlertCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send, Award, Calendar, Clock } from "lucide-react";
+import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, BellRing, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, CheckCircle2, AlertCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send, Award, Calendar, Clock, Lightbulb, Newspaper } from "lucide-react";
 import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Department, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus, QualityReportBadge, AppNotification, ErrorCatalogItem, BadgePointConfigItem } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
@@ -2033,9 +2033,53 @@ export default function MobileFrame({
       document.removeEventListener("touchstart", handleGlobalClick);
     };
   }, [expandedDirectiveIds]);
+  const formatShortName = (fullName?: string): string => {
+    if (!fullName) return "Đăng Xuất";
+    const trimmed = fullName.trim();
+    const parts = trimmed.split(/\s+/).filter(Boolean);
+    if (parts.length <= 2) {
+      return trimmed;
+    }
+    const ho = parts[0];
+    const ten = parts[parts.length - 1];
+    const middleInits = parts.slice(1, -1).map(p => p[0].toUpperCase() + ".").join("");
+    return `${ho} ${middleInits} ${ten}`;
+  };
+
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedFactoryFilter, setSelectedFactoryFilter] = useState<string | null>(null);
+  const [selectedProcessStatusFilter, setSelectedProcessStatusFilter] = useState<"ALL" | "UNACKNOWLEDGED" | "PROCESSING" | "RESOLVED">("ALL");
   const [selectedWeekFilter, setSelectedWeekFilter] = useState<string>("ALL");
+
+  // Auto-detect user account branch to filter by default on launch
+  useEffect(() => {
+    if (currentUser?.branch) {
+      const userBranchStr = currentUser.branch.trim();
+      if (userBranchStr && userBranchStr !== "Tất cả" && userBranchStr !== "ALL" && userBranchStr !== "Công ty Tân Phú") {
+        const found = branches?.find(b => 
+          b.id.toLowerCase() === userBranchStr.toLowerCase() ||
+          b.name.toLowerCase() === userBranchStr.toLowerCase() ||
+          userBranchStr.toLowerCase().includes(b.id.toLowerCase()) ||
+          b.name.toLowerCase().includes(userBranchStr.toLowerCase())
+        );
+        if (found) {
+          setSelectedFactoryFilter(found.id);
+        } else {
+          if (userBranchStr.toLowerCase().includes("bắc ninh") || userBranchStr.toLowerCase().includes("tpp-bni")) {
+            setSelectedFactoryFilter("TPP-BNI");
+          } else if (userBranchStr.toLowerCase().includes("long an") || userBranchStr.toLowerCase().includes("tpp-lan")) {
+            setSelectedFactoryFilter("TPP-LAN");
+          } else if (userBranchStr.toLowerCase().includes("314") || userBranchStr.toLowerCase().includes("tpp-314")) {
+            setSelectedFactoryFilter("TPP-314");
+          } else if (userBranchStr.toLowerCase().includes("văn phòng") || userBranchStr.toLowerCase().includes("tpp-cty")) {
+            setSelectedFactoryFilter("TPP-CTY");
+          } else if (userBranchStr.toLowerCase().includes("dnp")) {
+            setSelectedFactoryFilter("DNP");
+          }
+        }
+      }
+    }
+  }, [currentUser?.branch, currentUser?.id, branches]);
   const [selectedReportTypeFilter, setSelectedReportTypeFilter] = useState<"KPH" | "KPH_NB" | "KPH_BN" | "RRO" | "DSA" | "KNN" | null>(null);
   const [showKphPopover, setShowKphPopover] = useState(false);
   const isKphActive = selectedReportTypeFilter === "KPH" || selectedReportTypeFilter === "KPH_NB" || selectedReportTypeFilter === "KPH_BN";
@@ -3540,7 +3584,7 @@ App Link: ${window.location.origin}`;
   };
 
   // Filter items based on uploader or factory search or description search
-  const filteredReports = reports.filter((r) => {
+  const baseFilteredReports = reports.filter((r) => {
     if (r.isDeleted) return false;
 
     // Approval status filtering rules
@@ -3588,6 +3632,54 @@ App Link: ${window.location.origin}`;
       : (r.reportType === "DSA" || r.isSpotlight);
     
     return matchesSearch && matchesCategory && matchesFactoryFilter && matchesWeek && matchesType;
+  });
+
+  // Calculate process status counts for filter pills
+  const statusCounts = useMemo(() => {
+    let unacked = 0;
+    let processing = 0;
+    let resolved = 0;
+
+    baseFilteredReports.forEach((r) => {
+      const ackCount = r.sharedBy?.length || 0;
+      const resCount = r.resolutions?.length || 0;
+      const isResolved = resCount > 0 && (r.resolutions?.some(res => res.status === "Đã xử lý" || !!res.resultText) ?? true);
+
+      if (isResolved) {
+        resolved++;
+      } else if (ackCount > 0) {
+        processing++;
+      } else {
+        unacked++;
+      }
+    });
+
+    return {
+      all: baseFilteredReports.length,
+      unacked,
+      processing,
+      resolved,
+    };
+  }, [baseFilteredReports]);
+
+  // Final filtered reports considering selectedProcessStatusFilter
+  const filteredReports = baseFilteredReports.filter((r) => {
+    if (selectedProcessStatusFilter === "ALL") return true;
+
+    const ackCount = r.sharedBy?.length || 0;
+    const resCount = r.resolutions?.length || 0;
+    const isResolved = resCount > 0 && (r.resolutions?.some(res => res.status === "Đã xử lý" || !!res.resultText) ?? true);
+
+    if (selectedProcessStatusFilter === "UNACKNOWLEDGED") {
+      return ackCount === 0 && !isResolved;
+    }
+    if (selectedProcessStatusFilter === "PROCESSING") {
+      return ackCount > 0 && !isResolved;
+    }
+    if (selectedProcessStatusFilter === "RESOLVED") {
+      return isResolved;
+    }
+    return true;
   });
 
   // Sort reports according to the prioritized layout:
@@ -4511,6 +4603,17 @@ App Link: ${window.location.origin}`;
                 <QrCode className="w-[18px] h-[18px] text-sky-200 hover:text-white" />
               </button>
 
+              {/* --- 5.5. TRAO ĐỔI (CHAT / DISCUSSION) ICON --- */}
+              <button
+                onClick={() => setActiveBottomTab("TRAO_ĐỔI")}
+                className={`relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer shrink-0 ${
+                  activeBottomTab === "TRAO_ĐỔI" ? "text-cyan-300 scale-110" : "text-sky-200 hover:text-white"
+                }`}
+                title="Kênh trao đổi / Thảo luận"
+              >
+                <MessageSquare className="w-[18px] h-[18px]" />
+              </button>
+
               {/* --- 6. ONLINE COUNT (Main) --- */}
               {currentUser?.role !== UserRole.STAFF && currentUser?.role !== UserRole.REVIEWER && (
                 <button 
@@ -4584,12 +4687,13 @@ App Link: ${window.location.origin}`;
         )}
       </div>
 
-      {/* Internal layout controls (Search inputs) */}
+      {/* Internal layout controls (Search inputs & Status filters) */}
       {activeBottomTab === "BAO_CAO" && (
         <div className={`transition-all duration-300 overflow-hidden shrink-0 ${
-          showFilters ? "max-h-[50px] opacity-100" : "max-h-0 opacity-0 pointer-events-none"
+          showFilters ? "max-h-[105px] opacity-100" : "max-h-0 opacity-0 pointer-events-none"
         }`}>
-          <div className="bg-white pl-2.5 pr-1.5 py-1.5 border-b border-slate-200 shadow-xs flex items-center gap-1 flex-nowrap overflow-x-auto scrollbar-none select-none">
+          {/* Row 1: Search bar & Filters */}
+          <div className="bg-white pl-2.5 pr-1.5 py-1.5 border-b border-slate-100 flex items-center gap-1 flex-nowrap overflow-x-auto scrollbar-none select-none">
             {/* Search Input */}
             <div className={`relative transition-all duration-300 ${isSearchFocused ? "flex-1 min-w-[130px]" : "w-[28px] shrink-0"}`}>
               <Search className={`absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none transition-all duration-300 ${isSearchFocused ? "left-2" : "left-1/2 -translate-x-1/2"}`} />
@@ -4740,6 +4844,60 @@ App Link: ${window.location.origin}`;
               <span translate="no" className="notranslate">DSA</span>
             </button>
             <div className="w-2 shrink-0" />
+          </div>
+
+          {/* Row 2: Status Filter Strip */}
+          <div className="bg-white px-2.5 py-1.5 border-b border-slate-200/60 shadow-2xs flex items-center gap-1.5 overflow-x-auto scrollbar-none select-none text-[9px] font-extrabold">
+            <button
+              type="button"
+              onClick={() => setSelectedProcessStatusFilter("ALL")}
+              className={`h-[26px] px-2.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 leading-none ${
+                selectedProcessStatusFilter === "ALL"
+                  ? "bg-slate-800 text-white border-slate-800 shadow-3xs"
+                  : "bg-slate-100 text-slate-700 border-slate-200/80 hover:bg-slate-200/70"
+              }`}
+            >
+              <span translate="no" className="notranslate"><T>{`Tất cả (${statusCounts.all})`}</T></span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSelectedProcessStatusFilter("UNACKNOWLEDGED")}
+              className={`h-[26px] px-2.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 leading-none ${
+                selectedProcessStatusFilter === "UNACKNOWLEDGED"
+                  ? "bg-rose-600 text-white border-rose-600 shadow-3xs ring-1 ring-rose-400/50"
+                  : "bg-rose-50 text-rose-800 border-rose-200/80 hover:bg-rose-100"
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 inline-block animate-pulse" />
+              <span translate="no" className="notranslate"><T>{`Chưa tiếp nhận (${statusCounts.unacked})`}</T></span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSelectedProcessStatusFilter("PROCESSING")}
+              className={`h-[26px] px-2.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 leading-none ${
+                selectedProcessStatusFilter === "PROCESSING"
+                  ? "bg-amber-600 text-white border-amber-600 shadow-3xs ring-1 ring-amber-400/50"
+                  : "bg-amber-50 text-amber-800 border-amber-200/80 hover:bg-amber-100"
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 inline-block animate-pulse" />
+              <span translate="no" className="notranslate"><T>{`Đang xử lý (${statusCounts.processing})`}</T></span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSelectedProcessStatusFilter("RESOLVED")}
+              className={`h-[26px] px-2.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 leading-none ${
+                selectedProcessStatusFilter === "RESOLVED"
+                  ? "bg-emerald-600 text-white border-emerald-600 shadow-3xs ring-1 ring-emerald-400/50"
+                  : "bg-emerald-50 text-emerald-800 border-emerald-200/80 hover:bg-emerald-100"
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 inline-block" />
+              <span translate="no" className="notranslate"><T>{`Đã xử lý (${statusCounts.resolved})`}</T></span>
+            </button>
           </div>
         </div>
       )}
@@ -6218,56 +6376,6 @@ App Link: ${window.location.origin}`;
         />
       ) : (
         <>
-          {/* Top segment control switcher for ADMIN and REVIEWER */}
-          {(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER || isHQOrManagerUser(currentUser)) && (
-            <div className={`transition-all duration-300 overflow-hidden shrink-0 bg-white border-b border-slate-200 px-3 select-none ${
-              showFilters ? "max-h-[50px] py-2 opacity-100" : "max-h-0 py-0 opacity-0 pointer-events-none"
-            }`}>
-              <div className="flex bg-slate-100 p-0.5 rounded-lg items-center w-full border border-slate-200/40">
-                <button
-                  type="button"
-                  onClick={() => setMobileFeedSubTab("FEED")}
-                  className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-[10px] font-black border-none cursor-pointer transition-all ${
-                    mobileFeedSubTab === "FEED"
-                      ? `${theme.bg} text-white shadow-sm`
-                      : "text-slate-650 hover:text-slate-850 bg-transparent"
-                  }`}
-                >
-                  <T><span translate="no" className="notranslate font-black uppercase">Bản Tin</span></T>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMobileFeedSubTab("PROPOSAL")}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[10px] font-black border-none cursor-pointer transition-all relative ${
-                    mobileFeedSubTab === "PROPOSAL"
-                      ? `${theme.bg} text-white shadow-sm`
-                      : "text-slate-650 hover:text-slate-850 bg-transparent"
-                  }`}
-                >
-                  <T><span translate="no" className="notranslate font-black uppercase">Đề Xuất</span></T>
-                  {(() => {
-                    const pendingCount = reports.filter((r) => {
-                      if (r.isDeleted) return false;
-                      if (r.isApproved !== false) return false;
-                      if (currentUser?.role === UserRole.ADMIN) return true;
-                      if (currentUser?.role === UserRole.REVIEWER) {
-                        const clean = (s: string) => (s || "").replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
-                        return clean(r.factory) === clean(currentUser.branch || "") || r.factory.toLowerCase() === (currentUser.branch || "").toLowerCase();
-                      }
-                      return false;
-                    }).length;
-                    if (pendingCount === 0) return null;
-                    return (
-                      <span className="bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full block select-none ml-1 animate-pulse leading-none">
-                        {pendingCount}
-                      </span>
-                    );
-                  })()}
-                </button>
-              </div>
-            </div>
-          )}
-
           <div
             ref={scrollContainerRef}
             onScroll={handleScroll}
@@ -8322,8 +8430,9 @@ App Link: ${window.location.origin}`;
         </button>
       )}
 
-      {/* Modern bottom navigation tab bar containing Phân Tích & Báo Cáo */}
-      <div id="mobile-bottom-nav" className={`bg-slate-50 border-t border-slate-200 grid ${(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER || isHQOrManagerUser(currentUser)) ? "grid-cols-5" : "grid-cols-4"} py-2 text-center text-[9.3px] font-bold select-none shrink-0 font-sans shadow-inner shrink-0`}>
+      {/* Modern bottom navigation tab bar containing Phân Tích, Đề Xuất, Bản Tin, Duyệt NS, [Họ + Tên Rút Gọn] */}
+      <div id="mobile-bottom-nav" className={`bg-slate-50 border-t border-slate-200 grid ${(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER || isHQOrManagerUser(currentUser)) ? "grid-cols-5" : "grid-cols-4"} py-2 text-center text-[9px] font-bold select-none shrink-0 font-sans shadow-inner shrink-0`}>
+        {/* 1. PHÂN TÍCH */}
         <button
           type="button"
           onClick={() => {
@@ -8339,39 +8448,72 @@ App Link: ${window.location.origin}`;
           }`}
         >
           <div className="relative">
-            <BarChart2 className={`w-4 h-4 mx-auto mb-0.5 transition-transform hover:scale-110 ${
+            <BarChart2 className={`w-[18px] h-[18px] mx-auto mb-0.5 transition-transform hover:scale-110 ${
               activeBottomTab === "PHAN_TICH" ? "text-violet-600 font-extrabold" : "text-violet-400"
             }`} />
           </div>
           <T><span translate="no" className="notranslate truncate w-full block text-center">Phân Tích</span></T>
         </button>
         
+        {/* 2. ĐỀ XUẤT */}
         <button
           type="button"
-          onClick={() => setActiveBottomTab("TRAO_ĐỔI")}
+          onClick={() => {
+            setActiveBottomTab("BAO_CAO");
+            setMobileFeedSubTab("PROPOSAL");
+          }}
           className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors min-w-0 overflow-hidden ${
-            activeBottomTab === "TRAO_ĐỔI" ? "text-blue-600 font-extrabold" : "text-slate-400 hover:text-blue-600"
+            activeBottomTab === "BAO_CAO" && mobileFeedSubTab === "PROPOSAL"
+              ? "text-amber-600 font-extrabold"
+              : "text-slate-400 hover:text-amber-600"
           }`}
         >
-          <MessageSquare className={`w-4 h-4 mx-auto mb-0.5 transition-transform hover:scale-110 ${
-            activeBottomTab === "TRAO_ĐỔI" ? "text-blue-600 font-extrabold" : "text-blue-400"
-          }`} />
-          <T><span translate="no" className="notranslate truncate w-full block text-center">Trao Đổi</span></T>
+          <div className="relative">
+            <Lightbulb className={`w-[18px] h-[18px] mx-auto mb-0.5 transition-transform hover:scale-110 ${
+              activeBottomTab === "BAO_CAO" && mobileFeedSubTab === "PROPOSAL" ? "text-amber-600 font-extrabold" : "text-amber-500"
+            }`} />
+            {(() => {
+              const pendingCount = reports.filter((r) => {
+                if (r.isDeleted) return false;
+                if (r.isApproved !== false) return false;
+                if (currentUser?.role === UserRole.ADMIN) return true;
+                if (currentUser?.role === UserRole.REVIEWER) {
+                  const clean = (s: string) => (s || "").replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
+                  return clean(r.factory) === clean(currentUser.branch || "") || r.factory.toLowerCase() === (currentUser.branch || "").toLowerCase();
+                }
+                return false;
+              }).length;
+              if (pendingCount === 0) return null;
+              return (
+                <span className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[7.5px] font-black rounded-full h-3.5 min-w-3.5 px-1 flex items-center justify-center animate-bounce">
+                  {pendingCount}
+                </span>
+              );
+            })()}
+          </div>
+          <T><span translate="no" className="notranslate truncate w-full block text-center">Đề Xuất</span></T>
         </button>
 
+        {/* 3. BẢN TIN */}
         <button
           type="button"
-          onClick={() => setActiveBottomTab("BAO_CAO")}
+          onClick={() => {
+            setActiveBottomTab("BAO_CAO");
+            setMobileFeedSubTab("FEED");
+          }}
           className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors min-w-0 overflow-hidden ${
-            activeBottomTab === "BAO_CAO" ? "text-sky-600 font-extrabold" : "text-slate-400 hover:text-sky-600"
+            activeBottomTab === "BAO_CAO" && mobileFeedSubTab === "FEED"
+              ? "text-sky-600 font-extrabold"
+              : "text-slate-400 hover:text-sky-600"
           }`}
         >
-          <FileText className={`w-4 h-4 mx-auto mb-0.5 transition-transform hover:scale-110 ${
-            activeBottomTab === "BAO_CAO" ? "text-sky-600 font-extrabold" : "text-sky-400"
+          <Newspaper className={`w-[18px] h-[18px] mx-auto mb-0.5 transition-transform hover:scale-110 ${
+            activeBottomTab === "BAO_CAO" && mobileFeedSubTab === "FEED" ? "text-sky-600 font-extrabold" : "text-sky-400"
           }`} />
-          <T><span translate="no" className="notranslate truncate w-full block text-center">Home</span></T>
+          <T><span translate="no" className="notranslate truncate w-full block text-center">Bản Tin</span></T>
         </button>
 
+        {/* 4. DUYỆT NS */}
         {(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER || isHQOrManagerUser(currentUser)) && (
           <button
             type="button"
@@ -8381,7 +8523,7 @@ App Link: ${window.location.origin}`;
             }`}
           >
             <div className="relative">
-              <ClipboardCheck className={`w-4 h-4 mx-auto mb-0.5 transition-transform hover:scale-110 ${
+              <ClipboardCheck className={`w-[18px] h-[18px] mx-auto mb-0.5 transition-transform hover:scale-110 ${
                 activeBottomTab === "PHE_DUYET" ? "text-amber-600 font-extrabold" : "text-amber-500"
               }`} />
               {(() => {
@@ -8403,13 +8545,15 @@ App Link: ${window.location.origin}`;
           </button>
         )}
 
+        {/* 5. [HỌ + TÊN RÚT GỌN] */}
         <button
           type="button"
           onClick={() => setShowLogoutConfirm(true)}
           className="flex flex-col items-center justify-center py-0.5 text-slate-400 hover:text-rose-500 transition-colors cursor-pointer select-none border-none bg-transparent w-full min-w-0 overflow-hidden"
+          title="Đăng xuất tài khoản"
         >
-          <LogOut className="w-4 h-4 mx-auto mb-0.5 text-rose-500 hover:text-rose-600 hover:scale-110 transition-transform" />
-          <T><span translate="no" className="notranslate truncate w-full block text-center text-[8.3px] font-semibold">{currentUser?.fullName ? formatNameCapitalized(currentUser.fullName) : "Đăng Xuất"}</span></T>
+          <LogOut className="w-[18px] h-[18px] mx-auto mb-0.5 text-rose-500 hover:text-rose-600 hover:scale-110 transition-transform" />
+          <T><span translate="no" className="notranslate truncate w-full block text-center text-[8px] font-semibold">{formatShortName(currentUser?.fullName)}</span></T>
         </button>
       </div>
 
