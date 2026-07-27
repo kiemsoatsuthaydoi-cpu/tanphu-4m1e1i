@@ -2142,7 +2142,7 @@ export default function MobileFrame({
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedFactoryFilter, setSelectedFactoryFilter] = useState<string | null>(null);
-  const [selectedProcessStatusFilter, setSelectedProcessStatusFilter] = useState<"ALL" | "UNACKNOWLEDGED" | "PROCESSING" | "RESOLVED" | "UNRESOLVED">("ALL");
+  const [selectedProcessStatusFilter, setSelectedProcessStatusFilter] = useState<"ALL" | "UNACKNOWLEDGED" | "PROCESSING" | "RESOLVED">("ALL");
   const [selectedWeekFilter, setSelectedWeekFilter] = useState<string>("ALL");
 
   const isAdminUser = useMemo(() => {
@@ -2181,7 +2181,6 @@ export default function MobileFrame({
   const [transferCompanyNote, setTransferCompanyNote] = useState("");
   const [selectedOnlyTransferredFilter, setSelectedOnlyTransferredFilter] = useState(false);
   const [selectedOnlyTaggedFilter, setSelectedOnlyTaggedFilter] = useState(false);
-  const [showTaggedPopover, setShowTaggedPopover] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [activeFilterSheet, setActiveFilterSheet] = useState<"BRANCH" | "CATEGORY" | "WEEK" | null>(null);
   const [onboardingStep, setOnboardingStep] = useState<number | null>(null);
@@ -3887,9 +3886,6 @@ App Link: ${window.location.origin}`;
     if (selectedProcessStatusFilter === "PROCESSING") {
       return ackCount > 0 && !isResolved;
     }
-    if (selectedProcessStatusFilter === "UNRESOLVED") {
-      return !isResolved;
-    }
     if (selectedProcessStatusFilter === "RESOLVED") {
       return isResolved;
     }
@@ -5070,21 +5066,20 @@ App Link: ${window.location.origin}`;
           </div>
 
           {/* Row 2: Status Filter Strip */}
-          <div className="bg-white px-1 py-1.5 border-b border-slate-200/60 shadow-2xs flex items-center justify-between gap-0.5 sm:gap-1 overflow-x-auto scrollbar-none select-none text-[8.5px] xs:text-[9px] font-extrabold tracking-tight">
+          <div className="bg-white px-1.5 py-1.5 border-b border-slate-200/60 shadow-2xs flex items-center justify-between gap-1 overflow-x-auto scrollbar-none select-none text-[8.5px] xs:text-[9px] font-extrabold tracking-tight">
             <button
               type="button"
               onClick={() => {
                 setSelectedProcessStatusFilter("ALL");
                 setSelectedOnlyTransferredFilter(false);
-                setSelectedOnlyTaggedFilter(false);
               }}
-              className={`h-[26px] px-1 sm:px-1.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
-                selectedProcessStatusFilter === "ALL" && !selectedOnlyTransferredFilter && !selectedOnlyTaggedFilter
+              className={`h-[26px] px-1.5 sm:px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
+                selectedProcessStatusFilter === "ALL" && !selectedOnlyTransferredFilter
                   ? "bg-slate-800 text-white border-slate-800 shadow-3xs"
                   : "bg-slate-100 text-slate-700 border-slate-200/80 hover:bg-slate-200/70"
               }`}
             >
-              <span translate="no" className="notranslate"><T>{`ALL (${statusCounts.all})`}</T></span>
+              <span translate="no" className="notranslate"><T>{`TẤT CẢ (${selectedOnlyTaggedFilter ? taggedCounts.all : statusCounts.all})`}</T></span>
             </button>
 
             <button
@@ -5093,7 +5088,7 @@ App Link: ${window.location.origin}`;
                 setSelectedProcessStatusFilter("UNACKNOWLEDGED");
                 setSelectedOnlyTransferredFilter(false);
               }}
-              className={`h-[26px] px-1 sm:px-1.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
+              className={`h-[26px] px-1.5 sm:px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
                 selectedProcessStatusFilter === "UNACKNOWLEDGED" && !selectedOnlyTransferredFilter
                   ? "bg-rose-600 text-white border-rose-600 shadow-3xs ring-1 ring-rose-400/50"
                   : "bg-rose-50 text-rose-800 border-rose-200/80 hover:bg-rose-100"
@@ -5108,7 +5103,7 @@ App Link: ${window.location.origin}`;
                 setSelectedProcessStatusFilter("PROCESSING");
                 setSelectedOnlyTransferredFilter(false);
               }}
-              className={`h-[26px] px-1 sm:px-1.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
+              className={`h-[26px] px-1.5 sm:px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
                 selectedProcessStatusFilter === "PROCESSING" && !selectedOnlyTransferredFilter
                   ? "bg-amber-600 text-white border-amber-600 shadow-3xs ring-1 ring-amber-400/50"
                   : "bg-amber-50 text-amber-800 border-amber-200/80 hover:bg-amber-100"
@@ -5123,7 +5118,7 @@ App Link: ${window.location.origin}`;
                 setSelectedProcessStatusFilter("RESOLVED");
                 setSelectedOnlyTransferredFilter(false);
               }}
-              className={`h-[26px] px-1 sm:px-1.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
+              className={`h-[26px] px-1.5 sm:px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
                 selectedProcessStatusFilter === "RESOLVED" && !selectedOnlyTransferredFilter
                   ? "bg-emerald-600 text-white border-emerald-600 shadow-3xs ring-1 ring-emerald-400/50"
                   : "bg-emerald-50 text-emerald-800 border-emerald-200/80 hover:bg-emerald-100"
@@ -5139,7 +5134,7 @@ App Link: ${window.location.origin}`;
                 setSelectedOnlyTaggedFilter(false);
                 setSelectedProcessStatusFilter("ALL");
               }}
-              className={`h-[26px] px-1 sm:px-1.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
+              className={`h-[26px] px-1.5 sm:px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
                 selectedOnlyTransferredFilter
                   ? "bg-indigo-700 text-white border-indigo-700 shadow-3xs ring-1 ring-indigo-400/50 font-black"
                   : "bg-indigo-50 text-indigo-800 border-indigo-200/80 hover:bg-indigo-100 font-extrabold"
@@ -5152,159 +5147,19 @@ App Link: ${window.location.origin}`;
             <button
               type="button"
               onClick={() => {
-                if (!selectedOnlyTaggedFilter) {
-                  setSelectedOnlyTaggedFilter(true);
-                  setSelectedOnlyTransferredFilter(false);
-                  setSelectedProcessStatusFilter("UNRESOLVED");
-                }
-                setShowTaggedPopover(true);
+                setSelectedOnlyTaggedFilter(!selectedOnlyTaggedFilter);
+                setSelectedOnlyTransferredFilter(false);
+                setSelectedProcessStatusFilter("ALL");
               }}
-              className={`h-[26px] px-1 sm:px-1.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center gap-0.5 leading-none ${
+              className={`h-[26px] px-1.5 sm:px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
                 selectedOnlyTaggedFilter
                   ? "bg-purple-700 text-white border-purple-700 shadow-3xs ring-1 ring-purple-400/50 font-black"
                   : "bg-purple-50 text-purple-800 border-purple-200/80 hover:bg-purple-100 font-extrabold"
               }`}
-              title="Lọc các bản tin tag (@nhắc tên) hoặc giao cho bạn"
+              title="Chỉ hiển thị các bản tin có tag (@nhắc tên) bạn"
             >
-              <span translate="no" className="notranslate">
-                <T>
-                  {selectedOnlyTaggedFilter
-                    ? selectedProcessStatusFilter === "UNRESOLVED"
-                      ? `@ CẦN (${taggedCounts.unresolved})`
-                      : selectedProcessStatusFilter === "UNACKNOWLEDGED"
-                      ? `@ CHỜ (${taggedCounts.unacked})`
-                      : selectedProcessStatusFilter === "PROCESSING"
-                      ? `@ ĐANG (${taggedCounts.processing})`
-                      : selectedProcessStatusFilter === "RESOLVED"
-                      ? `@ XONG (${taggedCounts.resolved})`
-                      : `@ ALL (${taggedCounts.all})`
-                    : `@ (${taggedReportsCount})`}
-                </T>
-              </span>
-              <ChevronDown className="w-2.5 h-2.5 opacity-80 shrink-0" />
+              <span translate="no" className="notranslate"><T>{`@ (${taggedReportsCount})`}</T></span>
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* Popover Menu for Tagged (@) Reports */}
-      {showTaggedPopover && (
-        <div 
-          onClick={() => setShowTaggedPopover(false)}
-          className="fixed lg:absolute inset-0 bg-slate-900/50 backdrop-blur-2xs flex items-center justify-center p-4 z-[80] select-none animate-fadeIn cursor-pointer"
-        >
-          <div 
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl w-full max-w-[300px] p-4 shadow-2xl border border-slate-150 flex flex-col gap-3 animate-in fade-in zoom-in-95 duration-150 cursor-default"
-          >
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <span className="text-[12px] font-black text-purple-900 flex items-center gap-1.5 uppercase">
-                <AtSign className="w-4 h-4 text-purple-600 inline-block" />
-                <span translate="no" className="notranslate"><T>LỌC BẢN TIN NHẮC ĐẾN BẠN</T></span>
-              </span>
-              <button 
-                type="button" 
-                onClick={() => setShowTaggedPopover(false)}
-                className="w-5 h-5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-[9px] border-none"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedOnlyTaggedFilter(true);
-                  setSelectedOnlyTransferredFilter(false);
-                  setSelectedProcessStatusFilter("UNRESOLVED");
-                  setShowTaggedPopover(false);
-                }}
-                className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
-                  selectedOnlyTaggedFilter && selectedProcessStatusFilter === "UNRESOLVED"
-                    ? "bg-amber-500 text-white border-amber-600 shadow-xs font-bold"
-                    : "bg-amber-50/70 border-amber-200/80 text-amber-900 hover:bg-amber-100/80"
-                }`}
-              >
-                <div className="flex flex-col">
-                  <span className="text-[12px] font-black flex items-center gap-1.5">
-                    <span>🟡</span>
-                    <span translate="no" className="notranslate"><T>CẦN XỬ LÝ (Chờ & Đang XL)</T></span>
-                  </span>
-                  <span className="text-[10px] opacity-85 font-normal">Ưu tiên xử lý các việc chưa hoàn thành</span>
-                </div>
-                <span className="text-[12px] font-black px-2 py-0.5 rounded-full bg-white/20 border border-white/30">
-                  {taggedCounts.unresolved}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedOnlyTaggedFilter(true);
-                  setSelectedOnlyTransferredFilter(false);
-                  setSelectedProcessStatusFilter("ALL");
-                  setShowTaggedPopover(false);
-                }}
-                className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
-                  selectedOnlyTaggedFilter && selectedProcessStatusFilter === "ALL"
-                    ? "bg-purple-700 text-white border-purple-800 shadow-xs font-bold"
-                    : "bg-purple-50/70 border-purple-200/80 text-purple-900 hover:bg-purple-100/80"
-                }`}
-              >
-                <div className="flex flex-col">
-                  <span className="text-[12px] font-black flex items-center gap-1.5">
-                    <span>📑</span>
-                    <span translate="no" className="notranslate"><T>TẤT CẢ BẢN TIN ĐƯỢC TAG</T></span>
-                  </span>
-                  <span className="text-[10px] opacity-85 font-normal">Bao gồm cả chưa xử lý và đã xong</span>
-                </div>
-                <span className="text-[12px] font-black px-2 py-0.5 rounded-full bg-white/20 border border-white/30">
-                  {taggedCounts.all}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedOnlyTaggedFilter(true);
-                  setSelectedOnlyTransferredFilter(false);
-                  setSelectedProcessStatusFilter("RESOLVED");
-                  setShowTaggedPopover(false);
-                }}
-                className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
-                  selectedOnlyTaggedFilter && selectedProcessStatusFilter === "RESOLVED"
-                    ? "bg-emerald-600 text-white border-emerald-700 shadow-xs font-bold"
-                    : "bg-emerald-50/70 border-emerald-200/80 text-emerald-900 hover:bg-emerald-100/80"
-                }`}
-              >
-                <div className="flex flex-col">
-                  <span className="text-[12px] font-black flex items-center gap-1.5">
-                    <span>✅</span>
-                    <span translate="no" className="notranslate"><T>ĐÃ HOÀN THÀNH</T></span>
-                  </span>
-                  <span className="text-[10px] opacity-85 font-normal">Các bản tin đã ghi nhận kết quả xong</span>
-                </div>
-                <span className="text-[12px] font-black px-2 py-0.5 rounded-full bg-white/20 border border-white/30">
-                  {taggedCounts.resolved}
-                </span>
-              </button>
-
-              {selectedOnlyTaggedFilter && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedOnlyTaggedFilter(false);
-                    setSelectedProcessStatusFilter("ALL");
-                    setShowTaggedPopover(false);
-                  }}
-                  className="w-full mt-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-extrabold cursor-pointer border border-slate-200 transition-colors flex items-center justify-center gap-1.5"
-                >
-                  <span>❌</span>
-                  <span translate="no" className="notranslate"><T>Tắt lọc tag @ (Quay về tất cả bản tin)</T></span>
-                </button>
-              )}
-            </div>
           </div>
         </div>
       )}
