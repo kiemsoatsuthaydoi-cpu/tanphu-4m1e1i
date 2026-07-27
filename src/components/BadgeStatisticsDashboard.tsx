@@ -1009,70 +1009,78 @@ export default function BadgeStatisticsDashboard({
   }, [filteredBadges]);
 
   return (
-    <div className="w-full bg-slate-50 min-h-[500px] p-3 md:p-6 rounded-2xl text-slate-800 space-y-6 border border-slate-200/80 shadow-xs">
+    <div className={`w-full bg-slate-50 min-h-[500px] rounded-2xl text-slate-800 border border-slate-200/80 shadow-xs ${
+      isMobile ? "p-2.5 space-y-3.5" : "p-3 md:p-6 space-y-6"
+    }`}>
       {/* Header Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3.5 sm:p-5 rounded-2xl shadow-lg border border-indigo-900/40">
-        <div className="flex items-center gap-2.5 sm:gap-3.5 overflow-hidden">
-          <div className="p-2 sm:p-3 bg-amber-500/20 rounded-xl border border-amber-400/30 text-amber-300 shadow-inner shrink-0">
-            <Trophy className="w-5 h-5 sm:w-7 sm:h-7 text-amber-400 animate-pulse" />
+      <div className={`flex flex-col ${
+        isMobile ? "" : "sm:flex-row sm:items-center"
+      } justify-between gap-2 sm:gap-3 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-2.5 sm:p-5 rounded-2xl shadow-lg border border-indigo-900/40 overflow-hidden`}>
+        <div className="flex items-center gap-2 sm:gap-3.5 min-w-0 flex-1">
+          <div className="p-1.5 sm:p-3 bg-amber-500/20 rounded-xl border border-amber-400/30 text-amber-300 shadow-inner shrink-0">
+            <Trophy className="w-4 h-4 sm:w-6 sm:h-6 text-amber-400 animate-pulse" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-xs sm:text-base md:text-xl font-black tracking-tight uppercase text-white whitespace-nowrap overflow-hidden text-ellipsis">
+            <h2 className="text-[10px] sm:text-sm md:text-base lg:text-lg font-black tracking-tight uppercase text-white leading-tight truncate">
               <T><span translate="no" className="notranslate">THỐNG KÊ TRAO HUY HIỆU & VINH DANH</span></T>
             </h2>
-            <p className="text-[10px] sm:text-xs text-indigo-200/80 mt-0.5 leading-tight truncate">
+            <p className="text-[8.5px] sm:text-xs text-indigo-200/80 mt-0.5 leading-snug truncate">
               <T><span translate="no" className="notranslate">Tuyên dương cá nhân, tập thể và các sáng kiến, giải pháp xuất sắc</span></T>
             </p>
           </div>
         </div>
 
         {/* Mode Switcher Tabs */}
-        <div className="flex items-center w-full md:w-auto bg-slate-800/80 p-1 rounded-xl border border-slate-700/60 self-start md:self-auto">
+        <div className={`grid grid-cols-2 gap-1 ${
+          isMobile ? "w-full" : "w-full sm:w-auto"
+        } bg-slate-800/90 p-1 rounded-xl border border-slate-700/60 self-start sm:self-auto shrink-0 min-w-0`}>
           <button
             type="button"
             onClick={() => setActiveTab("LEADERBOARD")}
-            className={`flex-1 md:flex-initial px-2 sm:px-3.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap ${
+            className={`px-1 sm:px-3 py-1.5 rounded-lg text-[8.5px] sm:text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 text-center min-w-0 leading-none ${
               activeTab === "LEADERBOARD"
                 ? "bg-amber-500 text-slate-950 shadow-md font-black"
                 : "text-slate-300 hover:text-white"
             }`}
           >
-            <Award className="w-3.5 h-3.5 shrink-0" />
-            <T><span translate="no" className="notranslate">BẢNG XẾP HẠNG</span></T>
+            <Award className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 shrink-0" />
+            <span className="truncate"><T><span translate="no" className="notranslate">BẢNG XẾP HẠNG</span></T></span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("LIST")}
-            className={`flex-1 md:flex-initial px-2 sm:px-3.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap ${
+            className={`px-1 sm:px-3 py-1.5 rounded-lg text-[8.5px] sm:text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 text-center min-w-0 leading-none ${
               activeTab === "LIST"
                 ? "bg-amber-500 text-slate-950 shadow-md font-black"
                 : "text-slate-300 hover:text-white"
             }`}
           >
-            <FileText className="w-3.5 h-3.5 shrink-0" />
-            <T><span translate="no" className="notranslate">DANH SÁCH CHI TIẾT</span></T>
+            <FileText className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 shrink-0" />
+            <span className="truncate"><T><span translate="no" className="notranslate">DANH SÁCH CHI TIẾT</span></T></span>
           </button>
         </div>
       </div>
 
       {/* FILTER CONTROLS BAR */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+      <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
         <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase tracking-wider pb-2 border-b border-slate-100">
           <Filter className="w-4 h-4 text-indigo-600" />
           <T><span translate="no" className="notranslate">BỘ LỌC THỐNG KÊ TRAO HUY HIỆU</span></T>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className={`grid grid-cols-1 ${
+          isMobile ? "grid-cols-1" : "sm:grid-cols-2 xl:grid-cols-4"
+        } gap-2.5 sm:gap-3`}>
           {/* 1. Filter Mode: Ngày / Tháng */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-bold text-slate-600 uppercase">
+          <div className="flex flex-col gap-1 min-w-0">
+            <label className="text-[10px] sm:text-[11px] font-extrabold text-slate-600 uppercase tracking-wider truncate">
               <T><span translate="no" className="notranslate">Chế độ lọc thời gian</span></T>
             </label>
-            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <div className="grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
               <button
                 type="button"
                 onClick={() => setFilterMode("MONTH")}
-                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer text-center ${
+                className={`py-1.5 px-1.5 text-[10.5px] sm:text-[11px] font-bold rounded-lg transition-all cursor-pointer text-center leading-none truncate ${
                   filterMode === "MONTH"
                     ? "bg-indigo-600 text-white shadow-xs font-black"
                     : "text-slate-600 hover:text-slate-900"
@@ -1083,7 +1091,7 @@ export default function BadgeStatisticsDashboard({
               <button
                 type="button"
                 onClick={() => setFilterMode("DAY")}
-                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer text-center ${
+                className={`py-1.5 px-1.5 text-[10.5px] sm:text-[11px] font-bold rounded-lg transition-all cursor-pointer text-center leading-none truncate ${
                   filterMode === "DAY"
                     ? "bg-indigo-600 text-white shadow-xs font-black"
                     : "text-slate-600 hover:text-slate-900"
@@ -1095,8 +1103,8 @@ export default function BadgeStatisticsDashboard({
           </div>
 
           {/* 2. Specific Date or Month Picker */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-bold text-slate-600 uppercase">
+          <div className="flex flex-col gap-1 min-w-0">
+            <label className="text-[10px] sm:text-[11px] font-extrabold text-slate-600 uppercase tracking-wider truncate">
               {filterMode === "MONTH" ? (
                 <T><span translate="no" className="notranslate">Chọn Tháng (MM/YYYY)</span></T>
               ) : (
@@ -1112,14 +1120,14 @@ export default function BadgeStatisticsDashboard({
                 title="Chọn Tháng Báo Cáo"
               />
             ) : (
-              <div className="relative flex items-center">
+              <div className="relative flex items-center gap-1.5 min-w-0">
                 <input
                   type="date"
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 text-slate-800 text-xs font-bold rounded-xl px-3 py-2 outline-none focus:border-indigo-500 focus:bg-white transition-all cursor-pointer"
+                  className="w-full bg-slate-50 border border-slate-300 text-slate-800 text-xs font-bold rounded-xl px-2.5 py-1.5 outline-none focus:border-indigo-500 focus:bg-white transition-all cursor-pointer min-w-0"
                 />
-                <span className="ml-2 text-xs font-extrabold text-indigo-700 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-200 shrink-0">
+                <span className="text-[10px] sm:text-[10.5px] font-extrabold text-indigo-700 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-200 shrink-0">
                   <span translate="no" className="notranslate">{selectedDateFormatted}</span>
                 </span>
               </div>
@@ -1127,8 +1135,8 @@ export default function BadgeStatisticsDashboard({
           </div>
 
           {/* 3. Branch / Factory Filter */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-bold text-slate-600 uppercase">
+          <div className="flex flex-col gap-1 min-w-0">
+            <label className="text-[10px] sm:text-[11px] font-extrabold text-slate-600 uppercase tracking-wider truncate">
               <T><span translate="no" className="notranslate">Nhà máy / Chi nhánh</span></T>
             </label>
             <CustomSelect
@@ -1140,8 +1148,8 @@ export default function BadgeStatisticsDashboard({
           </div>
 
           {/* 4. Badge Category Filter */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-bold text-slate-600 uppercase">
+          <div className="flex flex-col gap-1 min-w-0">
+            <label className="text-[10px] sm:text-[11px] font-extrabold text-slate-600 uppercase tracking-wider truncate">
               <T><span translate="no" className="notranslate">Loại Huy Hiệu</span></T>
             </label>
             <CustomSelect
@@ -1154,8 +1162,8 @@ export default function BadgeStatisticsDashboard({
         </div>
 
         {/* Search input */}
-        <div className="relative pt-1">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+        <div className="relative pt-0.5">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
           <input
             type="text"
             value={searchTerm}
@@ -1167,76 +1175,86 @@ export default function BadgeStatisticsDashboard({
       </div>
 
       {/* OVERVIEW KEY METRICS (KPI CARDS) */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4">
+      <div className={`grid grid-cols-2 ${
+        isMobile ? "grid-cols-2" : "md:grid-cols-4"
+      } gap-2.5 sm:gap-3.5`}>
         {/* Card 1: Total Badges */}
-        <div className="bg-gradient-to-br from-amber-50 via-white to-amber-100/50 p-2.5 sm:p-4 rounded-2xl border border-amber-200/80 shadow-xs flex items-center justify-between gap-1.5">
-          <div className="min-w-0 flex-1">
-            <p className="text-[9.5px] sm:text-[11px] font-extrabold text-amber-800 uppercase tracking-tight leading-tight">
+        <div className="bg-gradient-to-br from-amber-50 via-white to-amber-100/50 p-2.5 sm:p-3.5 rounded-2xl border border-amber-200/80 shadow-2xs flex flex-col justify-between gap-1.5 min-w-0">
+          <div className="flex items-center justify-between gap-1 min-w-0">
+            <p className="text-[10px] sm:text-[11px] font-extrabold text-amber-800 uppercase tracking-tight truncate">
               <T><span translate="no" className="notranslate">Huy Hiệu Đã Trao</span></T>
             </p>
-            <h3 className="text-lg sm:text-2xl font-black text-amber-900 mt-1">
+            <div className="p-1 sm:p-1.5 bg-amber-500/20 text-amber-700 rounded-lg border border-amber-300 shrink-0">
+              <Medal className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline justify-between gap-1 mt-0.5 min-w-0">
+            <h3 className="text-lg sm:text-2xl font-black text-amber-900 leading-none shrink-0">
               <span translate="no" className="notranslate">{kpiStats.totalCount}</span>
             </h3>
-            <p className="text-[9px] sm:text-[10px] text-amber-700/80 mt-0.5 font-medium leading-tight">
+            <p className="text-[9px] sm:text-[10.5px] text-amber-700/80 font-bold truncate text-right">
               <T><span translate="no" className="notranslate">Lượt vinh danh</span></T>
             </p>
-          </div>
-          <div className="p-1.5 sm:p-2 bg-amber-500/20 text-amber-700 rounded-lg sm:rounded-xl border border-amber-300 shrink-0">
-            <Medal className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </div>
         </div>
 
         {/* Card 2: Total Points */}
-        <div className="bg-gradient-to-br from-emerald-50 via-white to-emerald-100/50 p-2.5 sm:p-4 rounded-2xl border border-emerald-200/80 shadow-xs flex items-center justify-between gap-1.5">
-          <div className="min-w-0 flex-1">
-            <p className="text-[9.5px] sm:text-[11px] font-extrabold text-emerald-800 uppercase tracking-tight leading-tight">
+        <div className="bg-gradient-to-br from-emerald-50 via-white to-emerald-100/50 p-2.5 sm:p-3.5 rounded-2xl border border-emerald-200/80 shadow-2xs flex flex-col justify-between gap-1.5 min-w-0">
+          <div className="flex items-center justify-between gap-1 min-w-0">
+            <p className="text-[10px] sm:text-[11px] font-extrabold text-emerald-800 uppercase tracking-tight truncate">
               <T><span translate="no" className="notranslate">Tổng Điểm Tích Lũy</span></T>
             </p>
-            <h3 className="text-lg sm:text-2xl font-black text-emerald-900 mt-1">
-              <span translate="no" className="notranslate">+{kpiStats.totalPts}</span> <span className="text-[10px] sm:text-xs font-bold text-emerald-700">điểm</span>
-            </h3>
-            <p className="text-[9px] sm:text-[10px] text-emerald-700/80 mt-0.5 font-medium leading-tight">
-              <T><span translate="no" className="notranslate">Cộng dồn thi đua</span></T>
-            </p>
+            <div className="p-1 sm:p-1.5 bg-emerald-500/20 text-emerald-700 rounded-lg border border-emerald-300 shrink-0">
+              <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </div>
           </div>
-          <div className="p-1.5 sm:p-2 bg-emerald-500/20 text-emerald-700 rounded-lg sm:rounded-xl border border-emerald-300 shrink-0">
-            <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          <div className="flex items-baseline justify-between gap-1 mt-0.5 min-w-0">
+            <h3 className="text-lg sm:text-2xl font-black text-emerald-900 leading-none shrink-0">
+              <span translate="no" className="notranslate">+{kpiStats.totalPts}</span>
+            </h3>
+            <p className="text-[9px] sm:text-[10.5px] text-emerald-700/80 font-bold truncate text-right">
+              <T><span translate="no" className="notranslate">điểm thi đua</span></T>
+            </p>
           </div>
         </div>
 
         {/* Card 3: Reports Awarded */}
-        <div className="bg-gradient-to-br from-indigo-50 via-white to-indigo-100/50 p-2.5 sm:p-4 rounded-2xl border border-indigo-200/80 shadow-xs flex items-center justify-between gap-1.5">
-          <div className="min-w-0 flex-1">
-            <p className="text-[9.5px] sm:text-[11px] font-extrabold text-indigo-800 uppercase tracking-tight leading-tight">
+        <div className="bg-gradient-to-br from-indigo-50 via-white to-indigo-100/50 p-2.5 sm:p-3.5 rounded-2xl border border-indigo-200/80 shadow-2xs flex flex-col justify-between gap-1.5 min-w-0">
+          <div className="flex items-center justify-between gap-1 min-w-0">
+            <p className="text-[10px] sm:text-[11px] font-extrabold text-indigo-800 uppercase tracking-tight truncate">
               <T><span translate="no" className="notranslate">Bản Tin & Kết Quả</span></T>
             </p>
-            <h3 className="text-lg sm:text-2xl font-black text-indigo-900 mt-1">
+            <div className="p-1 sm:p-1.5 bg-indigo-500/20 text-indigo-700 rounded-lg border border-indigo-300 shrink-0">
+              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline justify-between gap-1 mt-0.5 min-w-0">
+            <h3 className="text-lg sm:text-2xl font-black text-indigo-900 leading-none shrink-0">
               <span translate="no" className="notranslate">{kpiStats.distinctReports}</span>
             </h3>
-            <p className="text-[9px] sm:text-[10px] text-indigo-700/80 mt-0.5 font-medium leading-tight">
-              <T><span translate="no" className="notranslate">Mục được tuyên dương</span></T>
+            <p className="text-[9px] sm:text-[10.5px] text-indigo-700/80 font-bold truncate text-right">
+              <T><span translate="no" className="notranslate">Mục vinh danh</span></T>
             </p>
-          </div>
-          <div className="p-1.5 sm:p-2 bg-indigo-500/20 text-indigo-700 rounded-lg sm:rounded-xl border border-indigo-300 shrink-0">
-            <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </div>
         </div>
 
         {/* Card 4: Active Managers */}
-        <div className="bg-gradient-to-br from-purple-50 via-white to-purple-100/50 p-2.5 sm:p-4 rounded-2xl border border-purple-200/80 shadow-xs flex items-center justify-between gap-1.5">
-          <div className="min-w-0 flex-1">
-            <p className="text-[9.5px] sm:text-[11px] font-extrabold text-purple-800 uppercase tracking-tight leading-tight">
-              <T><span translate="no" className="notranslate">Lãnh Đạo Đã Trao</span></T>
+        <div className="bg-gradient-to-br from-purple-50 via-white to-purple-100/50 p-2.5 sm:p-3.5 rounded-2xl border border-purple-200/80 shadow-2xs flex flex-col justify-between gap-1.5 min-w-0">
+          <div className="flex items-center justify-between gap-1 min-w-0">
+            <p className="text-[10px] sm:text-[11px] font-extrabold text-purple-800 uppercase tracking-tight truncate">
+              <T><span translate="no" className="notranslate">LÃNH ĐẠO ĐÃ TRAO</span></T>
             </p>
-            <h3 className="text-lg sm:text-2xl font-black text-purple-900 mt-1">
+            <div className="p-1 sm:p-1.5 bg-purple-500/20 text-purple-700 rounded-lg border border-purple-300 shrink-0">
+              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline justify-between gap-1 mt-0.5 min-w-0">
+            <h3 className="text-lg sm:text-2xl font-black text-purple-900 leading-none shrink-0">
               <span translate="no" className="notranslate">{kpiStats.distinctGivers}</span>
             </h3>
-            <p className="text-[9px] sm:text-[10px] text-purple-700/80 mt-0.5 font-medium leading-tight">
-              <T><span translate="no" className="notranslate">Cấp quản lý tham gia</span></T>
+            <p className="text-[9px] sm:text-[10.5px] text-purple-700/80 font-bold truncate text-right">
+              <T><span translate="no" className="notranslate">Cấp quản lý</span></T>
             </p>
-          </div>
-          <div className="p-1.5 sm:p-2 bg-purple-500/20 text-purple-700 rounded-lg sm:rounded-xl border border-purple-300 shrink-0">
-            <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </div>
         </div>
       </div>
@@ -1322,7 +1340,7 @@ export default function BadgeStatisticsDashboard({
           </div>
 
           {/* Grid 2 Columns: Top Departments & Top Givers */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className={`grid grid-cols-1 ${isMobile ? "" : "lg:grid-cols-2"} gap-4 sm:gap-6`}>
             {/* Top Departments */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
               <div className="bg-slate-800 text-white px-3.5 sm:px-4 py-2.5 sm:py-3 font-extrabold text-[11px] sm:text-xs uppercase tracking-wider flex items-center justify-between gap-2">
@@ -1422,44 +1440,44 @@ export default function BadgeStatisticsDashboard({
       {activeTab === "LIST" && (
         <div className="space-y-4">
           {/* Sub-tabs for DANH SÁCH CHI TIẾT */}
-          <div className="flex flex-wrap items-center gap-2 bg-slate-200/70 p-1.5 rounded-2xl border border-slate-300/60 shadow-2xs">
+          <div className="grid grid-cols-3 gap-1 bg-slate-200/80 p-1 rounded-xl border border-slate-300/60 shadow-2xs">
             <button
               type="button"
               onClick={() => setListSubTab("REPORTS")}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer border-none ${
+              className={`flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs font-black transition-all cursor-pointer border-none min-w-0 ${
                 listSubTab === "REPORTS"
-                  ? "bg-white text-indigo-950 shadow-sm border border-slate-200 scale-[1.01]"
+                  ? "bg-white text-indigo-950 shadow-xs border border-slate-200"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/80"
               }`}
             >
-              <span>📄</span>
-              <span translate="no" className="notranslate"><T>BẢN TIN ({groupedReportList.length})</T></span>
+              <span className="shrink-0 text-xs">📄</span>
+              <span className="truncate"><T><span translate="no" className="notranslate">BẢN TIN ({groupedReportList.length})</span></T></span>
             </button>
 
             <button
               type="button"
               onClick={() => setListSubTab("DEPARTMENTS")}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer border-none ${
+              className={`flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs font-black transition-all cursor-pointer border-none min-w-0 ${
                 listSubTab === "DEPARTMENTS"
-                  ? "bg-white text-indigo-950 shadow-sm border border-slate-200 scale-[1.01]"
+                  ? "bg-white text-indigo-950 shadow-xs border border-slate-200"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/80"
               }`}
             >
-              <span>🏢</span>
-              <span translate="no" className="notranslate"><T>BỘ PHẬN ({detailedDepartmentList.length})</T></span>
+              <span className="shrink-0 text-xs">🏢</span>
+              <span className="truncate"><T><span translate="no" className="notranslate">BỘ PHẬN ({detailedDepartmentList.length})</span></T></span>
             </button>
 
             <button
               type="button"
               onClick={() => setListSubTab("MANAGERS")}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer border-none ${
+              className={`flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs font-black transition-all cursor-pointer border-none min-w-0 ${
                 listSubTab === "MANAGERS"
-                  ? "bg-white text-indigo-950 shadow-sm border border-slate-200 scale-[1.01]"
+                  ? "bg-white text-indigo-950 shadow-xs border border-slate-200"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/80"
               }`}
             >
-              <span>🎖️</span>
-              <span translate="no" className="notranslate"><T>QUẢN LÝ ({detailedManagerList.length})</T></span>
+              <span className="shrink-0 text-xs">🎖️</span>
+              <span className="truncate"><T><span translate="no" className="notranslate">QUẢN LÝ ({detailedManagerList.length})</span></T></span>
             </button>
           </div>
 

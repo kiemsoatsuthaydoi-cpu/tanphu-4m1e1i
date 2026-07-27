@@ -118,6 +118,15 @@ export interface QualityReport {
   assignedPersonName?: string;
   assignedPersonRole?: string;
   aiUsedBy?: string[];
+  targetCompany?: "TPP" | "DNP" | "ALL";
+  assignedCompany?: string;
+  transferHistory?: {
+    fromCompany: string;
+    toCompany: string;
+    transferredBy: string;
+    transferredAt: string;
+    note?: string;
+  }[];
 }
 
 export interface QualityReportBadge {
