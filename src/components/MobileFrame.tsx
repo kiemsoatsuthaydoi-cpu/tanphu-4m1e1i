@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import html2canvas from "html2canvas";
-import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, BellRing, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, CheckCircle2, AlertCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send, Award, Calendar, Clock, Lightbulb, Newspaper } from "lucide-react";
+import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, BellRing, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, CheckCircle2, AlertCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send, Award, Calendar, Clock, Lightbulb, Newspaper, AtSign } from "lucide-react";
 import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Department, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus, QualityReportBadge, AppNotification, ErrorCatalogItem, BadgePointConfigItem } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
@@ -2142,7 +2142,7 @@ export default function MobileFrame({
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedFactoryFilter, setSelectedFactoryFilter] = useState<string | null>(null);
-  const [selectedProcessStatusFilter, setSelectedProcessStatusFilter] = useState<"ALL" | "UNACKNOWLEDGED" | "PROCESSING" | "RESOLVED">("ALL");
+  const [selectedProcessStatusFilter, setSelectedProcessStatusFilter] = useState<"ALL" | "UNACKNOWLEDGED" | "PROCESSING" | "RESOLVED" | "UNRESOLVED">("ALL");
   const [selectedWeekFilter, setSelectedWeekFilter] = useState<string>("ALL");
 
   const isAdminUser = useMemo(() => {
@@ -2180,6 +2180,8 @@ export default function MobileFrame({
   const [transferTargetCompany, setTransferTargetCompany] = useState<"TPP" | "DNP" | "ALL">("DNP");
   const [transferCompanyNote, setTransferCompanyNote] = useState("");
   const [selectedOnlyTransferredFilter, setSelectedOnlyTransferredFilter] = useState(false);
+  const [selectedOnlyTaggedFilter, setSelectedOnlyTaggedFilter] = useState(false);
+  const [showTaggedPopover, setShowTaggedPopover] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [activeFilterSheet, setActiveFilterSheet] = useState<"BRANCH" | "CATEGORY" | "WEEK" | null>(null);
   const [onboardingStep, setOnboardingStep] = useState<number | null>(null);
@@ -2379,65 +2381,7 @@ export default function MobileFrame({
     setTouchStartY(e.targetTouches[0].clientY);
   };
 
-  const feedTouchStartX = useRef<number | null>(null);
-  const feedTouchStartY = useRef<number | null>(null);
 
-  const handleFeedTouchStart = (e: React.TouchEvent) => {
-    if (!(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER)) {
-      return;
-    }
-
-    const target = e.target as HTMLElement;
-    if (
-      target.closest(".group") || 
-      target.closest(".image-slider-container") || 
-      target.closest("button") || 
-      target.closest("select") || 
-      target.closest("input") || 
-      target.closest("textarea") || 
-      target.closest("a")
-    ) {
-      return;
-    }
-
-    if (e.targetTouches.length === 1) {
-      feedTouchStartX.current = e.targetTouches[0].clientX;
-      feedTouchStartY.current = e.targetTouches[0].clientY;
-    }
-  };
-
-  const handleFeedTouchEnd = (e: React.TouchEvent) => {
-    if (feedTouchStartX.current === null || feedTouchStartY.current === null) return;
-    
-    if (!(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER)) {
-      feedTouchStartX.current = null;
-      feedTouchStartY.current = null;
-      return;
-    }
-
-    const touchEndX = e.changedTouches[0].clientX;
-    const touchEndY = e.changedTouches[0].clientY;
-
-    const diffX = feedTouchStartX.current - touchEndX;
-    const diffY = feedTouchStartY.current - touchEndY;
-
-    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
-      if (diffX > 0) {
-        if (mobileFeedSubTab !== "PROPOSAL") {
-          setMobileFeedSubTab("PROPOSAL");
-          showToast("Chuyển sang tab: ĐỀ XUẤT 📑");
-        }
-      } else {
-        if (mobileFeedSubTab !== "FEED") {
-          setMobileFeedSubTab("FEED");
-          showToast("Chuyển sang tab: BẢN TIN 📑");
-        }
-      }
-    }
-
-    feedTouchStartX.current = null;
-    feedTouchStartY.current = null;
-  };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (touchStartX === null || touchStartY === null) return;
@@ -2734,6 +2678,8 @@ export default function MobileFrame({
     }
   };
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [isFabDocked, setIsFabDocked] = useState(false);
+  const touchStartXRef = useRef<number | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showMobileCloudQuota, setShowMobileCloudQuota] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
@@ -3504,6 +3450,9 @@ App Link: ${window.location.origin}`;
           if (prev) return false;
           return prev;
         });
+        if (scrollTop > 150 && diff > 20) {
+          setIsFabDocked(true);
+        }
       } else if ((diff < -8 && scrollTop < 150) || scrollTop <= 15) {
         setShowFilters((prev) => {
           if (!prev) return true;
@@ -3694,75 +3643,172 @@ App Link: ${window.location.origin}`;
     return { isDnpFactory, belongsToDnp, belongsToTpp, isTransferred };
   }, []);
 
-  // Filter items based on uploader or factory search or description search
-  const baseFilteredReports = reports.filter((r) => {
-    if (r.isDeleted) return false;
+  // Context-filtered reports matching active toolbar & branch/company/type/week filters
+  const contextFilteredReports = useMemo(() => {
+    return reports.filter((r) => {
+      if (r.isDeleted) return false;
 
-    const { isDnpFactory, belongsToDnp, belongsToTpp, isTransferred } = getReportCompanyOwnership(r);
+      const { belongsToDnp, belongsToTpp } = getReportCompanyOwnership(r);
 
-    // Company Permission Segregation: Non-Admin staff see news of their company or news transferred to their company
-    if (!isAdminUser) {
-      if (isUserDnpCompany && !belongsToDnp) return false;
-      if (!isUserDnpCompany && !belongsToTpp && r.uploaderId !== currentUser?.id) return false;
-    }
+      // Company Permission Segregation: Non-Admin staff see news of their company or news transferred to their company
+      if (!isAdminUser) {
+        if (isUserDnpCompany && !belongsToDnp) return false;
+        if (!isUserDnpCompany && !belongsToTpp && r.uploaderId !== currentUser?.id) return false;
+      }
 
-    // Approval status filtering rules
-    const isApproved = r.isApproved !== false;
-    const isUploader = r.uploaderId === currentUser?.id;
+      // Approval status filtering rules
+      const isApproved = r.isApproved !== false;
+      const isUploader = r.uploaderId === currentUser?.id;
 
-    if (currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) {
-      if (mobileFeedSubTab === "PROPOSAL") {
-        if (isApproved) return false;
-        // Reviewer can only see pending proposals for their own branch/factory
-        if (currentUser.role === UserRole.REVIEWER) {
-          const clean = (s: string) => (s || "").replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
-          const isMatch = clean(r.factory) === clean(currentUser.branch || "") || r.factory.toLowerCase() === (currentUser.branch || "").toLowerCase();
-          if (!isMatch && !belongsToDnp) return false;
+      if (currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) {
+        if (mobileFeedSubTab === "PROPOSAL") {
+          if (isApproved) return false;
+          // Reviewer can only see pending proposals for their own branch/factory
+          if (currentUser.role === UserRole.REVIEWER) {
+            const clean = (s: string) => (s || "").replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
+            const isMatch = clean(r.factory) === clean(currentUser.branch || "") || r.factory.toLowerCase() === (currentUser.branch || "").toLowerCase();
+            if (!isMatch && !belongsToDnp) return false;
+          }
+        } else {
+          if (!isApproved) return false;
         }
       } else {
-        if (!isApproved) return false;
+        // Regular Staff: show approved reports, OR their own pending proposals (which show a "Chờ duyệt" badge)
+        if (!isApproved && !isUploader) return false;
       }
-    } else {
-      // Regular Staff: show approved reports, OR their own pending proposals (which show a "Chờ duyệt" badge)
-      if (!isApproved && !isUploader) return false;
+
+      const s = searchTerm.toLowerCase();
+      const matchesSearch =
+        r.factory.toLowerCase().includes(s) ||
+        r.uploaderName.toLowerCase().includes(s) ||
+        r.content.toLowerCase().includes(s) ||
+        r.category.toLowerCase().includes(s) ||
+        (r.targetCompany && "chuyển giao liên công ty".includes(s)) ||
+        (r.assignedCompany && r.assignedCompany.toLowerCase().includes(s));
+
+      const matchesCategory = selectedCategory ? r.category === selectedCategory : true;
+      const matchesFactoryFilter = selectedFactoryFilter ? matchSelectedFactory(r.factory, selectedFactoryFilter) : true;
+      const rDate = parseReportTimestamp(r.timestamp);
+      const matchesWeek = isDateInWeekFilter(rDate, selectedWeekFilter);
+      const matchesType = !selectedReportTypeFilter
+        ? true
+        : selectedReportTypeFilter === "KPH_NB"
+        ? (r.reportType === "KPH" || r.isAbnormal) && (r.kphSubtype === "NB" || !r.kphSubtype) && r.reportType !== "KNN" && r.reportType !== "RRO"
+        : selectedReportTypeFilter === "KPH_BN"
+        ? (r.reportType === "KPH" && r.kphSubtype === "BN") || r.reportType === "KNN"
+        : selectedReportTypeFilter === "RRO"
+        ? r.reportType === "RRO"
+        : selectedReportTypeFilter === "KPH"
+        ? (r.reportType === "KPH" || r.isAbnormal) && r.reportType !== "RRO"
+        : (r.reportType === "DSA" || r.isSpotlight);
+      
+      const activeCompanyFilter = isAdminUser ? selectedNewsCompanyFilter : (isUserDnpCompany ? "DNP" : "TPP");
+      const matchesNewsCompany = (!activeCompanyFilter || activeCompanyFilter === "ALL")
+        ? true
+        : activeCompanyFilter === "DNP"
+        ? belongsToDnp
+        : belongsToTpp;
+
+      return matchesSearch && matchesCategory && matchesFactoryFilter && matchesWeek && matchesType && matchesNewsCompany;
+    });
+  }, [reports, currentUser, isAdminUser, isUserDnpCompany, mobileFeedSubTab, searchTerm, selectedCategory, selectedFactoryFilter, matchSelectedFactory, selectedWeekFilter, selectedReportTypeFilter, selectedNewsCompanyFilter, getReportCompanyOwnership]);
+
+  // Helper to check if current user is tagged or assigned in a report
+  const isUserTaggedInReport = (r: QualityReport, user: User | null): boolean => {
+    if (!user) return false;
+
+    // Direct assignment
+    if (r.assignedPersonId && r.assignedPersonId === user.id) return true;
+    if (r.assignedPersonName && user.fullName && r.assignedPersonName.toLowerCase() === user.fullName.toLowerCase()) return true;
+
+    // Helper to check text for @mention
+    const checkText = (text?: string): boolean => {
+      if (!text) return false;
+      const lower = text.toLowerCase();
+      if (!lower.includes("@")) return false;
+
+      if (user.fullName && lower.includes(`@${user.fullName.toLowerCase()}`)) return true;
+      if (user.id && lower.includes(`@${user.id.toLowerCase()}`)) return true;
+
+      if (user.fullName) {
+        const parts = user.fullName.trim().split(/\s+/);
+        if (parts.length >= 2) {
+          const shortName = parts.slice(-2).join(" ").toLowerCase();
+          if (lower.includes(`@${shortName}`)) return true;
+        }
+        const lastName = parts[parts.length - 1].toLowerCase();
+        if (lastName.length >= 2 && lower.includes(`@${lastName}`)) return true;
+      }
+
+      return false;
+    };
+
+    if (checkText(r.notes)) return true;
+    if (checkText(r.content)) return true;
+    if (r.directives && r.directives.some(d => checkText(d.text))) return true;
+    if (r.resolutions && r.resolutions.some(res => checkText(res.resultText) || (res.handlerName && user.fullName && res.handlerName.toLowerCase() === user.fullName.toLowerCase()))) return true;
+
+    return false;
+  };
+
+  // Transferred count recalculated dynamically based on active filters
+  const transferredReportsCount = useMemo(() => {
+    return contextFilteredReports.filter((r) => {
+      const { isTransferred } = getReportCompanyOwnership(r);
+      return isTransferred;
+    }).length;
+  }, [contextFilteredReports, getReportCompanyOwnership]);
+
+  // Tagged count for current user
+  const taggedReportsCount = useMemo(() => {
+    return contextFilteredReports.filter((r) => isUserTaggedInReport(r, currentUser)).length;
+  }, [contextFilteredReports, currentUser, isUserTaggedInReport]);
+
+  const taggedCounts = useMemo(() => {
+    let unacked = 0;
+    let processing = 0;
+    let resolved = 0;
+
+    contextFilteredReports.forEach((r) => {
+      if (!isUserTaggedInReport(r, currentUser)) return;
+      const isDsa = r.reportType === "DSA" || !!r.isSpotlight;
+      if (isDsa) return;
+
+      const ackCount = r.sharedBy?.length || 0;
+      const resCount = r.resolutions?.length || 0;
+      const isResolved = resCount > 0 && (r.resolutions?.some(res => res.status === "Đã xử lý" || !!res.resultText) ?? true);
+
+      if (isResolved) {
+        resolved++;
+      } else if (ackCount > 0) {
+        processing++;
+      } else {
+        unacked++;
+      }
+    });
+
+    return {
+      all: taggedReportsCount,
+      unresolved: unacked + processing,
+      unacked,
+      processing,
+      resolved,
+    };
+  }, [contextFilteredReports, currentUser, isUserTaggedInReport, taggedReportsCount]);
+
+  // Base reports list considering the transferred-only or tagged-only filter toggle
+  const baseFilteredReports = useMemo(() => {
+    if (selectedOnlyTaggedFilter) {
+      return contextFilteredReports.filter((r) => isUserTaggedInReport(r, currentUser));
     }
-
-    const s = searchTerm.toLowerCase();
-    const matchesSearch =
-      r.factory.toLowerCase().includes(s) ||
-      r.uploaderName.toLowerCase().includes(s) ||
-      r.content.toLowerCase().includes(s) ||
-      r.category.toLowerCase().includes(s) ||
-      (r.targetCompany && "chuyển giao liên công ty".includes(s)) ||
-      (r.assignedCompany && r.assignedCompany.toLowerCase().includes(s));
-
-    const matchesCategory = selectedCategory ? r.category === selectedCategory : true;
-    const matchesFactoryFilter = selectedFactoryFilter ? matchSelectedFactory(r.factory, selectedFactoryFilter) : true;
-    const rDate = parseReportTimestamp(r.timestamp);
-    const matchesWeek = isDateInWeekFilter(rDate, selectedWeekFilter);
-    const matchesType = !selectedReportTypeFilter
-      ? true
-      : selectedReportTypeFilter === "KPH_NB"
-      ? (r.reportType === "KPH" || r.isAbnormal) && (r.kphSubtype === "NB" || !r.kphSubtype) && r.reportType !== "KNN" && r.reportType !== "RRO"
-      : selectedReportTypeFilter === "KPH_BN"
-      ? (r.reportType === "KPH" && r.kphSubtype === "BN") || r.reportType === "KNN"
-      : selectedReportTypeFilter === "RRO"
-      ? r.reportType === "RRO"
-      : selectedReportTypeFilter === "KPH"
-      ? (r.reportType === "KPH" || r.isAbnormal) && r.reportType !== "RRO"
-      : (r.reportType === "DSA" || r.isSpotlight);
-    
-    const activeCompanyFilter = isAdminUser ? selectedNewsCompanyFilter : (isUserDnpCompany ? "DNP" : "TPP");
-    const matchesNewsCompany = (!activeCompanyFilter || activeCompanyFilter === "ALL")
-      ? true
-      : activeCompanyFilter === "DNP"
-      ? belongsToDnp
-      : belongsToTpp;
-
-    const matchesTransferredFilter = selectedOnlyTransferredFilter ? isTransferred : true;
-
-    return matchesSearch && matchesCategory && matchesFactoryFilter && matchesWeek && matchesType && matchesNewsCompany && matchesTransferredFilter;
-  });
+    if (selectedOnlyTransferredFilter) {
+      return contextFilteredReports.filter((r) => {
+        const { isTransferred } = getReportCompanyOwnership(r);
+        return isTransferred;
+      });
+    }
+    return contextFilteredReports;
+  }, [contextFilteredReports, selectedOnlyTaggedFilter, selectedOnlyTransferredFilter, currentUser, isUserTaggedInReport, getReportCompanyOwnership]);
 
   // Calculate company news counts for numeric badge
   const tppNewsCount = useMemo(() => {
@@ -3783,15 +3829,6 @@ App Link: ${window.location.origin}`;
     }).length;
   }, [reports, currentUser, getReportCompanyOwnership]);
 
-  const transferredReportsCount = useMemo(() => {
-    return reports.filter((r) => {
-      if (r.isDeleted) return false;
-      if (r.isApproved === false && r.uploaderId !== currentUser?.id) return false;
-      const { isTransferred } = getReportCompanyOwnership(r);
-      return isTransferred;
-    }).length;
-  }, [reports, currentUser, getReportCompanyOwnership]);
-
   const activeNewsCompany = useMemo(() => {
     return isAdminUser ? selectedNewsCompanyFilter : (isUserDnpCompany ? "DNP" : "TPP");
   }, [isAdminUser, selectedNewsCompanyFilter, isUserDnpCompany]);
@@ -3802,13 +3839,13 @@ App Link: ${window.location.origin}`;
     return tppNewsCount + dnpNewsCount;
   }, [activeNewsCompany, dnpNewsCount, tppNewsCount]);
 
-  // Calculate process status counts for filter pills (Excludes DSA / Điểm sáng)
+  // Calculate process status counts for filter pills dynamically based on active context filters
   const statusCounts = useMemo(() => {
     let unacked = 0;
     let processing = 0;
     let resolved = 0;
 
-    baseFilteredReports.forEach((r) => {
+    contextFilteredReports.forEach((r) => {
       const isDsa = r.reportType === "DSA" || !!r.isSpotlight;
       if (isDsa) return; // Skip DSA reports for status workflow counts
 
@@ -3826,12 +3863,12 @@ App Link: ${window.location.origin}`;
     });
 
     return {
-      all: baseFilteredReports.length,
+      all: contextFilteredReports.length,
       unacked,
       processing,
       resolved,
     };
-  }, [baseFilteredReports]);
+  }, [contextFilteredReports]);
 
   // Final filtered reports considering selectedProcessStatusFilter
   const filteredReports = baseFilteredReports.filter((r) => {
@@ -3849,6 +3886,9 @@ App Link: ${window.location.origin}`;
     }
     if (selectedProcessStatusFilter === "PROCESSING") {
       return ackCount > 0 && !isResolved;
+    }
+    if (selectedProcessStatusFilter === "UNRESOLVED") {
+      return !isResolved;
     }
     if (selectedProcessStatusFilter === "RESOLVED") {
       return isResolved;
@@ -5030,12 +5070,16 @@ App Link: ${window.location.origin}`;
           </div>
 
           {/* Row 2: Status Filter Strip */}
-          <div className="bg-white px-1.5 py-1.5 border-b border-slate-200/60 shadow-2xs flex items-center justify-between gap-1 overflow-x-auto scrollbar-none select-none text-[9px] font-extrabold">
+          <div className="bg-white px-1 py-1.5 border-b border-slate-200/60 shadow-2xs flex items-center justify-between gap-0.5 sm:gap-1 overflow-x-auto scrollbar-none select-none text-[8.5px] xs:text-[9px] font-extrabold tracking-tight">
             <button
               type="button"
-              onClick={() => setSelectedProcessStatusFilter("ALL")}
-              className={`h-[26px] px-1.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
-                selectedProcessStatusFilter === "ALL"
+              onClick={() => {
+                setSelectedProcessStatusFilter("ALL");
+                setSelectedOnlyTransferredFilter(false);
+                setSelectedOnlyTaggedFilter(false);
+              }}
+              className={`h-[26px] px-1 sm:px-1.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
+                selectedProcessStatusFilter === "ALL" && !selectedOnlyTransferredFilter && !selectedOnlyTaggedFilter
                   ? "bg-slate-800 text-white border-slate-800 shadow-3xs"
                   : "bg-slate-100 text-slate-700 border-slate-200/80 hover:bg-slate-200/70"
               }`}
@@ -5045,52 +5089,222 @@ App Link: ${window.location.origin}`;
 
             <button
               type="button"
-              onClick={() => setSelectedProcessStatusFilter("UNACKNOWLEDGED")}
-              className={`h-[26px] px-1.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
-                selectedProcessStatusFilter === "UNACKNOWLEDGED"
+              onClick={() => {
+                setSelectedProcessStatusFilter("UNACKNOWLEDGED");
+                setSelectedOnlyTransferredFilter(false);
+              }}
+              className={`h-[26px] px-1 sm:px-1.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
+                selectedProcessStatusFilter === "UNACKNOWLEDGED" && !selectedOnlyTransferredFilter
                   ? "bg-rose-600 text-white border-rose-600 shadow-3xs ring-1 ring-rose-400/50"
                   : "bg-rose-50 text-rose-800 border-rose-200/80 hover:bg-rose-100"
               }`}
             >
-              <span translate="no" className="notranslate"><T>{`PENDING (${statusCounts.unacked})`}</T></span>
+              <span translate="no" className="notranslate"><T>{`CHỜ XL (${selectedOnlyTaggedFilter ? taggedCounts.unacked : statusCounts.unacked})`}</T></span>
             </button>
 
             <button
               type="button"
-              onClick={() => setSelectedProcessStatusFilter("PROCESSING")}
-              className={`h-[26px] px-1.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
-                selectedProcessStatusFilter === "PROCESSING"
+              onClick={() => {
+                setSelectedProcessStatusFilter("PROCESSING");
+                setSelectedOnlyTransferredFilter(false);
+              }}
+              className={`h-[26px] px-1 sm:px-1.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
+                selectedProcessStatusFilter === "PROCESSING" && !selectedOnlyTransferredFilter
                   ? "bg-amber-600 text-white border-amber-600 shadow-3xs ring-1 ring-amber-400/50"
                   : "bg-amber-50 text-amber-800 border-amber-200/80 hover:bg-amber-100"
               }`}
             >
-              <span translate="no" className="notranslate"><T>{`PROCESSING (${statusCounts.processing})`}</T></span>
+              <span translate="no" className="notranslate"><T>{`ĐANG XL (${selectedOnlyTaggedFilter ? taggedCounts.processing : statusCounts.processing})`}</T></span>
             </button>
 
             <button
               type="button"
-              onClick={() => setSelectedProcessStatusFilter("RESOLVED")}
-              className={`h-[26px] px-1.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
-                selectedProcessStatusFilter === "RESOLVED"
+              onClick={() => {
+                setSelectedProcessStatusFilter("RESOLVED");
+                setSelectedOnlyTransferredFilter(false);
+              }}
+              className={`h-[26px] px-1 sm:px-1.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
+                selectedProcessStatusFilter === "RESOLVED" && !selectedOnlyTransferredFilter
                   ? "bg-emerald-600 text-white border-emerald-600 shadow-3xs ring-1 ring-emerald-400/50"
                   : "bg-emerald-50 text-emerald-800 border-emerald-200/80 hover:bg-emerald-100"
               }`}
             >
-              <span translate="no" className="notranslate"><T>{`FINISH (${statusCounts.resolved})`}</T></span>
+              <span translate="no" className="notranslate"><T>{`XONG (${selectedOnlyTaggedFilter ? taggedCounts.resolved : statusCounts.resolved})`}</T></span>
             </button>
 
             <button
               type="button"
-              onClick={() => setSelectedOnlyTransferredFilter(!selectedOnlyTransferredFilter)}
-              className={`h-[26px] px-1.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
+              onClick={() => {
+                setSelectedOnlyTransferredFilter(!selectedOnlyTransferredFilter);
+                setSelectedOnlyTaggedFilter(false);
+                setSelectedProcessStatusFilter("ALL");
+              }}
+              className={`h-[26px] px-1 sm:px-1.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
                 selectedOnlyTransferredFilter
                   ? "bg-indigo-700 text-white border-indigo-700 shadow-3xs ring-1 ring-indigo-400/50 font-black"
                   : "bg-indigo-50 text-indigo-800 border-indigo-200/80 hover:bg-indigo-100 font-extrabold"
               }`}
               title="Chỉ hiển thị các bản tin được chuyển giao xử lý liên công ty TPP ↔ DNP"
             >
-              <span translate="no" className="notranslate"><T>{`TRANSFER (${transferredReportsCount})`}</T></span>
+              <span translate="no" className="notranslate"><T>{`CHUYỂN (${transferredReportsCount})`}</T></span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (!selectedOnlyTaggedFilter) {
+                  setSelectedOnlyTaggedFilter(true);
+                  setSelectedOnlyTransferredFilter(false);
+                  setSelectedProcessStatusFilter("UNRESOLVED");
+                }
+                setShowTaggedPopover(true);
+              }}
+              className={`h-[26px] px-1 sm:px-1.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center gap-0.5 leading-none ${
+                selectedOnlyTaggedFilter
+                  ? "bg-purple-700 text-white border-purple-700 shadow-3xs ring-1 ring-purple-400/50 font-black"
+                  : "bg-purple-50 text-purple-800 border-purple-200/80 hover:bg-purple-100 font-extrabold"
+              }`}
+              title="Lọc các bản tin tag (@nhắc tên) hoặc giao cho bạn"
+            >
+              <span translate="no" className="notranslate">
+                <T>
+                  {selectedOnlyTaggedFilter
+                    ? selectedProcessStatusFilter === "UNRESOLVED"
+                      ? `@ CẦN (${taggedCounts.unresolved})`
+                      : selectedProcessStatusFilter === "UNACKNOWLEDGED"
+                      ? `@ CHỜ (${taggedCounts.unacked})`
+                      : selectedProcessStatusFilter === "PROCESSING"
+                      ? `@ ĐANG (${taggedCounts.processing})`
+                      : selectedProcessStatusFilter === "RESOLVED"
+                      ? `@ XONG (${taggedCounts.resolved})`
+                      : `@ ALL (${taggedCounts.all})`
+                    : `@ (${taggedReportsCount})`}
+                </T>
+              </span>
+              <ChevronDown className="w-2.5 h-2.5 opacity-80 shrink-0" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Popover Menu for Tagged (@) Reports */}
+      {showTaggedPopover && (
+        <div 
+          onClick={() => setShowTaggedPopover(false)}
+          className="fixed lg:absolute inset-0 bg-slate-900/50 backdrop-blur-2xs flex items-center justify-center p-4 z-[80] select-none animate-fadeIn cursor-pointer"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl w-full max-w-[300px] p-4 shadow-2xl border border-slate-150 flex flex-col gap-3 animate-in fade-in zoom-in-95 duration-150 cursor-default"
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <span className="text-[12px] font-black text-purple-900 flex items-center gap-1.5 uppercase">
+                <AtSign className="w-4 h-4 text-purple-600 inline-block" />
+                <span translate="no" className="notranslate"><T>LỌC BẢN TIN NHẮC ĐẾN BẠN</T></span>
+              </span>
+              <button 
+                type="button" 
+                onClick={() => setShowTaggedPopover(false)}
+                className="w-5 h-5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-[9px] border-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedOnlyTaggedFilter(true);
+                  setSelectedOnlyTransferredFilter(false);
+                  setSelectedProcessStatusFilter("UNRESOLVED");
+                  setShowTaggedPopover(false);
+                }}
+                className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                  selectedOnlyTaggedFilter && selectedProcessStatusFilter === "UNRESOLVED"
+                    ? "bg-amber-500 text-white border-amber-600 shadow-xs font-bold"
+                    : "bg-amber-50/70 border-amber-200/80 text-amber-900 hover:bg-amber-100/80"
+                }`}
+              >
+                <div className="flex flex-col">
+                  <span className="text-[12px] font-black flex items-center gap-1.5">
+                    <span>🟡</span>
+                    <span translate="no" className="notranslate"><T>CẦN XỬ LÝ (Chờ & Đang XL)</T></span>
+                  </span>
+                  <span className="text-[10px] opacity-85 font-normal">Ưu tiên xử lý các việc chưa hoàn thành</span>
+                </div>
+                <span className="text-[12px] font-black px-2 py-0.5 rounded-full bg-white/20 border border-white/30">
+                  {taggedCounts.unresolved}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedOnlyTaggedFilter(true);
+                  setSelectedOnlyTransferredFilter(false);
+                  setSelectedProcessStatusFilter("ALL");
+                  setShowTaggedPopover(false);
+                }}
+                className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                  selectedOnlyTaggedFilter && selectedProcessStatusFilter === "ALL"
+                    ? "bg-purple-700 text-white border-purple-800 shadow-xs font-bold"
+                    : "bg-purple-50/70 border-purple-200/80 text-purple-900 hover:bg-purple-100/80"
+                }`}
+              >
+                <div className="flex flex-col">
+                  <span className="text-[12px] font-black flex items-center gap-1.5">
+                    <span>📑</span>
+                    <span translate="no" className="notranslate"><T>TẤT CẢ BẢN TIN ĐƯỢC TAG</T></span>
+                  </span>
+                  <span className="text-[10px] opacity-85 font-normal">Bao gồm cả chưa xử lý và đã xong</span>
+                </div>
+                <span className="text-[12px] font-black px-2 py-0.5 rounded-full bg-white/20 border border-white/30">
+                  {taggedCounts.all}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedOnlyTaggedFilter(true);
+                  setSelectedOnlyTransferredFilter(false);
+                  setSelectedProcessStatusFilter("RESOLVED");
+                  setShowTaggedPopover(false);
+                }}
+                className={`w-full p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                  selectedOnlyTaggedFilter && selectedProcessStatusFilter === "RESOLVED"
+                    ? "bg-emerald-600 text-white border-emerald-700 shadow-xs font-bold"
+                    : "bg-emerald-50/70 border-emerald-200/80 text-emerald-900 hover:bg-emerald-100/80"
+                }`}
+              >
+                <div className="flex flex-col">
+                  <span className="text-[12px] font-black flex items-center gap-1.5">
+                    <span>✅</span>
+                    <span translate="no" className="notranslate"><T>ĐÃ HOÀN THÀNH</T></span>
+                  </span>
+                  <span className="text-[10px] opacity-85 font-normal">Các bản tin đã ghi nhận kết quả xong</span>
+                </div>
+                <span className="text-[12px] font-black px-2 py-0.5 rounded-full bg-white/20 border border-white/30">
+                  {taggedCounts.resolved}
+                </span>
+              </button>
+
+              {selectedOnlyTaggedFilter && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedOnlyTaggedFilter(false);
+                    setSelectedProcessStatusFilter("ALL");
+                    setShowTaggedPopover(false);
+                  }}
+                  className="w-full mt-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-extrabold cursor-pointer border border-slate-200 transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <span>❌</span>
+                  <span translate="no" className="notranslate"><T>Tắt lọc tag @ (Quay về tất cả bản tin)</T></span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -6717,8 +6931,6 @@ App Link: ${window.location.origin}`;
           <div
             ref={scrollContainerRef}
             onScroll={handleScroll}
-            onTouchStart={handleFeedTouchStart}
-            onTouchEnd={handleFeedTouchEnd}
             className="flex-1 p-3 space-y-3.5 bg-slate-50 relative overflow-y-auto"
           >
         {sortedReports.length === 0 ? (
@@ -8750,26 +8962,106 @@ App Link: ${window.location.origin}`;
         </div>
       </>)}
 
-      {/* Scroll to Top floating button */}
-      {showScrollTop && activeBottomTab === "BAO_CAO" && !showTrash && (
-        <button
-          type="button"
-          onClick={scrollToTop}
-          className="absolute bottom-36 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-xl flex items-center justify-center shadow-lg transition-all z-20 cursor-pointer"
-          title="Lên đầu trang"
-        >
-          <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />
-        </button>
-      )}
-
-      {/* Blue Circular float creation trigger */}
+      {/* Floating Action Buttons Area (Dockable to Right Edge - Compact Size) */}
       {activeBottomTab === "BAO_CAO" && !showTrash && (
-        <button
-          onClick={onOpenReportForm}
-          className={`absolute bottom-20 right-5 w-10 h-10 text-white rounded-xl flex items-center justify-center shadow-xl hover:scale-110 active:scale-90 transition-transform z-20 ${theme.hoverBg}`}
-        >
-          <Plus className="w-5 h-5 text-white stroke-[2.5px]" />
-        </button>
+        isFabDocked ? (
+          /* Thanh nút thu gọn nhỏ ở sát mép phải - Thao tác trực tiếp được cả Lên top, Tạo mới và Mở rộng */
+          <div
+            onTouchStart={(e) => {
+              touchStartXRef.current = e.touches[0].clientX;
+            }}
+            onTouchMove={(e) => {
+              if (touchStartXRef.current !== null) {
+                const diffX = e.touches[0].clientX - touchStartXRef.current;
+                if (diffX < -15) { // Swiped left from right edge
+                  setIsFabDocked(false);
+                  touchStartXRef.current = null;
+                }
+              }
+            }}
+            className="absolute bottom-24 right-0 z-30 bg-gradient-to-l from-blue-600/95 to-indigo-600/95 text-white rounded-l-xl pl-1 pr-0.5 py-1.5 shadow-2xl flex flex-col items-center gap-1 border-l border-y border-white/30 backdrop-blur-xs transition-all duration-200"
+          >
+            {/* Nút Mở rộng sang nút to */}
+            <button
+              type="button"
+              onClick={() => setIsFabDocked(false)}
+              className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-white/25 active:scale-90 transition-all cursor-pointer"
+              title="Sổ nút to ra"
+            >
+              <ChevronLeft className="w-3.5 h-3.5 text-white stroke-[2.5px]" />
+            </button>
+
+            {/* Nút Cuộn lên đầu trang (hiển thị khi có thể cuộn) */}
+            {showScrollTop && (
+              <button
+                type="button"
+                onClick={scrollToTop}
+                className="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/35 active:scale-90 transition-all cursor-pointer border border-white/25"
+                title="Lên đầu trang"
+              >
+                <ArrowUp className="w-3 h-3 text-white stroke-[2.5px]" />
+              </button>
+            )}
+
+            {/* Nút Đăng mới sự cố/báo cáo */}
+            <button
+              type="button"
+              onClick={onOpenReportForm}
+              className="w-5 h-5 flex items-center justify-center rounded-full bg-white/25 hover:bg-white/40 active:scale-90 transition-all cursor-pointer border border-white/25"
+              title="Đăng báo cáo mới"
+            >
+              <Plus className="w-3 h-3 text-white stroke-[2.5px]" />
+            </button>
+          </div>
+        ) : (
+          /* Khối nút bấm nổi đầy đủ - Nhỏ gọn hơn 30% */
+          <div
+            onTouchStart={(e) => {
+              touchStartXRef.current = e.touches[0].clientX;
+            }}
+            onTouchMove={(e) => {
+              if (touchStartXRef.current !== null) {
+                const diffX = e.touches[0].clientX - touchStartXRef.current;
+                if (diffX > 20) { // Swiped right towards edge
+                  setIsFabDocked(true);
+                  touchStartXRef.current = null;
+                }
+              }
+            }}
+            className="absolute bottom-20 right-3 z-30 flex flex-col items-center gap-2 transition-all duration-300 animate-in fade-in slide-in-from-right-3"
+          >
+            {/* Nút thu gọn vào cạnh phải */}
+            <button
+              type="button"
+              onClick={() => setIsFabDocked(true)}
+              className="w-5.5 h-5.5 bg-slate-800/80 hover:bg-slate-900 text-white rounded-full flex items-center justify-center shadow-md active:scale-90 transition-all cursor-pointer border border-white/20"
+              title="Ẩn nút vào cạnh phải"
+            >
+              <ChevronRight className="w-3 h-3 text-white" />
+            </button>
+
+            {/* Scroll to Top floating button */}
+            {showScrollTop && (
+              <button
+                type="button"
+                onClick={scrollToTop}
+                className="w-8 h-8 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-lg flex items-center justify-center shadow-lg transition-all cursor-pointer"
+                title="Lên đầu trang"
+              >
+                <ArrowUp className="w-4 h-4 text-white stroke-[2.5px]" />
+              </button>
+            )}
+
+            {/* Blue Circular float creation trigger */}
+            <button
+              onClick={onOpenReportForm}
+              className={`w-8 h-8 text-white rounded-lg flex items-center justify-center shadow-xl hover:scale-110 active:scale-90 transition-transform ${theme.hoverBg}`}
+              title="Đăng báo cáo mới"
+            >
+              <Plus className="w-4 h-4 text-white stroke-[2.5px]" />
+            </button>
+          </div>
+        )
       )}
 
       {/* Green HOME Floating Action Button on Trash page exactly styled as the screenshot (green circle with white home icon) */}
