@@ -2051,6 +2051,20 @@ export default function MobileFrame({
   const [selectedProcessStatusFilter, setSelectedProcessStatusFilter] = useState<"ALL" | "UNACKNOWLEDGED" | "PROCESSING" | "RESOLVED">("ALL");
   const [selectedWeekFilter, setSelectedWeekFilter] = useState<string>("ALL");
 
+  const isAdminUser = useMemo(() => {
+    if (!currentUser) return false;
+    const roleStr = (currentUser.role || "").toString().toUpperCase();
+    return roleStr === "CHỦ ADMIN" || roleStr === "ADMIN" || roleStr === "SUPER_ADMIN" || currentUser.role === UserRole.ADMIN;
+  }, [currentUser]);
+
+  const isUserDnpCompany = useMemo(() => {
+    if (!currentUser) return false;
+    const uBranch = (currentUser.branch || "").toUpperCase();
+    const uCompany = (currentUser.company || "").toUpperCase();
+    const uDept = (currentUser.department || "").toUpperCase();
+    return uBranch.includes("DNP") || uCompany.includes("DNP") || uBranch.includes("BBM") || uBranch.includes("BBC") || uDept.includes("DNP");
+  }, [currentUser]);
+
   // Auto-detect user account branch to filter by default on launch
   useEffect(() => {
     if (currentUser?.branch) {
@@ -2080,9 +2094,26 @@ export default function MobileFrame({
       }
     }
   }, [currentUser?.branch, currentUser?.id, branches]);
+
+  // Sync news company filter for non-admin staff
+  useEffect(() => {
+    if (!isAdminUser) {
+      if (isUserDnpCompany) {
+        setSelectedNewsCompanyFilter("DNP");
+      } else {
+        setSelectedNewsCompanyFilter("TPP");
+      }
+    }
+  }, [isAdminUser, isUserDnpCompany]);
   const [selectedReportTypeFilter, setSelectedReportTypeFilter] = useState<"KPH" | "KPH_NB" | "KPH_BN" | "RRO" | "DSA" | "KNN" | null>(null);
   const [showKphPopover, setShowKphPopover] = useState(false);
   const isKphActive = selectedReportTypeFilter === "KPH" || selectedReportTypeFilter === "KPH_NB" || selectedReportTypeFilter === "KPH_BN";
+  const [selectedNewsCompanyFilter, setSelectedNewsCompanyFilter] = useState<"ALL" | "TPP" | "DNP">("ALL");
+  const [showNewsCompanyPopover, setShowNewsCompanyPopover] = useState(false);
+  const [transferCompanyModalReport, setTransferCompanyModalReport] = useState<QualityReport | null>(null);
+  const [transferTargetCompany, setTransferTargetCompany] = useState<"TPP" | "DNP" | "ALL">("DNP");
+  const [transferCompanyNote, setTransferCompanyNote] = useState("");
+  const [selectedOnlyTransferredFilter, setSelectedOnlyTransferredFilter] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [activeFilterSheet, setActiveFilterSheet] = useState<"BRANCH" | "CATEGORY" | "WEEK" | null>(null);
   const [onboardingStep, setOnboardingStep] = useState<number | null>(null);
@@ -3583,9 +3614,31 @@ App Link: ${window.location.origin}`;
     return true;
   };
 
+  // Helper to determine company ownership & target transfer
+  const getReportCompanyOwnership = React.useCallback((r: QualityReport) => {
+    const isDnpFactory = !!(r.factory && (r.factory.includes("DNP") || r.factory.includes("BBM") || r.factory.includes("BBC")));
+    const isTargetDnp = r.targetCompany === "DNP" || (r.assignedCompany && r.assignedCompany.includes("DNP"));
+    const isTargetTpp = r.targetCompany === "TPP" || (r.assignedCompany && r.assignedCompany.includes("TPP"));
+    const isTargetAll = r.targetCompany === "ALL" || r.assignedCompany === "ALL";
+
+    const belongsToDnp = isDnpFactory || !!isTargetDnp || !!isTargetAll;
+    const belongsToTpp = !isDnpFactory || !!isTargetTpp || !!isTargetAll;
+    const isTransferred = !!r.targetCompany || !!r.assignedCompany || (r.transferHistory && r.transferHistory.length > 0);
+
+    return { isDnpFactory, belongsToDnp, belongsToTpp, isTransferred };
+  }, []);
+
   // Filter items based on uploader or factory search or description search
   const baseFilteredReports = reports.filter((r) => {
     if (r.isDeleted) return false;
+
+    const { isDnpFactory, belongsToDnp, belongsToTpp, isTransferred } = getReportCompanyOwnership(r);
+
+    // Company Permission Segregation: Non-Admin staff see news of their company or news transferred to their company
+    if (!isAdminUser) {
+      if (isUserDnpCompany && !belongsToDnp) return false;
+      if (!isUserDnpCompany && !belongsToTpp && r.uploaderId !== currentUser?.id) return false;
+    }
 
     // Approval status filtering rules
     const isApproved = r.isApproved !== false;
@@ -3598,7 +3651,7 @@ App Link: ${window.location.origin}`;
         if (currentUser.role === UserRole.REVIEWER) {
           const clean = (s: string) => (s || "").replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
           const isMatch = clean(r.factory) === clean(currentUser.branch || "") || r.factory.toLowerCase() === (currentUser.branch || "").toLowerCase();
-          if (!isMatch) return false;
+          if (!isMatch && !belongsToDnp) return false;
         }
       } else {
         if (!isApproved) return false;
@@ -3613,7 +3666,9 @@ App Link: ${window.location.origin}`;
       r.factory.toLowerCase().includes(s) ||
       r.uploaderName.toLowerCase().includes(s) ||
       r.content.toLowerCase().includes(s) ||
-      r.category.toLowerCase().includes(s);
+      r.category.toLowerCase().includes(s) ||
+      (r.targetCompany && "chuyển giao liên công ty".includes(s)) ||
+      (r.assignedCompany && r.assignedCompany.toLowerCase().includes(s));
 
     const matchesCategory = selectedCategory ? r.category === selectedCategory : true;
     const matchesFactoryFilter = selectedFactoryFilter ? matchSelectedFactory(r.factory, selectedFactoryFilter) : true;
@@ -3631,8 +3686,55 @@ App Link: ${window.location.origin}`;
       ? (r.reportType === "KPH" || r.isAbnormal) && r.reportType !== "RRO"
       : (r.reportType === "DSA" || r.isSpotlight);
     
-    return matchesSearch && matchesCategory && matchesFactoryFilter && matchesWeek && matchesType;
+    const activeCompanyFilter = isAdminUser ? selectedNewsCompanyFilter : (isUserDnpCompany ? "DNP" : "TPP");
+    const matchesNewsCompany = (!activeCompanyFilter || activeCompanyFilter === "ALL")
+      ? true
+      : activeCompanyFilter === "DNP"
+      ? belongsToDnp
+      : belongsToTpp;
+
+    const matchesTransferredFilter = selectedOnlyTransferredFilter ? isTransferred : true;
+
+    return matchesSearch && matchesCategory && matchesFactoryFilter && matchesWeek && matchesType && matchesNewsCompany && matchesTransferredFilter;
   });
+
+  // Calculate company news counts for numeric badge
+  const tppNewsCount = useMemo(() => {
+    return reports.filter((r) => {
+      if (r.isDeleted) return false;
+      if (r.isApproved === false && r.uploaderId !== currentUser?.id) return false;
+      const { belongsToTpp } = getReportCompanyOwnership(r);
+      return belongsToTpp;
+    }).length;
+  }, [reports, currentUser, getReportCompanyOwnership]);
+
+  const dnpNewsCount = useMemo(() => {
+    return reports.filter((r) => {
+      if (r.isDeleted) return false;
+      if (r.isApproved === false && r.uploaderId !== currentUser?.id) return false;
+      const { belongsToDnp } = getReportCompanyOwnership(r);
+      return belongsToDnp;
+    }).length;
+  }, [reports, currentUser, getReportCompanyOwnership]);
+
+  const transferredReportsCount = useMemo(() => {
+    return reports.filter((r) => {
+      if (r.isDeleted) return false;
+      if (r.isApproved === false && r.uploaderId !== currentUser?.id) return false;
+      const { isTransferred } = getReportCompanyOwnership(r);
+      return isTransferred;
+    }).length;
+  }, [reports, currentUser, getReportCompanyOwnership]);
+
+  const activeNewsCompany = useMemo(() => {
+    return isAdminUser ? selectedNewsCompanyFilter : (isUserDnpCompany ? "DNP" : "TPP");
+  }, [isAdminUser, selectedNewsCompanyFilter, isUserDnpCompany]);
+
+  const currentNewsCompanyBadgeCount = useMemo(() => {
+    if (activeNewsCompany === "DNP") return dnpNewsCount;
+    if (activeNewsCompany === "TPP") return tppNewsCount;
+    return tppNewsCount + dnpNewsCount;
+  }, [activeNewsCompany, dnpNewsCount, tppNewsCount]);
 
   // Calculate process status counts for filter pills
   const statusCounts = useMemo(() => {
@@ -4044,7 +4146,16 @@ App Link: ${window.location.origin}`;
     });
   };
 
-  const notifications = systemNotifications || generateNotifications();
+  const rawNotifications = systemNotifications || generateNotifications();
+  const notifications = useMemo(() => {
+    if (isAdminUser) return rawNotifications;
+    return rawNotifications.filter((n) => {
+      const fName = n.factoryName || "";
+      if (!fName || fName === "Hệ thống" || fName === "Diễn đàn") return true;
+      const isDnpNotif = fName.includes("DNP") || fName.includes("BBM") || fName.includes("BBC");
+      return isUserDnpCompany ? isDnpNotif : !isDnpNotif;
+    });
+  }, [systemNotifications, reports, chats, topics, replies, isAdminUser, isUserDnpCompany]);
   const unreadNotifications = notifications.filter((n) => !readNotifIds.includes(n.id));
   const unreadCount = unreadNotifications.length;
 
@@ -4847,56 +4958,70 @@ App Link: ${window.location.origin}`;
           </div>
 
           {/* Row 2: Status Filter Strip */}
-          <div className="bg-white px-2.5 py-1.5 border-b border-slate-200/60 shadow-2xs flex items-center gap-1.5 overflow-x-auto scrollbar-none select-none text-[9px] font-extrabold">
+          <div className="bg-white px-2 py-1.5 border-b border-slate-200/60 shadow-2xs flex items-center gap-1 overflow-x-auto scrollbar-none select-none text-[9px] font-extrabold">
             <button
               type="button"
               onClick={() => setSelectedProcessStatusFilter("ALL")}
-              className={`h-[26px] px-2.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 leading-none ${
+              className={`h-[26px] px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center gap-1 leading-none ${
                 selectedProcessStatusFilter === "ALL"
                   ? "bg-slate-800 text-white border-slate-800 shadow-3xs"
                   : "bg-slate-100 text-slate-700 border-slate-200/80 hover:bg-slate-200/70"
               }`}
             >
-              <span translate="no" className="notranslate"><T>{`Tất cả (${statusCounts.all})`}</T></span>
+              <span translate="no" className="notranslate"><T>{`ALL (${statusCounts.all})`}</T></span>
             </button>
 
             <button
               type="button"
               onClick={() => setSelectedProcessStatusFilter("UNACKNOWLEDGED")}
-              className={`h-[26px] px-2.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 leading-none ${
+              className={`h-[26px] px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center gap-1 leading-none ${
                 selectedProcessStatusFilter === "UNACKNOWLEDGED"
                   ? "bg-rose-600 text-white border-rose-600 shadow-3xs ring-1 ring-rose-400/50"
                   : "bg-rose-50 text-rose-800 border-rose-200/80 hover:bg-rose-100"
               }`}
             >
               <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 inline-block animate-pulse" />
-              <span translate="no" className="notranslate"><T>{`Chưa tiếp nhận (${statusCounts.unacked})`}</T></span>
+              <span translate="no" className="notranslate"><T>{`PENDING (${statusCounts.unacked})`}</T></span>
             </button>
 
             <button
               type="button"
               onClick={() => setSelectedProcessStatusFilter("PROCESSING")}
-              className={`h-[26px] px-2.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 leading-none ${
+              className={`h-[26px] px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center gap-1 leading-none ${
                 selectedProcessStatusFilter === "PROCESSING"
                   ? "bg-amber-600 text-white border-amber-600 shadow-3xs ring-1 ring-amber-400/50"
                   : "bg-amber-50 text-amber-800 border-amber-200/80 hover:bg-amber-100"
               }`}
             >
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 inline-block animate-pulse" />
-              <span translate="no" className="notranslate"><T>{`Đang xử lý (${statusCounts.processing})`}</T></span>
+              <span translate="no" className="notranslate"><T>{`PROCESSING (${statusCounts.processing})`}</T></span>
             </button>
 
             <button
               type="button"
               onClick={() => setSelectedProcessStatusFilter("RESOLVED")}
-              className={`h-[26px] px-2.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 leading-none ${
+              className={`h-[26px] px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center gap-1 leading-none ${
                 selectedProcessStatusFilter === "RESOLVED"
                   ? "bg-emerald-600 text-white border-emerald-600 shadow-3xs ring-1 ring-emerald-400/50"
                   : "bg-emerald-50 text-emerald-800 border-emerald-200/80 hover:bg-emerald-100"
               }`}
             >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 inline-block" />
-              <span translate="no" className="notranslate"><T>{`Đã xử lý (${statusCounts.resolved})`}</T></span>
+              <span translate="no" className="notranslate"><T>{`FINISH (${statusCounts.resolved})`}</T></span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSelectedOnlyTransferredFilter(!selectedOnlyTransferredFilter)}
+              className={`h-[26px] px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center gap-1 leading-none ${
+                selectedOnlyTransferredFilter
+                  ? "bg-indigo-700 text-white border-indigo-700 shadow-3xs ring-1 ring-indigo-400/50 font-black"
+                  : "bg-indigo-50 text-indigo-800 border-indigo-200/80 hover:bg-indigo-100 font-extrabold"
+              }`}
+              title="Chỉ hiển thị các bản tin được chuyển giao xử lý liên công ty TPP ↔ DNP"
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${selectedOnlyTransferredFilter ? "bg-white animate-pulse" : "bg-indigo-500"} shrink-0 inline-block`} />
+              <span translate="no" className="notranslate"><T>{`TRANSFER (${transferredReportsCount})`}</T></span>
             </button>
           </div>
         </div>
@@ -5007,7 +5132,152 @@ App Link: ${window.location.origin}`;
         </div>
       )}
 
-      {/* Offline Alert Sticky Banner */}
+      {/* Fixed Popover Menu for News Company Filter (Bản Tin TPP / Bản Tin DNP) */}
+      {showNewsCompanyPopover && (
+        <div 
+          onClick={() => setShowNewsCompanyPopover(false)}
+          className="fixed lg:absolute inset-0 bg-slate-900/50 backdrop-blur-2xs flex items-center justify-center p-4 z-[80] select-none animate-fadeIn cursor-pointer"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl w-full max-w-[310px] p-4 shadow-2xl border border-slate-150 flex flex-col gap-2.5 animate-in fade-in zoom-in-95 duration-150 cursor-default"
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <span className="text-[11px] font-black text-slate-800 flex items-center gap-1.5 uppercase">
+                <Newspaper className="w-3.5 h-3.5 text-sky-600 inline-block" />
+                <span translate="no" className="notranslate">PHÂN QUYỀN BẢN TIN CÔNG TY</span>
+              </span>
+              <button 
+                type="button" 
+                onClick={() => setShowNewsCompanyPopover(false)}
+                className="w-5 h-5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-[9px] border-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            {isAdminUser ? (
+              /* Admin users see full control buttons to filter TPP, DNP, or ALL */
+              <div className="flex flex-col gap-2">
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-2 text-[10px] text-amber-900 font-bold flex items-center gap-1.5 mb-1">
+                  <span>👑</span>
+                  <span translate="no" className="notranslate">Tài khoản Admin: Bạn có toàn quyền xem Bản tin, Thông báo và lọc tất cả chi nhánh của Tân Phú & DNP.</span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedNewsCompanyFilter("ALL");
+                    setShowNewsCompanyPopover(false);
+                  }}
+                  className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
+                    selectedNewsCompanyFilter === "ALL"
+                      ? "bg-sky-50 text-sky-900 border-sky-300 font-black shadow-xs ring-2 ring-sky-200"
+                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50 font-bold"
+                  }`}
+                >
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-black"><span translate="no" className="notranslate">Tất cả Bản Tin (TPP & DNP)</span></span>
+                      <span className="px-1.5 py-0.2 rounded-full bg-sky-100 text-sky-800 text-[9px] font-black">{tppNewsCount + dnpNewsCount}</span>
+                    </div>
+                    <span className="text-[9.5px] text-slate-500 font-normal"><span translate="no" className="notranslate">Toàn bộ tin tức & thông báo cả 2 Công ty</span></span>
+                  </div>
+                  {selectedNewsCompanyFilter === "ALL" && (
+                    <span className="w-5 h-5 rounded-full bg-sky-600 text-white flex items-center justify-center text-xs font-black shrink-0">✓</span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedNewsCompanyFilter("TPP");
+                    setShowNewsCompanyPopover(false);
+                  }}
+                  className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
+                    selectedNewsCompanyFilter === "TPP"
+                      ? "bg-blue-50 text-[#1e3a8a] border-blue-300 font-black shadow-xs ring-2 ring-blue-200"
+                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50 font-bold"
+                  }`}
+                >
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-black text-[#1e3a8a]"><span translate="no" className="notranslate">Bản Tin TPP (Tân Phú Việt Nam)</span></span>
+                      <span className="px-1.5 py-0.2 rounded-full bg-[#1e3a8a] text-white text-[9px] font-black">{tppNewsCount}</span>
+                    </div>
+                    <span className="text-[9.5px] text-slate-500 font-normal"><span translate="no" className="notranslate">Chỉ xem dữ liệu Công Ty Cổ Phần Tân Phú Việt Nam</span></span>
+                  </div>
+                  {selectedNewsCompanyFilter === "TPP" && (
+                    <span className="w-5 h-5 rounded-full bg-[#1e3a8a] text-white flex items-center justify-center text-xs font-black shrink-0">✓</span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedNewsCompanyFilter("DNP");
+                    setShowNewsCompanyPopover(false);
+                  }}
+                  className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
+                    selectedNewsCompanyFilter === "DNP"
+                      ? "bg-teal-50 text-teal-900 border-teal-300 font-black shadow-xs ring-2 ring-teal-200"
+                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50 font-bold"
+                  }`}
+                >
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-black text-teal-700"><span translate="no" className="notranslate">Bản Tin DNP (Công Ty DNP)</span></span>
+                      <span className="px-1.5 py-0.2 rounded-full bg-teal-700 text-white text-[9px] font-black">{dnpNewsCount}</span>
+                    </div>
+                    <span className="text-[9.5px] text-slate-500 font-normal"><span translate="no" className="notranslate">Chỉ xem dữ liệu Công ty Cổ phần Sản xuất và Thương mại DNP</span></span>
+                  </div>
+                  {selectedNewsCompanyFilter === "DNP" && (
+                    <span className="w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center text-xs font-black shrink-0">✓</span>
+                  )}
+                </button>
+              </div>
+            ) : (
+              /* Non-Admin Staff see automatic company lock explanation */
+              <div className="flex flex-col gap-2.5">
+                {isUserDnpCompany ? (
+                  <div className="p-3 rounded-xl bg-teal-50 border border-teal-300 text-teal-900 flex flex-col gap-1.5 shadow-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full bg-teal-600 text-white flex items-center justify-center font-black text-xs shrink-0">🔒</span>
+                      <span className="text-xs font-black"><span translate="no" className="notranslate">Đang hiển thị: Bản Tin DNP</span></span>
+                    </div>
+                    <p className="text-[10px] leading-relaxed text-teal-800 font-medium m-0">
+                      <span translate="no" className="notranslate">Tài khoản CBNV của bạn thuộc <strong>Công ty Cổ phần Sản xuất và Thương mại DNP</strong>. Hệ thống tự động phân quyền chỉ cho phép xem Bản tin & Thông báo nội bộ của <strong>DNP</strong>.</span>
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-blue-50 border border-blue-300 text-blue-900 flex flex-col gap-1.5 shadow-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-xs shrink-0">🔒</span>
+                      <span className="text-xs font-black"><span translate="no" className="notranslate">Đang hiển thị: Bản Tin Tân Phú</span></span>
+                    </div>
+                    <p className="text-[10px] leading-relaxed text-blue-800 font-medium m-0">
+                      <span translate="no" className="notranslate">Tài khoản CBNV của bạn thuộc <strong>Công Ty Cổ Phần Tân Phú Việt Nam</strong>. Hệ thống tự động phân quyền chỉ cho phép xem Bản tin & Thông báo nội bộ của <strong>Tân Phú Việt Nam</strong>.</span>
+                    </p>
+                  </div>
+                )}
+
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-2 text-[9.5px] text-slate-600 leading-normal flex items-start gap-1.5">
+                  <span className="shrink-0 text-amber-500 font-bold">💡</span>
+                  <span translate="no" className="notranslate">Duy nhất tài khoản Admin mới có quyền truy cập toàn bộ bản tin, thông báo và bộ lọc chi nhánh của cả TPP và DNP.</span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowNewsCompanyPopover(false)}
+                  className="w-full mt-1 py-2 text-center text-[11px] font-black text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer border-none"
+                >
+                  <span translate="no" className="notranslate">Đã hiểu</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {offlineMode && (
         <div className="bg-amber-100 border-b border-amber-200 text-amber-800 text-[10px] px-3 py-1.5 font-bold flex items-center justify-between shrink-0 select-none">
           <T>⚠️ Đang chạy Offline - Lưu báo cáo vào hàng chờ</T>
@@ -6408,7 +6678,7 @@ App Link: ${window.location.origin}`;
                 }`}
               >
                 {/* Header card info */}
-                <div className="px-3 py-2 bg-slate-50 border-b border-slate-100 flex justify-between items-center gap-2">
+                <div className="px-3 py-2 bg-slate-50/90 border-b border-slate-200/90 flex justify-between items-center gap-2">
                   <div className="flex-1 min-w-0">
                     <T className={`font-black block leading-tight truncate ${theme.text} ${factoryFontSizeClass}`}>
                       {getFactoryDisplayName(report.factory)?.toUpperCase()}
@@ -6505,7 +6775,47 @@ App Link: ${window.location.origin}`;
                   </div>
                 )}
 
-                {/* Update Information Sub-bar (Hidden in UI as requested, but still recorded in data) */}
+                {/* Cross-Company Transfer Bar */}
+                {(report.targetCompany || report.assignedCompany || (report.transferHistory && report.transferHistory.length > 0)) ? (
+                  <div className="bg-indigo-50/90 border-b border-indigo-200/80 px-3 py-1.5 flex items-center justify-between text-[9.5px] select-none">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="px-1.5 py-0.5 rounded bg-indigo-600 text-white text-[8px] font-black uppercase tracking-wider shrink-0">
+                        🔄 Liên Công Ty
+                      </span>
+                      <span className="font-extrabold text-indigo-900 truncate">
+                        {report.targetCompany === "DNP" ? "Đã chuyển ➔ DNP thụ lý" : report.targetCompany === "TPP" ? "Đã chuyển ➔ TPP thụ lý" : `Đã chuyển ➔ ${report.targetCompany || report.assignedCompany} thụ lý`}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTransferCompanyModalReport(report);
+                        setTransferTargetCompany(report.targetCompany || "DNP");
+                      }}
+                      className="text-indigo-700 hover:text-indigo-900 font-extrabold text-[8.5px] bg-white hover:bg-indigo-100 border border-indigo-300 px-2 py-0.5 rounded-md cursor-pointer transition-colors shrink-0 shadow-3xs"
+                      title="Đổi đơn vị thụ lý liên công ty"
+                    >
+                      ⚙️ Đổi đơn vị
+                    </button>
+                  </div>
+                ) : (
+                  <div className="bg-slate-50/80 border-b border-slate-200/90 px-3 py-1 flex items-center justify-between text-[9px] select-none">
+                    <span className="text-slate-400 font-bold text-[8.5px]">
+                      Đơn vị gốc: <span className="text-slate-600 font-extrabold">{report.factory.includes("DNP") || report.factory.includes("BBM") || report.factory.includes("BBC") ? "DNP / BBM" : "TPP"}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTransferCompanyModalReport(report);
+                        const defaultTarget = (report.factory.includes("DNP") || report.factory.includes("BBM") || report.factory.includes("BBC")) ? "TPP" : "DNP";
+                        setTransferTargetCompany(defaultTarget);
+                      }}
+                      className="text-slate-600 hover:text-indigo-700 font-bold text-[8.5px] bg-white hover:bg-indigo-50 border border-slate-250 hover:border-indigo-300 px-1.5 py-0.5 rounded cursor-pointer transition-colors shrink-0"
+                    >
+                      🔄 Chuyển DNP/TPP
+                    </button>
+                  </div>
+                )}
                 {/* 
                 {report.updatedAt && (
                   <div className="bg-emerald-50 border-b border-emerald-100 px-3 py-1.5 text-[9px] text-[#065f46]" id={`update-bar-${report.id}`}>
@@ -6870,16 +7180,14 @@ App Link: ${window.location.origin}`;
 
                             <div className="relative flex items-start justify-between mt-4 px-1 py-0.5">
                               {/* Connector Line Background */}
-                              <div className="absolute top-4 left-8 right-8 h-1 bg-slate-200 rounded-full z-0 overflow-hidden">
+                              <div className="absolute top-4 left-8 right-8 h-1.5 bg-slate-200 rounded-full z-0 overflow-hidden">
                                 <div
                                   className={`h-full transition-all duration-500 ${
                                     isResolved
-                                      ? "bg-gradient-to-r from-blue-500 via-amber-500 to-emerald-500 w-full"
+                                      ? "bg-gradient-to-r from-red-500 via-amber-500 to-emerald-500 w-full shadow-xs"
                                       : ackCount > 0
-                                        ? aiUsedList.length > 0
-                                          ? "bg-gradient-to-r from-blue-500 via-purple-500 to-emerald-500 w-1/2"
-                                          : "bg-gradient-to-r from-blue-500 to-emerald-500 w-1/2"
-                                        : "bg-blue-500 w-0"
+                                        ? "bg-gradient-to-r from-red-500 to-amber-500 w-1/2 shadow-xs"
+                                        : "bg-red-500 w-0"
                                   }`}
                                 />
                               </div>
@@ -6904,12 +7212,16 @@ App Link: ${window.location.origin}`;
                                 </button>
                               )}
 
-                              {/* Step 1: Ghi nhận sự cố */}
+                              {/* Step 1: Ghi nhận sự cố (Andon Red) */}
                               <div className="flex flex-col items-center text-center relative z-10 w-1/3">
-                                <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold shadow-xs border-2 border-white text-[10px]" title="Thời điểm khởi tạo bản tin">
-                                  <CheckCircle2 className="w-4 h-4 stroke-[2.5px]" />
+                                <div className="relative flex items-center justify-center">
+                                  <div className="w-8 h-8 rounded-full bg-red-600 text-white flex items-center justify-center font-bold shadow-sm border-2 border-white ring-2 ring-red-300 text-[10px]" title="Đèn Andon Đỏ: Khởi tạo sự cố">
+                                    <AlertTriangle className="w-4 h-4 stroke-[2.5px] text-white" />
+                                  </div>
+                                  {/* Andon Red signal dot */}
+                                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 border border-white shadow-[0_0_6px_rgba(239,68,68,0.9)] animate-pulse" title="Andon Đỏ" />
                                 </div>
-                                <span className="text-[9.5px] font-black text-slate-800 mt-1 leading-tight">
+                                <span className="text-[9.5px] font-black text-red-700 mt-1 leading-tight flex items-center gap-0.5">
                                   <span translate="no" className="notranslate"><T>Ghi nhận sự cố</T></span>
                                 </span>
                                 <span className="text-[8px] font-semibold text-slate-500 mt-0.5">
@@ -6917,7 +7229,7 @@ App Link: ${window.location.origin}`;
                                 </span>
                               </div>
 
-                              {/* Step 2: Tiếp nhận / Xử lý (Interactive Action) */}
+                              {/* Step 2: Tiếp nhận / Xử lý (Andon Amber/Yellow) */}
                               <div className="flex flex-col items-center text-center relative z-10 w-1/3">
                                 <div className="relative flex items-center justify-center">
                                   <button
@@ -6936,9 +7248,9 @@ App Link: ${window.location.origin}`;
                                     className={`relative w-8 h-8 rounded-full flex items-center justify-center font-bold shadow-sm border-2 border-white text-[10px] transition-all cursor-pointer active:scale-90 ${
                                       ackCount > 0
                                         ? hasReceiverUsedAi
-                                          ? "bg-emerald-600 text-white ring-2 ring-purple-400 hover:bg-emerald-700"
-                                          : "bg-emerald-600 text-white ring-2 ring-emerald-300 hover:bg-emerald-700"
-                                        : "bg-gradient-to-r from-amber-500 to-orange-500 text-white animate-pulse hover:scale-105 ring-2 ring-orange-300 shadow-orange-200"
+                                          ? "bg-amber-500 text-white ring-2 ring-purple-400 hover:bg-amber-600"
+                                          : "bg-amber-500 text-white ring-2 ring-amber-300 hover:bg-amber-600 shadow-amber-200"
+                                        : "bg-amber-100 text-amber-700 border-2 border-amber-400 hover:bg-amber-200 ring-2 ring-amber-200 animate-pulse"
                                     }`}
                                     title={
                                       isAcknowledged
@@ -6951,9 +7263,16 @@ App Link: ${window.location.origin}`;
                                     {ackCount > 0 ? (
                                       <Check className="w-4 h-4 stroke-[3px] text-white" />
                                     ) : (
-                                      <Users className="w-4 h-4 stroke-[2.5px]" />
+                                      <Clock className="w-4 h-4 stroke-[2.5px] text-amber-700 animate-pulse" />
                                     )}
                                   </button>
+
+                                  {/* Andon Amber/Yellow signal dot */}
+                                  <span className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border border-white ${
+                                    ackCount > 0 
+                                      ? "bg-amber-400 shadow-[0_0_6px_rgba(245,158,11,0.9)] animate-pulse" 
+                                      : "bg-amber-300 opacity-60"
+                                  }`} title="Andon Vàng" />
 
                                   {/* Acknowledgment Counter Badge */}
                                   {ackCount > 0 && (
@@ -6963,7 +7282,7 @@ App Link: ${window.location.origin}`;
                                         e.stopPropagation();
                                         setShowAcksListReport(report);
                                       }}
-                                      className="absolute -top-1.5 -right-2 bg-rose-600 hover:bg-rose-700 text-white text-[8.5px] font-black px-1.5 py-0.2 rounded-full border border-white shadow-xs cursor-pointer active:scale-95 transition-transform select-none"
+                                      className="absolute -bottom-1 -right-2 bg-amber-700 hover:bg-amber-800 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full border border-white shadow-xs cursor-pointer active:scale-95 transition-transform select-none"
                                       title={`Xem danh sách ${ackCount} người đã tiếp nhận`}
                                     >
                                       {ackCount}
@@ -6987,8 +7306,8 @@ App Link: ${window.location.origin}`;
                                   }}
                                   className={`mt-1 text-[9.5px] font-black leading-tight flex items-center gap-0.5 border-none bg-transparent cursor-pointer hover:underline ${
                                     ackCount > 0 
-                                      ? "text-emerald-700" 
-                                      : "text-amber-600"
+                                      ? "text-amber-800" 
+                                      : "text-amber-700"
                                   }`}
                                 >
                                   <span translate="no" className="notranslate">
@@ -7001,7 +7320,7 @@ App Link: ${window.location.origin}`;
                                     <button
                                       type="button"
                                       onClick={() => setShowAcksListReport(report)}
-                                      className="text-[8px] text-emerald-800 bg-emerald-100/90 hover:bg-emerald-200/90 px-1.5 py-0.2 rounded-full font-extrabold border border-emerald-200/60 inline-block cursor-pointer active:scale-95 transition-all"
+                                      className="text-[8px] text-amber-900 bg-amber-100 hover:bg-amber-200 px-1.5 py-0.2 rounded-full font-extrabold border border-amber-300/60 inline-block cursor-pointer active:scale-95 transition-all"
                                       title="Click xem danh sách chi tiết"
                                     >
                                       <span translate="no" className="notranslate">{ackCount} <T>người</T></span>
@@ -7020,7 +7339,7 @@ App Link: ${window.location.origin}`;
                                           isCancel: isAcknowledged
                                         });
                                       }}
-                                      className="text-[8px] text-amber-700 font-extrabold bg-amber-50 hover:bg-amber-100 px-1.5 py-0.2 rounded-full border border-amber-200 cursor-pointer active:scale-95 transition-all border-none"
+                                      className="text-[8px] text-amber-800 font-extrabold bg-amber-100 hover:bg-amber-200 px-1.5 py-0.2 rounded-full border border-amber-300 cursor-pointer active:scale-95 transition-all"
                                     >
                                       <span translate="no" className="notranslate"><T>+ Tiếp nhận ngay</T></span>
                                     </button>
@@ -7028,7 +7347,7 @@ App Link: ${window.location.origin}`;
                                 </div>
                               </div>
 
-                              {/* Step 3: Ghi nhận kết quả (Interactive Action - Extended Suggestion) */}
+                              {/* Step 3: Ghi nhận kết quả (Andon Green) */}
                               <div className="flex flex-col items-center text-center relative z-10 w-1/3">
                                 <div className="relative flex items-center justify-center">
                                   <button
@@ -7054,11 +7373,9 @@ App Link: ${window.location.origin}`;
                                     className={`relative w-8 h-8 rounded-full flex items-center justify-center font-bold shadow-sm border-2 border-white text-[10px] transition-all cursor-pointer active:scale-90 resolution-form-trigger ${
                                       isResolved
                                         ? "bg-emerald-600 text-white hover:bg-emerald-700 ring-2 ring-emerald-300"
-                                        : (ackCount > 0 || isAcknowledged)
-                                          ? "bg-indigo-600 text-white hover:bg-indigo-700 ring-2 ring-indigo-300 animate-pulse hover:scale-105 shadow-indigo-200"
-                                          : resCount > 0
-                                            ? "bg-indigo-600 text-white hover:bg-indigo-700 ring-2 ring-indigo-300"
-                                            : "bg-indigo-50 text-indigo-700 border-indigo-300 hover:bg-indigo-100 ring-2 ring-indigo-200"
+                                        : resCount > 0
+                                          ? "bg-emerald-500 text-white hover:bg-emerald-600 ring-2 ring-emerald-300"
+                                          : "bg-emerald-50 text-emerald-700 border-2 border-emerald-300 hover:bg-emerald-100 ring-1 ring-emerald-200"
                                     }`}
                                     title={
                                       resCount > 0
@@ -7067,11 +7384,20 @@ App Link: ${window.location.origin}`;
                                     }
                                   >
                                     {isResolved ? (
-                                      <CheckCircle2 className="w-4 h-4 stroke-[2.5px]" />
+                                      <CheckCircle2 className="w-4 h-4 stroke-[2.5px] text-white" />
                                     ) : (
-                                      <span className="text-[12px] leading-none">✍️</span>
+                                      <ClipboardCheck className="w-4 h-4 stroke-[2.5px] text-emerald-700" />
                                     )}
                                   </button>
+
+                                  {/* Andon Green signal dot */}
+                                  <span className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border border-white ${
+                                    isResolved
+                                      ? "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.9)]"
+                                      : resCount > 0
+                                        ? "bg-emerald-400 animate-pulse"
+                                        : "bg-emerald-300 opacity-50"
+                                  }`} title="Andon Xanh" />
 
                                   {/* Resolution count badge */}
                                   {resCount > 0 && (
@@ -7081,7 +7407,7 @@ App Link: ${window.location.origin}`;
                                         e.stopPropagation();
                                         toggleResolutionsExpand(report.id);
                                       }}
-                                      className="absolute -top-1.5 -right-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[8.5px] font-black px-1.5 py-0.2 rounded-full border border-white shadow-xs cursor-pointer active:scale-95 transition-transform select-none"
+                                      className="absolute -bottom-1 -right-2 bg-emerald-700 hover:bg-emerald-800 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full border border-white shadow-xs cursor-pointer active:scale-95 transition-transform select-none"
                                       title="Click xem/ẩn chi tiết kết quả xử lý"
                                     >
                                       {resCount}
@@ -7111,7 +7437,7 @@ App Link: ${window.location.origin}`;
                                     }
                                   }}
                                   className={`mt-1 text-[9.5px] font-black leading-tight flex items-center gap-0.5 border-none bg-transparent cursor-pointer hover:underline ${
-                                    isResolved ? "text-emerald-800" : resCount > 0 ? "text-indigo-800" : "text-indigo-600"
+                                    isResolved ? "text-emerald-800" : resCount > 0 ? "text-emerald-700" : "text-emerald-600"
                                   }`}
                                 >
                                   <span translate="no" className="notranslate">
@@ -8462,7 +8788,7 @@ App Link: ${window.location.origin}`;
             setActiveBottomTab("BAO_CAO");
             setMobileFeedSubTab("PROPOSAL");
           }}
-          className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors min-w-0 overflow-hidden ${
+          className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors min-w-0 overflow-visible ${
             activeBottomTab === "BAO_CAO" && mobileFeedSubTab === "PROPOSAL"
               ? "text-amber-600 font-extrabold"
               : "text-slate-400 hover:text-amber-600"
@@ -8485,7 +8811,7 @@ App Link: ${window.location.origin}`;
               }).length;
               if (pendingCount === 0) return null;
               return (
-                <span className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[7.5px] font-black rounded-full h-3.5 min-w-3.5 px-1 flex items-center justify-center animate-bounce">
+                <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[7.5px] font-black rounded-full h-3.5 min-w-3.5 px-1 flex items-center justify-center animate-bounce">
                   {pendingCount}
                 </span>
               );
@@ -8498,19 +8824,44 @@ App Link: ${window.location.origin}`;
         <button
           type="button"
           onClick={() => {
-            setActiveBottomTab("BAO_CAO");
-            setMobileFeedSubTab("FEED");
+            if (activeBottomTab === "BAO_CAO" && mobileFeedSubTab === "FEED") {
+              setShowNewsCompanyPopover(prev => !prev);
+            } else {
+              setActiveBottomTab("BAO_CAO");
+              setMobileFeedSubTab("FEED");
+            }
           }}
-          className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors min-w-0 overflow-hidden ${
+          className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors min-w-0 overflow-visible ${
             activeBottomTab === "BAO_CAO" && mobileFeedSubTab === "FEED"
-              ? "text-sky-600 font-extrabold"
-              : "text-slate-400 hover:text-sky-600"
+              ? activeNewsCompany === "DNP" ? "text-teal-700 font-extrabold" : "text-[#1e3a8a] font-extrabold"
+              : "text-slate-400 hover:text-[#1e3a8a]"
           }`}
+          title="Bấm để lọc Bản Tin TPP / DNP"
         >
-          <Newspaper className={`w-[18px] h-[18px] mx-auto mb-0.5 transition-transform hover:scale-110 ${
-            activeBottomTab === "BAO_CAO" && mobileFeedSubTab === "FEED" ? "text-sky-600 font-extrabold" : "text-sky-400"
-          }`} />
-          <T><span translate="no" className="notranslate truncate w-full block text-center">Bản Tin</span></T>
+          <div className="relative">
+            <Newspaper className={`w-[18px] h-[18px] mx-auto mb-0.5 transition-transform hover:scale-110 ${
+              activeBottomTab === "BAO_CAO" && mobileFeedSubTab === "FEED"
+                ? activeNewsCompany === "DNP" ? "text-teal-700" : "text-[#1e3a8a]"
+                : activeNewsCompany === "DNP" ? "text-teal-600/80" : "text-[#1e3a8a]/80"
+            }`} />
+            <span className={`absolute top-[-1px] -right-2.5 text-white text-[8px] font-black rounded-full h-3.5 min-w-[15px] px-1 flex items-center justify-center shadow-xs border border-white tracking-tight ${
+              activeNewsCompany === "DNP"
+                ? "bg-teal-700"
+                : "bg-[#1e3a8a]"
+            }`}>
+              {currentNewsCompanyBadgeCount}
+            </span>
+          </div>
+          <T>
+            <span translate="no" className="notranslate truncate w-full flex items-center justify-center gap-0.5">
+              {activeNewsCompany === "TPP"
+                ? "Bản Tin TPP"
+                : activeNewsCompany === "DNP"
+                ? "Bản Tin DNP"
+                : "Bản Tin"}
+              <span className="text-[7px] opacity-70">▼</span>
+            </span>
+          </T>
         </button>
 
         {/* 4. DUYỆT NS */}
@@ -8518,7 +8869,7 @@ App Link: ${window.location.origin}`;
           <button
             type="button"
             onClick={() => setActiveBottomTab("PHE_DUYET")}
-            className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors min-w-0 overflow-hidden ${
+            className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors min-w-0 overflow-visible ${
               activeBottomTab === "PHE_DUYET" ? "text-amber-600 font-extrabold" : "text-slate-400 hover:text-amber-600"
             }`}
           >
@@ -9144,6 +9495,189 @@ App Link: ${window.location.origin}`}
                   <span translate="no" className="notranslate">
                     <T>{isCancel ? "Xác nhận Hủy" : "Xác nhận Ngay"}</T>
                   </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Modal Chuyển giao Đơn vị thụ lý Liên Công ty (TPP ↔ DNP) */}
+      {transferCompanyModalReport && (() => {
+        const report = transferCompanyModalReport;
+        const currentOriginCompany = (report.factory.includes("DNP") || report.factory.includes("BBM") || report.factory.includes("BBC")) ? "DNP / BBM" : "TPP";
+        
+        return (
+          <div
+            onClick={() => {
+              setTransferCompanyModalReport(null);
+              setTransferCompanyNote("");
+            }}
+            className="fixed lg:absolute inset-0 bg-slate-900/65 backdrop-blur-xs flex items-center justify-center p-3 z-[90] select-none animate-fadeIn cursor-pointer"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl w-full max-w-sm overflow-hidden flex flex-col shadow-2xl border border-indigo-200 animate-scaleUp cursor-default"
+            >
+              {/* Modal Header */}
+              <div className="flex justify-between items-center px-4 py-3 bg-gradient-to-r from-indigo-700 to-blue-800 text-white border-b border-indigo-900">
+                <div className="flex items-center gap-2 font-black text-xs uppercase tracking-wide font-sans">
+                  <span className="text-base">🔄</span>
+                  <T><span translate="no" className="notranslate">Chuyển Giao Đơn Vị Thụ Lý</span></T>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTransferCompanyModalReport(null);
+                    setTransferCompanyNote("");
+                  }}
+                  className="w-6 h-6 rounded-full bg-white/20 hover:bg-white/30 text-white font-bold flex items-center justify-center cursor-pointer transition-colors text-xs border-none"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Modal Content Body */}
+              <div className="p-4 space-y-3.5 text-slate-800">
+                {/* Summary Box */}
+                <div className="bg-indigo-50/70 p-3 rounded-xl border border-indigo-100 flex flex-col gap-1 text-[11px]">
+                  <div className="flex justify-between items-center text-[10px] text-indigo-900 font-extrabold">
+                    <span>Mã tin: #{report.reportCode || report.id}</span>
+                    <span>Đơn vị gốc: {currentOriginCompany}</span>
+                  </div>
+                  <div className="font-extrabold text-slate-900 line-clamp-2 mt-0.5 text-[11.5px]">
+                    {report.content}
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">
+                    Đăng bởi: {report.uploaderName} ({report.factory})
+                  </div>
+                </div>
+
+                {/* Target Company Choice */}
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-black text-slate-700 uppercase tracking-tight">
+                    <T><span translate="no" className="notranslate">Chọn Đơn vị thụ lý mới:</span></T>
+                  </label>
+                  <div className="grid grid-cols-1 gap-2 text-xs font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setTransferTargetCompany("DNP")}
+                      className={`p-2.5 rounded-xl border text-left flex items-center justify-between cursor-pointer transition-all ${
+                        transferTargetCompany === "DNP"
+                          ? "bg-indigo-600 text-white border-indigo-700 shadow-md ring-2 ring-indigo-300"
+                          : "bg-slate-50 hover:bg-indigo-50 text-slate-800 border-slate-200"
+                      }`}
+                    >
+                      <div>
+                        <div className="font-black text-[12px]">CÔNG TY CỔ PHẦN DNP</div>
+                        <div className={`text-[10px] ${transferTargetCompany === "DNP" ? "text-indigo-100" : "text-slate-500"}`}>Bao Bì BBM / BBC</div>
+                      </div>
+                      {transferTargetCompany === "DNP" && <span className="text-sm font-black">✓</span>}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setTransferTargetCompany("TPP")}
+                      className={`p-2.5 rounded-xl border text-left flex items-center justify-between cursor-pointer transition-all ${
+                        transferTargetCompany === "TPP"
+                          ? "bg-indigo-600 text-white border-indigo-700 shadow-md ring-2 ring-indigo-300"
+                          : "bg-slate-50 hover:bg-indigo-50 text-slate-800 border-slate-200"
+                      }`}
+                    >
+                      <div>
+                        <div className="font-black text-[12px]">CÔNG TY CỔ PHẦN TÂN PHÚ (TPP)</div>
+                        <div className={`text-[10px] ${transferTargetCompany === "TPP" ? "text-indigo-100" : "text-slate-500"}`}>Công ty mẹ / Các NM Tân Phú</div>
+                      </div>
+                      {transferTargetCompany === "TPP" && <span className="text-sm font-black">✓</span>}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setTransferTargetCompany("ALL")}
+                      className={`p-2.5 rounded-xl border text-left flex items-center justify-between cursor-pointer transition-all ${
+                        transferTargetCompany === "ALL"
+                          ? "bg-indigo-600 text-white border-indigo-700 shadow-md ring-2 ring-indigo-300"
+                          : "bg-slate-50 hover:bg-indigo-50 text-slate-800 border-slate-200"
+                      }`}
+                    >
+                      <div>
+                        <div className="font-black text-[12px]">CẢ 2 CÔNG TY (TPP & DNP)</div>
+                        <div className={`text-[10px] ${transferTargetCompany === "ALL" ? "text-indigo-100" : "text-slate-500"}`}>Hiển thị công khai cho cả 2 bên cùng theo dõi</div>
+                      </div>
+                      {transferTargetCompany === "ALL" && <span className="text-sm font-black">✓</span>}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Transfer Reason Input */}
+                <div className="space-y-1">
+                  <label className="block text-[10.5px] font-bold text-slate-600">
+                    <T><span translate="no" className="notranslate">Ghi chú / Lý do chuyển giao (không bắt buộc):</span></T>
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={transferCompanyNote}
+                    onChange={(e) => setTransferCompanyNote(e.target.value)}
+                    placeholder="Ví dụ: Khiếu nại liên quan sản phẩm màng/túi do DNP-BBM sản xuất..."
+                    className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="px-4 py-3 bg-slate-100 border-t border-slate-200 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTransferCompanyModalReport(null);
+                    setTransferCompanyNote("");
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs cursor-pointer border-none"
+                >
+                  <T><span translate="no" className="notranslate">Hủy bỏ</span></T>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const now = new Date();
+                    const hrs = String(now.getHours()).padStart(2, '0');
+                    const mns = String(now.getMinutes()).padStart(2, '0');
+                    const scs = String(now.getSeconds()).padStart(2, '0');
+                    const date = String(now.getDate()).padStart(2, '0');
+                    const month = String(now.getMonth() + 1).padStart(2, '0');
+                    const year = String(now.getFullYear()).slice(-2);
+                    const timeStr = `${hrs}:${mns}:${scs} ${date}/${month}/${year}`;
+
+                    const newHistoryItem = {
+                      fromCompany: currentOriginCompany,
+                      toCompany: transferTargetCompany,
+                      transferredBy: currentUser?.fullName || "Admin",
+                      transferredAt: timeStr,
+                      note: transferCompanyNote.trim() || undefined,
+                    };
+
+                    const updatedReport: QualityReport = {
+                      ...report,
+                      targetCompany: transferTargetCompany,
+                      assignedCompany: transferTargetCompany === "DNP" ? "DNP-BBM/BBC" : transferTargetCompany === "TPP" ? "TPP-CTY" : "TPP & DNP",
+                      transferHistory: [...(report.transferHistory || []), newHistoryItem],
+                      updateLogs: [
+                        ...(report.updateLogs || []),
+                        `Chuyển giao đơn vị thụ lý ➔ ${transferTargetCompany} bởi ${currentUser?.fullName || "Admin"} (${timeStr})`
+                      ]
+                    };
+
+                    if (onUpdateReport) {
+                      onUpdateReport(updatedReport);
+                    }
+                    showToast(`Đã chuyển giao bài viết cho ${transferTargetCompany} thụ lý thành công! 🔄`);
+                    setTransferCompanyModalReport(null);
+                    setTransferCompanyNote("");
+                  }}
+                  className="px-4 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 active:scale-95 text-white font-black text-xs cursor-pointer transition-all shadow-xs border-none flex items-center gap-1"
+                >
+                  <span>🔄</span>
+                  <T><span translate="no" className="notranslate">Xác nhận Chuyển giao</span></T>
                 </button>
               </div>
             </div>
@@ -10899,7 +11433,7 @@ App Link: ${window.location.origin}`}
             {/* List Option Container */}
             <div className="max-h-[220px] overflow-y-auto space-y-1 pr-0.5 thin-scrollbar">
               {activeFilterSheet === "BRANCH" && (() => {
-                const activeFactoryChips = branches && branches.length > 0
+                const rawChips = branches && branches.length > 0
                   ? branches
                       .filter((b) => b.isScoring)
                       .map((b) => {
@@ -10910,8 +11444,22 @@ App Link: ${window.location.origin}`}
                       { key: "TPP-BNI", label: "TPP-BNI" },
                       { key: "TPP-LAN", label: "TPP-LAN" },
                       { key: "TPP-CTY", label: "TPP-CTY" },
-                      { key: "TPP-314", label: "TPP-314" }
+                      { key: "TPP-314", label: "TPP-314" },
+                      { key: "DNP", label: "DNP" }
                     ];
+
+                const activeFactoryChips = isAdminUser
+                  ? rawChips
+                  : rawChips.filter((item) => {
+                      const isDnpChip = item.key.includes("DNP") || item.label.includes("DNP") || item.key.includes("BBM") || item.key.includes("BBC");
+                      return isUserDnpCompany ? isDnpChip : !isDnpChip;
+                    });
+
+                const allLabel = isAdminUser
+                  ? "TẤT CẢ (TPP & DNP)"
+                  : isUserDnpCompany
+                  ? "TẤT CẢ CHI NHÁNH DNP"
+                  : "TẤT CẢ CHI NHÁNH TÂN PHÚ";
 
                 return (
                   <>
@@ -10928,7 +11476,7 @@ App Link: ${window.location.origin}`}
                           : "bg-transparent text-slate-600 hover:bg-slate-50"
                       }`}
                     >
-                      <T>TẤT CẢ (ALL)</T>
+                      <T>{allLabel}</T>
                       {!selectedFactoryFilter && <Check className="w-3.5 h-3.5 text-[#1e3a8a] stroke-[3px]" />}
                     </button>
                     
