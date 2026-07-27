@@ -300,6 +300,100 @@ function formatTimestampToDMY(tsStr: string): string {
   }
 }
 
+/**
+ * Kiểm tra quyền Chuyển DNP/TPP:
+ * Chỉ có:
+ * 1. Người đăng (Uploader)
+ * 2. Trưởng bộ phận của người đăng (Department Manager of Uploader)
+ * 3. Admin / Ban TGĐ
+ * mới có quyền thực hiện Chuyển DNP/TPP hoặc Đổi đơn vị.
+ */
+export function canUserTransferDnpTpp(
+  currentUser: User | null | undefined,
+  report: QualityReport
+): boolean {
+  if (!currentUser) return false;
+
+  const roleUpper = (currentUser.role || "").toString().toUpperCase();
+  const deptUpper = (currentUser.department || "").toString().toUpperCase();
+  const posUpper = (currentUser.position || "").toString().toUpperCase();
+
+  // 1. Admin / Ban TGĐ / Special permission
+  const isAdmin =
+    roleUpper === "CHỦ ADMIN" ||
+    roleUpper === "ADMIN" ||
+    roleUpper === UserRole.ADMIN ||
+    currentUser.canSpeciallyEditDelete === true ||
+    deptUpper.includes("BAN TGĐ") ||
+    deptUpper.includes("QUẢN TRỊ") ||
+    posUpper.includes("ADMIN") ||
+    posUpper.includes("TỔNG GIÁM ĐỐC") ||
+    posUpper.includes("TGĐ");
+
+  if (isAdmin) return true;
+
+  // 2. Người đăng bài (Uploader / Creator)
+  const isUploader =
+    (currentUser.id && report.uploaderId && currentUser.id === report.uploaderId) ||
+    (currentUser.fullName &&
+      report.uploaderName &&
+      currentUser.fullName.trim().toLowerCase() === report.uploaderName.trim().toLowerCase()) ||
+    (currentUser.phone &&
+      report.uploaderPhone &&
+      currentUser.phone.trim() === report.uploaderPhone.trim());
+
+  if (isUploader) return true;
+
+  // 3. Trưởng bộ phận của người đăng (Department Manager of Uploader)
+  const managerKeywords = [
+    "TRƯỞNG PHÒNG",
+    "PHÓ PHÒNG",
+    "GIÁM ĐỐC",
+    "PHÓ GIÁM ĐỐC",
+    "TRƯỞNG BAN",
+    "PHÓ BAN",
+    "TRƯỞNG BỘ PHẬN",
+    "PHÓ BỘ PHẬN",
+    "QUẢN LÝ",
+    "QUẢN ĐỐC",
+    "PHÓ QUẢN ĐỐC",
+    "CHỦ NHIỆM",
+    "DUYỆT VIÊN",
+    "CHUYÊN VIÊN CAO CẤP"
+  ];
+
+  const isManager =
+    currentUser.role === UserRole.REVIEWER ||
+    roleUpper.includes("DUYỆT VIÊN") ||
+    managerKeywords.some((kw) => posUpper.includes(kw) || deptUpper.includes(kw));
+
+  if (isManager) {
+    const uploaderDept = (report.uploaderDepartment || "").trim().toUpperCase();
+    const userDept = (currentUser.department || "").trim().toUpperCase();
+
+    const isSameDept =
+      uploaderDept &&
+      userDept &&
+      (uploaderDept === userDept ||
+        uploaderDept.includes(userDept) ||
+        userDept.includes(uploaderDept));
+
+    const userBranch = (currentUser.branch || "").trim().toUpperCase();
+    const reportFactory = (report.factory || "").trim().toUpperCase();
+
+    const isSameBranchOrFactory =
+      userBranch &&
+      reportFactory &&
+      (userBranch.includes(reportFactory) || reportFactory.includes(userBranch));
+
+    if (isSameDept || (isSameBranchOrFactory && !uploaderDept)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function MobileDirectiveForm({
   report,
   currentUser,
@@ -6760,34 +6854,61 @@ App Link: ${window.location.origin}`;
                         {report.targetCompany === "DNP" ? "Đã chuyển ➔ DNP thụ lý" : report.targetCompany === "TPP" ? "Đã chuyển ➔ TPP thụ lý" : `Đã chuyển ➔ ${report.targetCompany || report.assignedCompany} thụ lý`}
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTransferCompanyModalReport(report);
-                        setTransferTargetCompany(report.targetCompany || "DNP");
-                      }}
-                      className="text-indigo-700 hover:text-indigo-900 font-extrabold text-[8.5px] bg-white hover:bg-indigo-100 border border-indigo-300 px-2 py-0.5 rounded-md cursor-pointer transition-colors shrink-0 shadow-3xs"
-                      title="Đổi đơn vị thụ lý liên công ty"
-                    >
-                      ⚙️ Đổi đơn vị
-                    </button>
+                    {(() => {
+                      const isAllowed = canUserTransferDnpTpp(currentUser, report);
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!isAllowed) {
+                              showToast("🔒 Chỉ người đăng, Trưởng bộ phận người đăng hoặc Admin mới có quyền đổi đơn vị!");
+                              return;
+                            }
+                            setTransferCompanyModalReport(report);
+                            setTransferTargetCompany(report.targetCompany || "DNP");
+                          }}
+                          className={`font-extrabold text-[8.5px] border px-2 py-0.5 rounded-md transition-colors shrink-0 shadow-3xs ${
+                            isAllowed
+                              ? "text-indigo-700 hover:text-indigo-900 bg-white hover:bg-indigo-100 border-indigo-300 cursor-pointer"
+                              : "text-slate-400 bg-slate-100 border-slate-200 cursor-not-allowed opacity-75"
+                          }`}
+                          title={isAllowed ? "Đổi đơn vị thụ lý liên công ty" : "Chỉ người đăng, Trưởng bộ phận người đăng hoặc Admin mới có quyền"}
+                        >
+                          ⚙️ Đổi đơn vị {!isAllowed && "🔒"}
+                        </button>
+                      );
+                    })()}
                   </div>
                 ) : (
                   <div className="bg-slate-50/80 border-b border-slate-200/90 px-3 py-1 flex items-center justify-between text-[9px] select-none">
                     <span className="text-slate-400 font-bold text-[8.5px]">
                       Đơn vị gốc: <span className="text-slate-600 font-extrabold">{report.factory.includes("DNP") || report.factory.includes("BBM") || report.factory.includes("BBC") ? "DNP / BBM" : "TPP"}</span>
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTransferCompanyModalReport(report);
-                        const defaultTarget = (report.factory.includes("DNP") || report.factory.includes("BBM") || report.factory.includes("BBC")) ? "TPP" : "DNP";
-                        setTransferTargetCompany(defaultTarget);
-                      }}
-                      className="text-slate-600 hover:text-indigo-700 font-bold text-[8.5px] bg-white hover:bg-indigo-50 border border-slate-250 hover:border-indigo-300 px-1.5 py-0.5 rounded cursor-pointer transition-colors shrink-0"
-                    >
-                      🔄 Chuyển DNP/TPP
-                    </button>
+                    {(() => {
+                      const isAllowed = canUserTransferDnpTpp(currentUser, report);
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!isAllowed) {
+                              showToast("🔒 Chỉ người đăng, Trưởng bộ phận người đăng hoặc Admin mới có quyền chuyển DNP/TPP!");
+                              return;
+                            }
+                            setTransferCompanyModalReport(report);
+                            const defaultTarget = (report.factory.includes("DNP") || report.factory.includes("BBM") || report.factory.includes("BBC")) ? "TPP" : "DNP";
+                            setTransferTargetCompany(defaultTarget);
+                          }}
+                          className={`font-bold text-[8.5px] border px-1.5 py-0.5 rounded transition-colors shrink-0 ${
+                            isAllowed
+                              ? "text-slate-600 hover:text-indigo-700 bg-white hover:bg-indigo-50 border-slate-250 hover:border-indigo-300 cursor-pointer"
+                              : "text-slate-400 bg-slate-100 border-slate-200 cursor-not-allowed opacity-75"
+                          }`}
+                          title={isAllowed ? "Chuyển DNP/TPP" : "Chỉ người đăng, Trưởng bộ phận người đăng hoặc Admin mới có quyền"}
+                        >
+                          🔄 Chuyển DNP/TPP {!isAllowed && "🔒"}
+                        </button>
+                      );
+                    })()}
                   </div>
                 )}
                 {/* 
@@ -9564,6 +9685,12 @@ App Link: ${window.location.origin}`}
                 <button
                   type="button"
                   onClick={() => {
+                    if (!canUserTransferDnpTpp(currentUser, report)) {
+                      showToast("🔒 Bạn không có quyền chuyển DNP/TPP cho bản tin này!");
+                      setTransferCompanyModalReport(null);
+                      setTransferCompanyNote("");
+                      return;
+                    }
                     const now = new Date();
                     const hrs = String(now.getHours()).padStart(2, '0');
                     const mns = String(now.getMinutes()).padStart(2, '0');
