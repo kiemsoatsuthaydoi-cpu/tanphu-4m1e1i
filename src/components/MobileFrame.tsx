@@ -1216,7 +1216,7 @@ function MobileApprovalView({
                   <div className="flex-1 min-w-0 font-sans text-left">
                     <div className="flex items-center gap-1.5">
                       <span translate="no" className="notranslate font-black text-slate-800 text-[11px] block truncate leading-tight">
-                        {u.fullName}
+                        {capitalizeWords(u.fullName)}
                       </span>
                       {isMe && (
                         <span className="text-[7px] bg-slate-100 text-slate-500 px-1 py-0.5 rounded-md font-bold uppercase select-none">
@@ -2753,6 +2753,123 @@ export default function MobileFrame({
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
   };
+
+  // Helper to capitalize first letter of each word in a name or string
+  const capitalizeWords = (str: string | undefined | null): string => {
+    if (!str) return "";
+    return str
+      .split(/\s+/)
+      .map((word) => (word ? word.charAt(0).toUpperCase() + word.slice(1) : ""))
+      .join(" ");
+  };
+
+  // Helper function to highlight @mentions in blue (matching the GỬI button color)
+  const renderTaggedText = (text: string | undefined | null, usersList: any[] = []): React.ReactNode => {
+    if (!text || typeof text !== "string" || !text.includes("@")) {
+      return text || "";
+    }
+
+    // Collect potential candidates to match after '@'
+    const candidatesSet = new Set<string>();
+    if (usersList && usersList.length > 0) {
+      usersList.forEach((u) => {
+        if (u.fullName && u.fullName.trim()) {
+          candidatesSet.add(u.fullName.trim());
+          const parts = u.fullName.trim().split(/\s+/);
+          if (parts.length >= 2) {
+            candidatesSet.add(parts.slice(-2).join(" ")); // e.g. "Ánh Hồng"
+          }
+          if (parts[parts.length - 1].length >= 2) {
+            candidatesSet.add(parts[parts.length - 1]); // e.g. "Hồng"
+          }
+        }
+        if (u.department && u.department.trim()) {
+          candidatesSet.add(u.department.trim());
+          const cleanDept = u.department.replace(/^Phòng\s+/i, "").trim();
+          if (cleanDept.length >= 2) candidatesSet.add(cleanDept);
+        }
+        if (u.id && u.id.trim()) candidatesSet.add(u.id.trim());
+      });
+    }
+
+    const candidates = Array.from(candidatesSet).sort((a, b) => b.length - a.length);
+
+    type Range = { start: number; end: number; matchText: string };
+    const ranges: Range[] = [];
+    const lowerText = text.toLowerCase();
+
+    // 1. Check known candidates
+    for (const cand of candidates) {
+      if (!cand) continue;
+      const searchTarget = `@${cand.toLowerCase()}`;
+      let pos = 0;
+      while ((pos = lowerText.indexOf(searchTarget, pos)) !== -1) {
+        const end = pos + searchTarget.length;
+        const overlaps = ranges.some((r) => !(end <= r.start || pos >= r.end));
+        if (!overlaps) {
+          ranges.push({
+            start: pos,
+            end: end,
+            matchText: text.substring(pos, end),
+          });
+        }
+        pos = end;
+      }
+    }
+
+    // 2. Fallback regex for generic @mentions (e.g., @Name or @Department)
+    const genericRegex = /@[\p{L}\w\-_]+/gu;
+    let match: RegExpExecArray | null;
+    while ((match = genericRegex.exec(text)) !== null) {
+      const pos = match.index;
+      const end = pos + match[0].length;
+      const overlaps = ranges.some((r) => !(end <= r.start || pos >= r.end));
+      if (!overlaps) {
+        ranges.push({
+          start: pos,
+          end: end,
+          matchText: match[0],
+        });
+      }
+    }
+
+    if (ranges.length === 0) return text;
+
+    ranges.sort((a, b) => a.start - b.start);
+
+    const elements: React.ReactNode[] = [];
+    let currentIndex = 0;
+
+    ranges.forEach((r, idx) => {
+      if (r.start > currentIndex) {
+        elements.push(text.substring(currentIndex, r.start));
+      }
+      const rawTag = r.matchText;
+      let displayTag = rawTag;
+      if (rawTag.startsWith("@")) {
+        displayTag = `@${capitalizeWords(rawTag.slice(1))}`;
+      } else {
+        displayTag = capitalizeWords(rawTag);
+      }
+      elements.push(
+        <span
+          key={`tag-${idx}`}
+          translate="no"
+          className="notranslate text-blue-600 font-extrabold bg-blue-50/90 px-1.5 py-0.5 rounded border border-blue-200/80 mx-0.5 shadow-2xs inline-block text-[12px]"
+        >
+          {displayTag}
+        </span>
+      );
+      currentIndex = r.end;
+    });
+
+    if (currentIndex < text.length) {
+      elements.push(text.substring(currentIndex));
+    }
+
+    return <>{elements}</>;
+  };
+
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showMobileCloudQuota, setShowMobileCloudQuota] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
@@ -7139,12 +7256,17 @@ App Link: ${window.location.origin}`;
 
                   {/* Body description text */}
                   <div className={`pt-2 font-black leading-relaxed text-slate-900 ${contentFontSizeClass}`}>
-                    <T>{(report.content || "").toUpperCase()}</T>
+                    {report.content && report.content.includes("@") ? (
+                      renderTaggedText(report.content, users)
+                    ) : (
+                      <T>{(report.content || "").toUpperCase()}</T>
+                    )}
                   </div>
 
                   {report.notes && (
-                    <div className="mt-2 bg-slate-50/90 rounded p-2 text-[10.5px] text-slate-800 font-medium italic border-l-2 border-blue-500">
-                      <T>Ghi chú: {report.notes}</T>
+                    <div className="mt-2 bg-slate-50/90 rounded p-2 text-[12px] text-slate-800 font-medium italic border-l-2 border-blue-500 leading-relaxed">
+                      <span translate="no" className="notranslate font-semibold text-slate-600">Ghi chú: </span>
+                      {renderTaggedText(report.notes, users)}
                     </div>
                   )}
 
@@ -7185,8 +7307,8 @@ App Link: ${window.location.origin}`;
                     {/* List of existing instructions */}
                     {report.directives && report.directives.length > 0 && (
                       <div className="space-y-2 mb-2.5 w-full block">
-                        <div className="text-[10px] text-amber-700 font-extrabold flex items-center gap-1 uppercase select-none">
-                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                        <div className="text-[11.5px] text-amber-700 font-black flex items-center gap-1 uppercase select-none">
+                          <span className="inline-block w-2 h-2 rounded-full bg-amber-500"></span>
                           <T>CHỈ ĐẠO:</T>
                         </div>
                         <div className="space-y-1.5 block max-h-48 overflow-y-auto pr-1">
@@ -7198,15 +7320,15 @@ App Link: ${window.location.origin}`;
                                    key={dir.id}
                                    data-directive-container="true"
                                    onClick={() => setExpandedDirectiveIds(prev => ({ ...prev, [dir.id]: true }))}
-                                   className="bg-amber-50 hover:bg-amber-100/70 border border-amber-100 rounded p-1.5 flex items-center justify-between text-[9px] text-amber-900 cursor-pointer transition-all select-none shadow-3xs active:scale-[0.98] gap-1.5"
+                                   className="bg-amber-50 hover:bg-amber-100/70 border border-amber-100 rounded p-1.5 flex items-center justify-between text-[10.5px] text-amber-900 cursor-pointer transition-all select-none shadow-3xs active:scale-[0.98] gap-1.5"
                                  >
                                    <div className="flex-1 min-w-0">
-                                     <span className="font-extrabold text-[9px] text-amber-950 block leading-tight break-words">
-                                       <T>Chỉ đạo từ:</T> <span className="text-amber-900">{dir.author}</span>
+                                     <span className="font-extrabold text-[10.5px] text-amber-950 block leading-tight break-words">
+                                       <T>Chỉ đạo từ:</T> <span className="text-amber-900">{capitalizeWords(dir.author)}</span>
                                      </span>
                                    </div>
                                    <div className="flex items-center gap-1 shrink-0 select-none">
-                                     <span className="text-[8.5px] text-slate-500 font-bold flex items-center gap-1">
+                                     <span className="text-[10px] text-slate-500 font-bold flex items-center gap-1">
                                        <T>Xem chỉ đạo</T>
                                        <span className="text-[11px] leading-none">🛡️</span>
                                        <span className="text-[10px] text-amber-700">➔</span>
@@ -7227,32 +7349,33 @@ App Link: ${window.location.origin}`;
                              const hasUserAcknowledged = acknowledgesList.some(item => item.by === currentUserSignature);
 
                              return (
-                               <div key={dir.id} data-directive-container="true" className="bg-amber-50 border border-amber-100 rounded p-2 block text-[11px] leading-relaxed text-amber-900 shadow-3xs">
-                                 <div className="flex justify-between items-center text-[9px] text-slate-400 font-bold mb-1 select-none border-b border-amber-200/40 pb-1">
-                                   <span className="text-amber-800 font-extrabold flex items-center gap-1 animate-shimmer text-[9px]">
-                                     <span><T>Chỉ đạo từ:</T> {dir.author}</span>
-                                     <span className="text-[11px] leading-none">🛡️</span>
-                                   </span>
-                                   <div className="flex items-center gap-2">
-                                     <span>{dir.timestamp}</span>
-                                     <button
-                                       type="button"
-                                       onClick={(e) => {
-                                         e.stopPropagation();
-                                         setExpandedDirectiveIds(prev => ({ ...prev, [dir.id]: false }));
-                                       }}
-                                       className="text-[8px] text-amber-800 hover:text-amber-950 bg-amber-100 px-1 py-0.2 rounded border border-amber-200 font-sans cursor-pointer active:scale-95 transition-all"
-                                     >
-                                       <T>Thu gọn</T>
-                                     </button>
-                                   </div>
-                                 </div>
+                               <div key={dir.id} data-directive-container="true" className="bg-amber-50 border border-amber-200/80 rounded p-2.5 block text-[12.5px] leading-relaxed text-amber-950 shadow-3xs">
+                                  <div className="flex justify-between items-center text-[9px] text-slate-500 font-bold mb-1.5 select-none border-b border-amber-200/60 pb-1 gap-1">
+                                    <span className="text-amber-900 font-extrabold flex items-center gap-1 text-[10px] min-w-0 truncate">
+                                      <span className="truncate"><T>Chỉ đạo từ:</T> {capitalizeWords(dir.author)}</span>
+                                      <span className="text-[10px] leading-none shrink-0">🛡️</span>
+                                    </span>
+                                    <div className="flex items-center gap-1.5 shrink-0 whitespace-nowrap">
+                                      <span className="text-[8.5px] text-slate-500 font-mono font-medium whitespace-nowrap">{dir.timestamp}</span>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setExpandedDirectiveIds(prev => ({ ...prev, [dir.id]: false }));
+                                        }}
+                                        className="text-[10px] text-amber-900 hover:text-amber-950 bg-amber-100/90 hover:bg-amber-200 px-1.5 py-0.5 rounded border border-amber-200 font-sans cursor-pointer active:scale-95 transition-all font-black leading-none"
+                                        title="Thu gọn"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  </div>
                                  {editingDirectiveId === dir.id ? (
                                    <div className="mt-1.5 space-y-1">
                                      <textarea
                                        value={editingDirectiveText}
                                        onChange={(e) => setEditingDirectiveText(e.target.value)}
-                                       className="w-full bg-white border border-amber-200 text-[11px] rounded p-1.5 focus:outline-none focus:ring-1 focus:ring-amber-500 font-sans text-slate-800 resize-y"
+                                       className="w-full bg-white border border-amber-200 text-[12px] rounded p-1.5 focus:outline-none focus:ring-1 focus:ring-amber-500 font-sans text-slate-800 resize-y"
                                        rows={2}
                                      />
                                      <div className="flex justify-end gap-1.5 select-none">
@@ -7262,7 +7385,7 @@ App Link: ${window.location.origin}`;
                                            setEditingDirectiveId(null);
                                            setEditingDirectiveText("");
                                          }}
-                                         className="p-1 px-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-[9px] font-sans font-black rounded flex items-center gap-0.5 border-none h-6 cursor-pointer"
+                                         className="p-1 px-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-[9.5px] font-sans font-black rounded flex items-center gap-0.5 border-none h-6 cursor-pointer"
                                        >
                                          <X className="w-3 h-3" />
                                          <T>HỦY</T>
@@ -7289,7 +7412,7 @@ App Link: ${window.location.origin}`;
                                            setEditingDirectiveId(null);
                                            setEditingDirectiveText("");
                                          }}
-                                         className="p-1 px-1.5 bg-amber-500 hover:bg-amber-600 text-white text-[9px] font-sans font-black rounded flex items-center gap-0.5 border-none h-6 cursor-pointer"
+                                         className="p-1 px-1.5 bg-amber-500 hover:bg-amber-600 text-white text-[9.5px] font-sans font-black rounded flex items-center gap-0.5 border-none h-6 cursor-pointer"
                                        >
                                          <Check className="w-3 h-3" />
                                          <T>LƯU</T>
@@ -7298,8 +7421,8 @@ App Link: ${window.location.origin}`;
                                    </div>
                                  ) : (
                                    <>
-                                     <div className="flex justify-between items-start gap-2">
-                                       <T className="block font-medium flex-1 break-words">{dir.text}</T>
+                                     <div className="flex justify-between items-start gap-2 my-1">
+                                       <div className="block font-semibold text-slate-900 text-[12.5px] leading-relaxed flex-1 break-words">{renderTaggedText(dir.text, users)}</div>
                                        <div className="flex gap-1 shrink-0 select-none items-center mt-0.5">
                                          {canUserManageDirective(currentUser, report.factory) && (
                                            <button
@@ -7311,7 +7434,7 @@ App Link: ${window.location.origin}`;
                                              className="text-slate-400 hover:text-amber-600 transition-colors cursor-pointer border-none bg-transparent p-0.5"
                                              title="Chỉnh sửa chỉ đạo"
                                            >
-                                             <Edit className="w-3 h-3" />
+                                             <Edit className="w-3.5 h-3.5" />
                                            </button>
                                          )}
                                          {canUserManageDirective(currentUser, report.factory) && (
@@ -7323,7 +7446,7 @@ App Link: ${window.location.origin}`;
                                              className="text-slate-400 hover:text-rose-600 transition-colors cursor-pointer border-none bg-transparent p-0.5"
                                              title="Xóa chỉ đạo"
                                            >
-                                             <Trash2 className="w-3 h-3" />
+                                             <Trash2 className="w-3.5 h-3.5" />
                                            </button>
                                          )}
                                        </div>
@@ -7335,7 +7458,7 @@ App Link: ${window.location.origin}`;
                                          type="button"
                                          onClick={() => handleAcknowledgeDirective(report, dir.id)}
                                          disabled={hasUserAcknowledged}
-                                         className={`px-1.5 py-0.5 rounded text-[9px] font-sans font-extrabold flex items-center gap-0.5 transition-all ${
+                                         className={`px-2 py-1 rounded text-[10.5px] font-sans font-extrabold flex items-center gap-1 transition-all ${
                                            hasUserAcknowledged
                                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-not-allowed opacity-85"
                                              : "bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 hover:border-emerald-400 active:scale-95 cursor-pointer shadow-3xs"
@@ -8038,12 +8161,12 @@ App Link: ${window.location.origin}`;
                                   </span>
                                 </div>
                               </div>
-                              <p translate="no" className="notranslate text-slate-600 font-medium text-[10px] leading-relaxed whitespace-pre-wrap pl-1.5 border-l border-slate-200">
-                                {res.resultText}
-                              </p>
-                              <div className="mt-1.5 text-[8.5px] text-slate-400 font-mono flex items-center justify-between select-none">
+                              <div translate="no" className="notranslate text-slate-700 font-medium text-[11.5px] leading-relaxed whitespace-pre-wrap pl-1.5 border-l border-slate-200">
+                                {renderTaggedText(res.resultText, users)}
+                              </div>
+                              <div className="mt-1.5 text-[9.5px] text-slate-400 font-mono flex items-center justify-between select-none">
                                 <span translate="no" className="notranslate">
-                                  Đại diện: {res.handlerName}
+                                  Đại diện: {capitalizeWords(res.handlerName)}
                                 </span>
                                 <div className="flex items-center gap-1.5 shrink-0">
                                   <span>{formatTimestampToDMY(res.updatedAt)}</span>
@@ -8783,8 +8906,8 @@ App Link: ${window.location.origin}`;
                               className={`flex flex-col max-w-[88%] ${isMyself ? "self-end items-end" : "self-start items-start"}`}
                             >
                               {/* Metadata block containing sender title and role details */}
-                              <div className="text-[8.5px] font-bold text-slate-500 mb-0.5 px-0.5 select-none flex items-center gap-1 flex-wrap">
-                                <span translate="no" className="notranslate">{resolvedSender.fullName}</span>
+                              <div className="text-[9.5px] font-bold text-slate-500 mb-0.5 px-0.5 select-none flex items-center gap-1 flex-wrap">
+                                <span translate="no" className="notranslate">{capitalizeWords(resolvedSender.fullName)}</span>
                                 <span className="opacity-60 text-[7px] font-normal font-mono">({resolvedSender.position || resolvedSender.role || msg.senderRole})</span>
                               </div>
 
@@ -8835,7 +8958,7 @@ App Link: ${window.location.origin}`;
                                         : "bg-white text-slate-800 border border-slate-200 rounded-tl-none text-left"
                                     }`}
                                   >
-                                    <span translate="no" className="notranslate">{msg.message}</span>
+                                    <span translate="no" className="notranslate">{renderTaggedText(msg.message, users)}</span>
                                   </div>
 
                                   {/* Formatted Date value displayed as dd/mm/yy + Like button + Admin controls */}
