@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import html2canvas from "html2canvas";
 import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, BellRing, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, CheckCircle2, AlertCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send, Award, Calendar, Clock, Lightbulb, Newspaper, AtSign } from "lucide-react";
@@ -2679,6 +2679,80 @@ export default function MobileFrame({
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [isFabDocked, setIsFabDocked] = useState(false);
   const touchStartXRef = useRef<number | null>(null);
+
+  // Floating Action Button Cluster Vertical Dragging State
+  const [fabOffsetY, setFabOffsetY] = useState<number>(0);
+  const fabDragStartYRef = useRef<number | null>(null);
+  const fabInitialOffsetYRef = useRef<number>(0);
+  const isFabDraggingRef = useRef<boolean>(false);
+
+  const handleFabTouchStart = (e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0].clientX;
+    fabDragStartYRef.current = e.touches[0].clientY;
+    fabInitialOffsetYRef.current = fabOffsetY;
+    isFabDraggingRef.current = false;
+  };
+
+  const handleFabTouchMove = (e: React.TouchEvent) => {
+    if (touchStartXRef.current !== null) {
+      const diffX = e.touches[0].clientX - touchStartXRef.current;
+      if (isFabDocked && diffX < -15) {
+        setIsFabDocked(false);
+        touchStartXRef.current = null;
+      } else if (!isFabDocked && diffX > 20) {
+        setIsFabDocked(true);
+        touchStartXRef.current = null;
+      }
+    }
+
+    if (fabDragStartYRef.current !== null) {
+      const diffY = e.touches[0].clientY - fabDragStartYRef.current;
+      if (Math.abs(diffY) > 4) {
+        isFabDraggingRef.current = true;
+      }
+      const newOffset = fabInitialOffsetYRef.current + diffY;
+      const clampedOffset = Math.max(-550, Math.min(80, newOffset));
+      setFabOffsetY(clampedOffset);
+    }
+  };
+
+  const handleFabTouchEnd = () => {
+    fabDragStartYRef.current = null;
+    touchStartXRef.current = null;
+    setTimeout(() => {
+      isFabDraggingRef.current = false;
+    }, 100);
+  };
+
+  const handleFabMouseDown = (e: React.MouseEvent) => {
+    fabDragStartYRef.current = e.clientY;
+    fabInitialOffsetYRef.current = fabOffsetY;
+    isFabDraggingRef.current = false;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (fabDragStartYRef.current !== null) {
+        const diffY = moveEvent.clientY - fabDragStartYRef.current;
+        if (Math.abs(diffY) > 4) {
+          isFabDraggingRef.current = true;
+        }
+        const newOffset = fabInitialOffsetYRef.current + diffY;
+        const clampedOffset = Math.max(-550, Math.min(80, newOffset));
+        setFabOffsetY(clampedOffset);
+      }
+    };
+
+    const handleMouseUp = () => {
+      fabDragStartYRef.current = null;
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      setTimeout(() => {
+        isFabDraggingRef.current = false;
+      }, 100);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showMobileCloudQuota, setShowMobileCloudQuota] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
@@ -3712,13 +3786,13 @@ App Link: ${window.location.origin}`;
     });
   }, [reports, currentUser, isAdminUser, isUserDnpCompany, mobileFeedSubTab, searchTerm, selectedCategory, selectedFactoryFilter, matchSelectedFactory, selectedWeekFilter, selectedReportTypeFilter, selectedNewsCompanyFilter, getReportCompanyOwnership]);
 
-  // Helper to check if current user is tagged or assigned in a report
-  const isUserTaggedInReport = (r: QualityReport, user: User | null): boolean => {
-    if (!user) return false;
+  // Helper to check direct user tag/assignment in a report
+  const checkDirectUserTagged = (r: QualityReport, u: User): boolean => {
+    if (!u) return false;
 
     // Direct assignment
-    if (r.assignedPersonId && r.assignedPersonId === user.id) return true;
-    if (r.assignedPersonName && user.fullName && r.assignedPersonName.toLowerCase() === user.fullName.toLowerCase()) return true;
+    if (r.assignedPersonId && r.assignedPersonId === u.id) return true;
+    if (r.assignedPersonName && u.fullName && r.assignedPersonName.toLowerCase() === u.fullName.toLowerCase()) return true;
 
     // Helper to check text for @mention
     const checkText = (text?: string): boolean => {
@@ -3726,11 +3800,11 @@ App Link: ${window.location.origin}`;
       const lower = text.toLowerCase();
       if (!lower.includes("@")) return false;
 
-      if (user.fullName && lower.includes(`@${user.fullName.toLowerCase()}`)) return true;
-      if (user.id && lower.includes(`@${user.id.toLowerCase()}`)) return true;
+      if (u.fullName && lower.includes(`@${u.fullName.toLowerCase()}`)) return true;
+      if (u.id && lower.includes(`@${u.id.toLowerCase()}`)) return true;
 
-      if (user.fullName) {
-        const parts = user.fullName.trim().split(/\s+/);
+      if (u.fullName) {
+        const parts = u.fullName.trim().split(/\s+/);
         if (parts.length >= 2) {
           const shortName = parts.slice(-2).join(" ").toLowerCase();
           if (lower.includes(`@${shortName}`)) return true;
@@ -3745,10 +3819,53 @@ App Link: ${window.location.origin}`;
     if (checkText(r.notes)) return true;
     if (checkText(r.content)) return true;
     if (r.directives && r.directives.some(d => checkText(d.text))) return true;
-    if (r.resolutions && r.resolutions.some(res => checkText(res.resultText) || (res.handlerName && user.fullName && res.handlerName.toLowerCase() === user.fullName.toLowerCase()))) return true;
+    if (r.resolutions && r.resolutions.some(res => checkText(res.resultText) || (res.handlerName && u.fullName && res.handlerName.toLowerCase() === u.fullName.toLowerCase()))) return true;
 
     return false;
   };
+
+  // Helper to check if current user (or department members if user is Department Head/Manager) is tagged or assigned in a report
+  const isUserTaggedInReport = useCallback((r: QualityReport, user: User | null): boolean => {
+    if (!user) return false;
+
+    // 1. Direct tag/assignment on the user
+    if (checkDirectUserTagged(r, user)) return true;
+
+    // 2. Check if text mentions user's department directly (e.g., @Phòng QC, @QC)
+    if (user.department) {
+      const deptClean = user.department.trim().toLowerCase();
+      if (deptClean) {
+        const checkDeptText = (text?: string): boolean => {
+          if (!text) return false;
+          const lower = text.toLowerCase();
+          if (!lower.includes("@")) return false;
+          if (lower.includes(`@${deptClean}`)) return true;
+          const shortDept = deptClean.replace(/^(phòng|bộ phận|ban|xưởng|khối)\s+/i, "").trim();
+          if (shortDept.length >= 2 && lower.includes(`@${shortDept}`)) return true;
+          return false;
+        };
+        if (checkDeptText(r.notes) || checkDeptText(r.content)) return true;
+        if (r.directives && r.directives.some(d => checkDeptText(d.text))) return true;
+      }
+    }
+
+    // 3. For Department Heads / Managers / Reviewers / Admins, also check if any member of their department is tagged
+    const pos = (user.position || "").toLowerCase();
+    const role = (user.role || "").toLowerCase();
+    const isDeptHead = pos.includes("trưởng") || pos.includes("phó") || pos.includes("quản lý") || pos.includes("giám đốc") || pos.includes("gđ") || pos.includes("chủ nhiệm") || pos.includes("leader") || pos.includes("head") || role.includes("duyệt") || role.includes("admin");
+
+    if (isDeptHead && user.department && users && users.length > 0) {
+      const userDeptClean = user.department.trim().toLowerCase();
+      if (userDeptClean) {
+        const deptMembers = users.filter(u => u.id !== user.id && u.department && u.department.trim().toLowerCase() === userDeptClean);
+        for (const member of deptMembers) {
+          if (checkDirectUserTagged(r, member)) return true;
+        }
+      }
+    }
+
+    return false;
+  }, [users]);
 
   // Transferred count recalculated dynamically based on active filters
   const transferredReportsCount = useMemo(() => {
@@ -4912,7 +5029,7 @@ App Link: ${window.location.origin}`;
           showFilters ? "max-h-[105px] opacity-100" : "max-h-0 opacity-0 pointer-events-none"
         }`}>
           {/* Row 1: Search bar & Filters */}
-          <div className="bg-white pl-2.5 pr-1.5 py-1.5 border-b border-slate-100 flex items-center gap-1 flex-nowrap overflow-x-auto scrollbar-none select-none">
+          <div className="bg-white px-2 py-1.5 border-b border-slate-100 flex items-center gap-1 flex-nowrap overflow-x-auto scrollbar-none select-none">
             {/* Search Input */}
             <div className={`relative transition-all duration-300 ${isSearchFocused ? "flex-1 min-w-[130px]" : "w-[28px] shrink-0"}`}>
               <Search className={`absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none transition-all duration-300 ${isSearchFocused ? "left-2" : "left-1/2 -translate-x-1/2"}`} />
@@ -5062,18 +5179,17 @@ App Link: ${window.location.origin}`;
               )}
               <span translate="no" className="notranslate">DSA</span>
             </button>
-            <div className="w-2 shrink-0" />
           </div>
 
           {/* Row 2: Status Filter Strip */}
-          <div className="bg-white px-1.5 py-1.5 border-b border-slate-200/60 shadow-2xs flex items-center justify-between gap-1 overflow-x-auto scrollbar-none select-none text-[8.5px] xs:text-[9px] font-extrabold tracking-tight">
+          <div className="bg-white px-2 py-1.5 border-b border-slate-200/60 shadow-2xs flex items-center justify-between gap-[1.5px] overflow-x-auto scrollbar-none select-none text-[8.5px] xs:text-[9px] font-extrabold tracking-tight">
             <button
               type="button"
               onClick={() => {
                 setSelectedProcessStatusFilter("ALL");
                 setSelectedOnlyTransferredFilter(false);
               }}
-              className={`h-[26px] px-1.5 sm:px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
+              className={`h-[26px] px-1 sm:px-1.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
                 selectedProcessStatusFilter === "ALL" && !selectedOnlyTransferredFilter
                   ? "bg-slate-800 text-white border-slate-800 shadow-3xs"
                   : "bg-slate-100 text-slate-700 border-slate-200/80 hover:bg-slate-200/70"
@@ -5088,7 +5204,7 @@ App Link: ${window.location.origin}`;
                 setSelectedProcessStatusFilter("UNACKNOWLEDGED");
                 setSelectedOnlyTransferredFilter(false);
               }}
-              className={`h-[26px] px-1.5 sm:px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
+              className={`h-[26px] px-1 sm:px-1.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
                 selectedProcessStatusFilter === "UNACKNOWLEDGED" && !selectedOnlyTransferredFilter
                   ? "bg-rose-600 text-white border-rose-600 shadow-3xs ring-1 ring-rose-400/50"
                   : "bg-rose-50 text-rose-800 border-rose-200/80 hover:bg-rose-100"
@@ -5103,7 +5219,7 @@ App Link: ${window.location.origin}`;
                 setSelectedProcessStatusFilter("PROCESSING");
                 setSelectedOnlyTransferredFilter(false);
               }}
-              className={`h-[26px] px-1.5 sm:px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
+              className={`h-[26px] px-1 sm:px-1.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
                 selectedProcessStatusFilter === "PROCESSING" && !selectedOnlyTransferredFilter
                   ? "bg-amber-600 text-white border-amber-600 shadow-3xs ring-1 ring-amber-400/50"
                   : "bg-amber-50 text-amber-800 border-amber-200/80 hover:bg-amber-100"
@@ -5118,7 +5234,7 @@ App Link: ${window.location.origin}`;
                 setSelectedProcessStatusFilter("RESOLVED");
                 setSelectedOnlyTransferredFilter(false);
               }}
-              className={`h-[26px] px-1.5 sm:px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
+              className={`h-[26px] px-1 sm:px-1.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
                 selectedProcessStatusFilter === "RESOLVED" && !selectedOnlyTransferredFilter
                   ? "bg-emerald-600 text-white border-emerald-600 shadow-3xs ring-1 ring-emerald-400/50"
                   : "bg-emerald-50 text-emerald-800 border-emerald-200/80 hover:bg-emerald-100"
@@ -5134,7 +5250,7 @@ App Link: ${window.location.origin}`;
                 setSelectedOnlyTaggedFilter(false);
                 setSelectedProcessStatusFilter("ALL");
               }}
-              className={`h-[26px] px-1.5 sm:px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
+              className={`h-[26px] px-1 sm:px-1.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
                 selectedOnlyTransferredFilter
                   ? "bg-indigo-700 text-white border-indigo-700 shadow-3xs ring-1 ring-indigo-400/50 font-black"
                   : "bg-indigo-50 text-indigo-800 border-indigo-200/80 hover:bg-indigo-100 font-extrabold"
@@ -5151,14 +5267,15 @@ App Link: ${window.location.origin}`;
                 setSelectedOnlyTransferredFilter(false);
                 setSelectedProcessStatusFilter("ALL");
               }}
-              className={`h-[26px] px-1.5 sm:px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center leading-none ${
+              className={`h-[26px] px-1.5 sm:px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center gap-0.5 leading-none ${
                 selectedOnlyTaggedFilter
                   ? "bg-purple-700 text-white border-purple-700 shadow-3xs ring-1 ring-purple-400/50 font-black"
                   : "bg-purple-50 text-purple-800 border-purple-200/80 hover:bg-purple-100 font-extrabold"
               }`}
               title="Chỉ hiển thị các bản tin có tag (@nhắc tên) bạn"
             >
-              <span translate="no" className="notranslate"><T>{`@ (${taggedReportsCount})`}</T></span>
+              <AtSign className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
+              <span translate="no" className="notranslate"><T>{`(${taggedReportsCount})`}</T></span>
             </button>
           </div>
         </div>
@@ -8817,30 +8934,30 @@ App Link: ${window.location.origin}`;
         </div>
       </>)}
 
-      {/* Floating Action Buttons Area (Dockable to Right Edge - Compact Size) */}
+      {/* Floating Action Buttons Area (Dockable to Right Edge & Draggable Up/Down) */}
       {activeBottomTab === "BAO_CAO" && !showTrash && (
         isFabDocked ? (
-          /* Thanh nút thu gọn nhỏ ở sát mép phải - Thao tác trực tiếp được cả Lên top, Tạo mới và Mở rộng */
+          /* Thanh nút thu gọn nhỏ ở sát mép phải - Thao tác trực tiếp được cả Lên top, Tạo mới và Mở rộng, Khoảng hở hở rộng gấp 3 lần và Rê lên xuống được */
           <div
-            onTouchStart={(e) => {
-              touchStartXRef.current = e.touches[0].clientX;
-            }}
-            onTouchMove={(e) => {
-              if (touchStartXRef.current !== null) {
-                const diffX = e.touches[0].clientX - touchStartXRef.current;
-                if (diffX < -15) { // Swiped left from right edge
-                  setIsFabDocked(false);
-                  touchStartXRef.current = null;
-                }
-              }
-            }}
-            className="absolute bottom-24 right-0 z-30 bg-gradient-to-l from-blue-600/95 to-indigo-600/95 text-white rounded-l-xl pl-1 pr-0.5 py-1.5 shadow-2xl flex flex-col items-center gap-1 border-l border-y border-white/30 backdrop-blur-xs transition-all duration-200"
+            onTouchStart={handleFabTouchStart}
+            onTouchMove={handleFabTouchMove}
+            onTouchEnd={handleFabTouchEnd}
+            onMouseDown={handleFabMouseDown}
+            style={{ transform: `translateY(${fabOffsetY}px)` }}
+            className="absolute bottom-24 right-0 z-30 bg-gradient-to-l from-blue-600/95 to-indigo-600/95 text-white rounded-l-xl pl-1.5 pr-1 py-3 shadow-2xl flex flex-col items-center gap-3.5 border-l border-y border-white/30 backdrop-blur-xs transition-transform duration-75 select-none cursor-grab active:cursor-grabbing"
+            title="Nhấn giữ và rê lên/xuống để di chuyển cụm nút"
           >
+            {/* Vạch rê kéo lên xuống */}
+            <div className="w-3 h-1 rounded-full bg-white/40 mb-0.5"></div>
+
             {/* Nút Mở rộng sang nút to */}
             <button
               type="button"
-              onClick={() => setIsFabDocked(false)}
-              className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-white/25 active:scale-90 transition-all cursor-pointer"
+              onClick={() => {
+                if (isFabDraggingRef.current) return;
+                setIsFabDocked(false);
+              }}
+              className="w-5.5 h-5.5 flex items-center justify-center rounded-full hover:bg-white/25 active:scale-90 transition-all cursor-pointer"
               title="Sổ nút to ra"
             >
               <ChevronLeft className="w-3.5 h-3.5 text-white stroke-[2.5px]" />
@@ -8850,8 +8967,11 @@ App Link: ${window.location.origin}`;
             {showScrollTop && (
               <button
                 type="button"
-                onClick={scrollToTop}
-                className="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/35 active:scale-90 transition-all cursor-pointer border border-white/25"
+                onClick={() => {
+                  if (isFabDraggingRef.current) return;
+                  scrollToTop();
+                }}
+                className="w-5.5 h-5.5 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/35 active:scale-90 transition-all cursor-pointer border border-white/25"
                 title="Lên đầu trang"
               >
                 <ArrowUp className="w-3 h-3 text-white stroke-[2.5px]" />
@@ -8861,46 +8981,49 @@ App Link: ${window.location.origin}`;
             {/* Nút Đăng mới sự cố/báo cáo */}
             <button
               type="button"
-              onClick={onOpenReportForm}
-              className="w-5 h-5 flex items-center justify-center rounded-full bg-white/25 hover:bg-white/40 active:scale-90 transition-all cursor-pointer border border-white/25"
+              onClick={() => {
+                if (isFabDraggingRef.current) return;
+                onOpenReportForm();
+              }}
+              className="w-5.5 h-5.5 flex items-center justify-center rounded-full bg-white/25 hover:bg-white/40 active:scale-90 transition-all cursor-pointer border border-white/25"
               title="Đăng báo cáo mới"
             >
               <Plus className="w-3 h-3 text-white stroke-[2.5px]" />
             </button>
           </div>
         ) : (
-          /* Khối nút bấm nổi đầy đủ - Nhỏ gọn hơn 30% */
+          /* Khối nút bấm nổi đầy đủ - Khoảng hở hở rộng gấp 3 lần và Rê lên xuống được */
           <div
-            onTouchStart={(e) => {
-              touchStartXRef.current = e.touches[0].clientX;
-            }}
-            onTouchMove={(e) => {
-              if (touchStartXRef.current !== null) {
-                const diffX = e.touches[0].clientX - touchStartXRef.current;
-                if (diffX > 20) { // Swiped right towards edge
-                  setIsFabDocked(true);
-                  touchStartXRef.current = null;
-                }
-              }
-            }}
-            className="absolute bottom-20 right-3 z-30 flex flex-col items-center gap-2 transition-all duration-300 animate-in fade-in slide-in-from-right-3"
+            onTouchStart={handleFabTouchStart}
+            onTouchMove={handleFabTouchMove}
+            onTouchEnd={handleFabTouchEnd}
+            onMouseDown={handleFabMouseDown}
+            style={{ transform: `translateY(${fabOffsetY}px)` }}
+            className="absolute bottom-20 right-3 z-30 flex flex-col items-center gap-6 transition-transform duration-75 animate-in fade-in slide-in-from-right-3 select-none cursor-grab active:cursor-grabbing"
+            title="Nhấn giữ và rê lên/xuống để di chuyển cụm nút"
           >
             {/* Nút thu gọn vào cạnh phải */}
             <button
               type="button"
-              onClick={() => setIsFabDocked(true)}
-              className="w-5.5 h-5.5 bg-slate-800/80 hover:bg-slate-900 text-white rounded-full flex items-center justify-center shadow-md active:scale-90 transition-all cursor-pointer border border-white/20"
+              onClick={() => {
+                if (isFabDraggingRef.current) return;
+                setIsFabDocked(true);
+              }}
+              className="w-6 h-6 bg-slate-800/80 hover:bg-slate-900 text-white rounded-full flex items-center justify-center shadow-md active:scale-90 transition-all cursor-pointer border border-white/20"
               title="Ẩn nút vào cạnh phải"
             >
-              <ChevronRight className="w-3 h-3 text-white" />
+              <ChevronRight className="w-3.5 h-3.5 text-white" />
             </button>
 
             {/* Scroll to Top floating button */}
             {showScrollTop && (
               <button
                 type="button"
-                onClick={scrollToTop}
-                className="w-8 h-8 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-lg flex items-center justify-center shadow-lg transition-all cursor-pointer"
+                onClick={() => {
+                  if (isFabDraggingRef.current) return;
+                  scrollToTop();
+                }}
+                className="w-8.5 h-8.5 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-lg flex items-center justify-center shadow-lg transition-all cursor-pointer"
                 title="Lên đầu trang"
               >
                 <ArrowUp className="w-4 h-4 text-white stroke-[2.5px]" />
@@ -8909,8 +9032,11 @@ App Link: ${window.location.origin}`;
 
             {/* Blue Circular float creation trigger */}
             <button
-              onClick={onOpenReportForm}
-              className={`w-8 h-8 text-white rounded-lg flex items-center justify-center shadow-xl hover:scale-110 active:scale-90 transition-transform ${theme.hoverBg}`}
+              onClick={() => {
+                if (isFabDraggingRef.current) return;
+                onOpenReportForm();
+              }}
+              className={`w-8.5 h-8.5 text-white rounded-lg flex items-center justify-center shadow-xl hover:scale-110 active:scale-90 transition-transform ${theme.hoverBg}`}
               title="Đăng báo cáo mới"
             >
               <Plus className="w-4 h-4 text-white stroke-[2.5px]" />
