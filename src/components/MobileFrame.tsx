@@ -7538,7 +7538,7 @@ App Link: ${window.location.origin}`;
 
                         const reportDateObj = parseReportTimestamp(report.timestamp);
                         const elapsedHours = (new Date().getTime() - reportDateObj.getTime()) / (1000 * 60 * 60);
-                        const isOver48h = elapsedHours > 48;
+                        const isOver24h = elapsedHours > 24;
 
                         return (
                           <div className="mt-1 mb-1 p-2.5 bg-gradient-to-b from-slate-50 to-white border border-slate-200/90 rounded-xl flex flex-col gap-2 shadow-2xs">
@@ -7557,7 +7557,7 @@ App Link: ${window.location.origin}`;
                                   </span>
                                 ) : ackCount > 0 ? (
                                   <span className={`px-1.5 py-0.5 rounded border flex items-center gap-1 text-[8.5px] font-bold ${
-                                    isOver48h 
+                                    isOver24h 
                                       ? "text-amber-900 bg-amber-100 border-amber-300 ring-1 ring-amber-400" 
                                       : "text-amber-700 bg-amber-50 border-amber-200"
                                   }`}>
@@ -7566,15 +7566,14 @@ App Link: ${window.location.origin}`;
                                       <T>Đang xử lý</T>
                                     </span>
                                   </span>
-                                ) : isOver48h ? (
-                                  <span className="text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300 flex items-center gap-1 text-[8.5px] font-extrabold ring-2 ring-amber-400/60 shadow-3xs">
-                                    <BellRing className="w-3 h-3 text-amber-600 animate-bell-shake stroke-[2.5px]" />
-                                    <span translate="no" className="notranslate"><T>{"(>48H CHƯA TIẾP NHẬN)"}</T></span>
-                                  </span>
+                                ) : isOver24h ? (
+                                  <div title="Báo động: Quá 24h chưa tiếp nhận" className="flex items-center justify-center p-1 rounded-full bg-amber-100/90 border border-amber-300 ring-2 ring-amber-400/60 shadow-3xs cursor-pointer active:scale-95 transition-all">
+                                    <BellRing className="w-5 h-5 text-amber-600 animate-bell-shake stroke-[2.5px]" />
+                                  </div>
                                 ) : (
                                   <span className="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 flex items-center gap-1 text-[8.5px] font-bold">
                                     <Bell className="w-3 h-3 text-blue-600 animate-bell-gentle stroke-[2.5px]" />
-                                    <span translate="no" className="notranslate"><T>{"Mới ghi nhận (<48h)"}</T></span>
+                                    <span translate="no" className="notranslate"><T>{"Mới ghi nhận (<24h)"}</T></span>
                                   </span>
                                 )}
                               </div>
@@ -7849,8 +7848,8 @@ App Link: ${window.location.origin}`;
 
                       {/* Inline form to record or edit resolution (Placed BELOW Timeline) */}
                       {editingResolutionReportId === report.id && (
-                        <div ref={resolutionFormRef} className="mt-2 mb-1 p-2.5 bg-indigo-50/50 border border-indigo-100 rounded-lg flex flex-col gap-2 transition-all duration-300">
-                          <div className="text-[9.5px] font-bold text-indigo-800 flex items-center justify-between">
+                        <div ref={resolutionFormRef} className="mt-2 mb-1 p-2.5 bg-indigo-50/50 border border-indigo-100 rounded-lg flex flex-col gap-2.5 transition-all duration-300">
+                          <div className="text-[11px] font-bold text-indigo-800 flex items-center justify-between">
                             <span translate="no" className="notranslate">
                               {editingResolutionId ? "✏️ CẬP NHẬT KẾT QUẢ XỬ LÝ KPH:" : "✍️ GHI NHẬN KẾT QUẢ XỬ LÝ KPH:"}
                             </span>
@@ -7860,75 +7859,48 @@ App Link: ${window.location.origin}`;
                                 setEditingResolutionReportId(null);
                                 setEditingResolutionId(null);
                               }}
-                              className="text-slate-400 hover:text-slate-600 font-extrabold text-[11px] p-0.5 border-none bg-transparent cursor-pointer"
+                              className="text-slate-400 hover:text-slate-600 font-extrabold text-[13px] p-0.5 border-none bg-transparent cursor-pointer"
                             >
                               ✕
                             </button>
                           </div>
-                          
-                          {/* Department input */}
-                          <div className="flex flex-col gap-0.5">
-                            <label className="text-[8px] font-extrabold text-indigo-700 uppercase">
-                              <span translate="no" className="notranslate">Bộ Phận / Đơn Vị xử lý:</span>
-                            </label>
-                            <input
-                              type="text"
-                              value={resDeptName}
-                              onChange={(e) => setResDeptName(e.target.value)}
-                              placeholder="Ví dụ: Phòng QC, Tổ Cơ Điện..."
-                              className="w-full text-[9px] font-semibold text-slate-800 bg-white border border-slate-250 rounded px-1.5 py-1 focus:outline-none focus:border-indigo-400"
-                            />
-                          </div>
 
-                          {/* Status and Action text */}
-                          <div className="grid grid-cols-2 gap-1.5">
-                            <div className="flex flex-col gap-0.5">
-                              <label className="text-[8px] font-extrabold text-indigo-700 uppercase">
-                                <span translate="no" className="notranslate">Trạng thái:</span>
-                              </label>
-                              <div className="flex gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => setResStatus("Đang xử lý")}
-                                  className={`flex-1 flex items-center justify-center gap-1 py-1.5 px-1 rounded border text-[8.5px] font-extrabold transition-all select-none cursor-pointer active:scale-95 ${
-                                    resStatus === "Đang xử lý"
-                                      ? "bg-amber-50 text-amber-700 border-amber-400 shadow-3xs"
-                                      : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
-                                  }`}
-                                >
-                                  <span>⏳</span>
-                                  <span translate="no" className="notranslate">Đang xử lý</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setResStatus("Đã xử lý")}
-                                  className={`flex-1 flex items-center justify-center gap-1 py-1.5 px-1 rounded border text-[8.5px] font-extrabold transition-all select-none cursor-pointer active:scale-95 ${
-                                    resStatus === "Đã xử lý"
-                                      ? "bg-emerald-50 text-emerald-700 border-emerald-400 shadow-3xs"
-                                      : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
-                                  }`}
-                                >
-                                  <span>✅</span>
-                                  <span translate="no" className="notranslate">Đã xử lý</span>
-                                </button>
-                              </div>
-                            </div>
-                            <div className="flex flex-col gap-0.5">
-                              <label className="text-[8px] font-extrabold text-indigo-700 uppercase">
-                                <span translate="no" className="notranslate">Người thực hiện:</span>
-                              </label>
-                              <input
-                                type="text"
-                                readOnly
-                                value={currentUser?.fullName ? formatNameCapitalized(currentUser.fullName) : "Kiểm soát viên"}
-                                className="w-full text-[9px] font-semibold text-slate-500 bg-slate-100 border border-slate-200 rounded px-1.5 py-1 focus:outline-none cursor-not-allowed"
-                              />
+                          {/* Status picker */}
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-[9.5px] font-extrabold text-indigo-700 uppercase">
+                              <span translate="no" className="notranslate">Trạng thái:</span>
+                            </label>
+                            <div className="flex gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setResStatus("Đang xử lý")}
+                                className={`flex-1 flex items-center justify-center gap-1 py-1.5 px-1 rounded border text-[10px] font-extrabold transition-all select-none cursor-pointer active:scale-95 ${
+                                  resStatus === "Đang xử lý"
+                                    ? "bg-amber-50 text-amber-700 border-amber-400 shadow-3xs"
+                                    : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+                                }`}
+                              >
+                                <span>⏳</span>
+                                <span translate="no" className="notranslate">Đang xử lý</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setResStatus("Đã xử lý")}
+                                className={`flex-1 flex items-center justify-center gap-1 py-1.5 px-1 rounded border text-[10px] font-extrabold transition-all select-none cursor-pointer active:scale-95 ${
+                                  resStatus === "Đã xử lý"
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-400 shadow-3xs"
+                                    : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+                                }`}
+                              >
+                                <span>✅</span>
+                                <span translate="no" className="notranslate">Đã xử lý</span>
+                              </button>
                             </div>
                           </div>
 
                           {/* Result Description text field */}
                           <div className="flex flex-col gap-0.5">
-                            <label className="text-[8px] font-extrabold text-indigo-700 uppercase">
+                            <label className="text-[9.5px] font-extrabold text-indigo-700 uppercase">
                               <span translate="no" className="notranslate">Mô tả/ Ghi chú (nếu có):</span>
                             </label>
                             <textarea
@@ -7944,90 +7916,96 @@ App Link: ${window.location.origin}`;
                                 }
                               }}
                               placeholder="Nhập nội dung xử lý, giải pháp khắc phục..."
-                              className="w-full text-[9px] font-semibold text-slate-800 bg-white border border-slate-250 rounded px-1.5 py-1 focus:outline-none focus:border-indigo-400 resize-none"
+                              className="w-full text-[10.5px] font-semibold text-slate-800 bg-white border border-slate-250 rounded px-2 py-1 focus:outline-none focus:border-indigo-400 resize-none font-sans"
                             />
                           </div>
 
-                          {/* Save & Cancel buttons */}
-                          <div className="flex justify-end gap-1.5 pt-1 border-t border-indigo-100/30">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingResolutionReportId(null);
-                                setEditingResolutionId(null);
-                              }}
-                              className="text-[9px] font-bold text-slate-550 hover:text-slate-700 px-2 py-0.5 rounded border border-slate-200 hover:bg-slate-100 cursor-pointer active:scale-95 transition-all"
-                            >
-                              <span translate="no" className="notranslate">Hủy</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (!resDeptName.trim()) {
-                                  showToast("Vui lòng nhập tên Bộ Phận/ Đơn Vị xử lý! ⚠️");
-                                  return;
-                                }
-                                if (!resResultText.trim()) {
-                                  showToast("Vui lòng nhập nội dung kết quả xử lý! ⚠️");
-                                  return;
-                                }
-                                
-                                const currentResolutions = report.resolutions ? [...report.resolutions] : [];
-                                
-                                const getFormattedNow = () => {
-                                  const now = new Date();
-                                  const d = String(now.getDate()).padStart(2, '0');
-                                  const m = String(now.getMonth() + 1).padStart(2, '0');
-                                  const y = String(now.getFullYear()).slice(-2);
-                                  const h = String(now.getHours()).padStart(2, '0');
-                                  const min = String(now.getMinutes()).padStart(2, '0');
-                                  const sec = String(now.getSeconds()).padStart(2, '0');
-                                  return `${d}/${m}/${y} ${h}:${min}:${sec}`;
-                                };
+                          {/* Executor info & Save/Cancel buttons */}
+                          <div className="flex items-center justify-between gap-2 pt-1 border-t border-indigo-100/30">
+                            <div className="flex items-center gap-1 min-w-0 truncate text-[10.5px] font-semibold text-slate-600">
+                              <span className="text-[11px] leading-none shrink-0">👤</span>
+                              <span translate="no" className="notranslate truncate">
+                                {currentUser?.fullName ? formatNameCapitalized(currentUser.fullName) : "Kiểm soát viên"}
+                              </span>
+                            </div>
 
-                                let existingIndex = -1;
-                                if (editingResolutionId) {
-                                  existingIndex = currentResolutions.findIndex(
-                                    (r) => r.id === editingResolutionId
-                                  );
-                                } else {
-                                  existingIndex = currentResolutions.findIndex(
-                                    (r) => r.departmentName.trim().toLowerCase() === resDeptName.trim().toLowerCase()
-                                  );
-                                }
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingResolutionReportId(null);
+                                  setEditingResolutionId(null);
+                                }}
+                                className="text-[10.5px] font-bold text-slate-600 hover:text-slate-800 px-2.5 py-1 rounded border border-slate-200 hover:bg-slate-100 cursor-pointer active:scale-95 transition-all"
+                              >
+                                <span translate="no" className="notranslate">Hủy</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const resolvedDept = resDeptName.trim() || currentUser?.department || currentUser?.position || "Bộ phận xử lý";
+                                  if (!resResultText.trim()) {
+                                    showToast("Vui lòng nhập nội dung kết quả xử lý! ⚠️");
+                                    return;
+                                  }
+                                  
+                                  const currentResolutions = report.resolutions ? [...report.resolutions] : [];
+                                  
+                                  const getFormattedNow = () => {
+                                    const now = new Date();
+                                    const d = String(now.getDate()).padStart(2, "0");
+                                    const m = String(now.getMonth() + 1).padStart(2, "0");
+                                    const y = String(now.getFullYear()).slice(-2);
+                                    const h = String(now.getHours()).padStart(2, "0");
+                                    const min = String(now.getMinutes()).padStart(2, "0");
+                                    const sec = String(now.getSeconds()).padStart(2, "0");
+                                    return `${d}/${m}/${y} ${h}:${min}:${sec}`;
+                                  };
 
-                                const newRes: QualityReportResolution = {
-                                  id: existingIndex >= 0 ? currentResolutions[existingIndex].id : `res-${Date.now()}`,
-                                  departmentName: resDeptName.trim(),
-                                  handlerName: existingIndex >= 0 ? currentResolutions[existingIndex].handlerName : (currentUser?.fullName || "Kiểm soát viên"),
-                                  status: resStatus,
-                                  resultText: resResultText.trim(),
-                                  updatedAt: getFormattedNow()
-                                };
+                                  let existingIndex = -1;
+                                  if (editingResolutionId) {
+                                    existingIndex = currentResolutions.findIndex(
+                                      (r) => r.id === editingResolutionId
+                                    );
+                                  } else {
+                                    existingIndex = currentResolutions.findIndex(
+                                      (r) => r.departmentName.trim().toLowerCase() === resolvedDept.toLowerCase()
+                                    );
+                                  }
 
-                                if (existingIndex >= 0) {
-                                  currentResolutions[existingIndex] = newRes;
-                                } else {
-                                  currentResolutions.push(newRes);
-                                }
+                                  const newRes: QualityReportResolution = {
+                                    id: existingIndex >= 0 ? currentResolutions[existingIndex].id : `res-${Date.now()}`,
+                                    departmentName: resolvedDept,
+                                    handlerName: existingIndex >= 0 ? currentResolutions[existingIndex].handlerName : (currentUser?.fullName || "Kiểm soát viên"),
+                                    status: resStatus,
+                                    resultText: resResultText.trim(),
+                                    updatedAt: getFormattedNow()
+                                  };
 
-                                const updatedReport: QualityReport = {
-                                  ...report,
-                                  resolutions: currentResolutions
-                                };
+                                  if (existingIndex >= 0) {
+                                    currentResolutions[existingIndex] = newRes;
+                                  } else {
+                                    currentResolutions.push(newRes);
+                                  }
 
-                                if (onUpdateReport) {
-                                  onUpdateReport(updatedReport);
-                                }
+                                  const updatedReport: QualityReport = {
+                                    ...report,
+                                    resolutions: currentResolutions
+                                  };
 
-                                setEditingResolutionReportId(null);
-                                setEditingResolutionId(null);
-                                showToast("Đã lưu kết quả xử lý thành công! ✅");
-                              }}
-                              className="text-[9px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1 rounded shadow-xs cursor-pointer active:scale-95 transition-all border-none"
-                            >
-                              <span translate="no" className="notranslate">Lưu</span>
-                            </button>
+                                  if (onUpdateReport) {
+                                    onUpdateReport(updatedReport);
+                                  }
+
+                                  setEditingResolutionReportId(null);
+                                  setEditingResolutionId(null);
+                                  showToast("Đã lưu kết quả xử lý thành công! ✅");
+                                }}
+                                className="text-[10.5px] font-extrabold text-white bg-indigo-600 hover:bg-indigo-700 px-3.5 py-1 rounded shadow-xs cursor-pointer active:scale-95 transition-all border-none"
+                              >
+                                <span translate="no" className="notranslate">Lưu</span>
+                              </button>
+                            </div>
                           </div>
                         </div>
                       )}
