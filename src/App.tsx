@@ -458,7 +458,7 @@ const attachLocalImages = (rawReports: QualityReport[]): QualityReport[] => {
     const storedImg = safeGetItem(`4m1e1i_img_${r.id}`);
     const storedImgUrls = safeParseJSON(safeGetItem(`4m1e1i_img_urls_${r.id}`), []);
     
-    // Ưu tiên hình ảnh mới nhất từ máy chủ/Firestore
+    // Ưu tiên hình ảnh từ dữ liệu báo cáo / Firestore
     const hasServerUrls = Array.isArray(r.imageUrls) && r.imageUrls.length > 0;
     const hasServerUrl = Boolean(r.imageUrl && r.imageUrl.trim() !== "");
 
@@ -477,14 +477,6 @@ const attachLocalImages = (rawReports: QualityReport[]): QualityReport[] => {
       : (finalUrls && finalUrls.length > 0)
         ? finalUrls[0]
         : storedImg || "";
-
-    // Đồng bộ lại bộ nhớ đệm local khi máy chủ cập nhật danh sách ảnh mới
-    if (hasServerUrls) {
-      safeSetItem(`4m1e1i_img_urls_${r.id}`, JSON.stringify(r.imageUrls));
-    }
-    if (hasServerUrl && r.imageUrl.startsWith("data:")) {
-      safeSetItem(`4m1e1i_img_${r.id}`, r.imageUrl);
-    }
 
     return {
       ...r,
@@ -1942,40 +1934,18 @@ export default function App() {
     });
     safeSetItem("4m1e1i_reports", JSON.stringify(lightweightReports));
 
-    // Sắp xếp và lưu hình ảnh (Base64) riêng biệt cho tối đa 10 báo cáo mới nhất để tối ưu hóa bộ nhớ
-    const sorted = [...reports].sort((a, b) => parseReportDate(b.timestamp) - parseReportDate(a.timestamp));
-    sorted.forEach((r, idx) => {
-      const imgKey = `4m1e1i_img_${r.id}`;
-      const imgUrlsKey = `4m1e1i_img_urls_${r.id}`;
-
-      // Giữ hình ảnh cho tối đa 10 báo cáo mới nhất, xóa các ảnh cũ hơn để giải phóng bộ nhớ
-      if (idx < 10 && !r.isDeleted) {
-        if (r.imageUrl && r.imageUrl.startsWith("data:")) {
-          safeSetItem(imgKey, r.imageUrl);
-        }
-        if (r.imageUrls && r.imageUrls.length > 0) {
-          safeSetItem(imgUrlsKey, JSON.stringify(r.imageUrls));
-        }
-      } else {
-        safeRemoveItem(imgKey);
-        safeRemoveItem(imgUrlsKey);
-      }
-    });
-
-    // Dọn dẹp các khóa ảnh rác của các báo cáo đã bị xóa hoàn toàn khỏi danh sách
+    // Tự động dọn dẹp các khóa ảnh rác / cache ảnh cũ trong localStorage để giải phóng hoàn toàn bộ nhớ đệm
     try {
-      const reportIds = new Set(reports.map(r => r.id));
+      const keysToRemove: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key && key.startsWith("4m1e1i_img_")) {
-          const id = key.replace("4m1e1i_img_urls_", "").replace("4m1e1i_img_", "");
-          if (!reportIds.has(id)) {
-            safeRemoveItem(key);
-          }
+        if (key && (key.startsWith("4m1e1i_img_") || key.startsWith("4m1e1i_img_urls_"))) {
+          keysToRemove.push(key);
         }
       }
+      keysToRemove.forEach((key) => safeRemoveItem(key));
     } catch (e) {
-      console.warn("Lỗi dọn dẹp các khóa ảnh rác:", e);
+      // Silent catch
     }
   }, [reports]);
 

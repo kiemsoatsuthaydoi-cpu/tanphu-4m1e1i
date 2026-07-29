@@ -7440,11 +7440,20 @@ App Link: ${window.location.origin}`;
                             setActiveForumTopicId(existingTopic.id);
                             setActiveBottomTab("TRAO_ĐỔI");
                           }}
-                          className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-[11px] rounded-lg shadow-sm cursor-pointer hover:shadow active:scale-98 transition-all select-none uppercase tracking-wider"
+                          className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 bg-gradient-to-r from-red-600 via-orange-600 to-amber-600 hover:from-red-700 hover:to-amber-700 text-white font-extrabold text-[11px] rounded-lg shadow-md cursor-pointer hover:shadow-lg active:scale-98 transition-all select-none uppercase tracking-wider border border-amber-300/40 relative overflow-hidden group"
                         >
-                          <Flame className="w-4 h-4 text-amber-200 fill-amber-300 animate-pulse shrink-0" />
-                          <span translate="no" className="notranslate">
-                            <T>🔥 ĐANG THẢO LUẬN CHUYÊN ĐỀ</T> ({replyCount} <T>ý kiến</T>)
+                          {/* High-Contrast Active Flame Badge with Live Ping Indicator */}
+                          <div className="relative flex items-center justify-center shrink-0">
+                            <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-300 opacity-90"></span>
+                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-yellow-400 border border-red-700"></span>
+                            </span>
+                            <div className="w-6 h-6 rounded-full bg-white text-rose-600 shadow-md flex items-center justify-center">
+                              <Flame className="w-4 h-4 fill-rose-500 text-amber-500 animate-bounce" />
+                            </div>
+                          </div>
+                          <span translate="no" className="notranslate flex items-center gap-1.5">
+                            <T>ĐANG THẢO LUẬN CHUYÊN ĐỀ</T> <span className="bg-white/20 px-1.5 py-0.5 rounded-full text-[10px] text-amber-100 border border-white/30">({replyCount} <T>ý kiến</T>)</span>
                           </span>
                         </button>
                       );
@@ -7458,7 +7467,7 @@ App Link: ${window.location.origin}`;
                       >
                         <Flame className="w-4 h-4 text-amber-200 fill-amber-200 shrink-0" />
                         <span translate="no" className="notranslate">
-                          <T>🔥 Thảo luận chuyên đề</T>
+                          <T>THẢO LUẬN CHUYÊN ĐỀ</T>
                         </span>
                       </button>
                     );

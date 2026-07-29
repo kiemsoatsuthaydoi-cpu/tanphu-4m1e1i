@@ -2,8 +2,12 @@ import { initializeApp, getApps, getApp } from "firebase/app";
 import { 
   initializeFirestore, 
   persistentLocalCache, 
-  persistentMultipleTabManager 
+  persistentMultipleTabManager,
+  setLogLevel
 } from "firebase/firestore";
+
+// Suppress internal connection attempt logs in sandboxed/offline environments
+setLogLevel("error");
 
 let firebaseApp: any = null;
 let db: any = null;
@@ -73,18 +77,18 @@ if (!isDummy) {
       firebaseApp = getApp();
     }
     
-    // Enable offline multiple-tab persistence and auto-detect long polling for optimal connection handling
+    // Enable offline multiple-tab persistence and force long polling to bypass WebSocket 10s timeout in sandboxed environment
     try {
       db = initializeFirestore(firebaseApp, {
         localCache: persistentLocalCache({
           tabManager: persistentMultipleTabManager()
         }),
-        experimentalAutoDetectLongPolling: true
+        experimentalForceLongPolling: true
       });
     } catch (cacheErr) {
       console.warn("Firestore persistent local cache setup failed, using default cache:", cacheErr);
       db = initializeFirestore(firebaseApp, {
-        experimentalAutoDetectLongPolling: true
+        experimentalForceLongPolling: true
       });
     }
   } catch (error) {

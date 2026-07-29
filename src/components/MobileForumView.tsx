@@ -206,6 +206,9 @@ export default function MobileForumView({
   // Zalo-style Quoted Reply state
   const [replyingTo, setReplyingTo] = useState<{ id: string; senderName: string; message: string } | null>(null);
 
+  // Active / Selected Message ID on mobile tap
+  const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
+
   // Zalo-style Emoji Quick Picker state
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const EMOJI_LIST = ["👍", "👏", "💪", "❤️", "😊", "🎉", "🤝", "💡", "✅", "🔥", "📌", "🎯", "🙏", "🙌", "⭐", "✨", "🚀", "😅", "😍", "🍻"];
@@ -954,7 +957,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                   className="cursor-pointer group flex items-start justify-between gap-2 p-1 -m-1 rounded-lg hover:bg-blue-50/70 active:bg-blue-100/60 transition-all select-none border border-transparent hover:border-blue-200/80"
                   title="Bấm vào tiêu đề để xem nội dung chi tiết"
                 >
-                  <h2 className="font-black text-xs text-blue-700 leading-snug group-hover:text-blue-800 transition-colors flex-1 line-clamp-2 break-words">
+                  <h2 className="font-black text-sm text-blue-700 leading-snug group-hover:text-blue-800 transition-colors flex-1 line-clamp-2 break-words">
                     <span translate="no" className="notranslate">
                       {cleanDisplayTitle(selectedTopic.title)}
                     </span>
@@ -1060,6 +1063,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                   const hasLiked = currentUser && reply.likedBy?.includes(currentUser.phone || currentUser.id);
                   const likeCount = reply.likes || (reply.likedBy ? reply.likedBy.length : 0);
                   const isEditingThis = editingReplyId === reply.id;
+                  const isActiveMessage = activeMessageId === reply.id;
 
                   // Check if previous message was sent by the same sender to group consecutive messages
                   const prevReply = idx > 0 ? topicReplies[idx - 1] : null;
@@ -1092,14 +1096,17 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                         {isMe && !isEditingThis && (
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setReplyingTo({
                                 id: reply.id,
                                 senderName: resolvedSender.fullName,
                                 message: reply.message || (reply.attachments?.length ? "[Tệp đính kèm]" : "")
                               });
                             }}
-                            className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-1.5 rounded-full bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-700 shadow-xs cursor-pointer border border-slate-200 shrink-0 hover:scale-110 active:scale-95"
+                            className={`transition-all duration-200 p-1.5 rounded-full bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-700 shadow-xs cursor-pointer border border-slate-200 shrink-0 hover:scale-110 active:scale-95 ${
+                              isActiveMessage ? "opacity-100 scale-100" : "opacity-0 group-hover:opacity-100"
+                            }`}
                             title="Trả lời tin nhắn này (Quote)"
                           >
                             <CornerUpLeft className="w-3.5 h-3.5" />
@@ -1135,13 +1142,20 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                         ) : (
                           <div
                             id={`reply-${reply.id}`}
-                            className={`p-3 max-w-[88%] text-[12.5px] leading-relaxed break-words shadow-2xs relative transition-all rounded-2xl ${
+                            onClick={() => setActiveMessageId(prev => prev === reply.id ? null : reply.id)}
+                            className={`p-3 max-w-[88%] text-[12.5px] leading-relaxed break-words shadow-2xs relative transition-all rounded-2xl cursor-pointer select-none ${
+                              isActiveMessage
+                                ? isMe
+                                  ? "ring-2 ring-amber-300 ring-offset-1 shadow-md scale-[1.01]"
+                                  : "ring-2 ring-blue-400 ring-offset-1 shadow-md scale-[1.01]"
+                                : "hover:brightness-98"
+                            } ${
                               isMe
                                 ? "bg-[#1d4ed8] text-white font-semibold rounded-tr-none shadow-blue-500/10"
                                 : "bg-white text-slate-800 font-medium rounded-tl-none border border-slate-200/90"
                             }`}
                           >
-                            {/* Distinct Checkmark Tick Badge for Converted Messages */}
+                            {/* Distinct Task Icon Badge for Converted Messages */}
                             {(reply.actionType === "DIRECTIVE" || reply.actionType === "TASK") && (
                               <div
                                 onClick={(e) => {
@@ -1158,25 +1172,22 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                                     setEditTaskAssignedUser(null);
                                   }
                                 }}
-                                className={`absolute z-20 w-5 h-5 rounded-full border-2 border-white shadow-md flex items-center justify-center cursor-pointer transition-transform hover:scale-110 active:scale-95 ${
+                                className={`absolute z-20 w-5 h-5 rounded-full border-2 border-white shadow-md flex items-center justify-center cursor-pointer transition-transform hover:scale-110 active:scale-95 bg-orange-500 text-white ${
                                   isMe ? "-top-2 -left-2" : "-top-2 -right-2"
-                                } ${
-                                  reply.actionType === "DIRECTIVE"
-                                    ? "bg-amber-500 text-white"
-                                    : reply.actionData?.status === "COMPLETED"
-                                      ? "bg-emerald-600 text-white"
-                                      : "bg-blue-600 text-white"
                                 }`}
                                 title={reply.actionType === "DIRECTIVE" ? "Chỉ đạo hành động - Bấm để xem/chỉnh sửa" : "Đầu việc (Task) - Bấm để xem/chỉnh sửa"}
                               >
-                                <Check className="w-3 h-3 stroke-[3.5px]" />
+                                <ListTodo className="w-3 h-3 stroke-[2.5px]" />
                               </div>
                             )}
 
                             {/* Quoted Message Box inside Chat Bubble */}
                             {reply.quotedReply && (
                               <div
-                                onClick={() => scrollToReply(reply.quotedReply!.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  scrollToReply(reply.quotedReply!.id);
+                                }}
                                 className={`mb-2 p-2 rounded-xl border-l-4 text-[11px] cursor-pointer transition-opacity hover:opacity-90 ${
                                   isMe ? "bg-blue-800/60 text-blue-100 border-amber-400" : "bg-slate-100 text-slate-700 border-amber-500"
                                 }`}
@@ -1207,7 +1218,10 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                                     {reply.attachments.filter(a => a.type === "image").map((att, idx) => (
                                       <div
                                         key={idx}
-                                        onClick={() => setPreviewImageModal(att.url)}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setPreviewImageModal(att.url);
+                                        }}
                                         className="relative w-28 h-28 rounded-xl overflow-hidden border border-black/10 cursor-pointer group shadow-2xs"
                                       >
                                         <img src={att.url} alt="Attached photo" className="w-full h-full object-cover transition-transform group-hover:scale-105" />
@@ -1263,14 +1277,17 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                         {!isMe && !isEditingThis && (
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setReplyingTo({
                                 id: reply.id,
                                 senderName: resolvedSender.fullName,
                                 message: reply.message || (reply.attachments?.length ? "[Tệp đính kèm]" : "")
                               });
                             }}
-                            className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-1.5 rounded-full bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-700 shadow-xs cursor-pointer border border-slate-200 shrink-0 hover:scale-110 active:scale-95"
+                            className={`transition-all duration-200 p-1.5 rounded-full bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-700 shadow-xs cursor-pointer border border-slate-200 shrink-0 hover:scale-110 active:scale-95 ${
+                              isActiveMessage ? "opacity-100 scale-100" : "opacity-0 group-hover:opacity-100"
+                            }`}
                             title="Trả lời tin nhắn này (Quote)"
                           >
                             <CornerUpLeft className="w-3.5 h-3.5" />
@@ -1278,9 +1295,9 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                         )}
                       </div>
 
-                      {/* Action & Meta Row below message bubble (Hidden by default, shown on hover / focus / active touch) */}
-                      <div className={`flex items-center gap-1.5 pt-0.5 px-1 text-[8.5px] font-sans transition-opacity duration-200 ${
-                        isEditingThis
+                      {/* Action & Meta Row below message bubble (Hidden by default, shown on hover / focus / active touch or when message clicked) */}
+                      <div className={`flex items-center gap-1.5 pt-0.5 px-1 text-[8.5px] font-sans transition-all duration-200 ${
+                        isEditingThis || isActiveMessage
                           ? "opacity-100"
                           : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 group-active:opacity-100"
                       } ${isMe ? "justify-end" : "justify-start"}`}>
@@ -1291,7 +1308,10 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                         {/* Interactive Heart / Like Pill */}
                         <button
                           type="button"
-                          onClick={() => handleToggleLikeReply(reply.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleLikeReply(reply.id);
+                          }}
                           className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border cursor-pointer transition-all active:scale-90 ${
                             hasLiked
                               ? "bg-rose-50 text-rose-600 border-rose-300 shadow-2xs"
@@ -1308,7 +1328,8 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                         {/* Convert to Action Button */}
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setConvertModalReply(reply);
                             setActionTypeChoice(reply.actionType || "DIRECTIVE");
                             setTaskNote(reply.actionData?.note || "");
@@ -1332,7 +1353,8 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                           <div className="flex items-center gap-1">
                             <button
                               type="button"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setEditingReplyId(reply.id);
                                 setEditingReplyText(reply.message);
                               }}
@@ -1343,7 +1365,10 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                             </button>
                             <button
                               type="button"
-                              onClick={() => setDeletingReplyId(reply.id)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeletingReplyId(reply.id);
+                              }}
                               className="p-1 hover:bg-rose-100 text-rose-700 rounded-md border border-rose-200 bg-rose-50/80 cursor-pointer transition-colors"
                               title="Xóa ý kiến"
                             >
@@ -1486,9 +1511,9 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
 
                   <button
                     type="button"
-                    onClick={() => pdfInputRef.current?.click()}
-                    className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
-                    title="Đính kèm tài liệu PDF"
+                    onClick={() => alert("Chức năng đính kèm tệp PDF hiện đang được tạm khóa.")}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 opacity-40 hover:opacity-60 transition-all cursor-not-allowed relative"
+                    title="Chức năng đính kèm PDF hiện đang tạm khóa"
                   >
                     <Paperclip className="w-4 h-4" />
                   </button>
