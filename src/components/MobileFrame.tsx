@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import html2canvas from "html2canvas";
-import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, BellRing, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, CheckCircle2, AlertCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send, Award, Calendar, Clock, Lightbulb, Newspaper, AtSign } from "lucide-react";
+import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, BellRing, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, CheckCircle2, AlertCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send, Award, Calendar, Clock, Lightbulb, Newspaper, AtSign, Flame } from "lucide-react";
 import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Department, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus, QualityReportBadge, AppNotification, ErrorCatalogItem, BadgePointConfigItem } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
@@ -272,10 +272,16 @@ interface MobileFrameProps {
   // Forum props
   topics?: ForumTopic[];
   replies?: ForumReply[];
-  onAddForumTopic?: (title: string, description: string, category: ForumTopicCategory) => void;
+  onAddForumTopic?: (title: string, description: string, category: ForumTopicCategory, reportId?: string, invitedUserIds?: string[]) => string | void;
   onAddForumReply?: (topicId: string, message: string) => void;
   onUpdateForumTopicStatus?: (topicId: string, status: ForumTopicStatus) => void;
   onToggleForumTopicPin?: (topicId: string) => void;
+  onEditForumTopic?: (topicId: string, title: string, description: string, category: ForumTopicCategory) => void;
+  onUpdateTopicInvitedUsers?: (topicId: string, invitedUserIds: string[]) => void;
+  onDeleteForumTopic?: (topicId: string) => void;
+  onEditForumReply?: (replyId: string, updatedData: string | Partial<ForumReply>) => void;
+  onDeleteForumReply?: (replyId: string) => void;
+  onLikeForumReply?: (replyId: string) => void;
   errorCatalog?: ErrorCatalogItem[];
   onAddErrorCatalogItem?: (item: ErrorCatalogItem) => void;
   isQcFeatureEnabled?: boolean;
@@ -1216,7 +1222,7 @@ function MobileApprovalView({
                   <div className="flex-1 min-w-0 font-sans text-left">
                     <div className="flex items-center gap-1.5">
                       <span translate="no" className="notranslate font-black text-slate-800 text-[11px] block truncate leading-tight">
-                        {capitalizeWords(u.fullName)}
+                        {formatNameCapitalized(u.fullName)}
                       </span>
                       {isMe && (
                         <span className="text-[7px] bg-slate-100 text-slate-500 px-1 py-0.5 rounded-md font-bold uppercase select-none">
@@ -1373,8 +1379,23 @@ function MobileApprovalView({
 const safeSetItem = (key: string, value: string): void => {
   try {
     localStorage.setItem(key, value);
-  } catch (error) {
-    console.warn(`[localStorage] Failed to save key "${key}" in MobileFrame. Quota exceeded:`, error);
+  } catch (error: any) {
+    const isQuota = error && (error.name === "QuotaExceededError" || error.code === 22 || error.message?.includes("quota"));
+    if (isQuota) {
+      try {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && (k.startsWith("4m1e1i_img_") || k.startsWith("4m1e1i_img_urls_"))) {
+            keysToRemove.push(k);
+          }
+        }
+        keysToRemove.forEach(k => localStorage.removeItem(k));
+        localStorage.setItem(key, value);
+      } catch (retryErr) {
+        // Silent fail for quota error
+      }
+    }
   }
 };
 
@@ -1544,6 +1565,12 @@ export default function MobileFrame({
   onAddForumReply,
   onUpdateForumTopicStatus,
   onToggleForumTopicPin,
+  onEditForumTopic,
+  onUpdateTopicInvitedUsers,
+  onDeleteForumTopic,
+  onEditForumReply,
+  onDeleteForumReply,
+  onLikeForumReply,
   errorCatalog = [],
   onAddErrorCatalogItem,
   isQcFeatureEnabled = true,
@@ -2229,6 +2256,86 @@ export default function MobileFrame({
   const [mobileBranchFilter, setMobileBranchFilter] = useState<string>("Tất cả");
   const [mobileTimeFilter, setMobileTimeFilter] = useState<"NGAY" | "TUAN" | "THANG">("THANG");
   const [mobileCategoryFilter, setMobileCategoryFilter] = useState<string>("Tất cả");
+
+  // Emergency Discussion Modal States
+  const [emergencyDiscussionReport, setEmergencyDiscussionReport] = useState<QualityReport | null>(null);
+  const [emergencyTitle, setEmergencyTitle] = useState("");
+  const [emergencyDesc, setEmergencyDesc] = useState("");
+  const [emergencyCategory, setEmergencyCategory] = useState<ForumTopicCategory>("Thảo luận KPH");
+  const [emergencyInvitedUserIds, setEmergencyInvitedUserIds] = useState<string[]>([]);
+  const [invitedSearchQuery, setInvitedSearchQuery] = useState("");
+  const [activeForumTopicId, setActiveForumTopicId] = useState<string | null>(null);
+
+  const handleOpenEmergencyDiscussionModal = (report: QualityReport) => {
+    setEmergencyDiscussionReport(report);
+    const codePrefix = report.reportCode ? `[${report.reportCode}] ` : `[${report.reportType || "KPH"}] `;
+    const contentClean = (report.content || "").replace(/\s+/g, " ").trim();
+    
+    // Smart AI summary: keep complete words, avoid mid-word truncation, max ~75 chars for content part
+    const maxChars = 75;
+    let titleContent = contentClean;
+    if (contentClean.length > maxChars) {
+      const truncated = contentClean.slice(0, maxChars);
+      const lastSpace = truncated.lastIndexOf(" ");
+      const wordBoundaryText = lastSpace > 20 ? truncated.slice(0, lastSpace) : truncated;
+      titleContent = `${wordBoundaryText.replace(/[,;:\-–—\.\s]+$/, "")}...`;
+    }
+
+    setEmergencyTitle(`🔥 ${codePrefix}${titleContent}`);
+    
+    const desc = `THẢO LUẬN KHẨN CẤP VỀ SỰ CỐ / KPH:
+• Mã bản tin: ${report.reportCode || report.id}
+• Phân loại: ${report.category} (${report.reportType || "KPH"})
+• Nhà máy / Bộ phận: ${report.factory} (${report.uploaderDepartment})
+• Người tạo bản tin: ${report.uploaderName}
+• Thời gian ghi nhận: ${report.timestamp}
+• Nội dung sự cố: ${report.content}
+${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
+
+    setEmergencyDesc(desc);
+    setEmergencyCategory("Thảo luận KPH");
+    
+    // Auto pick relevant users: report creator + same branch managers + admins
+    const defaultInvited: string[] = [];
+    if (report.uploaderId) defaultInvited.push(report.uploaderId);
+    
+    users.forEach(u => {
+      if (
+        (u.branch === report.factory || u.role === UserRole.ADMIN || (u.position && (u.position.toLowerCase().includes("trưởng") || u.position.toLowerCase().includes("giám đốc")))) &&
+        u.id !== currentUser?.id
+      ) {
+        if (!defaultInvited.includes(u.id)) {
+          defaultInvited.push(u.id);
+        }
+      }
+    });
+
+    setEmergencyInvitedUserIds(defaultInvited);
+  };
+
+  const handleCreateEmergencyDiscussion = () => {
+    if (!emergencyDiscussionReport || !emergencyTitle.trim() || !emergencyDesc.trim()) return;
+    
+    if (onAddForumTopic) {
+      const createdId = onAddForumTopic(
+        emergencyTitle.trim(),
+        emergencyDesc.trim(),
+        emergencyCategory,
+        emergencyDiscussionReport.id,
+        emergencyInvitedUserIds
+      );
+      
+      if (createdId) {
+        setActiveForumTopicId(createdId);
+      }
+    }
+
+    setEmergencyDiscussionReport(null);
+    setEmergencyTitle("");
+    setEmergencyDesc("");
+    setEmergencyInvitedUserIds([]);
+    setActiveBottomTab("TRAO_ĐỔI");
+  };
   
   // Clock ticking mechanism (every second) to animate [hh:mm:ss] live
   const [ticker, setTicker] = useState<number>(0);
@@ -3101,12 +3208,16 @@ export default function MobileFrame({
   }, [editingResolutionReportId]);
 
   useEffect(() => {
-    const handleDocumentClick = (e: MouseEvent) => {
+    const handleDocumentClick = (e: MouseEvent | TouchEvent) => {
       const target = e.target as HTMLElement;
       if (!target) return;
 
       // If clicking inside a modal overlay, dropdown list, confirmation dialog, or other z-50/fixed portal element, do not trigger auto-collapse
-      if (target.closest(".fixed") || target.closest(".z-50")) {
+      if (
+        target.closest(".fixed") ||
+        target.closest(".z-50") ||
+        target.closest(".resolution-form-trigger")
+      ) {
         return;
       }
 
@@ -3114,8 +3225,13 @@ export default function MobileFrame({
       if (expandedKeys.length === 0) return;
 
       expandedKeys.forEach((reportId) => {
-        const container = document.getElementById(`receivers-section-${reportId}`);
-        if (container && !container.contains(target)) {
+        const box = document.getElementById(`resolution-details-box-${reportId}`);
+        if (!box) return;
+
+        const isInsideBox = box.contains(target);
+        const isInsideToggle = target.closest(`.resolution-toggle-btn-${reportId}`);
+
+        if (!isInsideBox && !isInsideToggle) {
           setExpandedResolutions((prev) => ({
             ...prev,
             [reportId]: false,
@@ -3124,9 +3240,11 @@ export default function MobileFrame({
       });
     };
 
-    document.addEventListener("click", handleDocumentClick, true);
+    document.addEventListener("mousedown", handleDocumentClick, true);
+    document.addEventListener("touchstart", handleDocumentClick, true);
     return () => {
-      document.removeEventListener("click", handleDocumentClick, true);
+      document.removeEventListener("mousedown", handleDocumentClick, true);
+      document.removeEventListener("touchstart", handleDocumentClick, true);
     };
   }, [expandedResolutions]);
 
@@ -7012,8 +7130,15 @@ App Link: ${window.location.origin}`;
           onAddForumReply={onAddForumReply}
           onUpdateForumTopicStatus={onUpdateForumTopicStatus}
           onToggleForumTopicPin={onToggleForumTopicPin}
+          onEditForumTopic={onEditForumTopic}
+          onUpdateTopicInvitedUsers={onUpdateTopicInvitedUsers}
+          onDeleteForumTopic={onDeleteForumTopic}
+          onEditForumReply={onEditForumReply}
+          onDeleteForumReply={onDeleteForumReply}
+          onLikeForumReply={onLikeForumReply}
           theme={theme}
           onGoHome={() => setActiveBottomTab("BAO_CAO")}
+          initialSelectedTopicId={activeForumTopicId}
         />
       ) : (
         <>
@@ -7301,6 +7426,43 @@ App Link: ${window.location.origin}`;
                       <span translate="no" className="notranslate">Phân tích Cơ hội & Rủi ro</span>
                     </button>
                   )}
+
+                  {/* Action Button: 🔥 Thảo luận chuyên đề */}
+                  {(() => {
+                    const existingTopic = topics.find(t => t.reportId === report.id);
+                    const replyCount = existingTopic ? replies.filter(r => r.topicId === existingTopic.id).length : 0;
+
+                    if (existingTopic) {
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveForumTopicId(existingTopic.id);
+                            setActiveBottomTab("TRAO_ĐỔI");
+                          }}
+                          className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold text-[11px] rounded-lg shadow-sm cursor-pointer hover:shadow active:scale-98 transition-all select-none uppercase tracking-wider"
+                        >
+                          <Flame className="w-4 h-4 text-amber-200 fill-amber-300 animate-pulse shrink-0" />
+                          <span translate="no" className="notranslate">
+                            <T>🔥 ĐANG THẢO LUẬN CHUYÊN ĐỀ</T> ({replyCount} <T>ý kiến</T>)
+                          </span>
+                        </button>
+                      );
+                    }
+
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEmergencyDiscussionModal(report)}
+                        className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-600 hover:from-amber-600 hover:to-rose-700 text-white font-extrabold text-[11px] rounded-lg shadow-sm cursor-pointer hover:shadow active:scale-98 transition-all select-none uppercase tracking-wider"
+                      >
+                        <Flame className="w-4 h-4 text-amber-200 fill-amber-200 shrink-0" />
+                        <span translate="no" className="notranslate">
+                          <T>🔥 Thảo luận chuyên đề</T>
+                        </span>
+                      </button>
+                    );
+                  })()}
 
                   {/* Dynamic manager instructions/directives */}
                   <div className="mt-3 pt-2.5 border-t border-slate-100 block select-text">
@@ -7803,7 +7965,7 @@ App Link: ${window.location.origin}`;
                                       <button
                                         type="button"
                                         onClick={() => toggleResolutionsExpand(report.id)}
-                                        className="text-[8px] text-emerald-700 bg-emerald-100/90 hover:bg-emerald-200/90 px-1.5 py-0.2 rounded-full font-extrabold border border-emerald-200/60 inline-flex items-center gap-0.5 cursor-pointer active:scale-95 transition-all"
+                                        className={`text-[8px] text-emerald-700 bg-emerald-100/90 hover:bg-emerald-200/90 px-1.5 py-0.2 rounded-full font-extrabold border border-emerald-200/60 inline-flex items-center gap-0.5 cursor-pointer active:scale-95 transition-all resolution-toggle-btn-${report.id}`}
                                         title="Click để ẩn/hiện danh sách kết quả xử lý"
                                       >
                                         <span>{resCount} kết quả</span>
@@ -8012,7 +8174,7 @@ App Link: ${window.location.origin}`;
 
                       {/* Displaying detailed Resolution logs list */}
                       {!!expandedResolutions[report.id] && (report.isAbnormal || report.reportType === "KPH" || report.reportType === "RRO" || report.reportType === "KNN") && report.resolutions && report.resolutions.length > 0 && (
-                        <div className="mt-1.5 p-2 bg-slate-50 border border-slate-150 rounded-lg flex flex-col gap-1.5 max-h-48 overflow-y-auto">
+                        <div id={`resolution-details-box-${report.id}`} className="mt-1.5 p-2 bg-slate-50 border border-slate-150 rounded-lg flex flex-col gap-1.5 max-h-48 overflow-y-auto">
                           <div className="text-[9.5px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center justify-between select-none">
                             <div className="flex items-center gap-1 flex-wrap">
                               <span className="w-1 h-1 rounded-full bg-slate-500"></span>
@@ -8069,9 +8231,6 @@ App Link: ${window.location.origin}`;
                                 }
                                 const firstVal = Object.values(reportItem.receiverTimestamps)[0];
                                 if (firstVal) return firstVal;
-                              }
-                              if (reportItem.sharedBy && reportItem.sharedBy.length > 0) {
-                                return reportItem.updatedAt || reportItem.timestamp;
                               }
                               return reportItem.timestamp;
                             };
@@ -9674,7 +9833,7 @@ App Link: ${window.location.origin}`}
                       }
                     }
                     
-                    const recAt = activeReport.receiverTimestamps?.[name] || activeReport.updatedAt || activeReport.timestamp;
+                    const recAt = activeReport.receiverTimestamps?.[name] || activeReport.timestamp;
                     const durationInfo = calculateTimeDurationText(activeReport.timestamp, recAt);
 
                     return (
@@ -12642,6 +12801,213 @@ App Link: ${window.location.origin}`}
           </div>
         );
       })()}
+
+      {/* Emergency Discussion Creation Modal */}
+      {emergencyDiscussionReport && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 animate-fadeIn">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-amber-200 overflow-hidden flex flex-col max-h-[90vh] animate-scaleUp">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-rose-600 p-3.5 text-white flex items-center justify-between shrink-0 shadow-md">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-white/20 rounded-lg backdrop-blur-xs">
+                  <Flame className="w-5 h-5 text-amber-200 fill-amber-300 animate-bounce" />
+                </div>
+                <div>
+                  <h3 className="font-black text-xs uppercase tracking-wide leading-tight">
+                    <T>MỞ PHÒNG THẢO LUẬN CHUYÊN ĐỀ</T>
+                  </h3>
+                  <p className="text-[9.5px] text-amber-100 font-medium">
+                    <T>Thảo luận khẩn cấp & mời các nhân sự liên quan vào trao đổi</T>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEmergencyDiscussionReport(null);
+                  setEmergencyTitle("");
+                  setEmergencyDesc("");
+                  setEmergencyInvitedUserIds([]);
+                }}
+                className="p-1.5 hover:bg-white/20 rounded-full transition-colors border-none bg-transparent text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 overflow-y-auto space-y-4 flex-1 bg-slate-50 text-[11px]">
+              {/* Report summary card */}
+              <div className="bg-amber-50/80 border border-amber-200/90 rounded-xl p-3 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] font-black uppercase text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded font-mono">
+                    #{emergencyDiscussionReport.reportCode || emergencyDiscussionReport.id}
+                  </span>
+                  <span className="text-[9px] font-extrabold text-amber-700">
+                    {emergencyDiscussionReport.factory} - {emergencyDiscussionReport.uploaderDepartment}
+                  </span>
+                </div>
+                <p className="text-[10.5px] font-bold text-slate-800 leading-snug line-clamp-2">
+                  <span translate="no" className="notranslate">{emergencyDiscussionReport.content}</span>
+                </p>
+              </div>
+
+              {/* Title input */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-600 uppercase tracking-wide block">
+                  <T>Tiêu đề chủ đề thảo luận</T> <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={emergencyTitle}
+                  onChange={(e) => setEmergencyTitle(e.target.value)}
+                  placeholder="Nhập tiêu đề thảo luận..."
+                  className="w-full px-3 py-2 bg-white border border-slate-250 rounded-lg text-xs font-bold text-slate-800 focus:outline-hidden focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-2xs"
+                />
+              </div>
+
+              {/* Category selection */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-600 uppercase tracking-wide block">
+                  <T>Chuyên mục</T>
+                </label>
+                <select
+                  value={emergencyCategory}
+                  onChange={(e) => setEmergencyCategory(e.target.value as ForumTopicCategory)}
+                  className="w-full px-3 py-2 bg-white border border-slate-250 rounded-lg text-xs font-bold text-slate-800 focus:outline-hidden focus:border-amber-500 shadow-2xs"
+                >
+                  <option value="Thảo luận KPH">🔥 Thảo luận KPH / Sự cố</option>
+                  <option value="Cải tiến 4M1E">💡 Cải tiến 4M1E1I</option>
+                  <option value="Góp ý chức năng">💬 Góp ý chức năng</option>
+                  <option value="Kiến nghị khác">📌 Kiến nghị khác</option>
+                </select>
+              </div>
+
+              {/* Description textarea */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-600 uppercase tracking-wide block">
+                  <T>Nội dung chi tiết & bối cảnh</T> <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  rows={4}
+                  value={emergencyDesc}
+                  onChange={(e) => setEmergencyDesc(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-250 rounded-lg text-xs font-medium text-slate-800 focus:outline-hidden focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-2xs resize-none"
+                />
+              </div>
+
+              {/* Multi-select invited personnel */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-black text-slate-600 uppercase tracking-wide block">
+                    <T>Mời nhân sự tham gia thảo luận</T> ({emergencyInvitedUserIds.length})
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (emergencyInvitedUserIds.length === users.length) {
+                        setEmergencyInvitedUserIds([]);
+                      } else {
+                        setEmergencyInvitedUserIds(users.map(u => u.id));
+                      }
+                    }}
+                    className="text-[9.5px] font-extrabold text-amber-700 hover:underline border-none bg-transparent cursor-pointer"
+                  >
+                    {emergencyInvitedUserIds.length === users.length ? "Bỏ chọn tất cả" : "Mời tất cả nhân sự"}
+                  </button>
+                </div>
+
+                {/* Filter search */}
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={invitedSearchQuery}
+                    onChange={(e) => setInvitedSearchQuery(e.target.value)}
+                    placeholder="Tìm tên nhân sự, bộ phận..."
+                    className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10.5px] font-medium"
+                  />
+                </div>
+
+                {/* Users checklist */}
+                <div className="max-h-36 overflow-y-auto bg-white border border-slate-200 rounded-xl p-2 space-y-1 shadow-inner">
+                  {users
+                    .filter(u => 
+                      !invitedSearchQuery.trim() || 
+                      u.fullName.toLowerCase().includes(invitedSearchQuery.toLowerCase()) || 
+                      (u.branch && u.branch.toLowerCase().includes(invitedSearchQuery.toLowerCase())) ||
+                      (u.department && u.department.toLowerCase().includes(invitedSearchQuery.toLowerCase()))
+                    )
+                    .map(u => {
+                      const isSelected = emergencyInvitedUserIds.includes(u.id);
+                      return (
+                        <label
+                          key={u.id}
+                          className={`flex items-center justify-between p-1.5 rounded-lg border cursor-pointer transition-all ${
+                            isSelected
+                              ? "bg-amber-50/80 border-amber-300 text-amber-950 font-bold"
+                              : "bg-slate-50/50 border-slate-150 text-slate-700 hover:bg-slate-100 font-medium"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {
+                                setEmergencyInvitedUserIds(prev => 
+                                  isSelected ? prev.filter(id => id !== u.id) : [...prev, u.id]
+                                );
+                              }}
+                              className="rounded text-amber-600 focus:ring-amber-500 accent-amber-600 w-3.5 h-3.5"
+                            />
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-[10.5px] leading-tight truncate">
+                                <span translate="no" className="notranslate">{u.fullName}</span>
+                              </span>
+                              <span className="text-[8.5px] text-slate-400 leading-none truncate">
+                                {u.branch || "DNP/TPP"} • {u.position || u.role}
+                              </span>
+                            </div>
+                          </div>
+                          {isSelected && (
+                            <span className="text-[8px] font-black uppercase text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded shrink-0">
+                              Đã chọn
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 bg-slate-100 border-t border-slate-200 flex items-center justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setEmergencyDiscussionReport(null);
+                  setEmergencyTitle("");
+                  setEmergencyDesc("");
+                  setEmergencyInvitedUserIds([]);
+                }}
+                className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-[11px] rounded-lg transition-all border-none cursor-pointer"
+              >
+                <T>HỦY</T>
+              </button>
+              <button
+                type="button"
+                disabled={!emergencyTitle.trim() || !emergencyDesc.trim()}
+                onClick={handleCreateEmergencyDiscussion}
+                className="px-4 py-2 bg-gradient-to-r from-amber-500 via-orange-600 to-rose-600 hover:from-amber-600 hover:to-rose-700 text-white font-extrabold text-[11px] rounded-lg shadow-md hover:shadow-lg active:scale-95 transition-all flex items-center gap-1.5 border-none cursor-pointer disabled:opacity-50 uppercase tracking-wider"
+              >
+                <Flame className="w-4 h-4 text-amber-200 fill-amber-300" />
+                <T>MỞ PHÒNG THẢO LUẬN NGAY</T>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

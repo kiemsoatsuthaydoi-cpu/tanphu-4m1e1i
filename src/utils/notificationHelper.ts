@@ -394,22 +394,39 @@ export function generateNotifications(
     });
   }
 
-  // 6. Mentions in Forum Topics
-  if (users && users.length > 0 && topics && Array.isArray(topics)) {
+  // 6. Mentions and Invitations in Forum Topics
+  if (topics && Array.isArray(topics)) {
     topics.forEach((topic) => {
-      const mentioned = findMentionedUsers(topic.description, users);
-      mentioned.forEach((u) => {
-        list.push({
-          id: `mention-topic-${topic.id}-${u.id}`,
-          title: "📌 Bạn được nhắc đến",
-          description: `${topic.creatorName} đã nhắc đến bạn trong chủ đề "${topic.title}": "${topic.description.substring(0, 45)}..."`,
-          timestamp: topic.timestamp,
-          type: "mention",
-          targetReportId: undefined,
-          authorName: topic.creatorName,
-          factoryName: "Diễn đàn"
+      if (users && users.length > 0) {
+        const mentioned = findMentionedUsers(topic.description, users);
+        mentioned.forEach((u) => {
+          list.push({
+            id: `mention-topic-${topic.id}-${u.id}`,
+            title: "📌 Bạn được nhắc đến",
+            description: `${topic.creatorName} đã nhắc đến bạn trong chủ đề "${topic.title}": "${topic.description.substring(0, 45)}..."`,
+            timestamp: topic.timestamp,
+            type: "mention",
+            targetReportId: topic.reportId,
+            authorName: topic.creatorName,
+            factoryName: "Diễn đàn"
+          });
         });
-      });
+      }
+
+      if (topic.invitedUserIds && Array.isArray(topic.invitedUserIds)) {
+        topic.invitedUserIds.forEach((uId) => {
+          list.push({
+            id: `invite-topic-${topic.id}-${uId}`,
+            title: "🔥 Mời thảo luận chuyên đề",
+            description: `${topic.creatorName} đã mời bạn tham gia thảo luận: "${topic.title.substring(0, 45)}${topic.title.length > 45 ? '...' : ''}"`,
+            timestamp: topic.timestamp,
+            type: "mention",
+            targetReportId: topic.reportId,
+            authorName: topic.creatorName,
+            factoryName: "Diễn đàn"
+          });
+        });
+      }
     });
   }
 

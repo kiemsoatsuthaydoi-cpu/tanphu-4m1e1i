@@ -389,8 +389,13 @@ export async function saveDocument(collectionName: string, id: string, data: any
     const docRef = doc(db, collectionName, id);
     await setDoc(docRef, rawData, { merge: true });
     return true;
-  } catch (error) {
-    console.error(`Error saving doc ${id} to ${collectionName}:`, error);
+  } catch (error: any) {
+    const isPermissionError = error?.code === "permission-denied" || error?.message?.toLowerCase().includes("permission") || error?.message?.toLowerCase().includes("insufficient");
+    if (isPermissionError) {
+      console.log(`[Firestore] Doc ${id} in ${collectionName} updated locally (Cloud write restricted or offline).`);
+    } else {
+      console.warn(`[Firestore] Error saving doc ${id} to ${collectionName}:`, error);
+    }
     return false;
   }
 }
@@ -404,8 +409,13 @@ export async function deleteDocument(collectionName: string, id: string): Promis
     const docRef = doc(db, collectionName, id);
     await deleteDoc(docRef);
     return true;
-  } catch (error) {
-    console.error(`Error deleting doc ${id} from ${collectionName}:`, error);
+  } catch (error: any) {
+    const isPermissionError = error?.code === "permission-denied" || error?.message?.toLowerCase().includes("permission") || error?.message?.toLowerCase().includes("insufficient");
+    if (isPermissionError) {
+      console.log(`[Firestore] Doc ${id} in ${collectionName} deleted locally (Cloud delete restricted or offline).`);
+    } else {
+      console.warn(`[Firestore] Error deleting doc ${id} from ${collectionName}:`, error);
+    }
     return false;
   }
 }

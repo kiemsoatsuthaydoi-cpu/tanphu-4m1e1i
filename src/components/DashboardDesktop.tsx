@@ -191,10 +191,12 @@ interface DashboardDesktopProps {
   // Forum properties
   topics?: ForumTopic[];
   replies?: ForumReply[];
-  onAddForumTopic?: (title: string, description: string, category: ForumTopicCategory) => void;
+  onAddForumTopic?: (title: string, description: string, category: ForumTopicCategory, reportId?: string, invitedUserIds?: string[]) => string | void;
   onAddForumReply?: (topicId: string, message: string) => void;
   onUpdateForumTopicStatus?: (topicId: string, status: ForumTopicStatus) => void;
   onToggleForumTopicPin?: (topicId: string) => void;
+  onEditForumTopic?: (topicId: string, title: string, description: string, category: ForumTopicCategory) => void;
+  onDeleteForumTopic?: (topicId: string) => void;
 
   // Error Catalog properties
   errorCatalog?: ErrorCatalogItem[];
@@ -1070,8 +1072,23 @@ function DesktopQCConfirmation({
 const safeSetItem = (key: string, value: string): void => {
   try {
     localStorage.setItem(key, value);
-  } catch (error) {
-    console.warn(`[localStorage] Failed to save key "${key}" in DashboardDesktop. Quota exceeded:`, error);
+  } catch (error: any) {
+    const isQuota = error && (error.name === "QuotaExceededError" || error.code === 22 || error.message?.includes("quota"));
+    if (isQuota) {
+      try {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && (k.startsWith("4m1e1i_img_") || k.startsWith("4m1e1i_img_urls_"))) {
+            keysToRemove.push(k);
+          }
+        }
+        keysToRemove.forEach(k => localStorage.removeItem(k));
+        localStorage.setItem(key, value);
+      } catch (retryErr) {
+        // Silent fail for quota error
+      }
+    }
   }
 };
 
@@ -1147,6 +1164,8 @@ export default function DashboardDesktop({
   onAddForumReply,
   onUpdateForumTopicStatus,
   onToggleForumTopicPin,
+  onEditForumTopic,
+  onDeleteForumTopic,
 
   // Error Catalog props
   errorCatalog = [],
@@ -1674,6 +1693,13 @@ export default function DashboardDesktop({
   const [forumReplyMessage, setForumReplyMessage] = useState("");
   const [forumSearchQuery, setForumSearchQuery] = useState("");
   const [forumCategoryFilter, setForumCategoryFilter] = useState<string>("ALL");
+
+  // Edit & Delete topic state for Desktop
+  const [editingDesktopTopic, setEditingDesktopTopic] = useState<ForumTopic | null>(null);
+  const [editDesktopTopicTitle, setEditDesktopTopicTitle] = useState("");
+  const [editDesktopTopicDesc, setEditDesktopTopicDesc] = useState("");
+  const [editDesktopTopicCategory, setEditDesktopTopicCategory] = useState<ForumTopicCategory>("Góp ý chức năng");
+  const [deletingDesktopTopic, setDeletingDesktopTopic] = useState<ForumTopic | null>(null);
 
   const [localReadNotifIds, setLocalReadNotifIds] = useState<string[]>(() => {
     try {
@@ -8347,13 +8373,40 @@ export default function DashboardDesktop({
                               <select
                                 value={topic.status}
                                 onChange={(e) => onUpdateForumTopicStatus?.(topic.id, e.target.value as any)}
-                                className="bg-slate-50 text-slate-800 border border-slate-200 rounded-md px-2 py-1.5 text-xs font-bold focus:outline-none"
+                                className="bg-slate-50 text-slate-800 border border-slate-200 rounded-md px-2 py-1.5 text-xs font-bold focus:outline-none cursor-pointer"
                               >
                                 <option value="OPEN">🟢 Mở</option>
                                 <option value="PROCESSING">🟡 Đang xử lý</option>
                                 <option value="RESOLVED">🔵 Đã giải quyết</option>
                                 <option value="CLOSED">⚪ Đóng</option>
                               </select>
+
+                              {/* Edit Button */}
+                              <button
+                                onClick={() => {
+                                  setEditingDesktopTopic(topic);
+                                  setEditDesktopTopicTitle(topic.title);
+                                  setEditDesktopTopicDesc(topic.description);
+                                  setEditDesktopTopicCategory(topic.category);
+                                }}
+                                className="p-1.5 rounded-md border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                                title="Sửa chủ đề"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                                <T>Sửa</T>
+                              </button>
+
+                              {/* Delete Button */}
+                              <button
+                                onClick={() => {
+                                  setDeletingDesktopTopic(topic);
+                                }}
+                                className="p-1.5 rounded-md border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                                title="Xóa chủ đề"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <T>Xóa</T>
+                              </button>
                             </div>
                           )}
                         </div>
@@ -8578,6 +8631,143 @@ export default function DashboardDesktop({
                         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-sm"
                       >
                         <T>ĐĂNG CHỦ ĐỀ</T>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Edit Topic Modal */}
+              {editingDesktopTopic && (
+                <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+                  <div className="bg-white rounded-lg border border-slate-200 w-full max-w-[500px] p-5 shadow-xl flex flex-col space-y-4 animate-scaleUp">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                      <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                        <Edit className="w-4 h-4 text-blue-600" />
+                        <T>Chỉnh Sửa Chủ Đề Thảo Luận</T>
+                      </h3>
+                      <button
+                        onClick={() => setEditingDesktopTopic(null)}
+                        className="text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-md cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <div className="space-y-3">
+                      {/* Category */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">
+                          <T>Chuyên mục</T>
+                        </label>
+                        <select
+                          value={editDesktopTopicCategory}
+                          onChange={(e) => setEditDesktopTopicCategory(e.target.value as ForumTopicCategory)}
+                          className="w-full bg-slate-50 text-slate-800 border border-slate-200 rounded-md px-3 py-1.5 text-xs font-bold focus:outline-none focus:border-blue-500"
+                        >
+                          <option value="Thảo luận KPH">Thảo luận KPH</option>
+                          <option value="Góp ý chức năng">Góp ý chức năng</option>
+                          <option value="Cải tiến 4M1E">Cải tiến 4M1E</option>
+                          <option value="Kiến nghị khác">Kiến nghị khác</option>
+                        </select>
+                      </div>
+
+                      {/* Title */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">
+                          <T>Tiêu đề chủ đề</T>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Tiêu đề thảo luận..."
+                          value={editDesktopTopicTitle}
+                          onChange={(e) => setEditDesktopTopicTitle(e.target.value)}
+                          className="w-full bg-slate-50 text-slate-800 border border-slate-200 rounded-md px-3 py-1.5 text-xs focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+
+                      {/* Description */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">
+                          <T>Nội dung chi tiết</T>
+                        </label>
+                        <MentionTextArea
+                          users={users}
+                          placeholder="Nội dung chi tiết..."
+                          value={editDesktopTopicDesc}
+                          onChange={setEditDesktopTopicDesc}
+                          className="w-full h-32 bg-slate-50 text-slate-800 border border-slate-200 rounded-md px-3 py-2 text-xs focus:outline-none focus:border-blue-500 resize-none"
+                          rows={4}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Footer Buttons */}
+                    <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => setEditingDesktopTopic(null)}
+                        className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-650 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                      >
+                        <T>HỦY BỎ</T>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!editDesktopTopicTitle.trim() || !editDesktopTopicDesc.trim()) return;
+                          if (onEditForumTopic) {
+                            onEditForumTopic(editingDesktopTopic.id, editDesktopTopicTitle, editDesktopTopicDesc, editDesktopTopicCategory);
+                            if (onShowToast) onShowToast("Đã cập nhật chủ đề thảo luận thành công!");
+                          }
+                          setEditingDesktopTopic(null);
+                        }}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-sm"
+                      >
+                        <T>LƯU CẬP NHẬT</T>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Delete Topic Confirmation Modal */}
+              {deletingDesktopTopic && (
+                <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+                  <div className="bg-white rounded-xl border border-slate-200 w-full max-w-[400px] p-5 shadow-xl flex flex-col space-y-4 text-center animate-scaleUp">
+                    <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+                      <Trash2 className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-base">
+                        <T>Xác Nhận Xóa Chủ Đề Thảo Luận</T>
+                      </h3>
+                      <p className="text-xs text-slate-600 mt-2 font-medium leading-relaxed">
+                        <T>Bạn có chắc chắn muốn xóa chủ đề</T> <br />
+                        <strong className="notranslate text-slate-800" translate="no">"{deletingDesktopTopic.title}"</strong>? <br />
+                        <T>Tất cả các ý kiến phản hồi thuộc chủ đề này cũng sẽ bị xóa vĩnh viễn.</T>
+                      </p>
+                    </div>
+                    <div className="flex justify-center gap-3 pt-2 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => setDeletingDesktopTopic(null)}
+                        className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                      >
+                        <T>HỦY BỎ</T>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (onDeleteForumTopic) {
+                            onDeleteForumTopic(deletingDesktopTopic.id);
+                            setSelectedTopicId(null);
+                            if (onShowToast) onShowToast("Đã xóa chủ đề thảo luận thành công!");
+                          }
+                          setDeletingDesktopTopic(null);
+                        }}
+                        className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-sm border-none"
+                      >
+                        <T>XÓA VĨNH VIỄN</T>
                       </button>
                     </div>
                   </div>

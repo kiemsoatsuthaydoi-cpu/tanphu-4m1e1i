@@ -61,22 +61,30 @@ const safeSetItem = (key: string, value: string): void => {
   try {
     localStorage.setItem(key, value);
   } catch (error: any) {
-    console.warn(`[localStorage] Failed to save key "${key}". Quota exceeded or storage is disabled:`, error);
-    if (error && (error.name === "QuotaExceededError" || error.code === 22 || error.name === "NS_ERROR_DOM_QUOTA_REACHED" || error.message?.includes("quota"))) {
+    const isQuotaError = error && (error.name === "QuotaExceededError" || error.code === 22 || error.name === "NS_ERROR_DOM_QUOTA_REACHED" || error.message?.includes("quota"));
+    
+    if (isQuotaError) {
       try {
-        console.warn("[localStorage] Storage quota exceeded. Automatically clearing older caches to preserve critical user data...");
-        // Clear less critical caches to free up space
-        localStorage.removeItem("4m1e1i_products_catalog");
-        localStorage.removeItem("4m1e1i_molds_catalog");
-        localStorage.removeItem("4m1e1i_chats");
-        localStorage.removeItem("4m1e1i_broadcasts");
+        // Clear non-critical image caches first to free up space for core data
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && (k.startsWith("4m1e1i_img_") || k.startsWith("4m1e1i_img_urls_"))) {
+            keysToRemove.push(k);
+          }
+        }
+        keysToRemove.forEach(k => localStorage.removeItem(k));
         
-        // Try writing the value again after clearing space
+        // Try writing again
         localStorage.setItem(key, value);
-        console.log(`[localStorage] Retry writing key "${key}" succeeded after clearing caches!`);
       } catch (retryError) {
-        console.warn(`[localStorage] Retry failed for key "${key}":`, retryError);
+        // Silent fail for non-essential image cache keys, log once for critical keys
+        if (!key.startsWith("4m1e1i_img_")) {
+          console.warn(`[localStorage] Storage full. Could not save non-critical key "${key}".`);
+        }
       }
+    } else {
+      console.warn(`[localStorage] Failed to save key "${key}":`, error);
     }
   }
 };
@@ -450,18 +458,38 @@ const attachLocalImages = (rawReports: QualityReport[]): QualityReport[] => {
     const storedImg = safeGetItem(`4m1e1i_img_${r.id}`);
     const storedImgUrls = safeParseJSON(safeGetItem(`4m1e1i_img_urls_${r.id}`), []);
     
-    return {
-      ...r,
-      imageUrl: storedImg || r.imageUrl || "",
-      imageUrls: (storedImgUrls && storedImgUrls.length > 0)
+    // Ưu tiên hình ảnh mới nhất từ máy chủ/Firestore
+    const hasServerUrls = Array.isArray(r.imageUrls) && r.imageUrls.length > 0;
+    const hasServerUrl = Boolean(r.imageUrl && r.imageUrl.trim() !== "");
+
+    const finalUrls = hasServerUrls
+      ? r.imageUrls
+      : (storedImgUrls && storedImgUrls.length > 0)
         ? storedImgUrls
-        : (r.imageUrls && r.imageUrls.length > 0)
-          ? r.imageUrls
+        : hasServerUrl
+          ? [r.imageUrl!]
           : storedImg
             ? [storedImg]
-            : r.imageUrl
-              ? [r.imageUrl]
-              : []
+            : [];
+
+    const finalSingleUrl = hasServerUrl
+      ? r.imageUrl!
+      : (finalUrls && finalUrls.length > 0)
+        ? finalUrls[0]
+        : storedImg || "";
+
+    // Đồng bộ lại bộ nhớ đệm local khi máy chủ cập nhật danh sách ảnh mới
+    if (hasServerUrls) {
+      safeSetItem(`4m1e1i_img_urls_${r.id}`, JSON.stringify(r.imageUrls));
+    }
+    if (hasServerUrl && r.imageUrl.startsWith("data:")) {
+      safeSetItem(`4m1e1i_img_${r.id}`, r.imageUrl);
+    }
+
+    return {
+      ...r,
+      imageUrl: finalSingleUrl,
+      imageUrls: finalUrls
     };
   });
 };
@@ -686,6 +714,15 @@ export default function App() {
     const saved = safeGetItem("4m1e1i_replies");
     return safeParseJSON(saved, []);
   });
+
+  const [deletedTopicIds, setDeletedTopicIds] = useState<string[]>(() => {
+    const saved = safeGetItem("4m1e1i_deleted_topic_ids");
+    return safeParseJSON(saved, []);
+  });
+  const deletedTopicIdsRef = useRef<string[]>(deletedTopicIds);
+  useEffect(() => {
+    deletedTopicIdsRef.current = deletedTopicIds;
+  }, [deletedTopicIds]);
 
   // Offline queue
   const [offlineQueue, setOfflineQueue] = useState<QualityReport[]>(() => {
@@ -1540,9 +1577,10 @@ export default function App() {
       setProductionRequests(fProdRequests);
 
       if (fTopics && fTopics.length > 0) {
-        setTopics(fTopics);
+        const validTopics = fTopics.filter((t) => !deletedTopicIdsRef.current.includes(t.id));
+        setTopics(validTopics);
       } else {
-        setTopics([
+        const defaultTopics = [
           {
             id: "TOPIC-1",
             title: "Góp ý cải tiến chức năng add hình ảnh",
@@ -1567,7 +1605,8 @@ export default function App() {
             status: "PROCESSING",
             isPinned: false
           }
-        ]);
+        ].filter((t) => !deletedTopicIdsRef.current.includes(t.id));
+        setTopics(defaultTopics as ForumTopic[]);
       }
 
       if (fReplies && fReplies.length > 0) {
@@ -1682,6 +1721,15 @@ export default function App() {
   useEffect(() => {
     if (!db || !dbConnected || dbLoading) return;
 
+    const handleSyncErr = (colName: string) => (error: any) => {
+      const isPermissionError = error?.code === "permission-denied" || error?.message?.toLowerCase().includes("permission") || error?.message?.toLowerCase().includes("insufficient");
+      if (isPermissionError) {
+        console.log(`[Firestore] Realtime sync for ${colName} running in fallback local mode (permission restricted or offline).`);
+      } else {
+        console.warn(`[Firestore] Realtime sync error for ${colName}:`, error);
+      }
+    };
+
     const unsubscribeReports = onSnapshot(
       collection(db, COLLECTIONS.REPORTS),
       (snapshot) => {
@@ -1691,9 +1739,7 @@ export default function App() {
         });
         setReports(sanitizeReports(attachLocalImages(list)));
       },
-      (error) => {
-        console.error("Lỗi đồng bộ báo cáo thời gian thực:", error);
-      }
+      handleSyncErr("reports")
     );
 
     const unsubscribeChats = onSnapshot(
@@ -1705,9 +1751,7 @@ export default function App() {
         });
         setChats(list);
       },
-      (error) => {
-        console.error("Lỗi đồng bộ chat thời gian thực:", error);
-      }
+      handleSyncErr("chats")
     );
 
     const unsubscribeBroadcasts = onSnapshot(
@@ -1719,9 +1763,7 @@ export default function App() {
         });
         setBroadcasts(list);
       },
-      (error) => {
-        console.error("Lỗi đồng bộ thông báo thời gian thực:", error);
-      }
+      handleSyncErr("broadcasts")
     );
 
     const unsubscribeTopics = onSnapshot(
@@ -1729,13 +1771,14 @@ export default function App() {
       (snapshot) => {
         const list: ForumTopic[] = [];
         snapshot.forEach((doc) => {
-          list.push(doc.data() as ForumTopic);
+          const t = doc.data() as ForumTopic;
+          if (t && t.id && !deletedTopicIdsRef.current.includes(t.id) && !t.isDeleted) {
+            list.push(t);
+          }
         });
         setTopics(list);
       },
-      (error) => {
-        console.error("Lỗi đồng bộ forum topics thời gian thực:", error);
-      }
+      handleSyncErr("forum_topics")
     );
 
     const unsubscribeReplies = onSnapshot(
@@ -1747,9 +1790,7 @@ export default function App() {
         });
         setReplies(list);
       },
-      (error) => {
-        console.error("Lỗi đồng bộ forum replies thời gian thực:", error);
-      }
+      handleSyncErr("forum_replies")
     );
 
     const unsubscribeConfigs = onSnapshot(
@@ -1793,6 +1834,11 @@ export default function App() {
             const data = doc.data();
             if (data && Array.isArray(data.ids)) {
               setDeletedNotifIds(data.ids);
+            }
+          } else if (doc.id === "deleted_topics") {
+            const data = doc.data();
+            if (data && Array.isArray(data.ids)) {
+              setDeletedTopicIds((prev) => Array.from(new Set([...prev, ...data.ids])));
             }
           } else if (doc.id === "qc_feature") {
             const data = doc.data();
@@ -2008,6 +2054,18 @@ export default function App() {
   useEffect(() => {
     safeSetItem("4m1e1i_offline_queue", JSON.stringify(offlineQueue));
   }, [offlineQueue]);
+
+  useEffect(() => {
+    safeSetItem("4m1e1i_topics", JSON.stringify(topics));
+  }, [topics]);
+
+  useEffect(() => {
+    safeSetItem("4m1e1i_replies", JSON.stringify(replies));
+  }, [replies]);
+
+  useEffect(() => {
+    safeSetItem("4m1e1i_deleted_topic_ids", JSON.stringify(deletedTopicIds));
+  }, [deletedTopicIds]);
 
   useEffect(() => {
     safeSetItem("4m1e1i_current_user", JSON.stringify(currentUser));
@@ -2914,9 +2972,11 @@ export default function App() {
   const handleAddForumTopic = (
     title: string,
     description: string,
-    category: ForumTopicCategory
-  ) => {
-    if (!currentUser) return;
+    category: ForumTopicCategory,
+    reportId?: string,
+    invitedUserIds?: string[]
+  ): string => {
+    if (!currentUser) return "";
     const newTopic: ForumTopic = {
       id: `TOPIC-${Date.now()}`,
       title,
@@ -2927,7 +2987,9 @@ export default function App() {
       creatorRole: currentUser.role,
       timestamp: getFormattedTimestamp(),
       status: "OPEN",
-      isPinned: false
+      isPinned: false,
+      reportId,
+      invitedUserIds
     };
     setTopics((prev) => [...prev, newTopic]);
     if (dbConnected) {
@@ -2935,10 +2997,16 @@ export default function App() {
         console.error("Lỗi khi tạo chủ đề lên Firestore:", err);
       });
     }
-    showToast("Đã tạo chủ đề trao đổi mới!", "success");
+
+    showToast(reportId ? "🔥 Đã mở phòng thảo luận chuyên đề khẩn!" : "Đã tạo chủ đề trao đổi mới!", "success");
+    return newTopic.id;
   };
 
-  const handleAddForumReply = (topicId: string, message: string) => {
+  const handleAddForumReply = (
+    topicId: string,
+    message: string,
+    extraData?: Partial<ForumReply>
+  ) => {
     if (!currentUser) return;
     const newReply: ForumReply = {
       id: `REPLY-${Date.now()}`,
@@ -2947,7 +3015,8 @@ export default function App() {
       senderPhone: currentUser.phone,
       senderRole: currentUser.role,
       message,
-      timestamp: getFormattedTimestamp()
+      timestamp: getFormattedTimestamp(),
+      ...extraData
     };
     setReplies((prev) => [...prev, newReply]);
     if (dbConnected) {
@@ -2955,6 +3024,28 @@ export default function App() {
         console.error("Lỗi khi gửi phản hồi lên Firestore:", err);
       });
     }
+  };
+
+  const handleEditForumReply = (
+    replyId: string,
+    updatedData: string | Partial<ForumReply>
+  ) => {
+    setReplies((prev) => {
+      const next = prev.map((r) => {
+        if (r.id !== replyId) return r;
+        const updated: ForumReply = typeof updatedData === "string"
+          ? { ...r, message: updatedData }
+          : { ...r, ...updatedData };
+        if (dbConnected) {
+          saveDocument(COLLECTIONS.TOPIC_REPLIES, updated.id, updated).catch((err) => {
+            console.error("Lỗi khi cập nhật phản hồi lên Firestore:", err);
+          });
+        }
+        return updated;
+      });
+      safeSetItem("4m1e1i_replies", JSON.stringify(next));
+      return next;
+    });
   };
 
   const handleUpdateForumTopicStatus = (topicId: string, status: ForumTopicStatus) => {
@@ -2983,6 +3074,66 @@ export default function App() {
       return updated;
     }));
     showToast("Đã cập nhật trạng thái ghim chủ đề!", "success");
+  };
+
+  const handleEditForumTopic = (
+    topicId: string, 
+    title: string, 
+    description: string, 
+    category: ForumTopicCategory
+  ) => {
+    setTopics((prev) => prev.map((t) => {
+      if (t.id !== topicId) return t;
+      const updated = { ...t, title, description, category };
+      if (dbConnected) {
+        saveDocument(COLLECTIONS.TOPICS, updated.id, updated).catch((err) => {
+          console.error("Lỗi khi sửa chủ đề:", err);
+        });
+      }
+      return updated;
+    }));
+    showToast("Đã cập nhật thông tin chủ đề!", "success");
+  };
+
+  const handleUpdateTopicInvitedUsers = (topicId: string, invitedUserIds: string[]) => {
+    setTopics((prev) => prev.map((t) => {
+      if (t.id !== topicId) return t;
+      const updated = { ...t, invitedUserIds };
+      if (dbConnected) {
+        saveDocument(COLLECTIONS.TOPICS, updated.id, updated).catch((err) => {
+          console.error("Lỗi khi cập nhật thành viên nhóm:", err);
+        });
+      }
+      return updated;
+    }));
+    showToast("Đã cập nhật danh sách thành viên tham gia nhóm!", "success");
+  };
+
+  const handleDeleteForumTopic = (topicId: string) => {
+    const targetReplies = replies.filter((r) => r.topicId === topicId);
+    setDeletedTopicIds((prev) => {
+      const next = Array.from(new Set([...prev, topicId]));
+      safeSetItem("4m1e1i_deleted_topic_ids", JSON.stringify(next));
+      return next;
+    });
+    setTopics((prev) => {
+      const next = prev.filter((t) => t.id !== topicId);
+      safeSetItem("4m1e1i_topics", JSON.stringify(next));
+      return next;
+    });
+    setReplies((prev) => {
+      const next = prev.filter((r) => r.topicId !== topicId);
+      safeSetItem("4m1e1i_replies", JSON.stringify(next));
+      return next;
+    });
+    if (dbConnected) {
+      deleteDocument(COLLECTIONS.TOPICS, topicId).catch(() => {});
+      targetReplies.forEach((r) => {
+        deleteDocument(COLLECTIONS.TOPIC_REPLIES, r.id).catch(() => {});
+      });
+      saveDocument("config", "deleted_topics", { ids: Array.from(new Set([...deletedTopicIds, topicId])) }).catch(() => {});
+    }
+    showToast("Đã xóa chủ đề thảo luận!", "info");
   };
 
   // Forum message
@@ -4300,8 +4451,12 @@ export default function App() {
             replies={replies}
             onAddForumTopic={handleAddForumTopic}
             onAddForumReply={handleAddForumReply}
+            onEditForumReply={handleEditForumReply}
             onUpdateForumTopicStatus={handleUpdateForumTopicStatus}
             onToggleForumTopicPin={handleToggleForumTopicPin}
+            onEditForumTopic={handleEditForumTopic}
+            onUpdateTopicInvitedUsers={handleUpdateTopicInvitedUsers}
+            onDeleteForumTopic={handleDeleteForumTopic}
             onExportBackup={handleExportBackup}
             onImportBackup={handleImportBackup}
           />
@@ -4426,8 +4581,12 @@ export default function App() {
             replies={replies}
             onAddForumTopic={handleAddForumTopic}
             onAddForumReply={handleAddForumReply}
+            onEditForumReply={handleEditForumReply}
             onUpdateForumTopicStatus={handleUpdateForumTopicStatus}
             onToggleForumTopicPin={handleToggleForumTopicPin}
+            onEditForumTopic={handleEditForumTopic}
+            onUpdateTopicInvitedUsers={handleUpdateTopicInvitedUsers}
+            onDeleteForumTopic={handleDeleteForumTopic}
             onExportBackup={handleExportBackup}
             onImportBackup={handleImportBackup}
           />
@@ -4666,8 +4825,12 @@ export default function App() {
                 replies={replies}
                 onAddForumTopic={handleAddForumTopic}
                 onAddForumReply={handleAddForumReply}
+                onEditForumReply={handleEditForumReply}
                 onUpdateForumTopicStatus={handleUpdateForumTopicStatus}
                 onToggleForumTopicPin={handleToggleForumTopicPin}
+                onEditForumTopic={handleEditForumTopic}
+                onUpdateTopicInvitedUsers={handleUpdateTopicInvitedUsers}
+                onDeleteForumTopic={handleDeleteForumTopic}
                 onExportBackup={handleExportBackup}
                 onImportBackup={handleImportBackup}
               />
@@ -4747,8 +4910,12 @@ export default function App() {
                 replies={replies}
                 onAddForumTopic={handleAddForumTopic}
                 onAddForumReply={handleAddForumReply}
+                onEditForumReply={handleEditForumReply}
                 onUpdateForumTopicStatus={handleUpdateForumTopicStatus}
                 onToggleForumTopicPin={handleToggleForumTopicPin}
+                onEditForumTopic={handleEditForumTopic}
+                onUpdateTopicInvitedUsers={handleUpdateTopicInvitedUsers}
+                onDeleteForumTopic={handleDeleteForumTopic}
                 onExportBackup={handleExportBackup}
                 onImportBackup={handleImportBackup}
               />

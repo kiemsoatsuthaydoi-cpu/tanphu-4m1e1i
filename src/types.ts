@@ -405,7 +405,7 @@ export interface FactoryMetrics {
   activeIncidents: number;
 }
 
-export type ForumTopicCategory = "Góp ý chức năng" | "Cải tiến 4M1E" | "Kiến nghị khác";
+export type ForumTopicCategory = "Góp ý chức năng" | "Cải tiến 4M1E" | "Kiến nghị khác" | "Thảo luận KPH";
 export type ForumTopicStatus = "OPEN" | "PROCESSING" | "RESOLVED";
 
 export interface ForumTopic {
@@ -419,6 +419,24 @@ export interface ForumTopic {
   timestamp: string;
   status: ForumTopicStatus;
   isPinned: boolean;
+  reportId?: string;
+  invitedUserIds?: string[];
+  isDeleted?: boolean;
+  aiSummary?: string;
+  aiSummaryData?: {
+    keyPoints: string[];
+    consensus: string;
+    actionItems: string[];
+    updatedAt: string;
+  };
+  isAiSummaryPinned?: boolean;
+}
+
+export interface ForumReplyAttachment {
+  type: "image" | "pdf";
+  url: string;
+  name?: string;
+  sizeKb?: number;
 }
 
 export interface ForumReply {
@@ -429,6 +447,24 @@ export interface ForumReply {
   senderRole: string;
   message: string;
   timestamp: string;
+  likes?: number;
+  likedBy?: string[];
+  actionType?: "DIRECTIVE" | "TASK";
+  actionData?: {
+    assignedToName?: string;
+    assignedToId?: string;
+    deadline?: string;
+    status?: "PENDING" | "COMPLETED";
+    createdByName?: string;
+    createdAt?: string;
+    note?: string;
+  };
+  quotedReply?: {
+    id: string;
+    senderName: string;
+    message: string;
+  };
+  attachments?: ForumReplyAttachment[];
 }
 
 export interface ErrorCatalogItem {

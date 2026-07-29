@@ -325,9 +325,11 @@ interface MentionInputProps {
   onChange: (val: string) => void;
   placeholder?: string;
   className?: string;
+  containerClassName?: string;
   style?: React.CSSProperties;
   name?: string;
   type?: string;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
 }
 
 export function MentionInput({
@@ -337,16 +339,33 @@ export function MentionInput({
   onChange,
   placeholder,
   className,
+  containerClassName,
   style,
   name,
-  type = "text"
+  onKeyDown
 }: MentionInputProps) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [annotationStartIdx, setAnnotationStartIdx] = useState(-1);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Auto-resize logic: expand up to 3 lines max (~76px) and collapse when empty
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+
+    el.style.height = "auto";
+    if (value) {
+      const scrollH = el.scrollHeight;
+      const maxHeight = 76; // max ~3 lines
+      const newH = Math.min(scrollH, maxHeight);
+      el.style.height = `${Math.max(36, newH)}px`;
+    } else {
+      el.style.height = "36px";
+    }
+  }, [value]);
 
   // Determine active user
   let activeUser = currentUser;
@@ -377,8 +396,8 @@ export function MentionInput({
     .slice(0, 8);
 
   const handleSelectUser = (user: User) => {
-    if (!inputRef.current) return;
-    const cursorPosition = inputRef.current.selectionStart || 0;
+    if (!textareaRef.current) return;
+    const cursorPosition = textareaRef.current.selectionStart || 0;
     const textBefore = value.slice(0, annotationStartIdx);
     const textAfter = value.slice(cursorPosition);
 
@@ -389,15 +408,15 @@ export function MentionInput({
     setShowDropdown(false);
 
     setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus();
+      if (textareaRef.current) {
+        textareaRef.current.focus();
         const nextCursor = textBefore.length + tag.length;
-        inputRef.current.setSelectionRange(nextCursor, nextCursor);
+        textareaRef.current.setSelectionRange(nextCursor, nextCursor);
       }
     }, 10);
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     onChange(val);
 
@@ -417,7 +436,7 @@ export function MentionInput({
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (showDropdown && filteredUsers.length > 0) {
       if (e.key === "ArrowDown") {
         e.preventDefault();
@@ -439,15 +458,23 @@ export function MentionInput({
         setShowDropdown(false);
         return;
       }
-    } else if (e.key === "Enter") {
+    } else if (e.key === "Enter" && !e.shiftKey) {
       const formatted = formatVietnameseInputText(value);
       if (formatted !== value) {
         onChange(formatted);
       }
+      e.preventDefault();
+      const form = textareaRef.current?.form;
+      if (form) {
+        form.requestSubmit();
+      }
+    }
+    if (onKeyDown) {
+      onKeyDown(e);
     }
   };
 
-  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+  const handleBlur = (e: React.FocusEvent<HTMLTextAreaElement>) => {
     const formatted = formatVietnameseInputText(e.target.value);
     if (formatted !== e.target.value) {
       onChange(formatted);
@@ -459,8 +486,8 @@ export function MentionInput({
       if (
         dropdownRef.current &&
         !dropdownRef.current.contains(e.target as Node) &&
-        inputRef.current &&
-        !inputRef.current.contains(e.target as Node)
+        textareaRef.current &&
+        !textareaRef.current.contains(e.target as Node)
       ) {
         setShowDropdown(false);
       }
@@ -470,18 +497,21 @@ export function MentionInput({
   }, []);
 
   return (
-    <div className="relative w-full">
-      <input
-        ref={inputRef}
-        type={type}
+    <div className={`relative flex-1 min-w-0 ${containerClassName || ""}`}>
+      <textarea
+        ref={textareaRef}
         name={name}
         placeholder={placeholder}
         value={value}
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
         onBlur={handleBlur}
-        className={className}
-        style={style}
+        rows={1}
+        className={`w-full resize-none overflow-y-auto leading-normal transition-all block ${className || ""}`}
+        style={{
+          boxSizing: "border-box",
+          ...style
+        }}
       />
 
       {showDropdown && (
@@ -494,7 +524,7 @@ export function MentionInput({
               <span><T><span translate="no" className="notranslate">Nhấn phím lên/xuống & Enter để Tag nhanh:</span></T></span>
               {userCanTagLeaders && (
                 <span className="text-[8px] text-indigo-600 bg-indigo-50 px-1 py-0.2 rounded font-extrabold">
-                  <span translate="no" className="notranslate">⚡ Quyền Tag Lãnh Đạo</span>
+                  <span translate="no" className="notranslate">⚡ Quyền Tag LÃNH ĐẠO</span>
                 </span>
               )}
             </div>

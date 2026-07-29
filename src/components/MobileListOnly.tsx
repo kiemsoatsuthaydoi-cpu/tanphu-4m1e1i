@@ -420,9 +420,6 @@ export function MobileListOnly({
                             const firstVal = Object.values(reportItem.receiverTimestamps)[0];
                             if (firstVal) return firstVal;
                           }
-                          if (reportItem.sharedBy && reportItem.sharedBy.length > 0) {
-                            return reportItem.updatedAt || reportItem.timestamp;
-                          }
                           return reportItem.timestamp;
                         };
 
