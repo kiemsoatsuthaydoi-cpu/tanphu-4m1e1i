@@ -2295,31 +2295,17 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
     setEmergencyDesc(desc);
     setEmergencyCategory("Thảo luận KPH");
     
-    // Auto pick relevant users: report creator + same branch managers + admins
-    const defaultInvited: string[] = [];
-    if (report.uploaderId) defaultInvited.push(report.uploaderId);
-    
-    users.forEach(u => {
-      if (
-        (u.branch === report.factory || u.role === UserRole.ADMIN || (u.position && (u.position.toLowerCase().includes("trưởng") || u.position.toLowerCase().includes("giám đốc")))) &&
-        u.id !== currentUser?.id
-      ) {
-        if (!defaultInvited.includes(u.id)) {
-          defaultInvited.push(u.id);
-        }
-      }
-    });
-
-    setEmergencyInvitedUserIds(defaultInvited);
+    // Do not auto pre-select participants
+    setEmergencyInvitedUserIds([]);
   };
 
   const handleCreateEmergencyDiscussion = () => {
-    if (!emergencyDiscussionReport || !emergencyTitle.trim() || !emergencyDesc.trim()) return;
+    if (!emergencyDiscussionReport || !emergencyTitle.trim()) return;
     
     if (onAddForumTopic) {
       const createdId = onAddForumTopic(
         emergencyTitle.trim(),
-        emergencyDesc.trim(),
+        emergencyDesc.trim() || emergencyTitle.trim(),
         emergencyCategory,
         emergencyDiscussionReport.id,
         emergencyInvitedUserIds
@@ -7126,6 +7112,9 @@ App Link: ${window.location.origin}`;
           replies={replies}
           currentUser={currentUser}
           users={users}
+          reports={reports}
+          onUpdateReport={onUpdateReport}
+          showToast={showToast}
           onAddForumTopic={onAddForumTopic}
           onAddForumReply={onAddForumReply}
           onUpdateForumTopicStatus={onUpdateForumTopicStatus}
@@ -7433,6 +7422,28 @@ App Link: ${window.location.origin}`;
                     const replyCount = existingTopic ? replies.filter(r => r.topicId === existingTopic.id).length : 0;
 
                     if (existingTopic) {
+                      const isResolved = existingTopic.status === "RESOLVED";
+
+                      if (isResolved) {
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveForumTopicId(existingTopic.id);
+                              setActiveBottomTab("TRAO_ĐỔI");
+                            }}
+                            className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white font-extrabold text-[11px] rounded-lg shadow-md cursor-pointer hover:shadow-lg active:scale-98 transition-all select-none uppercase tracking-wider border border-emerald-300/40 relative overflow-hidden group"
+                          >
+                            <div className="w-6 h-6 rounded-full bg-white text-emerald-600 shadow-md flex items-center justify-center shrink-0">
+                              <CheckCircle2 className="w-4 h-4 fill-emerald-500 text-white" />
+                            </div>
+                            <span translate="no" className="notranslate flex items-center gap-1.5">
+                              <T>ĐÃ CHỐT GIẢI PHÁP</T> <span className="bg-white/20 px-1.5 py-0.5 rounded-full text-[10px] text-emerald-100 border border-white/30">({replyCount} <T>ý kiến</T>)</span>
+                            </span>
+                          </button>
+                        );
+                      }
+
                       return (
                         <button
                           type="button"
@@ -12892,19 +12903,6 @@ App Link: ${window.location.origin}`}
                 </select>
               </div>
 
-              {/* Description textarea */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-600 uppercase tracking-wide block">
-                  <T>Nội dung chi tiết & bối cảnh</T> <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  rows={4}
-                  value={emergencyDesc}
-                  onChange={(e) => setEmergencyDesc(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-slate-250 rounded-lg text-xs font-medium text-slate-800 focus:outline-hidden focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-2xs resize-none"
-                />
-              </div>
-
               {/* Multi-select invited personnel */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -12939,7 +12937,7 @@ App Link: ${window.location.origin}`}
                 </div>
 
                 {/* Users checklist */}
-                <div className="max-h-36 overflow-y-auto bg-white border border-slate-200 rounded-xl p-2 space-y-1 shadow-inner">
+                <div className="max-h-72 overflow-y-auto bg-white border border-slate-200 rounded-xl p-2 space-y-1 shadow-inner">
                   {users
                     .filter(u => 
                       !invitedSearchQuery.trim() || 
@@ -13006,7 +13004,7 @@ App Link: ${window.location.origin}`}
               </button>
               <button
                 type="button"
-                disabled={!emergencyTitle.trim() || !emergencyDesc.trim()}
+                disabled={!emergencyTitle.trim()}
                 onClick={handleCreateEmergencyDiscussion}
                 className="px-4 py-2 bg-gradient-to-r from-amber-500 via-orange-600 to-rose-600 hover:from-amber-600 hover:to-rose-700 text-white font-extrabold text-[11px] rounded-lg shadow-md hover:shadow-lg active:scale-95 transition-all flex items-center gap-1.5 border-none cursor-pointer disabled:opacity-50 uppercase tracking-wider"
               >

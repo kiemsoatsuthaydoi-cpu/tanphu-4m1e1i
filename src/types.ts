@@ -410,6 +410,7 @@ export type ForumTopicStatus = "OPEN" | "PROCESSING" | "RESOLVED";
 
 export interface ForumTopic {
   id: string;
+  topicCode?: string;
   title: string;
   description: string;
   category: ForumTopicCategory;

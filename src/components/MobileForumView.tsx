@@ -6,7 +6,9 @@ import {
   ForumTopicCategory, 
   ForumTopicStatus, 
   User, 
-  UserRole 
+  UserRole,
+  QualityReport,
+  QualityReportResolution 
 } from "../types";
 import { resolveSenderInfo } from "../utils/userResolver";
 import { loadImage, processImage } from "../utils/imageProcessor";
@@ -55,6 +57,9 @@ interface MobileForumViewProps {
   replies: ForumReply[];
   currentUser: User | null;
   users?: User[];
+  reports?: QualityReport[];
+  onUpdateReport?: (report: QualityReport) => void;
+  showToast?: (msg: string) => void;
   onAddForumTopic?: (title: string, description: string, category: ForumTopicCategory, reportId?: string, invitedUserIds?: string[]) => void;
   onAddForumReply?: (topicId: string, message: string, extraData?: Partial<ForumReply>) => void;
   onUpdateForumTopicStatus?: (topicId: string, status: ForumTopicStatus) => void;
@@ -82,6 +87,9 @@ export default function MobileForumView({
   replies,
   currentUser,
   users = [],
+  reports = [],
+  onUpdateReport,
+  showToast,
   onAddForumTopic,
   onAddForumReply,
   onUpdateForumTopicStatus,
@@ -99,6 +107,11 @@ export default function MobileForumView({
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(initialSelectedTopicId || null);
   const [isDescExpanded, setIsDescExpanded] = useState(false);
   const titlePopRef = useRef<HTMLDivElement>(null);
+
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [showCloseTopicModal, setShowCloseTopicModal] = useState(false);
+  const [conclusionText, setConclusionText] = useState("");
+  const [syncToReport, setSyncToReport] = useState(true);
 
   useEffect(() => {
     if (initialSelectedTopicId) {
@@ -591,9 +604,9 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
 
   const handleCreateTopic = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim() || !newDesc.trim()) return;
+    if (!newTitle.trim()) return;
     if (onAddForumTopic) {
-      onAddForumTopic(newTitle, newDesc, newCategory);
+      onAddForumTopic(newTitle, newDesc.trim() || newTitle, newCategory);
     }
     setNewTitle("");
     setNewDesc("");
@@ -632,7 +645,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
 
   const getStatusLabel = (status: ForumTopicStatus) => {
     switch (status) {
-      case "OPEN": return "Mới";
+      case "OPEN": return "Đang mở";
       case "PROCESSING": return "Đang xử lý";
       case "RESOLVED": return "Đã giải quyết";
       default: return status;
@@ -748,8 +761,20 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                     : "border-slate-200 hover:border-slate-350"
                 }`}
               >
+                {/* Topic Code & Category Row */}
+                <div className="flex items-center justify-between gap-1 mb-1.5">
+                  <span className="text-[9px] font-extrabold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                    <span translate="no" className="notranslate">{topic.category}</span>
+                  </span>
+                  {topic.topicCode && (
+                    <span className="text-[9.5px] font-mono font-black text-indigo-700 bg-indigo-50/80 px-2 py-0.5 rounded border border-indigo-200 shrink-0">
+                      <span translate="no" className="notranslate">Mã: {topic.topicCode}</span>
+                    </span>
+                  )}
+                </div>
+
                 {/* Title */}
-                <h4 className="font-extrabold text-[11px] text-blue-700 leading-snug line-clamp-2 break-words mb-1">
+                <h4 className="font-extrabold text-[12px] text-blue-700 leading-snug line-clamp-2 break-words mb-1">
                   {topic.isPinned && (
                     <Pin className="w-3 h-3 text-amber-500 fill-amber-500 shrink-0 inline mr-1 -mt-0.5" />
                   )}
@@ -758,12 +783,6 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                   </span>
                 </h4>
 
-                {/* Description snippet */}
-                <p className="text-[10px] text-slate-500 line-clamp-2 leading-relaxed mb-2.5">
-                  <span translate="no" className="notranslate">
-                    {topic.description}
-                  </span>
-                </p>
 
                 {/* Footer metrics */}
                 <div className="flex justify-between items-center text-[8.5px] text-slate-400 font-bold border-t border-slate-100 pt-2">
@@ -879,23 +898,130 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
             {/* Slide-over Content Area */}
             <div className="flex-1 overflow-y-auto bg-slate-50 flex flex-col">
               {/* Main Topic Information Card */}
-              <div className="bg-white border-b border-slate-200 px-3 py-2 space-y-1.5 shrink-0 select-text">
+              <div className="bg-white border-b border-slate-200 px-3 py-2 space-y-1.5 shrink-0 select-text relative z-20">
                 {/* Top Meta & Controls Row */}
-                <div className="flex flex-wrap items-center justify-between gap-1.5 text-[10.5px] text-slate-500 font-bold pb-0.5 border-b border-slate-100">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <div className="flex flex-col justify-center gap-0.5">
-                      <span className="flex items-center gap-1 text-slate-700 font-extrabold">
+                <div className="flex items-center justify-between gap-1 text-[10.5px] text-slate-500 font-bold pb-0.5 border-b border-slate-100 relative">
+                  <div className="flex items-center gap-1.5 shrink-0 min-w-0">
+                    <div className="flex flex-col justify-center gap-0.5 shrink-0">
+                      <span className="flex items-center gap-1 text-slate-700 font-extrabold max-w-[100px] truncate">
                         <UserIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span translate="no" className="notranslate">{selectedTopic.creatorName}</span>
+                        <span translate="no" className="notranslate truncate">{selectedTopic.creatorName}</span>
                       </span>
-                      <span className="flex items-center gap-1 text-slate-400 text-[7.5px] font-sans font-medium pl-4">
+                      <span className="flex items-center gap-0.5 text-slate-400 text-[7.5px] font-sans font-medium pl-3.5 whitespace-nowrap">
                         <Clock className="w-2.5 h-2.5 text-slate-400 shrink-0" />
                         <span translate="no" className="notranslate">{selectedTopic.timestamp}</span>
                       </span>
                     </div>
+
+                    {/* Abbreviated Status Badge / Dropdown Button */}
+                    <div className="relative shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+                        title="Bấm để chọn trạng thái (ĐANG MỞ -> ĐANG XL -> ĐÃ XONG)"
+                        className={`h-6.5 px-1.5 rounded-md text-[9px] font-black border shadow-2xs cursor-pointer active:scale-95 transition-all shrink-0 flex items-center justify-center gap-0.5 whitespace-nowrap overflow-hidden ${getStatusColor(selectedTopic.status)}`}
+                      >
+                        <span className="notranslate whitespace-nowrap text-[9px] font-black tracking-tight" translate="no">
+                          <T>{selectedTopic.status === "OPEN" ? "ĐANG MỞ" : selectedTopic.status === "PROCESSING" ? "ĐANG XL" : "ĐÃ XONG"}</T>
+                        </span>
+                        <ChevronDown className="w-2.5 h-2.5 opacity-60 shrink-0" />
+                      </button>
+
+                      {/* Dropdown Menu for Status */}
+                      {showStatusDropdown && (
+                        <div 
+                          className="absolute left-0 top-full mt-1 w-52 bg-white border border-slate-200 rounded-lg shadow-xl z-50 py-1 text-xs animate-fadeIn"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="px-2.5 py-1 text-[9px] font-extrabold text-slate-400 uppercase tracking-wider border-b border-slate-100 flex items-center justify-between">
+                            <span><T>Trạng thái thảo luận</T></span>
+                            <button onClick={() => setShowStatusDropdown(false)} className="text-slate-400 hover:text-slate-600 border-none bg-transparent cursor-pointer p-0.5">
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (onUpdateForumTopicStatus) onUpdateForumTopicStatus(selectedTopic.id, "OPEN");
+                              setShowStatusDropdown(false);
+                            }}
+                            className={`w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-blue-50 transition-colors border-none cursor-pointer bg-transparent ${selectedTopic.status === "OPEN" ? "font-bold text-blue-700 bg-blue-50/50" : "text-slate-700"}`}
+                          >
+                            <span className="flex items-center gap-1.5 text-[11px]">
+                              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                              <T>Mở (ĐANG MỞ)</T>
+                            </span>
+                            {selectedTopic.status === "OPEN" && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (onUpdateForumTopicStatus) onUpdateForumTopicStatus(selectedTopic.id, "PROCESSING");
+                              setShowStatusDropdown(false);
+                            }}
+                            className={`w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-amber-50 transition-colors border-none cursor-pointer bg-transparent ${selectedTopic.status === "PROCESSING" ? "font-bold text-amber-700 bg-amber-50/50" : "text-slate-700"}`}
+                          >
+                            <span className="flex items-center gap-1.5 text-[11px]">
+                              <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                              <T>Đang xử lý (ĐANG XL)</T>
+                            </span>
+                            {selectedTopic.status === "PROCESSING" && <Check className="w-3.5 h-3.5 text-amber-600" />}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (onUpdateForumTopicStatus) {
+                                onUpdateForumTopicStatus(selectedTopic.id, "RESOLVED");
+                              }
+
+                              if (selectedTopic.reportId && onUpdateReport && reports) {
+                                const targetReport = reports.find(
+                                  r => r.id === selectedTopic.reportId || r.reportCode === selectedTopic.reportId
+                                );
+                                if (targetReport) {
+                                  const timeStr = new Date().toLocaleDateString('en-GB') + ' ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+                                  const newResolution: QualityReportResolution = {
+                                    id: `res_forum_${Date.now()}`,
+                                    departmentName: currentUser?.department || selectedTopic.category || "Ban Thảo luận",
+                                    handlerName: currentUser?.fullName || selectedTopic.creatorName || "Chủ trì Thảo luận",
+                                    status: "Đã xử lý",
+                                    resultText: `[Chốt từ Thảo luận Chuyên đề] Đã hoàn tất thảo luận chuyên đề.`,
+                                    updatedAt: timeStr
+                                  };
+
+                                  const updatedResolutions = [...(targetReport.resolutions || []), newResolution];
+                                  const updatedReport: QualityReport = {
+                                    ...targetReport,
+                                    resolutions: updatedResolutions,
+                                    updateLogs: [
+                                      ...(targetReport.updateLogs || []),
+                                      `Đã đồng bộ kết luận từ Thảo luận Chuyên đề bởi ${currentUser?.fullName || "Admin"} (${timeStr})`
+                                    ]
+                                  };
+
+                                  onUpdateReport(updatedReport);
+                                }
+                              }
+
+                              setShowStatusDropdown(false);
+                            }}
+                            className={`w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-emerald-50 transition-colors border-none cursor-pointer bg-transparent ${selectedTopic.status === "RESOLVED" ? "font-bold text-emerald-700 bg-emerald-50/50" : "text-slate-700"}`}
+                          >
+                            <span className="flex items-center gap-1.5 text-[11px]">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                              <T>Chốt kết luận & Đóng (ĐÃ XONG)</T>
+                            </span>
+                            {selectedTopic.status === "RESOLVED" && <Check className="w-3.5 h-3.5 text-emerald-600" />}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-1 flex-wrap ml-auto">
+                  <div className="flex items-center gap-1 shrink-0 ml-auto whitespace-nowrap">
                     {/* "Xem bản tin" Icon Button */}
                     {selectedTopic.reportId && onGoHome && (
                       <button
@@ -908,91 +1034,57 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                       </button>
                     )}
 
-                  {/* "🤖 AI Tóm tắt" Button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAiSummaryModal(true);
-                      if (!currentAiSummary) {
-                        generateAiSummaryForTopic();
-                      }
-                    }}
-                    title="AI Tóm tắt nội dung thảo luận"
-                    className="h-6.5 px-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-md shadow-2xs border-none cursor-pointer flex items-center gap-1 text-[10px] font-black transition-all shrink-0"
-                  >
-                    <Sparkles className="w-3 h-3 text-amber-300 fill-amber-300 animate-pulse" />
-                    <span className="notranslate" translate="no"><T>AI TÓM TẮT</T></span>
-                  </button>
+                    {/* "🤖 AI Tóm tắt" Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAiSummaryModal(true);
+                        if (!currentAiSummary) {
+                          generateAiSummaryForTopic();
+                        }
+                      }}
+                      title="AI Tóm tắt nội dung thảo luận"
+                      className="h-6.5 px-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-md shadow-2xs border-none cursor-pointer flex items-center gap-0.5 text-[9.5px] font-black transition-all shrink-0 whitespace-nowrap"
+                    >
+                      <Sparkles className="w-3 h-3 text-amber-300 fill-amber-300 animate-pulse shrink-0" />
+                      <span className="notranslate whitespace-nowrap" translate="no"><T>AI-SUM</T></span>
+                    </button>
 
-                  {/* "Task" Button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActionsCatalogScope("CURRENT_TOPIC");
-                      setShowActionsCatalogModal(true);
-                    }}
-                    title="Xem Danh mục Chỉ đạo / Task thuộc thảo luận này"
-                    className="h-6.5 px-2.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white rounded-md shadow-2xs border-none cursor-pointer flex items-center gap-1 text-[10px] font-black transition-all shrink-0"
-                  >
-                    <ListTodo className="w-3 h-3 text-amber-200 stroke-[2.5px]" />
-                    <span className="notranslate" translate="no"><T>TASK</T></span>
-                  </button>
+                    {/* "Task" Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActionsCatalogScope("CURRENT_TOPIC");
+                        setShowActionsCatalogModal(true);
+                      }}
+                      title="Xem Danh mục Chỉ đạo / Task thuộc thảo luận này"
+                      className="h-6.5 px-2 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white rounded-md shadow-2xs border-none cursor-pointer flex items-center gap-0.5 text-[9.5px] font-black transition-all shrink-0 whitespace-nowrap"
+                    >
+                      <ListTodo className="w-3 h-3 text-amber-200 stroke-[2.5px] shrink-0" />
+                      <span className="notranslate whitespace-nowrap" translate="no"><T>TASK</T></span>
+                    </button>
 
-                  {/* "+" Button: Mời & Xem danh sách người tham gia nhóm */}
-                  <button
-                    type="button"
-                    onClick={() => setShowMembersModal(true)}
-                    title="Mời & Danh sách người tham gia nhóm"
-                    className="h-6.5 w-6.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-md shadow-2xs border-none cursor-pointer flex items-center justify-center transition-all shrink-0"
-                  >
-                    <Plus className="w-3.5 h-3.5 stroke-[3px]" />
-                  </button>
-                </div>
+                    {/* "+" Button: Mời & Xem danh sách người tham gia nhóm */}
+                    <button
+                      type="button"
+                      onClick={() => setShowMembersModal(true)}
+                      title="Mời & Danh sách người tham gia nhóm"
+                      className="h-6.5 w-6.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-md shadow-2xs border-none cursor-pointer flex items-center justify-center transition-all shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5 stroke-[3px]" />
+                    </button>
+                  </div>
               </div>
 
-              {/* Clickable Title with Popover & Auto-Collapse on Outside Click */}
-              <div ref={titlePopRef} className="relative pt-0.5">
-                <div
-                  onClick={() => setIsDescExpanded(!isDescExpanded)}
-                  className="cursor-pointer group flex items-start justify-between gap-2 p-1 -m-1 rounded-lg hover:bg-blue-50/70 active:bg-blue-100/60 transition-all select-none border border-transparent hover:border-blue-200/80"
-                  title="Bấm vào tiêu đề để xem nội dung chi tiết"
-                >
-                  <h2 className="font-black text-sm text-blue-700 leading-snug group-hover:text-blue-800 transition-colors flex-1 line-clamp-2 break-words">
+              {/* Clean Title Banner */}
+              <div className="pt-1">
+                <div className="p-2 rounded-lg bg-rose-50 border border-rose-200/80 transition-all select-none">
+                  <h2 className="font-black text-[15px] text-rose-900 leading-snug break-words">
                     <span translate="no" className="notranslate">
                       {cleanDisplayTitle(selectedTopic.title)}
                     </span>
                   </h2>
-                  <div className={`shrink-0 pt-0.5 text-slate-400 group-hover:text-blue-600 transition-transform duration-200 ${isDescExpanded ? "rotate-180 text-blue-600" : ""}`}>
-                    <ChevronDown className="w-4 h-4 stroke-[2.5px]" />
-                  </div>
                 </div>
-
-                {/* Popover showing Full Topic Content */}
-                {isDescExpanded && (
-                  <div className="mt-2.5 p-3 bg-blue-50/95 border border-blue-200/90 rounded-xl shadow-lg animate-fadeIn text-xs leading-relaxed text-slate-800 font-medium space-y-1.5 z-20 select-text">
-                    <div className="flex justify-between items-center text-[10.5px] font-extrabold text-blue-900 border-b border-blue-200/80 pb-1 uppercase tracking-wider">
-                      <span className="flex items-center gap-1">
-                        <MessageSquare className="w-3 h-3 text-blue-700 stroke-[2.5px]" />
-                        <T>Nội dung chi tiết chủ đề</T>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setIsDescExpanded(false);
-                        }}
-                        className="text-slate-400 hover:text-blue-700 font-bold border-none bg-transparent cursor-pointer text-xs p-0.5"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    <p className="whitespace-pre-wrap text-slate-800 pt-0.5" translate="no">
-                      <span translate="no" className="notranslate">
-                        {selectedTopic.description || "Không có mô tả chi tiết."}
-                      </span>
-                    </p>
-                  </div>
-                )}
               </div>
 
 
@@ -1644,21 +1736,6 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                   className="w-full bg-slate-50 border border-slate-250 focus:border-blue-500 focus:bg-white rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-none transition-all placeholder:text-slate-400 placeholder:font-normal"
                 />
               </div>
-
-              {/* Description textarea */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">
-                  <T>Nội dung chi tiết</T>
-                </label>
-                <MentionTextArea
-                  users={users}
-                  placeholder="Ghi rõ ý kiến, đề xuất chi tiết hoặc phản hồi đến BQT..."
-                  value={newDesc}
-                  onChange={setNewDesc}
-                  className="w-full bg-slate-50 border border-slate-250 focus:border-blue-500 focus:bg-white rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 placeholder:font-normal leading-relaxed resize-none"
-                  rows={3}
-                />
-              </div>
             </div>
 
             {/* Footer actions */}
@@ -1672,7 +1749,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
               </button>
               <button
                 type="submit"
-                disabled={!newTitle.trim() || !newDesc.trim()}
+                disabled={!newTitle.trim()}
                 className={`flex-1 py-2 text-center text-white rounded-lg text-xs font-extrabold ${theme.bg} disabled:bg-slate-300 disabled:opacity-50 cursor-pointer border-none shadow-2xs transition-all active:scale-98`}
               >
                 <T>TẠO CHỦ ĐỀ</T>
@@ -1692,9 +1769,9 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
             onClick={(e) => e.stopPropagation()}
             onSubmit={(e) => {
               e.preventDefault();
-              if (!editTitle.trim() || !editDesc.trim()) return;
+              if (!editTitle.trim()) return;
               if (onEditForumTopic) {
-                onEditForumTopic(editingTopic.id, editTitle, editDesc, editCategory);
+                onEditForumTopic(editingTopic.id, editTitle, editDesc || editTitle, editCategory);
               }
               setEditingTopic(null);
             }}
@@ -1756,20 +1833,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                 />
               </div>
 
-              {/* Description textarea */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">
-                  <T>Nội dung chi tiết</T>
-                </label>
-                <MentionTextArea
-                  users={users}
-                  placeholder="Nội dung thảo luận..."
-                  value={editDesc}
-                  onChange={setEditDesc}
-                  className="w-full bg-slate-50 border border-slate-250 focus:border-blue-500 focus:bg-white rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 placeholder:font-normal leading-relaxed resize-none"
-                  rows={3}
-                />
-              </div>
+
             </div>
 
             {/* Footer actions */}
@@ -3029,6 +3093,167 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                 className="flex-1 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs border-none cursor-pointer"
               >
                 <T>Xóa ngay</T>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Chốt kết luận & Đóng thảo luận */}
+      {showCloseTopicModal && selectedTopic && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white px-4 py-3 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-200 shrink-0" />
+                <div>
+                  <h3 className="font-extrabold text-xs uppercase tracking-wide">
+                    <T>Chốt kết luận & Đóng thảo luận</T>
+                  </h3>
+                  <p className="text-[10px] text-emerald-100 font-medium truncate max-w-[250px]">
+                    {selectedTopic.title}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCloseTopicModal(false)}
+                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer border-none bg-transparent"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 overflow-y-auto space-y-3.5 text-xs text-slate-700">
+              {/* Linked Report Info Banner */}
+              {selectedTopic.reportId && (
+                <div className="p-2.5 bg-blue-50/80 border border-blue-200/80 rounded-xl flex items-start gap-2 text-blue-900">
+                  <Zap className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                  <div className="text-[11px] leading-snug">
+                    <span className="font-bold uppercase text-blue-700 block">
+                      <T>Bản tin KPH liên quan</T>: #{selectedTopic.reportId}
+                    </span>
+                    <span className="text-slate-600">
+                      {reports?.find(r => r.id === selectedTopic.reportId || r.reportCode === selectedTopic.reportId)?.content || "Báo cáo sự cố gốc"}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Text Area for Conclusion */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-slate-800 text-xs flex items-center gap-1">
+                    <span><T>Nội dung kết luận xử lý cuối cùng</T></span>
+                    <span className="text-rose-500">*</span>
+                  </label>
+                </div>
+
+                <textarea
+                  value={conclusionText}
+                  onChange={(e) => setConclusionText(e.target.value)}
+                  placeholder="Nhập nội dung chốt kết luận xử lý KPH / kết quả thảo luận..."
+                  rows={4}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-sans text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all resize-none"
+                />
+              </div>
+
+              {/* Sync Checkbox */}
+              {selectedTopic.reportId && (
+                <label className="flex items-start gap-2.5 cursor-pointer p-2.5 bg-emerald-50/60 border border-emerald-200/80 rounded-xl hover:bg-emerald-50 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={syncToReport}
+                    onChange={(e) => setSyncToReport(e.target.checked)}
+                    className="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                  />
+                  <div className="text-[11px] text-slate-700 leading-tight">
+                    <span className="font-extrabold text-emerald-800 block">
+                      <T>Tự động đồng bộ (Sync) về Bản tin KPH gốc</T>
+                    </span>
+                    <span className="text-slate-500 text-[10px]">
+                      <T>Ghi nhận kết luận này vào mục "Ghi nhận kết quả xử lý KPH" (report.resolutions) của bài viết gốc.</T>
+                    </span>
+                  </div>
+                </label>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowCloseTopicModal(false)}
+                className="px-3.5 py-1.5 rounded-xl border border-slate-300 bg-white text-slate-700 text-xs font-bold hover:bg-slate-100 transition-all cursor-pointer"
+              >
+                <T>Hủy</T>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!selectedTopic) return;
+                  const finalNote = conclusionText.trim();
+                  if (!finalNote) {
+                    alert("Vui lòng nhập nội dung kết luận trước khi chốt!");
+                    return;
+                  }
+
+                  // 1. Update topic status to RESOLVED
+                  if (onUpdateForumTopicStatus) {
+                    onUpdateForumTopicStatus(selectedTopic.id, "RESOLVED");
+                  }
+
+                  // 2. Add pinned conclusion log to discussion thread
+                  if (onAddForumReply) {
+                    onAddForumReply(
+                      selectedTopic.id,
+                      `📌 [KẾT LUẬN CUỐI CÙNG & ĐÓNG THẢO LUẬN]:\n${finalNote}`
+                    );
+                  }
+
+                  // 3. Sync to report.resolutions if enabled & reportId exists
+                  if (syncToReport && selectedTopic.reportId && onUpdateReport && reports) {
+                    const targetReport = reports.find(
+                      r => r.id === selectedTopic.reportId || r.reportCode === selectedTopic.reportId
+                    );
+                    if (targetReport) {
+                      const timeStr = new Date().toLocaleDateString('en-GB') + ' ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+                      const newResolution: QualityReportResolution = {
+                        id: `res_forum_${Date.now()}`,
+                        departmentName: currentUser?.department || selectedTopic.category || "Ban Thảo luận",
+                        handlerName: currentUser?.fullName || selectedTopic.creatorName || "Chủ trì Thảo luận",
+                        status: "Đã xử lý",
+                        resultText: `[Chốt từ Thảo luận Chuyên đề] ${finalNote}`,
+                        updatedAt: timeStr
+                      };
+
+                      const updatedResolutions = [...(targetReport.resolutions || []), newResolution];
+                      const updatedReport: QualityReport = {
+                        ...targetReport,
+                        resolutions: updatedResolutions,
+                        updateLogs: [
+                          ...(targetReport.updateLogs || []),
+                          `Đã đồng bộ kết luận từ Thảo luận Chuyên đề bởi ${currentUser?.fullName || "Admin"} (${timeStr})`
+                        ]
+                      };
+
+                      onUpdateReport(updatedReport);
+                    }
+                  }
+
+                  if (showToast) {
+                    showToast("Đã chốt kết luận và đồng bộ vào Bản tin KPH thành công! ✅");
+                  }
+
+                  setShowCloseTopicModal(false);
+                  setConclusionText("");
+                }}
+                className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-black shadow-md transition-all cursor-pointer flex items-center gap-1.5 border-none"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <T>Xác nhận Chốt & Đóng</T>
               </button>
             </div>
           </div>

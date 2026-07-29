@@ -716,6 +716,66 @@ export default function App() {
     deletedTopicIdsRef.current = deletedTopicIds;
   }, [deletedTopicIds]);
 
+  const [deletedReplyIds, setDeletedReplyIds] = useState<string[]>(() => {
+    const saved = safeGetItem("4m1e1i_deleted_reply_ids");
+    return safeParseJSON(saved, []);
+  });
+  const deletedReplyIdsRef = useRef<string[]>(deletedReplyIds);
+  useEffect(() => {
+    deletedReplyIdsRef.current = deletedReplyIds;
+  }, [deletedReplyIds]);
+
+  // Topic Code Sequence Counter (Guarantees non-repeating topic codes even if topics are deleted)
+  const [topicCodeCounter, setTopicCodeCounter] = useState<number>(() => {
+    const saved = safeGetItem("4m1e1i_topic_code_counter");
+    const parsed = parseInt(saved || "0", 10);
+    return isNaN(parsed) ? 0 : parsed;
+  });
+
+  // Auto-assign topicCode to existing topics missing one
+  useEffect(() => {
+    if (topics && topics.length > 0) {
+      let changed = false;
+      let currentCounter = topicCodeCounter;
+      topics.forEach((t) => {
+        if (t.topicCode) {
+          const match = t.topicCode.match(/\d+/);
+          if (match) {
+            const num = parseInt(match[0], 10);
+            if (!isNaN(num) && num > currentCounter) currentCounter = num;
+          }
+        }
+      });
+
+      const updatedTopics = topics.map((t) => {
+        if (!t.topicCode) {
+          changed = true;
+          currentCounter++;
+          const code = `TD-${String(currentCounter).padStart(6, "0")}`;
+          return { ...t, topicCode: code };
+        } else if (t.topicCode.startsWith("TD-") && t.topicCode.length < 9) {
+          // Reformat 4-digit code (e.g. TD-0003) to 6 digits (e.g. TD-000003)
+          const match = t.topicCode.match(/\d+/);
+          if (match) {
+            const num = parseInt(match[0], 10);
+            const code = `TD-${String(num).padStart(6, "0")}`;
+            if (code !== t.topicCode) {
+              changed = true;
+              return { ...t, topicCode: code };
+            }
+          }
+        }
+        return t;
+      });
+
+      if (changed || currentCounter !== topicCodeCounter) {
+        setTopics(updatedTopics);
+        setTopicCodeCounter(currentCounter);
+        safeSetItem("4m1e1i_topic_code_counter", currentCounter.toString());
+      }
+    }
+  }, [topics]);
+
   // Offline queue
   const [offlineQueue, setOfflineQueue] = useState<QualityReport[]>(() => {
     const saved = safeGetItem("4m1e1i_offline_queue");
@@ -1602,7 +1662,8 @@ export default function App() {
       }
 
       if (fReplies && fReplies.length > 0) {
-        setReplies(fReplies);
+        const validReplies = fReplies.filter((r) => !deletedReplyIdsRef.current.includes(r.id) && !r.isDeleted);
+        setReplies(validReplies);
       } else {
         setReplies([
           {
@@ -1778,7 +1839,10 @@ export default function App() {
       (snapshot) => {
         const list: ForumReply[] = [];
         snapshot.forEach((doc) => {
-          list.push(doc.data() as ForumReply);
+          const r = doc.data() as ForumReply;
+          if (r && r.id && !deletedReplyIdsRef.current.includes(r.id) && !r.isDeleted) {
+            list.push(r);
+          }
         });
         setReplies(list);
       },
@@ -1831,6 +1895,11 @@ export default function App() {
             const data = doc.data();
             if (data && Array.isArray(data.ids)) {
               setDeletedTopicIds((prev) => Array.from(new Set([...prev, ...data.ids])));
+            }
+          } else if (doc.id === "deleted_replies") {
+            const data = doc.data();
+            if (data && Array.isArray(data.ids)) {
+              setDeletedReplyIds((prev) => Array.from(new Set([...prev, ...data.ids])));
             }
           } else if (doc.id === "qc_feature") {
             const data = doc.data();
@@ -2036,6 +2105,10 @@ export default function App() {
   useEffect(() => {
     safeSetItem("4m1e1i_deleted_topic_ids", JSON.stringify(deletedTopicIds));
   }, [deletedTopicIds]);
+
+  useEffect(() => {
+    safeSetItem("4m1e1i_deleted_reply_ids", JSON.stringify(deletedReplyIds));
+  }, [deletedReplyIds]);
 
   useEffect(() => {
     safeSetItem("4m1e1i_current_user", JSON.stringify(currentUser));
@@ -2947,8 +3020,27 @@ export default function App() {
     invitedUserIds?: string[]
   ): string => {
     if (!currentUser) return "";
+
+    // Generate unique topic code (monotonically increasing, non-reusable)
+    let maxNum = topicCodeCounter;
+    topics.forEach((t) => {
+      if (t.topicCode) {
+        const match = t.topicCode.match(/\d+/);
+        if (match) {
+          const num = parseInt(match[0], 10);
+          if (!isNaN(num) && num > maxNum) maxNum = num;
+        }
+      }
+    });
+    const nextCounter = maxNum + 1;
+    const topicCode = `TD-${String(nextCounter).padStart(6, "0")}`;
+
+    setTopicCodeCounter(nextCounter);
+    safeSetItem("4m1e1i_topic_code_counter", nextCounter.toString());
+
     const newTopic: ForumTopic = {
       id: `TOPIC-${Date.now()}`,
+      topicCode,
       title,
       description,
       category,
@@ -3018,17 +3110,68 @@ export default function App() {
     });
   };
 
+  const handleDeleteForumReply = (replyId: string) => {
+    setDeletedReplyIds((prev) => {
+      const next = Array.from(new Set([...prev, replyId]));
+      safeSetItem("4m1e1i_deleted_reply_ids", JSON.stringify(next));
+      return next;
+    });
+    setReplies((prev) => {
+      const next = prev.filter((r) => r.id !== replyId);
+      safeSetItem("4m1e1i_replies", JSON.stringify(next));
+      return next;
+    });
+    if (dbConnected) {
+      deleteDocument(COLLECTIONS.TOPIC_REPLIES, replyId).catch((err) => {
+        console.error("Lỗi khi xóa phản hồi trên Firestore:", err);
+      });
+      const updatedIds = Array.from(new Set([...deletedReplyIdsRef.current, replyId]));
+      saveDocument("config", "deleted_replies", { ids: updatedIds }).catch(() => {});
+    }
+    showToast("Đã xóa tin nhắn!", "info");
+  };
+
+  const handleLikeForumReply = (replyId: string) => {
+    if (!currentUser) return;
+    setReplies((prev) => {
+      const next = prev.map((r) => {
+        if (r.id !== replyId) return r;
+        const userPhone = currentUser.phone || currentUser.id;
+        const likedBy = r.likedBy || [];
+        const hasLiked = likedBy.includes(userPhone);
+        const newLikedBy = hasLiked ? likedBy.filter((p) => p !== userPhone) : [...likedBy, userPhone];
+        const updated: ForumReply = {
+          ...r,
+          likes: newLikedBy.length,
+          likedBy: newLikedBy
+        };
+        if (dbConnected) {
+          saveDocument(COLLECTIONS.TOPIC_REPLIES, updated.id, updated).catch((err) => {
+            console.error("Lỗi khi thả tim phản hồi:", err);
+          });
+        }
+        return updated;
+      });
+      safeSetItem("4m1e1i_replies", JSON.stringify(next));
+      return next;
+    });
+  };
+
   const handleUpdateForumTopicStatus = (topicId: string, status: ForumTopicStatus) => {
-    setTopics((prev) => prev.map((t) => {
-      if (t.id !== topicId) return t;
-      const updated = { ...t, status };
-      if (dbConnected) {
-        saveDocument(COLLECTIONS.TOPICS, updated.id, updated).catch((err) => {
-          console.error("Lỗi khi cập nhật trạng thái chủ đề:", err);
-        });
-      }
-      return updated;
-    }));
+    setTopics((prev) => {
+      const next = prev.map((t) => {
+        if (t.id !== topicId) return t;
+        const updated = { ...t, status };
+        if (dbConnected) {
+          saveDocument(COLLECTIONS.TOPICS, updated.id, updated).catch((err) => {
+            console.error("Lỗi khi cập nhật trạng thái chủ đề:", err);
+          });
+        }
+        return updated;
+      });
+      safeSetItem("4m1e1i_topics", JSON.stringify(next));
+      return next;
+    });
     showToast("Đã cập nhật trạng thái chủ đề!", "success");
   };
 
@@ -3081,11 +3224,19 @@ export default function App() {
 
   const handleDeleteForumTopic = (topicId: string) => {
     const targetReplies = replies.filter((r) => r.topicId === topicId);
+    const targetReplyIds = targetReplies.map((r) => r.id);
     setDeletedTopicIds((prev) => {
       const next = Array.from(new Set([...prev, topicId]));
       safeSetItem("4m1e1i_deleted_topic_ids", JSON.stringify(next));
       return next;
     });
+    if (targetReplyIds.length > 0) {
+      setDeletedReplyIds((prev) => {
+        const next = Array.from(new Set([...prev, ...targetReplyIds]));
+        safeSetItem("4m1e1i_deleted_reply_ids", JSON.stringify(next));
+        return next;
+      });
+    }
     setTopics((prev) => {
       const next = prev.filter((t) => t.id !== topicId);
       safeSetItem("4m1e1i_topics", JSON.stringify(next));
@@ -3102,6 +3253,9 @@ export default function App() {
         deleteDocument(COLLECTIONS.TOPIC_REPLIES, r.id).catch(() => {});
       });
       saveDocument("config", "deleted_topics", { ids: Array.from(new Set([...deletedTopicIds, topicId])) }).catch(() => {});
+      if (targetReplyIds.length > 0) {
+        saveDocument("config", "deleted_replies", { ids: Array.from(new Set([...deletedReplyIdsRef.current, ...targetReplyIds])) }).catch(() => {});
+      }
     }
     showToast("Đã xóa chủ đề thảo luận!", "info");
   };
@@ -4422,6 +4576,8 @@ export default function App() {
             onAddForumTopic={handleAddForumTopic}
             onAddForumReply={handleAddForumReply}
             onEditForumReply={handleEditForumReply}
+            onDeleteForumReply={handleDeleteForumReply}
+            onLikeForumReply={handleLikeForumReply}
             onUpdateForumTopicStatus={handleUpdateForumTopicStatus}
             onToggleForumTopicPin={handleToggleForumTopicPin}
             onEditForumTopic={handleEditForumTopic}
@@ -4552,6 +4708,8 @@ export default function App() {
             onAddForumTopic={handleAddForumTopic}
             onAddForumReply={handleAddForumReply}
             onEditForumReply={handleEditForumReply}
+            onDeleteForumReply={handleDeleteForumReply}
+            onLikeForumReply={handleLikeForumReply}
             onUpdateForumTopicStatus={handleUpdateForumTopicStatus}
             onToggleForumTopicPin={handleToggleForumTopicPin}
             onEditForumTopic={handleEditForumTopic}
@@ -4796,6 +4954,8 @@ export default function App() {
                 onAddForumTopic={handleAddForumTopic}
                 onAddForumReply={handleAddForumReply}
                 onEditForumReply={handleEditForumReply}
+                onDeleteForumReply={handleDeleteForumReply}
+                onLikeForumReply={handleLikeForumReply}
                 onUpdateForumTopicStatus={handleUpdateForumTopicStatus}
                 onToggleForumTopicPin={handleToggleForumTopicPin}
                 onEditForumTopic={handleEditForumTopic}
@@ -4881,6 +5041,8 @@ export default function App() {
                 onAddForumTopic={handleAddForumTopic}
                 onAddForumReply={handleAddForumReply}
                 onEditForumReply={handleEditForumReply}
+                onDeleteForumReply={handleDeleteForumReply}
+                onLikeForumReply={handleLikeForumReply}
                 onUpdateForumTopicStatus={handleUpdateForumTopicStatus}
                 onToggleForumTopicPin={handleToggleForumTopicPin}
                 onEditForumTopic={handleEditForumTopic}

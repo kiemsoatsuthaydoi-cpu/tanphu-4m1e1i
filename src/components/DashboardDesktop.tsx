@@ -8225,10 +8225,17 @@ export default function DashboardDesktop({
                             }`}
                           >
                             <div className="flex items-start justify-between gap-1 mb-1">
-                              {/* Category Badge */}
-                              <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
-                                <T>{t.category}</T>
-                              </span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {t.topicCode && (
+                                  <span className="px-1.5 py-0.5 rounded-md text-[9px] font-mono font-black bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
+                                    <span translate="no" className="notranslate">Mã: {t.topicCode}</span>
+                                  </span>
+                                )}
+                                {/* Category Badge */}
+                                <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                  <T>{t.category}</T>
+                                </span>
+                              </div>
 
                               {/* Status Badge */}
                               <span
@@ -8260,10 +8267,6 @@ export default function DashboardDesktop({
                               <T>{t.title}</T>
                             </h4>
 
-                            {/* Description snippet */}
-                            <p className="text-slate-500 text-[10px] line-clamp-2 leading-relaxed mb-2">
-                              <T>{t.description}</T>
-                            </p>
 
                             {/* Metadata */}
                             <div className="flex items-center justify-between text-[9px] text-slate-400">
@@ -8309,6 +8312,11 @@ export default function DashboardDesktop({
                         <div className="p-4 border-b border-slate-200 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
                           <div className="space-y-1.5 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
+                              {topic.topicCode && (
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-black bg-indigo-100 text-indigo-800 border border-indigo-300">
+                                  <span translate="no" className="notranslate">Mã: {topic.topicCode}</span>
+                                </span>
+                              )}
                               <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200">
                                 <T>{topic.category}</T>
                               </span>
@@ -8431,9 +8439,6 @@ export default function DashboardDesktop({
                                     <T>{topic.timestamp}</T>
                                   </span>
                                 </div>
-                                <p className="text-slate-700 text-xs mt-2 leading-relaxed break-words whitespace-pre-wrap font-medium">
-                                  <T>{topic.description}</T>
-                                </p>
                               </div>
                             </div>
                           </div>
@@ -8591,21 +8596,6 @@ export default function DashboardDesktop({
                           className="w-full bg-slate-50 text-slate-800 border border-slate-200 rounded-md px-3 py-1.5 text-xs focus:outline-none focus:border-blue-500"
                         />
                       </div>
-
-                      {/* Description */}
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase">
-                          <T>Nội dung chi tiết</T>
-                        </label>
-                        <MentionTextArea
-                          users={users}
-                          placeholder="Mô tả cụ thể ý kiến hoặc giải pháp cải tiến của bạn để Ban Quản Trị xem xét..."
-                          value={newTopicDesc}
-                          onChange={setNewTopicDesc}
-                          className="w-full h-32 bg-slate-50 text-slate-800 border border-slate-200 rounded-md px-3 py-2 text-xs focus:outline-none focus:border-blue-500 resize-none"
-                          rows={4}
-                        />
-                      </div>
                     </div>
 
                     {/* Footer Buttons */}
@@ -8622,8 +8612,8 @@ export default function DashboardDesktop({
                       </button>
                       <button
                         onClick={() => {
-                          if (!newTopicTitle.trim() || !newTopicDesc.trim()) return;
-                          onAddForumTopic?.(newTopicTitle, newTopicDesc, newTopicCategory);
+                          if (!newTopicTitle.trim()) return;
+                          onAddForumTopic?.(newTopicTitle, newTopicDesc || newTopicTitle, newTopicCategory);
                           setIsCreatingTopic(false);
                           setNewTopicTitle("");
                           setNewTopicDesc("");
@@ -8686,22 +8676,6 @@ export default function DashboardDesktop({
                         />
                       </div>
 
-                      {/* Description */}
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase">
-                          <T>Nội dung chi tiết</T>
-                        </label>
-                        <MentionTextArea
-                          users={users}
-                          placeholder="Nội dung chi tiết..."
-                          value={editDesktopTopicDesc}
-                          onChange={setEditDesktopTopicDesc}
-                          className="w-full h-32 bg-slate-50 text-slate-800 border border-slate-200 rounded-md px-3 py-2 text-xs focus:outline-none focus:border-blue-500 resize-none"
-                          rows={4}
-                        />
-                      </div>
-                    </div>
-
                     {/* Footer Buttons */}
                     <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-100">
                       <button
@@ -8714,9 +8688,9 @@ export default function DashboardDesktop({
                       <button
                         type="button"
                         onClick={() => {
-                          if (!editDesktopTopicTitle.trim() || !editDesktopTopicDesc.trim()) return;
+                          if (!editDesktopTopicTitle.trim()) return;
                           if (onEditForumTopic) {
-                            onEditForumTopic(editingDesktopTopic.id, editDesktopTopicTitle, editDesktopTopicDesc, editDesktopTopicCategory);
+                            onEditForumTopic(editingDesktopTopic.id, editDesktopTopicTitle, editDesktopTopicDesc || editDesktopTopicTitle, editDesktopTopicCategory);
                             if (onShowToast) onShowToast("Đã cập nhật chủ đề thảo luận thành công!");
                           }
                           setEditingDesktopTopic(null);
@@ -8728,6 +8702,7 @@ export default function DashboardDesktop({
                     </div>
                   </div>
                 </div>
+              </div>
               )}
 
               {/* Delete Topic Confirmation Modal */}
