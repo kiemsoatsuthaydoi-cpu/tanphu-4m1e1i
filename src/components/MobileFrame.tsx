@@ -2265,6 +2265,10 @@ export default function MobileFrame({
   const [emergencyInvitedUserIds, setEmergencyInvitedUserIds] = useState<string[]>([]);
   const [invitedSearchQuery, setInvitedSearchQuery] = useState("");
   const [activeForumTopicId, setActiveForumTopicId] = useState<string | null>(null);
+  const handleForumTopicSelect = useCallback((topicId: string | null) => {
+    activeForumTopicIdRef.current = topicId;
+    setActiveForumTopicId(topicId);
+  }, []);
   const [isInputFocused, setIsInputFocused] = useState(false);
 
   useEffect(() => {
@@ -3524,12 +3528,14 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
 
       // Priority 2: Back 1 lần -> If in Forum topic detail view, exit to topic list
       if (activeBottomTabRef.current === "TRAO_ĐỔI" && activeForumTopicIdRef.current) {
+        activeForumTopicIdRef.current = null;
         setActiveForumTopicId(null);
         return;
       }
 
       // Priority 3: Back lần 2 -> If in Forum topic list or any other tab, go back to "Bản Tin"
       if (activeBottomTabRef.current !== "BAO_CAO") {
+        activeBottomTabRef.current = "BAO_CAO";
         setActiveBottomTab("BAO_CAO");
         return;
       }
@@ -7443,7 +7449,7 @@ App Link: ${window.location.origin}`;
             }
           }}
           initialSelectedTopicId={activeForumTopicId}
-          onTopicSelect={(topicId) => setActiveForumTopicId(topicId)}
+          onTopicSelect={handleForumTopicSelect}
         />
       ) : (
         <>

@@ -116,15 +116,16 @@ export default function MobileForumView({
   const [conclusionText, setConclusionText] = useState("");
   const [syncToReport, setSyncToReport] = useState(true);
 
+  const handleSelectTopic = (topicId: string | null) => {
+    setSelectedTopicId(topicId);
+    if (onTopicSelect) {
+      onTopicSelect(topicId);
+    }
+  };
+
   useEffect(() => {
     setSelectedTopicId(initialSelectedTopicId || null);
   }, [initialSelectedTopicId]);
-
-  useEffect(() => {
-    if (onTopicSelect) {
-      onTopicSelect(selectedTopicId);
-    }
-  }, [selectedTopicId, onTopicSelect]);
 
   useEffect(() => {
     setIsDescExpanded(false);
@@ -762,7 +763,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
             return (
               <div
                 key={topic.id}
-                onClick={() => setSelectedTopicId(topic.id)}
+                onClick={() => handleSelectTopic(topic.id)}
                 className={`bg-white p-3 rounded-lg border transition-all cursor-pointer relative ${
                   topic.isPinned 
                     ? "border-amber-300 bg-amber-50/10 hover:border-amber-400" 
@@ -892,7 +893,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
             <div className={`px-3 py-2 text-white flex items-center gap-2 shrink-0 ${theme.bg}`}>
               <button
                 type="button"
-                onClick={() => setSelectedTopicId(null)}
+                onClick={() => handleSelectTopic(null)}
                 className="bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white p-1 rounded-md shadow-2xs border-none cursor-pointer flex items-center justify-center transition-all shrink-0"
                 title="Quay lại danh sách thảo luận"
               >
@@ -2051,7 +2052,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                   if (onDeleteForumTopic) {
                     onDeleteForumTopic(deletingTopic.id);
                     if (selectedTopicId === deletingTopic.id) {
-                      setSelectedTopicId(null);
+                      handleSelectTopic(null);
                     }
                   }
                   setDeletingTopic(null);

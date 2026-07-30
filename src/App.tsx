@@ -929,6 +929,7 @@ export default function App() {
   }, [mobileUIConfig]);
 
   const wasPopStateRef = useRef(false);
+  const appPushedHistoryRef = useRef(false);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -940,6 +941,7 @@ export default function App() {
         setReportsForPrint(null);
       }
       if (confirmDialog) setConfirmDialog(null);
+      appPushedHistoryRef.current = false;
       setTimeout(() => {
         wasPopStateRef.current = false;
       }, 50);
@@ -948,9 +950,13 @@ export default function App() {
     const hasActiveOverlay = isFormOpen || !!editingReport || isNativeScrollActive || !!confirmDialog;
 
     if (hasActiveOverlay) {
-      window.history.pushState({ inAppBackable: true }, "");
+      if (!appPushedHistoryRef.current) {
+        window.history.pushState({ inAppBackable: true }, "");
+        appPushedHistoryRef.current = true;
+      }
     } else {
-      if (!wasPopStateRef.current) {
+      if (!wasPopStateRef.current && appPushedHistoryRef.current) {
+        appPushedHistoryRef.current = false;
         if (window.history.state?.inAppBackable) {
           window.history.back();
         }
