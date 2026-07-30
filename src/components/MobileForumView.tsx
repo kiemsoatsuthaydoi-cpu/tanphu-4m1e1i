@@ -308,13 +308,45 @@ export default function MobileForumView({
     }
   };
 
-  // Helper to format topic title cleanly without mid-word cuts and without redundant "Thảo luận:" prefix
-  const cleanDisplayTitle = (title: string): string => {
+  // Helper to format topic title cleanly without mid-word cuts, allowing up to 2 full lines of context (~145 chars)
+  const cleanDisplayTitle = (title: string, description?: string, report?: QualityReport | null): string => {
     if (!title) return "";
     let cleaned = title.replace(/Thảo luận:\s*/gi, "");
-    // Repair known half-word pattern from previous truncated data
     cleaned = cleaned.replace(/\bPHẢN H\.\.\.$/gi, "PHẢN HỒI...");
     cleaned = cleaned.replace(/\s+[A-Za-zÀ-ỹ]{1,2}\.\.\.$/gi, "...");
+
+    // If title was truncated with "..." at the end (under 110 chars), enrich it using report or description if available
+    if ((cleaned.endsWith("...") || cleaned.endsWith("…")) && cleaned.length < 110) {
+      const sourceText = report?.content || description || "";
+      if (sourceText) {
+        const cleanSource = sourceText.replace(/\s+/g, " ").trim();
+        const baseTitle = cleaned.replace(/[\.\s]+$/, "");
+        const pureTitleText = baseTitle.replace(/^(🔥\s*)?(\[[A-Z0-9_-]+\]\s*)?/, "").trim();
+        
+        if (pureTitleText && cleanSource.toLowerCase().includes(pureTitleText.toLowerCase().slice(0, 15))) {
+          const prefixMatch = baseTitle.match(/^(🔥\s*)?(\[[A-Z0-9_-]+\]\s*)?/);
+          const prefix = prefixMatch ? prefixMatch[0] : "";
+          
+          let expandedText = cleanSource;
+          if (report?.notes && report.notes.trim()) {
+            const notesClean = report.notes.replace(/\s+/g, " ").trim();
+            if (!expandedText.toLowerCase().includes(notesClean.toLowerCase())) {
+              expandedText = `${expandedText} - ${notesClean}`;
+            }
+          }
+          
+          const maxChars = 145;
+          if (expandedText.length > maxChars) {
+            const truncated = expandedText.slice(0, maxChars);
+            const lastSpace = truncated.lastIndexOf(" ");
+            const wordBoundary = lastSpace > 30 ? truncated.slice(0, lastSpace) : truncated;
+            expandedText = `${wordBoundary.replace(/[,;:\-–—\.\s]+$/, "")}...`;
+          }
+          cleaned = `${prefix}${expandedText}`;
+        }
+      }
+    }
+
     return cleaned;
   };
 
@@ -523,7 +555,177 @@ export default function MobileForumView({
     }
   };
 
+  // Helper function to capitalize words
+  const capitalizeWords = (str: string): string => {
+    if (!str) return "";
+    return str
+      .split(/\s+/)
+      .map((word) => (word ? word.charAt(0).toUpperCase() + word.slice(1) : ""))
+      .join(" ");
+  };
+
+  // Helper function to render @mentions in blue
+  const renderMentionText = (text: string | undefined | null, isDarkBg: boolean = false): React.ReactNode => {
+    if (!text || typeof text !== "string" || !text.includes("@")) {
+      return text || "";
+    }
+
+    // Collect candidates from users prop and common system tags
+    const candidatesSet = new Set<string>();
+    if (users && users.length > 0) {
+      users.forEach((u) => {
+        if (u.fullName && u.fullName.trim()) {
+          candidatesSet.add(u.fullName.trim());
+          const parts = u.fullName.trim().split(/\s+/);
+          if (parts.length >= 2) {
+            candidatesSet.add(parts.slice(-2).join(" ")); // e.g. "Nhật Trường"
+          }
+          if (parts[parts.length - 1].length >= 2) {
+            candidatesSet.add(parts[parts.length - 1]); // e.g. "Trường"
+          }
+        }
+        if (u.department && u.department.trim()) {
+          candidatesSet.add(u.department.trim());
+          const cleanDept = u.department.replace(/^Phòng\s+/i, "").trim();
+          if (cleanDept.length >= 2) candidatesSet.add(cleanDept);
+        }
+        if (u.id && u.id.trim()) candidatesSet.add(u.id.trim());
+      });
+    }
+
+    candidatesSet.add("Tất cả");
+    candidatesSet.add("All");
+    candidatesSet.add("Mọi người");
+    candidatesSet.add("Ban Giám Đốc");
+    candidatesSet.add("QLCL");
+    candidatesSet.add("QC");
+    candidatesSet.add("R&D");
+
+    const candidates = Array.from(candidatesSet).sort((a, b) => b.length - a.length);
+
+    type Range = { start: number; end: number; matchText: string };
+    const ranges: Range[] = [];
+    const lowerText = text.toLowerCase();
+
+    // 1. Check known candidates
+    for (const cand of candidates) {
+      if (!cand) continue;
+      const searchTarget = `@${cand.toLowerCase()}`;
+      let pos = 0;
+      while ((pos = lowerText.indexOf(searchTarget, pos)) !== -1) {
+        const end = pos + searchTarget.length;
+        const overlaps = ranges.some((r) => !(end <= r.start || pos >= r.end));
+        if (!overlaps) {
+          ranges.push({
+            start: pos,
+            end: end,
+            matchText: text.substring(pos, end),
+          });
+        }
+        pos = end;
+      }
+    }
+
+    // 2. Fallback regex for generic @mentions (capturing capitalized names or words following @)
+    const genericRegex = /@([\p{L}\w\-_]+(?:\s+[\p{L}\w\-_]+)*)/gu;
+    let match: RegExpExecArray | null;
+    while ((match = genericRegex.exec(text)) !== null) {
+      const namePart = match[1];
+      
+      let cleanName = namePart.split(/[,.:;!?\n\r]/)[0].trim();
+      const stopWords = ["dạ", "nhưng", "em", "anh", "chị", "của", "với", "cho", "nhờ", "đã", "rồi", "và", "khi", "là", "được", "này", "ạ", "ơi"];
+      const words = cleanName.split(/\s+/);
+      const filteredWords: string[] = [];
+      for (const w of words) {
+        if (stopWords.includes(w.toLowerCase()) && filteredWords.length > 0) {
+          break;
+        }
+        filteredWords.push(w);
+      }
+      if (filteredWords.length > 0) {
+        cleanName = filteredWords.join(" ");
+        const finalTag = `@${cleanName}`;
+        const pos = match.index;
+        const end = pos + finalTag.length;
+        const overlaps = ranges.some((r) => !(end <= r.start || pos >= r.end));
+        if (!overlaps) {
+          ranges.push({
+            start: pos,
+            end: end,
+            matchText: text.substring(pos, end),
+          });
+        }
+      }
+    }
+
+    if (ranges.length === 0) return text;
+
+    ranges.sort((a, b) => a.start - b.start);
+
+    const elements: React.ReactNode[] = [];
+    let currentIndex = 0;
+
+    ranges.forEach((r, idx) => {
+      if (r.start > currentIndex) {
+        elements.push(text.substring(currentIndex, r.start));
+      }
+      const rawTag = r.matchText;
+      let displayTag = rawTag;
+      if (rawTag.startsWith("@")) {
+        displayTag = `@${capitalizeWords(rawTag.slice(1))}`;
+      } else {
+        displayTag = capitalizeWords(rawTag);
+      }
+
+      elements.push(
+        <span
+          key={`tag-${idx}`}
+          translate="no"
+          className={
+            isDarkBg
+              ? "notranslate text-sky-200 font-extrabold bg-blue-800/90 px-1.5 py-0.5 rounded border border-blue-400/50 mx-0.5 inline-block text-[11.5px] shadow-2xs"
+              : "notranslate text-blue-600 font-extrabold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200/80 mx-0.5 inline-block text-[11.5px] shadow-2xs"
+          }
+        >
+          {displayTag}
+        </span>
+      );
+      currentIndex = r.end;
+    });
+
+    if (currentIndex < text.length) {
+      elements.push(text.substring(currentIndex));
+    }
+
+    return elements;
+  };
+
   // AI Summary Generator
+  const cleanSalutationsAndGreetings = (rawMsg: string): string => {
+    if (!rawMsg) return "";
+    let msg = rawMsg.replace(/\s+/g, ' ').trim();
+
+    // Pattern for leading greetings, acknowledgements and conversational pleasantries
+    const leadGreetingRegex = /^(hello|hi|dear\s+all|good\s+morning|good\s+afternoon|chào\s+(anh|chị|em|mọi\s+người|cả\s+nhà|sếp|ban|sếp\s+và\s+các\s+anh\s+chị|qc|p\.?\s*qlcl|qlcl)|dạ\s+vâng|dạ|thưa\s+sếp|kính\s+gửi|thân\s+gửi|cho\s+(mình|em)\s+hỏi|dạ\s+cho\s+em\s+hỏi)[.,!:-]?\s*/i;
+    const leadAckRegex = /^(ok\s+(em|anh|chị|cả\s+nhà|mọi\s+người|sếp)|ok|tks\s+(em|anh|chị)|thanks|cảm\s+ơn\s+(anh|chị|em|mọi\s+người)|nhờ\s+(em|anh|chị))[.,!:-]?\s*/i;
+
+    let prev = "";
+    while (msg !== prev) {
+      prev = msg;
+      msg = msg.replace(leadGreetingRegex, "").trim();
+      msg = msg.replace(leadAckRegex, "").trim();
+    }
+
+    // Trailing thanks / salutations
+    msg = msg.replace(/\s*(tks\s*(em|anh|chị)?|thanks(\s*all)?|cảm\s+ơn(\s*(anh|chị|em))?)[.,!]?$/i, "").trim();
+
+    if (msg.length > 0) {
+      msg = msg.charAt(0).toUpperCase() + msg.slice(1);
+    }
+
+    return msg;
+  };
+
   const generateAiSummaryForTopic = () => {
     if (!selectedTopic) return;
     setIsAiSummarizing(true);
@@ -534,43 +736,109 @@ export default function MobileForumView({
       const tasks = repliesList.filter(r => r.actionType === "TASK");
 
       const keyPoints: string[] = [];
-      keyPoints.push(`Chủ đề: "${cleanDisplayTitle(selectedTopic.title)}".`);
-      if (selectedTopic.description) {
-        const descShort = selectedTopic.description.length > 80 ? selectedTopic.description.slice(0, 80) + "..." : selectedTopic.description;
-        keyPoints.push(`Nội dung ban đầu: ${descShort}`);
-      }
-      keyPoints.push(`Số lượng trao đổi: ${repliesList.length} ý kiến từ các thành viên.`);
-      if (joinedUserCount > 0) {
-        keyPoints.push(`Nhóm tham gia: ${joinedUserCount} nhân sự.`);
+
+      // 1. Full Topic & Problem Description details
+      const fullTitle = cleanDisplayTitle(selectedTopic.title);
+      keyPoints.push(`Chủ đề: "${fullTitle}" (Phân loại: ${selectedTopic.category || "Thảo luận"}).`);
+
+      if (matchedReport) {
+        const reportCode = matchedReport.reportCode || selectedTopic.reportId;
+        const prodName = (matchedReport as any).productName || "";
+        const errName = (matchedReport as any).errorName || (matchedReport as any).description || matchedReport.content || "";
+        const notes = matchedReport.notes || "";
+        
+        let reportDetail = `Báo cáo KPH liên quan: ${reportCode}`;
+        if (prodName) reportDetail += ` | Sản phẩm: ${prodName}`;
+        if (errName) reportDetail += ` | Lỗi/Hiện tượng: ${errName}`;
+        if (notes) reportDetail += ` (${notes})`;
+        keyPoints.push(reportDetail);
+      } else if (selectedTopic.description) {
+        const cleanDesc = cleanSalutationsAndGreetings(selectedTopic.description);
+        if (cleanDesc) {
+          keyPoints.push(`Vấn đề ban đầu: ${cleanDesc}`);
+        }
       }
 
-      let consensus = "Các bên đã trao đổi và thống nhất giải pháp xử lý theo đúng quy trình 4M1E1I, phân công rõ người phụ trách và hạn hoàn thành.";
-      const lastReply = repliesList[repliesList.length - 1];
-      if (lastReply) {
-        const cleanMsg = lastReply.message.replace(/\s+/g, ' ').trim();
-        consensus = `Kết luận gần nhất (${lastReply.senderName}): "${cleanMsg.length > 85 ? cleanMsg.slice(0, 85) + "..." : cleanMsg}"`;
+      // 2. Overview of thread activity & participants
+      const uniqueSenders = Array.from(new Set(repliesList.map(r => r.senderName).filter(Boolean)));
+      if (uniqueSenders.length > 0) {
+        keyPoints.push(`Số lượng trao đổi: ${repliesList.length} ý kiến từ ${uniqueSenders.length} nhân sự tham gia (${uniqueSenders.join(", ")}).`);
+      } else {
+        keyPoints.push(`Số lượng trao đổi: ${repliesList.length} ý kiến từ các thành viên.`);
       }
 
+      // 3. Highlight main core ideas from members (stripped of pure greetings/filler)
+      if (repliesList.length > 0) {
+        const highlightsByAuthor: Record<string, string[]> = {};
+        
+        repliesList.forEach(r => {
+          if (r.message.startsWith("📌 Đã chuyển tin nhắn thành")) return;
+          const cleanedMsg = cleanSalutationsAndGreetings(r.message);
+          // Filter out empty messages or ultra-short acknowledgements like "Ok", "Đã rõ"
+          if (cleanedMsg && cleanedMsg.length > 3 && !/^(đã rõ|rõ rồi|đã nhận|ok|xong)$/i.test(cleanedMsg)) {
+            const author = r.senderName || "Thành viên";
+            if (!highlightsByAuthor[author]) highlightsByAuthor[author] = [];
+            highlightsByAuthor[author].push(cleanedMsg);
+          }
+        });
+
+        Object.entries(highlightsByAuthor).forEach(([author, msgs]) => {
+          const combined = msgs.join(" | ");
+          const displayText = combined.length > 250 ? combined.slice(0, 250) + "..." : combined;
+          keyPoints.push(`Ý kiến từ ${author}: "${displayText}"`);
+        });
+      }
+
+      // Consensus / Final Conclusion
+      let consensus = "Các bên đã trao đổi, phân tích nguyên nhân và thống nhất phương án xử lý theo quy trình 4M1E1I, phân công rõ người phụ trách và hạn hoàn thành.";
+      if (repliesList.length > 0) {
+        const conclusionReplies = repliesList.filter(r => {
+          const m = r.message.toLowerCase();
+          return m.includes("ok") || m.includes("đồng ý") || m.includes("thống nhất") || m.includes("kết luận") || m.includes("xử lý") || m.includes("theo dõi") || m.includes("phản hồi");
+        });
+
+        if (conclusionReplies.length > 0) {
+          const latestConc = conclusionReplies[conclusionReplies.length - 1];
+          const cleanMsg = cleanSalutationsAndGreetings(latestConc.message) || latestConc.message.replace(/\s+/g, ' ').trim();
+          consensus = `Kết luận gần nhất (${latestConc.senderName}): "${cleanMsg}"`;
+
+          if (conclusionReplies.length >= 2) {
+            const prevConc = conclusionReplies[conclusionReplies.length - 2];
+            if (prevConc.id !== latestConc.id) {
+              const prevMsg = cleanSalutationsAndGreetings(prevConc.message) || prevConc.message.replace(/\s+/g, ' ').trim();
+              consensus += `\n• Ý kiến thống nhất (${prevConc.senderName}): "${prevMsg}"`;
+            }
+          }
+        } else {
+          const lastReply = repliesList[repliesList.length - 1];
+          if (lastReply) {
+            const cleanMsg = cleanSalutationsAndGreetings(lastReply.message) || lastReply.message.replace(/\s+/g, ' ').trim();
+            consensus = `Kết luận gần nhất (${lastReply.senderName}): "${cleanMsg}"`;
+          }
+        }
+      }
+
+      // Directives & Tasks - Strip salutations for clean action items
       const actionItems: string[] = [];
       directives.forEach(d => {
-        const cleanMsg = d.message.replace(/\s+/g, ' ').trim();
-        actionItems.push(`⚡ Chỉ đạo (${d.senderName}): ${cleanMsg.length > 55 ? cleanMsg.slice(0, 55) + "..." : cleanMsg}`);
+        const cleanMsg = cleanSalutationsAndGreetings(d.message) || d.message.replace(/\s+/g, ' ').trim();
+        actionItems.push(`⚡ Chỉ đạo (${d.senderName}): ${cleanMsg}`);
       });
       tasks.forEach(t => {
-        const cleanMsg = t.message.replace(/\s+/g, ' ').trim();
+        const cleanMsg = cleanSalutationsAndGreetings(t.message) || t.message.replace(/\s+/g, ' ').trim();
         const statusText = t.actionData?.status === "COMPLETED" ? "[Đã xong]" : "[Đang làm]";
-        actionItems.push(`📌 Đầu việc (${t.actionData?.assignedToName || "Nhân sự"}): ${cleanMsg.length > 45 ? cleanMsg.slice(0, 45) + "..." : cleanMsg} - Hạn: ${t.actionData?.deadline || "N/A"} ${statusText}`);
+        actionItems.push(`📌 Đầu việc (${t.actionData?.assignedToName || "Nhân sự"}): ${cleanMsg} - Hạn: ${t.actionData?.deadline || "N/A"} ${statusText}`);
       });
 
       if (actionItems.length === 0) {
-        actionItems.push("Chưa có chỉ đạo hoặc đầu việc phân công trực tiếp nào trong lượt thảo luận này.");
+        actionItems.push("Chưa có chỉ đạo hoặc đầu việc (Task) giao trực tiếp nào trong lượt thảo luận này.");
       }
 
       const now = new Date();
       const day = String(now.getDate()).padStart(2, '0');
       const month = String(now.getMonth() + 1).padStart(2, '0');
       const year = String(now.getFullYear()).slice(-2);
-      const timeStr = `${day}/${month}/${year} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const timeStr = `${day}/${month}/${year} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
       setAiSummariesMap(prev => ({
         ...prev,
@@ -788,7 +1056,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                     <Pin className="w-3 h-3 text-amber-500 fill-amber-500 shrink-0 inline mr-1 -mt-0.5" />
                   )}
                   <span translate="no" className="notranslate">
-                    {cleanDisplayTitle(topic.title)}
+                    {cleanDisplayTitle(topic.title, topic.description, reports.find(r => r.id === topic.reportId || r.reportCode === topic.reportId))}
                   </span>
                 </h4>
 
@@ -1096,7 +1364,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                 >
                   <h2 className="font-black text-[13px] text-rose-900 leading-snug break-words flex-1 min-w-0">
                     <span translate="no" className="notranslate">
-                      {cleanDisplayTitle(selectedTopic.title)}
+                      {cleanDisplayTitle(selectedTopic.title, selectedTopic.description, matchedReport)}
                     </span>
                   </h2>
                   <div className="shrink-0 flex items-center justify-center mb-0.5 text-rose-700">
@@ -1113,7 +1381,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                   <div className="mt-1.5 p-3 bg-white border border-rose-200 rounded-xl shadow-xl space-y-2.5 animate-fadeIn z-30 select-text">
                     {/* Header */}
                     <div className="flex items-center justify-between border-b border-rose-100 pb-1.5">
-                      <span className="text-[10.5px] font-extrabold text-rose-900 uppercase tracking-wide flex items-center gap-1">
+                      <span className="text-[9.5px] font-extrabold text-rose-900 uppercase tracking-wide flex items-center gap-1">
                         <FileText className="w-3.5 h-3.5 text-rose-600" />
                         <T>Nội dung chi tiết & Bối cảnh</T>
                       </span>
@@ -1131,19 +1399,19 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
 
                     {/* Detailed Description */}
                     <div className="space-y-1">
-                      <div className="text-[11.5px] text-slate-800 leading-relaxed font-medium bg-rose-50/60 p-2.5 rounded-lg border border-rose-100/80 break-words whitespace-pre-wrap">
+                      <div className="text-[10.5px] text-slate-800 leading-relaxed font-medium bg-rose-50/60 p-2.5 rounded-lg border border-rose-100/80 break-words whitespace-pre-wrap">
                         {selectedTopic.description ? (
                           <span translate="no" className="notranslate">
-                            {selectedTopic.description}
+                            {renderMentionText(selectedTopic.description, false)}
                           </span>
                         ) : (
-                          <em className="text-slate-400 text-[10.5px]"><T>Không có diễn giải chi tiết ban đầu.</T></em>
+                          <em className="text-slate-400 text-[9.5px]"><T>Không có diễn giải chi tiết ban đầu.</T></em>
                         )}
                       </div>
                     </div>
 
                     {/* Context metadata */}
-                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100 text-[10px] text-slate-600">
+                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100 text-[9px] text-slate-600">
                       <div>
                         <span className="text-slate-400 font-medium"><T>Người tạo:</T> </span>
                         <strong className="text-slate-800" translate="no">{selectedTopic.creatorName}</strong>
@@ -1166,21 +1434,21 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
 
                     {/* Linked Report details if available */}
                     {matchedReport && (
-                      <div className="p-2 bg-amber-50/70 border border-amber-200/80 rounded-lg space-y-1 text-[10px]">
+                      <div className="p-2 bg-amber-50/70 border border-amber-200/80 rounded-lg space-y-1 text-[9px]">
                         <div className="font-bold text-amber-900 flex items-center justify-between">
                           <span><T>Báo cáo KPH liên quan:</T></span>
                           <span translate="no" className="notranslate font-extrabold">{matchedReport.reportCode}</span>
                         </div>
-                        {matchedReport.productName && (
+                        {(matchedReport as any).productName && (
                           <div className="text-slate-700">
                             <span className="font-semibold"><T>Sản phẩm:</T> </span>
-                            <span translate="no">{matchedReport.productName}</span>
+                            <span translate="no">{(matchedReport as any).productName}</span>
                           </div>
                         )}
-                        {(matchedReport.errorName || matchedReport.description) && (
+                        {((matchedReport as any).errorName || (matchedReport as any).description || matchedReport.content) && (
                           <div className="text-slate-700">
                             <span className="font-semibold"><T>Hiện tượng / Lỗi:</T> </span>
-                            <span translate="no">{matchedReport.errorName || matchedReport.description}</span>
+                            <span translate="no">{(matchedReport as any).errorName || (matchedReport as any).description || matchedReport.content}</span>
                           </div>
                         )}
                       </div>
@@ -1217,14 +1485,14 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                       <strong className="text-indigo-950 font-black"><T>Ý chính:</T></strong>
                       <ul className="list-disc list-inside space-y-0.5 pl-1 pt-0.5 text-slate-700">
                         {currentAiSummary.keyPoints.map((pt, idx) => (
-                          <li key={idx} translate="no" className="notranslate">{pt}</li>
+                          <li key={idx} translate="no" className="notranslate">{renderMentionText(pt, false)}</li>
                         ))}
                       </ul>
                     </div>
 
                     <div className="pt-1 border-t border-indigo-100/80">
                       <strong className="text-indigo-950 font-black"><T>Thống nhất:</T> </strong>
-                      <span translate="no" className="notranslate">{currentAiSummary.consensus}</span>
+                      <span translate="no" className="notranslate">{renderMentionText(currentAiSummary.consensus, false)}</span>
                     </div>
 
                     {currentAiSummary.directivesAndTasks.length > 0 && (
@@ -1232,7 +1500,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                         <strong className="text-indigo-950 font-black"><T>Chỉ đạo & Đầu việc:</T></strong>
                         <ul className="space-y-0.5 pl-1 pt-0.5 font-bold text-[10.5px]">
                           {currentAiSummary.directivesAndTasks.map((act, idx) => (
-                            <li key={idx} className="text-amber-900" translate="no">{act}</li>
+                            <li key={idx} className="text-amber-900" translate="no">{renderMentionText(act, false)}</li>
                           ))}
                         </ul>
                       </div>
@@ -1408,7 +1676,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                                   <span translate="no" className="notranslate">{reply.quotedReply.senderName}</span>
                                 </div>
                                 <p translate="no" className="notranslate line-clamp-2 italic text-[10.5px]">
-                                  "{reply.quotedReply.message}"
+                                  "{renderMentionText(reply.quotedReply.message, isMe)}"
                                 </p>
                               </div>
                             )}
@@ -1416,7 +1684,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                             {/* Text message */}
                             {reply.message && (
                               <span translate="no" className="notranslate whitespace-pre-wrap">
-                                {reply.message}
+                                {renderMentionText(reply.message, isMe)}
                               </span>
                             )}
 
@@ -3008,7 +3276,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
 
                       {/* Content / Note */}
                       <p className="text-xs text-slate-800 font-medium leading-relaxed bg-slate-50 p-2 rounded-lg border border-slate-200/80" translate="no">
-                        <span translate="no" className="notranslate">{reply.actionData?.note || reply.message}</span>
+                        <span translate="no" className="notranslate">{renderMentionText(reply.actionData?.note || reply.message, false)}</span>
                       </p>
 
                       {/* Task Details Row */}

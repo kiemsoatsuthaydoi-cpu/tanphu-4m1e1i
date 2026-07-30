@@ -6586,7 +6586,7 @@ export default function DashboardDesktop({
                                       className="mt-2.5 flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-[10px] rounded-lg shadow-sm border border-emerald-500/10 cursor-pointer hover:shadow active:scale-95 transition-all select-none uppercase tracking-wide"
                                     >
                                       <Bot className="w-3.5 h-3.5 text-emerald-100" />
-                                      <span translate="no" className="notranslate">Phân tích Cơ hội & Rủi ro</span>
+                                      <span translate="no" className="notranslate">Phân tích Cơ hội & Rủi ro (Thách thức)</span>
                                     </button>
                                   )}
 
@@ -8264,7 +8264,7 @@ export default function DashboardDesktop({
                             </div>
 
                             {/* Title */}
-                            <h4 className="font-bold text-slate-800 text-xs mb-1 line-clamp-1 flex items-center gap-1">
+                            <h4 className="font-bold text-slate-800 text-xs mb-1 line-clamp-2 flex items-center gap-1">
                               {t.isPinned && <Pin className="w-3 h-3 text-red-500 shrink-0 fill-red-500" />}
                               <T>{t.title}</T>
                             </h4>
@@ -8803,7 +8803,7 @@ export default function DashboardDesktop({
                         } uppercase tracking-wider`}>
                           <span translate="no" className="notranslate">
                             {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                              ? "Phân tích Cơ hội & Rủi ro 4M1E1I"
+                              ? "Phân tích Cơ hội & Rủi ro (Thách thức) 4M1E1I"
                               : "5-WHYs & CƠ HỘI CẢI TIẾN"}
                           </span>
                         </p>
@@ -8833,7 +8833,7 @@ export default function DashboardDesktop({
                       <Brain className="w-4 h-4" />
                       <span translate="no" className="notranslate">
                         {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                          ? "Bảng Phân tích Cơ hội & Rủi ro"
+                          ? "Bảng Phân tích Cơ hội & Rủi ro (Thách thức)"
                           : "5-WHYs & CƠ HỘI CẢI TIẾN"}
                       </span>
                     </button>
@@ -8920,14 +8920,14 @@ export default function DashboardDesktop({
                               <p className="text-xs font-black text-slate-750 animate-pulse">
                                 <span translate="no" className="notranslate">
                                   {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                                    ? "Trí tuệ nhân tạo đang phân tích cơ hội & rủi ro..."
+                                    ? "Trí tuệ nhân tạo đang phân tích cơ hội & rủi ro (thách thức)..."
                                     : "Trí tuệ nhân tạo đang phân tích lỗi..."}
                                 </span>
                               </p>
                               <p className="text-[10px] text-slate-400 mt-1">
                                 <span translate="no" className="notranslate">
                                   {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                                    ? "Đang rà soát cơ hội, rủi ro và đánh giá quy tắc nghiêm ngặt 4M1E1I"
+                                    ? "Đang rà soát cơ hội, rủi ro (thách thức) và đánh giá quy tắc nghiêm ngặt 4M1E1I"
                                     : `Đang áp dụng mô hình 5-Why và đề xuất giải pháp cho ${companyName}`}
                                 </span>
                               </p>
@@ -8943,7 +8943,7 @@ export default function DashboardDesktop({
                             <p className="text-xs">
                               <span translate="no" className="notranslate">
                                 {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                                  ? "Bấm nút \"Phân tích Cơ hội & Rủi ro\" để bắt đầu"
+                                  ? "Bấm nút \"Phân tích Cơ hội & Rủi ro (Thách thức)\" để bắt đầu"
                                   : "Bấm nút \"5-WHYs & CƠ HỘI CẢI TIẾN\" để bắt đầu"}
                               </span>
                             </p>

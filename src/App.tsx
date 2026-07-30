@@ -928,12 +928,8 @@ export default function App() {
     safeSetItem("4m1e1i_mobile_ui_config", JSON.stringify(mobileUIConfig));
   }, [mobileUIConfig]);
 
-  const wasPopStateRef = useRef(false);
-  const appPushedHistoryRef = useRef(false);
-
   useEffect(() => {
     const handlePopState = () => {
-      wasPopStateRef.current = true;
       if (isFormOpen) setIsFormOpen(false);
       if (editingReport) setEditingReport(null);
       if (isNativeScrollActive) {
@@ -941,27 +937,7 @@ export default function App() {
         setReportsForPrint(null);
       }
       if (confirmDialog) setConfirmDialog(null);
-      appPushedHistoryRef.current = false;
-      setTimeout(() => {
-        wasPopStateRef.current = false;
-      }, 50);
     };
-
-    const hasActiveOverlay = isFormOpen || !!editingReport || isNativeScrollActive || !!confirmDialog;
-
-    if (hasActiveOverlay) {
-      if (!appPushedHistoryRef.current) {
-        window.history.pushState({ inAppBackable: true }, "");
-        appPushedHistoryRef.current = true;
-      }
-    } else {
-      if (!wasPopStateRef.current && appPushedHistoryRef.current) {
-        appPushedHistoryRef.current = false;
-        if (window.history.state?.inAppBackable) {
-          window.history.back();
-        }
-      }
-    }
 
     window.addEventListener("popstate", handlePopState);
     return () => {
@@ -4534,6 +4510,12 @@ export default function App() {
           />
         ) : (
           <MobileFrame
+            isFormOpen={isFormOpen}
+            onCloseForm={() => setIsFormOpen(false)}
+            editingReport={editingReport}
+            onCloseEditingReport={() => setEditingReport(null)}
+            confirmDialog={confirmDialog}
+            onCloseConfirmDialog={() => setConfirmDialog(null)}
             headerLogoAvatar={headerLogoAvatar}
             onUpdateHeaderLogoAvatar={handleUpdateHeaderLogoAvatar}
             errorCatalog={errorCatalog}
@@ -4666,6 +4648,12 @@ export default function App() {
           />
         ) : (
           <MobileFrame
+            isFormOpen={isFormOpen}
+            onCloseForm={() => setIsFormOpen(false)}
+            editingReport={editingReport}
+            onCloseEditingReport={() => setEditingReport(null)}
+            confirmDialog={confirmDialog}
+            onCloseConfirmDialog={() => setConfirmDialog(null)}
             headerLogoAvatar={headerLogoAvatar}
             onUpdateHeaderLogoAvatar={handleUpdateHeaderLogoAvatar}
             errorCatalog={errorCatalog}
@@ -4913,6 +4901,12 @@ export default function App() {
               />
             ) : (
               <MobileFrame
+                isFormOpen={isFormOpen}
+                onCloseForm={() => setIsFormOpen(false)}
+                editingReport={editingReport}
+                onCloseEditingReport={() => setEditingReport(null)}
+                confirmDialog={confirmDialog}
+                onCloseConfirmDialog={() => setConfirmDialog(null)}
                 headerLogoAvatar={headerLogoAvatar}
                 onUpdateHeaderLogoAvatar={handleUpdateHeaderLogoAvatar}
                 errorCatalog={errorCatalog}
@@ -4999,6 +4993,12 @@ export default function App() {
               />
             ) : (
               <MobileFrame
+                isFormOpen={isFormOpen}
+                onCloseForm={() => setIsFormOpen(false)}
+                editingReport={editingReport}
+                onCloseEditingReport={() => setEditingReport(null)}
+                confirmDialog={confirmDialog}
+                onCloseConfirmDialog={() => setConfirmDialog(null)}
                 headerLogoAvatar={headerLogoAvatar}
                 onUpdateHeaderLogoAvatar={handleUpdateHeaderLogoAvatar}
                 errorCatalog={errorCatalog}

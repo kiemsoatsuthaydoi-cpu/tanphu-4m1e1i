@@ -286,6 +286,12 @@ interface MobileFrameProps {
   onAddErrorCatalogItem?: (item: ErrorCatalogItem) => void;
   isQcFeatureEnabled?: boolean;
   onToggleQcFeature?: (enabled: boolean) => void;
+  isFormOpen?: boolean;
+  onCloseForm?: () => void;
+  editingReport?: QualityReport | null;
+  onCloseEditingReport?: () => void;
+  confirmDialog?: any;
+  onCloseConfirmDialog?: () => void;
 }
 
 function formatTimestampToDMY(tsStr: string): string {
@@ -1574,7 +1580,13 @@ export default function MobileFrame({
   errorCatalog = [],
   onAddErrorCatalogItem,
   isQcFeatureEnabled = true,
-  onToggleQcFeature
+  onToggleQcFeature,
+  isFormOpen,
+  onCloseForm,
+  editingReport,
+  onCloseEditingReport,
+  confirmDialog,
+  onCloseConfirmDialog
 }: MobileFrameProps) {
   const isRealMobile = typeof window !== "undefined" && (
     window.innerWidth < 1024 || 
@@ -2306,15 +2318,21 @@ export default function MobileFrame({
   const handleOpenEmergencyDiscussionModal = (report: QualityReport) => {
     setEmergencyDiscussionReport(report);
     const codePrefix = report.reportCode ? `[${report.reportCode}] ` : `[${report.reportType || "KPH"}] `;
-    const contentClean = (report.content || "").replace(/\s+/g, " ").trim();
+    let fullText = (report.content || "").replace(/\s+/g, " ").trim();
+    if (report.notes && report.notes.trim()) {
+      const notesClean = report.notes.replace(/\s+/g, " ").trim();
+      if (!fullText.toLowerCase().includes(notesClean.toLowerCase())) {
+        fullText = `${fullText} - ${notesClean}`;
+      }
+    }
     
-    // Smart AI summary: keep complete words, avoid mid-word truncation, max ~75 chars for content part
-    const maxChars = 75;
-    let titleContent = contentClean;
-    if (contentClean.length > maxChars) {
-      const truncated = contentClean.slice(0, maxChars);
+    // Smart AI summary: keep complete words, allow up to ~145 chars so content fills up to 2 full lines
+    const maxChars = 145;
+    let titleContent = fullText;
+    if (fullText.length > maxChars) {
+      const truncated = fullText.slice(0, maxChars);
       const lastSpace = truncated.lastIndexOf(" ");
-      const wordBoundaryText = lastSpace > 20 ? truncated.slice(0, lastSpace) : truncated;
+      const wordBoundaryText = lastSpace > 30 ? truncated.slice(0, lastSpace) : truncated;
       titleContent = `${wordBoundaryText.replace(/[,;:\-–—\.\s]+$/, "")}...`;
     }
 
@@ -3334,6 +3352,10 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
   const isEditingTickerRef = useRef(isEditingTicker);
   const isEditingKnowledgeRef = useRef(isEditingKnowledge);
   const editingBroadcastIdRef = useRef(editingBroadcastId);
+  const isFormOpenRef = useRef(isFormOpen);
+  const editingReportRef = useRef(editingReport);
+  const confirmDialogRef = useRef(confirmDialog);
+  const isNativeScrollActiveRef = useRef(isNativeScrollActive);
   const lastBackPressTimeRef = useRef<number>(0);
 
   useEffect(() => { activeBottomTabRef.current = activeBottomTab; }, [activeBottomTab]);
@@ -3373,6 +3395,10 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
   useEffect(() => { isEditingTickerRef.current = isEditingTicker; }, [isEditingTicker]);
   useEffect(() => { isEditingKnowledgeRef.current = isEditingKnowledge; }, [isEditingKnowledge]);
   useEffect(() => { editingBroadcastIdRef.current = editingBroadcastId; }, [editingBroadcastId]);
+  useEffect(() => { isFormOpenRef.current = isFormOpen; }, [isFormOpen]);
+  useEffect(() => { editingReportRef.current = editingReport; }, [editingReport]);
+  useEffect(() => { confirmDialogRef.current = confirmDialog; }, [confirmDialog]);
+  useEffect(() => { isNativeScrollActiveRef.current = isNativeScrollActive; }, [isNativeScrollActive]);
 
   // Handle hardware / browser Back button for mobile navigation
   useEffect(() => {
@@ -3380,10 +3406,28 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
     window.history.pushState({ app: "tanphu_4m1e1i" }, "");
 
     const handlePopState = () => {
-      // Re-push state so subsequent back presses are captured
+      // Re-push state so subsequent back presses are captured and user stays in app
       window.history.pushState({ app: "tanphu_4m1e1i" }, "");
 
-      // Priority 1: Close any open modal, drawer, popover or sheet
+      // Priority 0: Parent App overlays (Confirm dialog, Form, Edit report, Print/Scroll view)
+      if (confirmDialogRef.current && onCloseConfirmDialog) {
+        onCloseConfirmDialog();
+        return;
+      }
+      if (isFormOpenRef.current && onCloseForm) {
+        onCloseForm();
+        return;
+      }
+      if (editingReportRef.current && onCloseEditingReport) {
+        onCloseEditingReport();
+        return;
+      }
+      if (isNativeScrollActiveRef.current && setIsNativeScrollActive) {
+        setIsNativeScrollActive(false);
+        return;
+      }
+
+      // Priority 1: Close any open MobileFrame modal, drawer, popover or sheet
       if (showOnlineUsersDrawerRef.current) {
         setShowOnlineUsersDrawer(false);
         return;
@@ -7734,7 +7778,7 @@ App Link: ${window.location.origin}`;
                       className="mt-3 w-full flex items-center justify-center gap-1.5 px-3 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-[11px] rounded-lg shadow-sm cursor-pointer hover:shadow active:scale-98 transition-all select-none uppercase tracking-wider"
                     >
                       <Bot className="w-4 h-4 text-emerald-100" />
-                      <span translate="no" className="notranslate">Phân tích Cơ hội & Rủi ro</span>
+                      <span translate="no" className="notranslate">Phân tích Cơ hội & Rủi ro (Thách thức)</span>
                     </button>
                   )}
 
@@ -12882,7 +12926,7 @@ App Link: ${window.location.origin}`}
                     } uppercase tracking-wider`}>
                       <span translate="no" className="notranslate">
                         {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                          ? "Phân tích cơ hội & rủi ro 4M1E1I"
+                          ? "Phân tích cơ hội & rủi ro (thách thức) 4M1E1I"
                           : "5-WHYs & CƠ HỘI CẢI TIẾN"}
                       </span>
                     </p>
@@ -12997,14 +13041,14 @@ App Link: ${window.location.origin}`}
                           <p className="text-[11px] font-black text-slate-750 animate-pulse">
                             <span translate="no" className="notranslate">
                               {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                                ? "AI đang phân tích cơ hội & rủi ro..."
+                                ? "AI đang phân tích cơ hội & rủi ro (thách thức)..."
                                 : "AI đang phân tích lỗi..."}
                             </span>
                           </p>
                           <p className="text-[9px] text-slate-400 mt-0.5">
                             <span translate="no" className="notranslate">
                               {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                                ? "Đang rà soát, đánh giá cơ hội & rủi ro 4M1E1I"
+                                ? "Đang rà soát, đánh giá cơ hội & rủi ro (thách thức) 4M1E1I"
                                 : "Đang áp dụng mô hình 5-Why chất lượng Tân Phú"}
                             </span>
                           </p>
@@ -13020,7 +13064,7 @@ App Link: ${window.location.origin}`}
                         <p className="text-[11px]">
                           <span translate="no" className="notranslate">
                             {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                              ? "Bấm nút \"Phân tích Cơ hội & Rủi ro\" để bắt đầu"
+                              ? "Bấm nút \"Phân tích Cơ hội & Rủi ro (Thách thức)\" để bắt đầu"
                               : "Bấm nút \"5-WHYs & CƠ HỘI CẢI TIẾN\" để bắt đầu"}
                           </span>
                         </p>
@@ -13043,7 +13087,7 @@ App Link: ${window.location.origin}`}
                     <span className="text-[10px] font-bold">
                       <span translate="no" className="notranslate">
                         {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                          ? "Hỏi đáp về cơ hội & rủi ro của Điểm Sáng này"
+                          ? "Hỏi đáp về cơ hội & rủi ro (thách thức) của Điểm Sáng này"
                           : "Đặt câu hỏi chuyên sâu về lỗi 4M1E1I này"}
                       </span>
                     </span>
