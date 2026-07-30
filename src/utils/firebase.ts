@@ -1,13 +1,14 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { 
   initializeFirestore, 
+  getFirestore,
   persistentLocalCache, 
   persistentMultipleTabManager,
   setLogLevel
 } from "firebase/firestore";
 
-// Suppress internal connection attempt logs in sandboxed/offline environments
-setLogLevel("error");
+// Suppress internal connection attempt logs/warnings in sandboxed/offline environments
+setLogLevel("silent");
 
 let firebaseApp: any = null;
 let db: any = null;
@@ -86,10 +87,11 @@ if (!isDummy) {
         experimentalForceLongPolling: true
       });
     } catch (cacheErr) {
-      console.warn("Firestore persistent local cache setup failed, using default cache:", cacheErr);
-      db = initializeFirestore(firebaseApp, {
-        experimentalForceLongPolling: true
-      });
+      try {
+        db = getFirestore(firebaseApp);
+      } catch (getDbErr) {
+        console.warn("Firestore getFirestore fallback failed:", getDbErr);
+      }
     }
   } catch (error) {
     console.warn("Firebase/Firestore client initialization failed:", error);

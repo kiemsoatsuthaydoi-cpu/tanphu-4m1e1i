@@ -75,8 +75,9 @@ interface MobileForumViewProps {
     lightBg: string;
     lightText: string;
   };
-  onGoHome?: () => void;
+  onGoHome?: (reportId?: string) => void;
   initialSelectedTopicId?: string | null;
+  onTopicSelect?: (topicId: string | null) => void;
   onEditForumReply?: (replyId: string, updatedData: string | Partial<ForumReply>) => void;
   onDeleteForumReply?: (replyId: string) => void;
   onLikeForumReply?: (replyId: string) => void;
@@ -102,7 +103,8 @@ export default function MobileForumView({
   onLikeForumReply,
   theme,
   onGoHome,
-  initialSelectedTopicId
+  initialSelectedTopicId,
+  onTopicSelect
 }: MobileForumViewProps) {
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(initialSelectedTopicId || null);
   const [isDescExpanded, setIsDescExpanded] = useState(false);
@@ -114,10 +116,14 @@ export default function MobileForumView({
   const [syncToReport, setSyncToReport] = useState(true);
 
   useEffect(() => {
-    if (initialSelectedTopicId) {
-      setSelectedTopicId(initialSelectedTopicId);
-    }
+    setSelectedTopicId(initialSelectedTopicId || null);
   }, [initialSelectedTopicId]);
+
+  useEffect(() => {
+    if (onTopicSelect) {
+      onTopicSelect(selectedTopicId);
+    }
+  }, [selectedTopicId, onTopicSelect]);
 
   useEffect(() => {
     setIsDescExpanded(false);
@@ -318,6 +324,7 @@ export default function MobileForumView({
   const repliesEndRef = useRef<HTMLDivElement>(null);
 
   const selectedTopic = topics.find(t => t.id === selectedTopicId);
+  const matchedReport = selectedTopic?.reportId ? reports.find(r => r.id === selectedTopic.reportId || r.reportCode === selectedTopic.reportId) : null;
   const topicReplies = localReplies
     .filter(r => r.topicId === selectedTopicId)
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
@@ -883,13 +890,15 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
             {/* Slide-over Header */}
             <div className={`px-3 py-2 text-white flex items-center gap-2 shrink-0 ${theme.bg}`}>
               <button
+                type="button"
                 onClick={() => setSelectedTopicId(null)}
-                className="p-1 hover:bg-white/10 rounded-md transition-colors border-none bg-transparent cursor-pointer"
+                className="bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white p-1 rounded-md shadow-2xs border-none cursor-pointer flex items-center justify-center transition-all shrink-0"
+                title="Quay lại danh sách thảo luận"
               >
-                <ArrowLeft className="w-4 h-4 text-white" />
+                <ArrowLeft className="w-5 h-5 text-white stroke-[2.5px]" />
               </button>
               <div className="flex-1 min-w-0">
-                <h3 className="font-extrabold text-[11px] uppercase tracking-wide truncate">
+                <h3 className="font-extrabold text-[13px] uppercase tracking-wide truncate">
                   <T>Chi tiết trao đổi</T>
                 </h3>
               </div>
@@ -1026,7 +1035,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                     {selectedTopic.reportId && onGoHome && (
                       <button
                         type="button"
-                        onClick={onGoHome}
+                        onClick={() => onGoHome(selectedTopic.reportId)}
                         title="Xem bản tin sự cố liên quan"
                         className="w-6.5 h-6.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white rounded-md shadow-2xs border-none cursor-pointer flex items-center justify-center transition-all shrink-0"
                       >
@@ -1076,15 +1085,106 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                   </div>
               </div>
 
-              {/* Clean Title Banner */}
-              <div className="pt-1">
-                <div className="p-2 rounded-lg bg-rose-50 border border-rose-200/80 transition-all select-none">
-                  <h2 className="font-black text-[15px] text-rose-900 leading-snug break-words">
+              {/* Clean Title Banner with Expandable Description & Context */}
+              <div className="pt-1 relative" ref={titlePopRef}>
+                <div 
+                  onClick={() => setIsDescExpanded(!isDescExpanded)}
+                  className="p-2.5 rounded-lg bg-rose-50 hover:bg-rose-100/80 active:scale-[0.99] border border-rose-200/80 transition-all select-none cursor-pointer flex items-end justify-between gap-2 shadow-2xs group"
+                  title="Bấm để xem/ẩn nội dung chi tiết & bối cảnh thảo luận"
+                >
+                  <h2 className="font-black text-[13px] text-rose-900 leading-snug break-words flex-1 min-w-0">
                     <span translate="no" className="notranslate">
                       {cleanDisplayTitle(selectedTopic.title)}
                     </span>
                   </h2>
+                  <div className="shrink-0 flex items-center justify-center mb-0.5 text-rose-700">
+                    {isDescExpanded ? (
+                      <ChevronUp className="w-4 h-4 shrink-0 stroke-[2.5px]" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 shrink-0 stroke-[2.5px]" />
+                    )}
+                  </div>
                 </div>
+
+                {/* Expanded Detailed Description & Context Popover */}
+                {isDescExpanded && (
+                  <div className="mt-1.5 p-3 bg-white border border-rose-200 rounded-xl shadow-xl space-y-2.5 animate-fadeIn z-30 select-text">
+                    {/* Header */}
+                    <div className="flex items-center justify-between border-b border-rose-100 pb-1.5">
+                      <span className="text-[10.5px] font-extrabold text-rose-900 uppercase tracking-wide flex items-center gap-1">
+                        <FileText className="w-3.5 h-3.5 text-rose-600" />
+                        <T>Nội dung chi tiết & Bối cảnh</T>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsDescExpanded(false);
+                        }}
+                        className="p-1 text-slate-400 hover:text-rose-700 rounded-md transition-colors border-none bg-transparent cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Detailed Description */}
+                    <div className="space-y-1">
+                      <div className="text-[11.5px] text-slate-800 leading-relaxed font-medium bg-rose-50/60 p-2.5 rounded-lg border border-rose-100/80 break-words whitespace-pre-wrap">
+                        {selectedTopic.description ? (
+                          <span translate="no" className="notranslate">
+                            {selectedTopic.description}
+                          </span>
+                        ) : (
+                          <em className="text-slate-400 text-[10.5px]"><T>Không có diễn giải chi tiết ban đầu.</T></em>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Context metadata */}
+                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100 text-[10px] text-slate-600">
+                      <div>
+                        <span className="text-slate-400 font-medium"><T>Người tạo:</T> </span>
+                        <strong className="text-slate-800" translate="no">{selectedTopic.creatorName}</strong>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 font-medium"><T>Thời gian:</T> </span>
+                        <span className="text-slate-700" translate="no">{selectedTopic.timestamp}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 font-medium"><T>Chuyên mục:</T> </span>
+                        <span className="text-rose-800 font-bold" translate="no">{selectedTopic.category}</span>
+                      </div>
+                      {matchedReport && (
+                        <div>
+                          <span className="text-slate-400 font-medium"><T>Mã báo cáo:</T> </span>
+                          <strong className="text-amber-700" translate="no">{matchedReport.reportCode}</strong>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Linked Report details if available */}
+                    {matchedReport && (
+                      <div className="p-2 bg-amber-50/70 border border-amber-200/80 rounded-lg space-y-1 text-[10px]">
+                        <div className="font-bold text-amber-900 flex items-center justify-between">
+                          <span><T>Báo cáo KPH liên quan:</T></span>
+                          <span translate="no" className="notranslate font-extrabold">{matchedReport.reportCode}</span>
+                        </div>
+                        {matchedReport.productName && (
+                          <div className="text-slate-700">
+                            <span className="font-semibold"><T>Sản phẩm:</T> </span>
+                            <span translate="no">{matchedReport.productName}</span>
+                          </div>
+                        )}
+                        {(matchedReport.errorName || matchedReport.description) && (
+                          <div className="text-slate-700">
+                            <span className="font-semibold"><T>Hiện tượng / Lỗi:</T> </span>
+                            <span translate="no">{matchedReport.errorName || matchedReport.description}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
 

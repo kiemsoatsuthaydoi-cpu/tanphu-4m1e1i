@@ -3005,6 +3005,92 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
   const lastTouchTimeRef = useRef(0);
   const touchCountRef = useRef(0);
   const secondaryIconsRef = useRef<HTMLDivElement>(null);
+
+  // Sync state refs for popstate handler
+  const activeBottomTabRef = useRef(activeBottomTab);
+  const activeForumTopicIdRef = useRef(activeForumTopicId);
+  const showLogoutConfirmRef = useRef(showLogoutConfirm);
+  const showTrashRef = useRef(showTrash);
+  const aiAnalysisReportRef = useRef(aiAnalysisReport);
+  const emergencyDiscussionReportRef = useRef(emergencyDiscussionReport);
+  const activeFilterSheetRef = useRef(activeFilterSheet);
+  const lastBackPressTimeRef = useRef<number>(0);
+
+  useEffect(() => { activeBottomTabRef.current = activeBottomTab; }, [activeBottomTab]);
+  useEffect(() => { activeForumTopicIdRef.current = activeForumTopicId; }, [activeForumTopicId]);
+  useEffect(() => { showLogoutConfirmRef.current = showLogoutConfirm; }, [showLogoutConfirm]);
+  useEffect(() => { showTrashRef.current = showTrash; }, [showTrash]);
+  useEffect(() => { aiAnalysisReportRef.current = aiAnalysisReport; }, [aiAnalysisReport]);
+  useEffect(() => { emergencyDiscussionReportRef.current = emergencyDiscussionReport; }, [emergencyDiscussionReport]);
+  useEffect(() => { activeFilterSheetRef.current = activeFilterSheet; }, [activeFilterSheet]);
+
+  // Handle hardware / browser Back button for mobile navigation
+  useEffect(() => {
+    // Push initial dummy history state
+    window.history.pushState({ app: "tanphu_4m1e1i" }, "");
+
+    const handlePopState = () => {
+      // Re-push state so subsequent back presses are captured
+      window.history.pushState({ app: "tanphu_4m1e1i" }, "");
+
+      // Priority 1: Close any open modal or sheet
+      if (showLogoutConfirmRef.current) {
+        setShowLogoutConfirm(false);
+        return;
+      }
+      if (aiAnalysisReportRef.current) {
+        setAiAnalysisReport(null);
+        setAiAnalysisText("");
+        return;
+      }
+      if (emergencyDiscussionReportRef.current) {
+        setEmergencyDiscussionReport(null);
+        return;
+      }
+      if (activeFilterSheetRef.current) {
+        setActiveFilterSheet(null);
+        return;
+      }
+      if (showTrashRef.current) {
+        setShowTrash(false);
+        return;
+      }
+
+      // Priority 2: Back 1 lần -> If in Forum topic detail view, exit to topic list
+      if (activeBottomTabRef.current === "TRAO_ĐỔI" && activeForumTopicIdRef.current) {
+        setActiveForumTopicId(null);
+        return;
+      }
+
+      // Priority 3: Back lần 2 -> If in Forum topic list, go back to "Bản Tin"
+      if (activeBottomTabRef.current === "TRAO_ĐỔI") {
+        setActiveBottomTab("BAO_CAO");
+        return;
+      }
+
+      // Priority 4: If in another secondary tab -> go back to "Bản Tin"
+      if (activeBottomTabRef.current !== "BAO_CAO") {
+        setActiveBottomTab("BAO_CAO");
+        return;
+      }
+
+      // Priority 5: Double back when on "Bản Tin" -> show "Xác nhận Đăng Xuất" menu
+      const now = Date.now();
+      if (now - lastBackPressTimeRef.current < 2000) {
+        setShowLogoutConfirm(true);
+      } else {
+        lastBackPressTimeRef.current = now;
+        if (showToast) {
+          showToast("Nhấn BACK thêm lần nữa để Xác nhận Đăng Xuất");
+        }
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
   useEffect(() => {
     const el = secondaryIconsRef.current;
     if (el) {
@@ -7126,8 +7212,30 @@ App Link: ${window.location.origin}`;
           onDeleteForumReply={onDeleteForumReply}
           onLikeForumReply={onLikeForumReply}
           theme={theme}
-          onGoHome={() => setActiveBottomTab("BAO_CAO")}
+          onGoHome={(reportId?: string) => {
+            setActiveBottomTab("BAO_CAO");
+            setSearchTerm("");
+            setSelectedCategory(null);
+            setSelectedFactoryFilter(null);
+            setSelectedReportTypeFilter(null);
+            setMobileBranchFilter("Tất cả");
+            setMobileCategoryFilter("Tất cả");
+
+            if (reportId) {
+              setTimeout(() => {
+                const el = document.getElementById(`report-card-${reportId}`);
+                if (el) {
+                  el.scrollIntoView({ behavior: "smooth", block: "center" });
+                  el.classList.add("ring-4", "ring-amber-400", "ring-offset-2");
+                  setTimeout(() => {
+                    el.classList.remove("ring-4", "ring-amber-400", "ring-offset-2");
+                  }, 3000);
+                }
+              }, 250);
+            }
+          }}
           initialSelectedTopicId={activeForumTopicId}
+          onTopicSelect={(topicId) => setActiveForumTopicId(topicId)}
         />
       ) : (
         <>
