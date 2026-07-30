@@ -295,7 +295,7 @@ export function MobileListOnly({
                   </div>
 
                   {report.notes && (
-                    <div className="p-2 bg-slate-50/90 rounded border-l-2 border-slate-400 text-[10.5px] italic text-slate-800 font-medium">
+                    <div className="p-2 bg-slate-50/90 rounded border-l-2 border-slate-400 text-[10.5px] italic text-slate-800 font-medium whitespace-pre-wrap break-words">
                       <span translate="no" className="notranslate">Ghi chú: {report.notes}</span>
                     </div>
                   )}

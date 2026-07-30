@@ -2265,6 +2265,39 @@ export default function MobileFrame({
   const [emergencyInvitedUserIds, setEmergencyInvitedUserIds] = useState<string[]>([]);
   const [invitedSearchQuery, setInvitedSearchQuery] = useState("");
   const [activeForumTopicId, setActiveForumTopicId] = useState<string | null>(null);
+  const [isInputFocused, setIsInputFocused] = useState(false);
+
+  useEffect(() => {
+    const handleFocusIn = (e: FocusEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
+        setIsInputFocused(true);
+        setTimeout(() => {
+          try {
+            target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          } catch {
+            // ignore
+          }
+        }, 250);
+      }
+    };
+
+    const handleFocusOut = () => {
+      setTimeout(() => {
+        const activeEl = document.activeElement;
+        if (!activeEl || (activeEl.tagName !== "INPUT" && activeEl.tagName !== "TEXTAREA")) {
+          setIsInputFocused(false);
+        }
+      }, 150);
+    };
+
+    window.addEventListener("focusin", handleFocusIn);
+    window.addEventListener("focusout", handleFocusOut);
+    return () => {
+      window.removeEventListener("focusin", handleFocusIn);
+      window.removeEventListener("focusout", handleFocusOut);
+    };
+  }, []);
 
   const handleOpenEmergencyDiscussionModal = (report: QualityReport) => {
     setEmergencyDiscussionReport(report);
@@ -3006,91 +3039,6 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
   const touchCountRef = useRef(0);
   const secondaryIconsRef = useRef<HTMLDivElement>(null);
 
-  // Sync state refs for popstate handler
-  const activeBottomTabRef = useRef(activeBottomTab);
-  const activeForumTopicIdRef = useRef(activeForumTopicId);
-  const showLogoutConfirmRef = useRef(showLogoutConfirm);
-  const showTrashRef = useRef(showTrash);
-  const aiAnalysisReportRef = useRef(aiAnalysisReport);
-  const emergencyDiscussionReportRef = useRef(emergencyDiscussionReport);
-  const activeFilterSheetRef = useRef(activeFilterSheet);
-  const lastBackPressTimeRef = useRef<number>(0);
-
-  useEffect(() => { activeBottomTabRef.current = activeBottomTab; }, [activeBottomTab]);
-  useEffect(() => { activeForumTopicIdRef.current = activeForumTopicId; }, [activeForumTopicId]);
-  useEffect(() => { showLogoutConfirmRef.current = showLogoutConfirm; }, [showLogoutConfirm]);
-  useEffect(() => { showTrashRef.current = showTrash; }, [showTrash]);
-  useEffect(() => { aiAnalysisReportRef.current = aiAnalysisReport; }, [aiAnalysisReport]);
-  useEffect(() => { emergencyDiscussionReportRef.current = emergencyDiscussionReport; }, [emergencyDiscussionReport]);
-  useEffect(() => { activeFilterSheetRef.current = activeFilterSheet; }, [activeFilterSheet]);
-
-  // Handle hardware / browser Back button for mobile navigation
-  useEffect(() => {
-    // Push initial dummy history state
-    window.history.pushState({ app: "tanphu_4m1e1i" }, "");
-
-    const handlePopState = () => {
-      // Re-push state so subsequent back presses are captured
-      window.history.pushState({ app: "tanphu_4m1e1i" }, "");
-
-      // Priority 1: Close any open modal or sheet
-      if (showLogoutConfirmRef.current) {
-        setShowLogoutConfirm(false);
-        return;
-      }
-      if (aiAnalysisReportRef.current) {
-        setAiAnalysisReport(null);
-        setAiAnalysisText("");
-        return;
-      }
-      if (emergencyDiscussionReportRef.current) {
-        setEmergencyDiscussionReport(null);
-        return;
-      }
-      if (activeFilterSheetRef.current) {
-        setActiveFilterSheet(null);
-        return;
-      }
-      if (showTrashRef.current) {
-        setShowTrash(false);
-        return;
-      }
-
-      // Priority 2: Back 1 lần -> If in Forum topic detail view, exit to topic list
-      if (activeBottomTabRef.current === "TRAO_ĐỔI" && activeForumTopicIdRef.current) {
-        setActiveForumTopicId(null);
-        return;
-      }
-
-      // Priority 3: Back lần 2 -> If in Forum topic list, go back to "Bản Tin"
-      if (activeBottomTabRef.current === "TRAO_ĐỔI") {
-        setActiveBottomTab("BAO_CAO");
-        return;
-      }
-
-      // Priority 4: If in another secondary tab -> go back to "Bản Tin"
-      if (activeBottomTabRef.current !== "BAO_CAO") {
-        setActiveBottomTab("BAO_CAO");
-        return;
-      }
-
-      // Priority 5: Double back when on "Bản Tin" -> show "Xác nhận Đăng Xuất" menu
-      const now = Date.now();
-      if (now - lastBackPressTimeRef.current < 2000) {
-        setShowLogoutConfirm(true);
-      } else {
-        lastBackPressTimeRef.current = now;
-        if (showToast) {
-          showToast("Nhấn BACK thêm lần nữa để Xác nhận Đăng Xuất");
-        }
-      }
-    };
-
-    window.addEventListener("popstate", handlePopState);
-    return () => {
-      window.removeEventListener("popstate", handlePopState);
-    };
-  }, []);
   useEffect(() => {
     const el = secondaryIconsRef.current;
     if (el) {
@@ -3343,6 +3291,266 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
       }
     }
   }, [activeBottomTab, currentUser, mobileStatsSubTab]);
+
+  // Sync state refs for popstate handler
+  const activeBottomTabRef = useRef(activeBottomTab);
+  const activeForumTopicIdRef = useRef(activeForumTopicId);
+  const showLogoutConfirmRef = useRef(showLogoutConfirm);
+  const showOnlineUsersDrawerRef = useRef(showOnlineUsersDrawer);
+  const showNotifDrawerRef = useRef(showNotifDrawer);
+  const showTrashRef = useRef(showTrash);
+  const aiAnalysisReportRef = useRef(aiAnalysisReport);
+  const emergencyDiscussionReportRef = useRef(emergencyDiscussionReport);
+  const activeFilterSheetRef = useRef(activeFilterSheet);
+  const showLogoAvatarModalRef = useRef(showLogoAvatarModal);
+  const shareModalReportRef = useRef(shareModalReport);
+  const transferCompanyModalReportRef = useRef(transferCompanyModalReport);
+  const showLikesListReportRef = useRef(showLikesListReport);
+  const showAcksListReportRef = useRef(showAcksListReport);
+  const showAiUsersReportRef = useRef(showAiUsersReport);
+  const selectedBadgeReportRef = useRef(selectedBadgeReport);
+  const selectedResolutionBadgeRef = useRef(selectedResolutionBadge);
+  const selectedInfoBadgeRef = useRef(selectedInfoBadge);
+  const showAwardMenuRef = useRef(showAwardMenu);
+  const showAwardMenuForResRef = useRef(showAwardMenuForRes);
+  const showBadgeExplanationsRef = useRef(showBadgeExplanations);
+  const confirmAckModalDataRef = useRef(confirmAckModalData);
+  const confirmRemoveAckDataRef = useRef(confirmRemoveAckData);
+  const directiveToDeleteRef = useRef(directiveToDelete);
+  const resolutionToDeleteRef = useRef(resolutionToDelete);
+  const notifIdConfirmDltRef = useRef(notifIdConfirmDlt);
+  const bcastIdConfirmDltRef = useRef(bcastIdConfirmDlt);
+  const editingResolutionReportIdRef = useRef(editingResolutionReportId);
+  const editingReplicationReportIdRef = useRef(editingReplicationReportId);
+  const showChartDatePickerRef = useRef(showChartDatePicker);
+  const showKphPopoverRef = useRef(showKphPopover);
+  const showNewsCompanyPopoverRef = useRef(showNewsCompanyPopover);
+  const showMobileCloudQuotaRef = useRef(showMobileCloudQuota);
+  const editingDirectiveIdRef = useRef(editingDirectiveId);
+  const isEditingTickerRef = useRef(isEditingTicker);
+  const isEditingKnowledgeRef = useRef(isEditingKnowledge);
+  const editingBroadcastIdRef = useRef(editingBroadcastId);
+  const lastBackPressTimeRef = useRef<number>(0);
+
+  useEffect(() => { activeBottomTabRef.current = activeBottomTab; }, [activeBottomTab]);
+  useEffect(() => { activeForumTopicIdRef.current = activeForumTopicId; }, [activeForumTopicId]);
+  useEffect(() => { showLogoutConfirmRef.current = showLogoutConfirm; }, [showLogoutConfirm]);
+  useEffect(() => { showOnlineUsersDrawerRef.current = showOnlineUsersDrawer; }, [showOnlineUsersDrawer]);
+  useEffect(() => { showNotifDrawerRef.current = showNotifDrawer; }, [showNotifDrawer]);
+  useEffect(() => { showTrashRef.current = showTrash; }, [showTrash]);
+  useEffect(() => { aiAnalysisReportRef.current = aiAnalysisReport; }, [aiAnalysisReport]);
+  useEffect(() => { emergencyDiscussionReportRef.current = emergencyDiscussionReport; }, [emergencyDiscussionReport]);
+  useEffect(() => { activeFilterSheetRef.current = activeFilterSheet; }, [activeFilterSheet]);
+  useEffect(() => { showLogoAvatarModalRef.current = showLogoAvatarModal; }, [showLogoAvatarModal]);
+  useEffect(() => { shareModalReportRef.current = shareModalReport; }, [shareModalReport]);
+  useEffect(() => { transferCompanyModalReportRef.current = transferCompanyModalReport; }, [transferCompanyModalReport]);
+  useEffect(() => { showLikesListReportRef.current = showLikesListReport; }, [showLikesListReport]);
+  useEffect(() => { showAcksListReportRef.current = showAcksListReport; }, [showAcksListReport]);
+  useEffect(() => { showAiUsersReportRef.current = showAiUsersReport; }, [showAiUsersReport]);
+  useEffect(() => { selectedBadgeReportRef.current = selectedBadgeReport; }, [selectedBadgeReport]);
+  useEffect(() => { selectedResolutionBadgeRef.current = selectedResolutionBadge; }, [selectedResolutionBadge]);
+  useEffect(() => { selectedInfoBadgeRef.current = selectedInfoBadge; }, [selectedInfoBadge]);
+  useEffect(() => { showAwardMenuRef.current = showAwardMenu; }, [showAwardMenu]);
+  useEffect(() => { showAwardMenuForResRef.current = showAwardMenuForRes; }, [showAwardMenuForRes]);
+  useEffect(() => { showBadgeExplanationsRef.current = showBadgeExplanations; }, [showBadgeExplanations]);
+  useEffect(() => { confirmAckModalDataRef.current = confirmAckModalData; }, [confirmAckModalData]);
+  useEffect(() => { confirmRemoveAckDataRef.current = confirmRemoveAckData; }, [confirmRemoveAckData]);
+  useEffect(() => { directiveToDeleteRef.current = directiveToDelete; }, [directiveToDelete]);
+  useEffect(() => { resolutionToDeleteRef.current = resolutionToDelete; }, [resolutionToDelete]);
+  useEffect(() => { notifIdConfirmDltRef.current = notifIdConfirmDlt; }, [notifIdConfirmDlt]);
+  useEffect(() => { bcastIdConfirmDltRef.current = bcastIdConfirmDlt; }, [bcastIdConfirmDlt]);
+  useEffect(() => { editingResolutionReportIdRef.current = editingResolutionReportId; }, [editingResolutionReportId]);
+  useEffect(() => { editingReplicationReportIdRef.current = editingReplicationReportId; }, [editingReplicationReportId]);
+  useEffect(() => { showChartDatePickerRef.current = showChartDatePicker; }, [showChartDatePicker]);
+  useEffect(() => { showKphPopoverRef.current = showKphPopover; }, [showKphPopover]);
+  useEffect(() => { showNewsCompanyPopoverRef.current = showNewsCompanyPopover; }, [showNewsCompanyPopover]);
+  useEffect(() => { showMobileCloudQuotaRef.current = showMobileCloudQuota; }, [showMobileCloudQuota]);
+  useEffect(() => { editingDirectiveIdRef.current = editingDirectiveId; }, [editingDirectiveId]);
+  useEffect(() => { isEditingTickerRef.current = isEditingTicker; }, [isEditingTicker]);
+  useEffect(() => { isEditingKnowledgeRef.current = isEditingKnowledge; }, [isEditingKnowledge]);
+  useEffect(() => { editingBroadcastIdRef.current = editingBroadcastId; }, [editingBroadcastId]);
+
+  // Handle hardware / browser Back button for mobile navigation
+  useEffect(() => {
+    // Push initial dummy history state
+    window.history.pushState({ app: "tanphu_4m1e1i" }, "");
+
+    const handlePopState = () => {
+      // Re-push state so subsequent back presses are captured
+      window.history.pushState({ app: "tanphu_4m1e1i" }, "");
+
+      // Priority 1: Close any open modal, drawer, popover or sheet
+      if (showOnlineUsersDrawerRef.current) {
+        setShowOnlineUsersDrawer(false);
+        return;
+      }
+      if (showNotifDrawerRef.current) {
+        setShowNotifDrawer(false);
+        return;
+      }
+      if (showLogoutConfirmRef.current) {
+        setShowLogoutConfirm(false);
+        return;
+      }
+      if (showLogoAvatarModalRef.current) {
+        setShowLogoAvatarModal(false);
+        return;
+      }
+      if (shareModalReportRef.current) {
+        setShareModalReport(null);
+        return;
+      }
+      if (transferCompanyModalReportRef.current) {
+        setTransferCompanyModalReport(null);
+        return;
+      }
+      if (aiAnalysisReportRef.current) {
+        setAiAnalysisReport(null);
+        setAiAnalysisText("");
+        return;
+      }
+      if (emergencyDiscussionReportRef.current) {
+        setEmergencyDiscussionReport(null);
+        return;
+      }
+      if (activeFilterSheetRef.current) {
+        setActiveFilterSheet(null);
+        return;
+      }
+      if (showTrashRef.current) {
+        setShowTrash(false);
+        return;
+      }
+      if (showLikesListReportRef.current) {
+        setShowLikesListReport(null);
+        return;
+      }
+      if (showAcksListReportRef.current) {
+        setShowAcksListReport(null);
+        return;
+      }
+      if (showAiUsersReportRef.current) {
+        setShowAiUsersReport(null);
+        return;
+      }
+      if (selectedBadgeReportRef.current) {
+        setSelectedBadgeReport(null);
+        return;
+      }
+      if (selectedResolutionBadgeRef.current) {
+        setSelectedResolutionBadge(null);
+        return;
+      }
+      if (selectedInfoBadgeRef.current) {
+        setSelectedInfoBadge(null);
+        return;
+      }
+      if (showAwardMenuRef.current) {
+        setShowAwardMenu(false);
+        return;
+      }
+      if (showAwardMenuForResRef.current) {
+        setShowAwardMenuForRes(false);
+        return;
+      }
+      if (showBadgeExplanationsRef.current) {
+        setShowBadgeExplanations(false);
+        return;
+      }
+      if (confirmAckModalDataRef.current) {
+        setConfirmAckModalData(null);
+        return;
+      }
+      if (confirmRemoveAckDataRef.current) {
+        setConfirmRemoveAckData(null);
+        return;
+      }
+      if (directiveToDeleteRef.current) {
+        setDirectiveToDelete(null);
+        return;
+      }
+      if (resolutionToDeleteRef.current) {
+        setResolutionToDelete(null);
+        return;
+      }
+      if (notifIdConfirmDltRef.current) {
+        setNotifIdConfirmDlt(null);
+        return;
+      }
+      if (bcastIdConfirmDltRef.current) {
+        setBcastIdConfirmDlt(null);
+        return;
+      }
+      if (editingResolutionReportIdRef.current) {
+        setEditingResolutionReportId(null);
+        return;
+      }
+      if (editingReplicationReportIdRef.current) {
+        setEditingReplicationReportId(null);
+        return;
+      }
+      if (showChartDatePickerRef.current) {
+        setShowChartDatePicker(false);
+        return;
+      }
+      if (showKphPopoverRef.current) {
+        setShowKphPopover(false);
+        return;
+      }
+      if (showNewsCompanyPopoverRef.current) {
+        setShowNewsCompanyPopover(false);
+        return;
+      }
+      if (showMobileCloudQuotaRef.current) {
+        setShowMobileCloudQuota(false);
+        return;
+      }
+      if (editingDirectiveIdRef.current) {
+        setEditingDirectiveId(null);
+        return;
+      }
+      if (isEditingTickerRef.current) {
+        setIsEditingTicker(false);
+        return;
+      }
+      if (isEditingKnowledgeRef.current) {
+        setIsEditingKnowledge(false);
+        return;
+      }
+      if (editingBroadcastIdRef.current) {
+        setEditingBroadcastId(null);
+        return;
+      }
+
+      // Priority 2: Back 1 lần -> If in Forum topic detail view, exit to topic list
+      if (activeBottomTabRef.current === "TRAO_ĐỔI" && activeForumTopicIdRef.current) {
+        setActiveForumTopicId(null);
+        return;
+      }
+
+      // Priority 3: Back lần 2 -> If in Forum topic list or any other tab, go back to "Bản Tin"
+      if (activeBottomTabRef.current !== "BAO_CAO") {
+        setActiveBottomTab("BAO_CAO");
+        return;
+      }
+
+      // Priority 4: Double back when on "Bản Tin" -> show "Xác nhận Đăng Xuất" menu
+      const now = Date.now();
+      if (now - lastBackPressTimeRef.current < 2000) {
+        setShowLogoutConfirm(true);
+      } else {
+        lastBackPressTimeRef.current = now;
+        if (showToast) {
+          showToast("Nhấn BACK thêm lần nữa để Xác nhận Đăng Xuất");
+        }
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
 
   const toggleLike = (reportId: string) => {
     const report = reports.find((r) => r.id === reportId);
@@ -7477,7 +7685,7 @@ App Link: ${window.location.origin}`;
                   />
 
                   {/* Body description text */}
-                  <div className={`pt-2 font-black leading-relaxed text-slate-900 ${contentFontSizeClass}`}>
+                  <div className={`pt-2 font-black leading-relaxed text-slate-900 ${contentFontSizeClass} line-clamp-5`}>
                     {report.content && report.content.includes("@") ? (
                       renderTaggedText(report.content, users)
                     ) : (
@@ -7486,8 +7694,8 @@ App Link: ${window.location.origin}`;
                   </div>
 
                   {report.notes && (
-                    <div className="mt-2 bg-slate-50/90 rounded p-2 text-[12px] text-slate-800 font-medium italic border-l-2 border-blue-500 leading-relaxed">
-                      <span translate="no" className="notranslate font-semibold text-slate-600">Ghi chú: </span>
+                    <div className="mt-2 bg-slate-50/90 rounded p-2 text-[12px] text-slate-800 font-medium italic border-l-2 border-blue-500 leading-relaxed whitespace-pre-wrap break-words">
+                      <span translate="no" className="notranslate font-semibold text-slate-600 not-italic">Ghi chú: </span>
                       {renderTaggedText(report.notes, users)}
                     </div>
                   )}
@@ -9464,6 +9672,7 @@ App Link: ${window.location.origin}`;
       )}
 
       {/* Modern bottom navigation tab bar containing Phân Tích, Đề Xuất, Bản Tin, Duyệt NS, [Họ + Tên Rút Gọn] */}
+      {!(activeBottomTab === "TRAO_ĐỔI" && activeForumTopicId) && !isInputFocused && (
       <div id="mobile-bottom-nav" className={`bg-slate-50 border-t border-slate-200 grid ${(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER || isHQOrManagerUser(currentUser)) ? "grid-cols-5" : "grid-cols-4"} py-2 text-center text-[9px] font-bold select-none shrink-0 font-sans shadow-inner shrink-0`}>
         {/* 1. PHÂN TÍCH */}
         <button
@@ -9614,6 +9823,7 @@ App Link: ${window.location.origin}`;
           <T><span translate="no" className="notranslate truncate w-full block text-center text-[8px] font-semibold">{formatShortName(currentUser?.fullName)}</span></T>
         </button>
       </div>
+      )}
 
       {toastMessage && (
         <div className="absolute top-24 left-1/2 -translate-x-1/2 bg-[#065f46] text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 text-[11px] font-bold z-50 tracking-wide min-w-[280px] justify-center text-center border-2 border-white select-none animate-fadeIn">

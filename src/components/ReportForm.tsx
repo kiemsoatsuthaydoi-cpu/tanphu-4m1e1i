@@ -1158,10 +1158,18 @@ export default function ReportForm({
 
         {/* 6. Content statement description (Nội dung thay đổi*) */}
         <div>
-          <label className="text-xs font-bold text-slate-700 flex justify-between items-center mb-1 uppercase">
-            <T>Mô tả chi tiết*</T>
-            <T className="text-[9px] text-slate-400 lowercase font-normal">(Chi tiết yếu tố biến động)</T>
-          </label>
+          <div className="flex justify-between items-center mb-1">
+            <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase">
+              <T>Mô tả chi tiết*</T>
+              <T className="text-[9px] text-slate-400 lowercase font-normal">(Chi tiết yếu tố biến động)</T>
+            </label>
+            <span className="text-[9.5px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+              <span translate="no" className="notranslate">Tối đa 5 dòng</span>
+            </span>
+          </div>
+          <p className="text-[10.5px] text-amber-800 font-medium italic mb-1.5 bg-amber-50/70 border-l-2 border-amber-500 p-1.5 rounded-r">
+            <T>💡 Ghi chú: Hãy đúc kết và ghi nhận các thông tin trọng tâm, ngắn gọn, súc tích (giới hạn tối đa 5 dòng).</T>
+          </p>
           <MentionTextArea
             users={users}
             placeholder={
@@ -1172,10 +1180,27 @@ export default function ReportForm({
                 : "Mô tả cụ thể vấn đề chất lượng hay sự đổi mới, ví dụ: 'Bảo dưỡng định kỳ đầu cắm phôi phát hiện bám cặn...'"
             }
             value={content}
-            onChange={setContent}
-            rows={3}
+            onChange={(val) => {
+              const lines = val.split("\n");
+              if (lines.length > 5) {
+                setContent(lines.slice(0, 5).join("\n"));
+              } else {
+                setContent(val);
+              }
+            }}
+            rows={5}
             className="w-full border border-slate-200 rounded-lg p-2.5 text-xs focus:ring-1 focus:ring-blue-500 outline-none bg-white font-medium"
           />
+          <div className="flex justify-between items-center mt-1 text-[10px] text-slate-400">
+            <span>
+              <T>Số dòng hiện tại:</T> <strong className={content ? (content.split('\n').length > 5 ? "text-red-500 font-bold" : "text-slate-600 font-bold") : "text-slate-600 font-bold"}>{content ? content.split('\n').length : 0}/5</strong>
+            </span>
+            {content && content.split('\n').length >= 5 && (
+              <span className="text-amber-600 font-bold">
+                <T>Đã đạt giới hạn 5 dòng</T>
+              </span>
+            )}
+          </div>
         </div>
 
         {/* 7. Updater view-only metadata */}

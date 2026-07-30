@@ -5837,9 +5837,11 @@ export default function DashboardDesktop({
                               </div>
                             </td>
                             <td className="p-4 leading-relaxed text-slate-900 max-w-sm font-bold border border-slate-200">
-                              <T><span translate="no" className="notranslate">{(r.content || "").toUpperCase()}</span></T>
+                              <div className="line-clamp-5">
+                                <T><span translate="no" className="notranslate">{(r.content || "").toUpperCase()}</span></T>
+                              </div>
                               {r.notes && (
-                                <div className="mt-1 text-[10.5px] text-slate-800 font-medium italic block border-l-2 border-amber-500 pl-1.5">
+                                <div className="mt-1 text-[10.5px] text-slate-800 font-medium italic block border-l-2 border-amber-500 pl-1.5 whitespace-pre-wrap break-words">
                                   <T><span translate="no" className="notranslate">Ghi chú: {r.notes}</span></T>
                                 </div>
                               )}
@@ -6330,7 +6332,7 @@ export default function DashboardDesktop({
                                       <T><span translate="no" className="notranslate">{(r.content || "").toUpperCase()}</span></T>
                                     </div>
                                     {r.notes && (
-                                      <div className="mt-1 text-[10px] text-slate-400 italic block border-l-2 border-slate-300 pl-1.5">
+                                      <div className="mt-1 text-[10px] text-slate-400 italic block border-l-2 border-slate-300 pl-1.5 whitespace-pre-wrap break-words">
                                         <T><span translate="no" className="notranslate">Ghi chú: {r.notes}</span></T>
                                       </div>
                                     )}
@@ -6553,7 +6555,7 @@ export default function DashboardDesktop({
                                 <td className="p-4 leading-relaxed text-slate-900 max-w-sm font-bold border border-slate-200">
                                   <T>{(r.content || "").toUpperCase()}</T>
                                   {r.notes && (
-                                    <div className="mt-1 text-[10.5px] text-slate-800 font-medium italic block border-l-2 border-emerald-500 pl-1.5">
+                                    <div className="mt-1 text-[10.5px] text-slate-800 font-medium italic block border-l-2 border-emerald-500 pl-1.5 whitespace-pre-wrap break-words">
                                       <T>Ghi chú: {r.notes}</T>
                                     </div>
                                   )}

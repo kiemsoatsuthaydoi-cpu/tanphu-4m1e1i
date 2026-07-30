@@ -330,6 +330,8 @@ interface MentionInputProps {
   name?: string;
   type?: string;
   onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  onFocus?: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
+  onBlur?: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
 }
 
 export function MentionInput({
@@ -342,7 +344,9 @@ export function MentionInput({
   containerClassName,
   style,
   name,
-  onKeyDown
+  onKeyDown,
+  onFocus,
+  onBlur
 }: MentionInputProps) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -474,10 +478,27 @@ export function MentionInput({
     }
   };
 
+  const handleFocus = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+    const target = e.target;
+    setTimeout(() => {
+      try {
+        target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      } catch {
+        // ignore
+      }
+    }, 250);
+    if (onFocus) {
+      onFocus(e);
+    }
+  };
+
   const handleBlur = (e: React.FocusEvent<HTMLTextAreaElement>) => {
     const formatted = formatVietnameseInputText(e.target.value);
     if (formatted !== e.target.value) {
       onChange(formatted);
+    }
+    if (onBlur) {
+      onBlur(e);
     }
   };
 
@@ -505,6 +526,7 @@ export function MentionInput({
         value={value}
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
+        onFocus={handleFocus}
         onBlur={handleBlur}
         rows={1}
         className={`w-full resize-none overflow-y-auto leading-normal transition-all block ${className || ""}`}

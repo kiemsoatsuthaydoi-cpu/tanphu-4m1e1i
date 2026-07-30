@@ -47,7 +47,8 @@ import {
   Paperclip,
   FileText,
   Download,
-  Eye
+  Eye,
+  Heart
 } from "lucide-react";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
@@ -1286,23 +1287,38 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                       <div className={`flex items-center gap-1.5 ${isMe ? "justify-end" : "justify-start"}`}>
                         {/* Quick Reply Arrow Button on Hover (Left side for sent messages) */}
                         {isMe && !isEditingThis && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setReplyingTo({
-                                id: reply.id,
-                                senderName: resolvedSender.fullName,
-                                message: reply.message || (reply.attachments?.length ? "[Tệp đính kèm]" : "")
-                              });
-                            }}
-                            className={`transition-all duration-200 p-1.5 rounded-full bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-700 shadow-xs cursor-pointer border border-slate-200 shrink-0 hover:scale-110 active:scale-95 ${
-                              isActiveMessage ? "opacity-100 scale-100" : "opacity-0 group-hover:opacity-100"
-                            }`}
-                            title="Trả lời tin nhắn này (Quote)"
-                          >
-                            <CornerUpLeft className="w-3.5 h-3.5" />
-                          </button>
+                          <div className={`flex items-center gap-1 transition-all duration-200 shrink-0 ${
+                            isActiveMessage ? "opacity-100 scale-100" : "opacity-0 group-hover:opacity-100"
+                          }`}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleLikeReply(reply.id);
+                              }}
+                              className={`p-1.5 rounded-full bg-slate-100 hover:bg-rose-100 cursor-pointer border border-slate-200 transition-transform hover:scale-110 active:scale-95 ${
+                                hasLiked ? "text-rose-500 bg-rose-50 border-rose-200" : "text-slate-400 hover:text-rose-600"
+                              }`}
+                              title="Thích tin nhắn"
+                            >
+                              <Heart className={`w-3.5 h-3.5 ${hasLiked ? "fill-rose-500 text-rose-500" : ""}`} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setReplyingTo({
+                                  id: reply.id,
+                                  senderName: resolvedSender.fullName,
+                                  message: reply.message || (reply.attachments?.length ? "[Tệp đính kèm]" : "")
+                                });
+                              }}
+                              className="p-1.5 rounded-full bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-700 shadow-xs cursor-pointer border border-slate-200 hover:scale-110 active:scale-95"
+                              title="Trả lời tin nhắn này (Quote)"
+                            >
+                              <CornerUpLeft className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         )}
 
                         {isEditingThis ? (
@@ -1311,7 +1327,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                               users={users}
                               value={editingReplyText}
                               onChange={setEditingReplyText}
-                              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs font-medium outline-none focus:bg-white focus:border-blue-500"
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-[13px] font-medium outline-none focus:bg-white focus:border-blue-500"
                               rows={2}
                             />
                             <div className="flex justify-end gap-1.5">
@@ -1336,6 +1352,8 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                             id={`reply-${reply.id}`}
                             onClick={() => setActiveMessageId(prev => prev === reply.id ? null : reply.id)}
                             className={`p-3 max-w-[88%] text-[12.5px] leading-relaxed break-words shadow-2xs relative transition-all rounded-2xl cursor-pointer select-none ${
+                              likeCount > 0 ? "pb-3.5 mb-1" : ""
+                            } ${
                               isActiveMessage
                                 ? isMe
                                   ? "ring-2 ring-amber-300 ring-offset-1 shadow-md scale-[1.01]"
@@ -1438,57 +1456,96 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                                       isMe ? "bg-blue-800/80 border-blue-400/50 text-white" : "bg-rose-50/90 border-rose-200 text-slate-800"
                                     }`}
                                   >
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      <div className="p-1.5 rounded-lg bg-rose-500 text-white shrink-0">
-                                        <FileText className="w-4 h-4" />
-                                      </div>
-                                      <div className="flex flex-col min-w-0">
-                                        <span translate="no" className="notranslate font-bold truncate text-[11px]">{att.name || "Tài liệu.pdf"}</span>
-                                        <span className="text-[9.5px] opacity-80">{att.sizeKb ? `${att.sizeKb} KB` : "PDF"}</span>
-                                      </div>
-                                    </div>
-                                    <a
-                                      href={att.url}
-                                      download={att.name || "Tai_Lieu.pdf"}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="px-2 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-current text-[10px] font-bold flex items-center gap-1 shrink-0 no-underline cursor-pointer"
-                                    >
-                                      <Download className="w-3 h-3" />
-                                      <T>Tải về</T>
-                                    </a>
-                                  </div>
-                                ))}
-                              </div>
+                                     <div className="flex items-center gap-2 min-w-0">
+                                       <div className="p-1.5 rounded-lg bg-rose-500 text-white shrink-0">
+                                         <FileText className="w-4 h-4" />
+                                       </div>
+                                       <div className="flex flex-col min-w-0">
+                                         <span translate="no" className="notranslate font-bold truncate text-[11px]">{att.name || "Tài liệu.pdf"}</span>
+                                         <span className="text-[9.5px] opacity-80">{att.sizeKb ? `${att.sizeKb} KB` : "PDF"}</span>
+                                       </div>
+                                     </div>
+                                     <a
+                                       href={att.url}
+                                       download={att.name || "Tai_Lieu.pdf"}
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       onClick={(e) => e.stopPropagation()}
+                                       className="px-2 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-current text-[10px] font-bold flex items-center gap-1 shrink-0 no-underline cursor-pointer"
+                                     >
+                                       <Download className="w-3 h-3" />
+                                       <T>Tải về</T>
+                                     </a>
+                                   </div>
+                                 ))}
+                               </div>
+                             )}
+
+                            {/* Reaction Badge attached to bottom corner when likes > 0 */}
+                            {likeCount > 0 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleLikeReply(reply.id);
+                                }}
+                                className={`absolute -bottom-2.5 z-20 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9.5px] font-bold border cursor-pointer transition-all shadow-2xs hover:scale-105 active:scale-90 ${
+                                  isMe ? "left-2.5" : "right-2.5"
+                                } ${
+                                  hasLiked
+                                    ? "bg-rose-50 text-rose-600 border-rose-200 ring-2 ring-white"
+                                    : "bg-white text-slate-600 border-slate-200 ring-2 ring-white hover:bg-rose-50 hover:text-rose-500"
+                                }`}
+                                title="Bấm để thả tim / bỏ thích"
+                              >
+                                <span className="text-[10px] leading-none">❤️</span>
+                                <span translate="no" className="notranslate text-[9px] font-extrabold leading-none">
+                                  {likeCount}
+                                </span>
+                              </button>
                             )}
                           </div>
                         )}
 
-                        {/* Quick Reply Arrow Button on Hover (Right side for received messages) */}
+                        {/* Quick Action Buttons on Hover (Right side for received messages) */}
                         {!isMe && !isEditingThis && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setReplyingTo({
-                                id: reply.id,
-                                senderName: resolvedSender.fullName,
-                                message: reply.message || (reply.attachments?.length ? "[Tệp đính kèm]" : "")
-                              });
-                            }}
-                            className={`transition-all duration-200 p-1.5 rounded-full bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-700 shadow-xs cursor-pointer border border-slate-200 shrink-0 hover:scale-110 active:scale-95 ${
-                              isActiveMessage ? "opacity-100 scale-100" : "opacity-0 group-hover:opacity-100"
-                            }`}
-                            title="Trả lời tin nhắn này (Quote)"
-                          >
-                            <CornerUpLeft className="w-3.5 h-3.5" />
-                          </button>
+                          <div className={`flex items-center gap-1 transition-all duration-200 shrink-0 ${
+                            isActiveMessage ? "opacity-100 scale-100" : "opacity-0 group-hover:opacity-100"
+                          }`}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleLikeReply(reply.id);
+                              }}
+                              className={`p-1.5 rounded-full bg-slate-100 hover:bg-rose-100 cursor-pointer border border-slate-200 transition-transform hover:scale-110 active:scale-95 ${
+                                hasLiked ? "text-rose-500 bg-rose-50 border-rose-200" : "text-slate-400 hover:text-rose-600"
+                              }`}
+                              title="Thích tin nhắn"
+                            >
+                              <Heart className={`w-3.5 h-3.5 ${hasLiked ? "fill-rose-500 text-rose-500" : ""}`} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setReplyingTo({
+                                  id: reply.id,
+                                  senderName: resolvedSender.fullName,
+                                  message: reply.message || (reply.attachments?.length ? "[Tệp đính kèm]" : "")
+                                });
+                              }}
+                              className="p-1.5 rounded-full bg-slate-100 hover:bg-blue-100 text-slate-500 hover:text-blue-700 shadow-xs cursor-pointer border border-slate-200 hover:scale-110 active:scale-95"
+                              title="Trả lời tin nhắn này (Quote)"
+                            >
+                              <CornerUpLeft className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         )}
                       </div>
 
-                      {/* Action & Meta Row below message bubble (Hidden by default, shown on hover / focus / active touch or when message clicked) */}
-                      <div className={`flex items-center gap-1.5 pt-0.5 px-1 text-[8.5px] font-sans transition-all duration-200 ${
+                      {/* Action & Meta Row below message bubble */}
+                      <div className={`flex items-center gap-1.5 pt-2.5 px-1 text-[8.5px] font-sans transition-all duration-200 ${
                         isEditingThis || isActiveMessage
                           ? "opacity-100"
                           : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 group-active:opacity-100"
@@ -1497,24 +1554,24 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                           {reply.timestamp}
                         </span>
 
-                        {/* Interactive Heart / Like Pill */}
+                        {/* Like Button in Meta Row */}
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleToggleLikeReply(reply.id);
                           }}
-                          className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border cursor-pointer transition-all active:scale-90 ${
+                          className={`p-1 rounded-md border cursor-pointer transition-colors flex items-center gap-1 ${
                             hasLiked
-                              ? "bg-rose-50 text-rose-600 border-rose-300 shadow-2xs"
-                              : "bg-white text-slate-500 border-slate-200 hover:bg-rose-50 hover:text-rose-500"
+                              ? "bg-rose-50 text-rose-600 border-rose-200"
+                              : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-rose-50 hover:text-rose-500"
                           }`}
                           title="Thích ý kiến"
                         >
-                          <span className={hasLiked ? "text-rose-500" : "text-slate-400"}>
-                            ❤️
+                          <Heart className={`w-3 h-3 ${hasLiked ? "fill-rose-500 text-rose-500" : ""}`} />
+                          <span translate="no" className="notranslate text-[9px] font-bold">
+                            {likeCount > 0 ? likeCount : "Thích"}
                           </span>
-                          <span translate="no" className="notranslate">{likeCount}</span>
                         </button>
 
                         {/* Convert to Action Button */}
@@ -1716,7 +1773,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                   placeholder="Nhập ý kiến trao đổi của bạn..."
                   value={replyMessage}
                   onChange={setReplyMessage}
-                  className="bg-slate-100 border border-slate-200 outline-none px-3 py-2 rounded-xl text-xs font-medium placeholder:text-slate-400 focus:bg-white focus:border-blue-500"
+                  className="bg-slate-100 border border-slate-200 outline-none px-3 py-2 rounded-xl text-[13px] font-medium placeholder:text-slate-400 focus:bg-white focus:border-blue-500"
                 />
                 <button
                   type="submit"
