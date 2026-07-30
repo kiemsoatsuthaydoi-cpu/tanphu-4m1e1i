@@ -79,6 +79,8 @@ interface MobileForumViewProps {
   };
   onGoHome?: (reportId?: string) => void;
   initialSelectedTopicId?: string | null;
+  autoOpenActionsCatalogTopicId?: string | null;
+  onClearAutoOpenActionsCatalog?: () => void;
   onTopicSelect?: (topicId: string | null) => void;
   onEditForumReply?: (replyId: string, updatedData: string | Partial<ForumReply>) => void;
   onDeleteForumReply?: (replyId: string) => void;
@@ -106,6 +108,8 @@ export default function MobileForumView({
   theme,
   onGoHome,
   initialSelectedTopicId,
+  autoOpenActionsCatalogTopicId,
+  onClearAutoOpenActionsCatalog,
   onTopicSelect
 }: MobileForumViewProps) {
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(initialSelectedTopicId || null);
@@ -127,6 +131,20 @@ export default function MobileForumView({
   useEffect(() => {
     setSelectedTopicId(initialSelectedTopicId || null);
   }, [initialSelectedTopicId]);
+
+  useEffect(() => {
+    if (autoOpenActionsCatalogTopicId) {
+      if (selectedTopicId !== autoOpenActionsCatalogTopicId) {
+        setSelectedTopicId(autoOpenActionsCatalogTopicId);
+        if (onTopicSelect) onTopicSelect(autoOpenActionsCatalogTopicId);
+      }
+      setActionsCatalogScope("CURRENT_TOPIC");
+      setShowActionsCatalogModal(true);
+      if (onClearAutoOpenActionsCatalog) {
+        onClearAutoOpenActionsCatalog();
+      }
+    }
+  }, [autoOpenActionsCatalogTopicId, selectedTopicId, onTopicSelect, onClearAutoOpenActionsCatalog]);
 
   useEffect(() => {
     setIsDescExpanded(false);
@@ -2084,7 +2102,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
 
                 <MentionInput
                   users={users}
-                  placeholder="Nhập ý kiến trao đổi... (Hỗ trợ Ctrl+V dán ảnh nén)"
+                  placeholder="Nhập ý kiến trao đổi..."
                   value={replyMessage}
                   onChange={setReplyMessage}
                   onPaste={handlePaste}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import html2canvas from "html2canvas";
-import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, BellRing, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, CheckCircle2, AlertCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send, Award, Calendar, Clock, Lightbulb, Newspaper, AtSign, Flame } from "lucide-react";
+import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, BellRing, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, CheckCircle2, AlertCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send, Award, Calendar, Clock, Lightbulb, Newspaper, AtSign, Flame, Presentation } from "lucide-react";
 import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Department, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus, QualityReportBadge, AppNotification, ErrorCatalogItem, BadgePointConfigItem } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
@@ -18,6 +18,7 @@ import StatisticsDashboard from "./StatisticsDashboard";
 import ProgressTrackingDashboard from "./ProgressTrackingDashboard";
 import BadgeStatisticsDashboard from "./BadgeStatisticsDashboard";
 import MobileForumView from "./MobileForumView";
+import { PowerPointGuideModal } from "./PowerPointGuideModal";
 import {
   ResponsiveContainer,
   RadarChart,
@@ -2277,6 +2278,8 @@ export default function MobileFrame({
   const [emergencyInvitedUserIds, setEmergencyInvitedUserIds] = useState<string[]>([]);
   const [invitedSearchQuery, setInvitedSearchQuery] = useState("");
   const [activeForumTopicId, setActiveForumTopicId] = useState<string | null>(null);
+  const [autoOpenActionsCatalogTopicId, setAutoOpenActionsCatalogTopicId] = useState<string | null>(null);
+  const [showPptxGuide, setShowPptxGuide] = useState(false);
   const handleForumTopicSelect = useCallback((topicId: string | null) => {
     activeForumTopicIdRef.current = topicId;
     setActiveForumTopicId(topicId);
@@ -4389,6 +4392,67 @@ App Link: ${window.location.origin}`;
     return false;
   };
 
+  // Helper to check if a report's discussion (forum topic/replies) contains a task or @mention assigned to/tagging the user
+  const checkUserTaskInDiscussion = useCallback((r: QualityReport, u: User | null): boolean => {
+    if (!u || !topics || topics.length === 0 || !replies || replies.length === 0) return false;
+
+    const topic = topics.find(t => t.reportId === r.id || (r.reportCode && t.reportId === r.reportCode));
+    if (!topic) return false;
+
+    const topicReplies = replies.filter(reply => reply.topicId === topic.id);
+    if (topicReplies.length === 0) return false;
+
+    const userId = u.id ? u.id.toLowerCase() : "";
+    const userFullName = u.fullName ? u.fullName.toLowerCase() : "";
+    const userDept = u.department ? u.department.trim().toLowerCase() : "";
+    const shortDept = userDept ? userDept.replace(/^(phòng|bộ phận|ban|xưởng|khối)\s+/i, "").trim() : "";
+
+    let shortName = "";
+    let lastName = "";
+    if (u.fullName) {
+      const parts = u.fullName.trim().split(/\s+/);
+      if (parts.length >= 2) {
+        shortName = parts.slice(-2).join(" ").toLowerCase();
+      }
+      lastName = parts[parts.length - 1].toLowerCase();
+    }
+
+    return topicReplies.some(reply => {
+      // 1. Direct task/directive assigned to user
+      if (reply.actionData) {
+        const assignedId = reply.actionData.assignedToId ? reply.actionData.assignedToId.toLowerCase() : "";
+        const assignedName = reply.actionData.assignedToName ? reply.actionData.assignedToName.toLowerCase() : "";
+        const note = reply.actionData.note ? reply.actionData.note.toLowerCase() : "";
+
+        if (assignedId && userId && assignedId === userId) return true;
+        if (assignedName && userFullName && (assignedName.includes(userFullName) || userFullName.includes(assignedName))) return true;
+        if (assignedName && shortName && assignedName.includes(shortName)) return true;
+        if (assignedName && userDept && (assignedName.includes(userDept) || (shortDept && assignedName.includes(shortDept)))) return true;
+        
+        if (note && note.includes("@")) {
+          if (userFullName && note.includes(`@${userFullName}`)) return true;
+          if (shortName && note.includes(`@${shortName}`)) return true;
+          if (lastName && lastName.length >= 2 && note.includes(`@${lastName}`)) return true;
+          if (userDept && note.includes(`@${userDept}`)) return true;
+          if (shortDept && shortDept.length >= 2 && note.includes(`@${shortDept}`)) return true;
+        }
+      }
+
+      // 2. Check reply message for @mentions or task assignment
+      const msg = reply.message ? reply.message.toLowerCase() : "";
+      if (msg.includes("@")) {
+        if (userFullName && msg.includes(`@${userFullName}`)) return true;
+        if (userId && msg.includes(`@${userId}`)) return true;
+        if (shortName && msg.includes(`@${shortName}`)) return true;
+        if (lastName && lastName.length >= 2 && msg.includes(`@${lastName}`)) return true;
+        if (userDept && msg.includes(`@${userDept}`)) return true;
+        if (shortDept && shortDept.length >= 2 && msg.includes(`@${shortDept}`)) return true;
+      }
+
+      return false;
+    });
+  }, [topics, replies]);
+
   // Helper to check if current user (or department members if user is Department Head/Manager) is tagged or assigned in a report
   const isUserTaggedInReport = useCallback((r: QualityReport, user: User | null): boolean => {
     if (!user) return false;
@@ -4396,7 +4460,10 @@ App Link: ${window.location.origin}`;
     // 1. Direct tag/assignment on the user
     if (checkDirectUserTagged(r, user)) return true;
 
-    // 2. Check if text mentions user's department directly (e.g., @Phòng QC, @QC)
+    // 2. Task or @mention tag inside the report's Discussion (forum replies)
+    if (checkUserTaskInDiscussion(r, user)) return true;
+
+    // 3. Check if text mentions user's department directly (e.g., @Phòng QC, @QC)
     if (user.department) {
       const deptClean = user.department.trim().toLowerCase();
       if (deptClean) {
@@ -4414,7 +4481,7 @@ App Link: ${window.location.origin}`;
       }
     }
 
-    // 3. For Department Heads / Managers / Reviewers / Admins, also check if any member of their department is tagged
+    // 4. For Department Heads / Managers / Reviewers / Admins, also check if any member of their department is tagged
     const pos = (user.position || "").toLowerCase();
     const role = (user.role || "").toLowerCase();
     const isDeptHead = pos.includes("trưởng") || pos.includes("phó") || pos.includes("quản lý") || pos.includes("giám đốc") || pos.includes("gđ") || pos.includes("chủ nhiệm") || pos.includes("leader") || pos.includes("head") || role.includes("duyệt") || role.includes("admin");
@@ -4430,7 +4497,7 @@ App Link: ${window.location.origin}`;
     }
 
     return false;
-  }, [users]);
+  }, [users, checkUserTaskInDiscussion]);
 
   // Transferred count recalculated dynamically based on active filters
   const transferredReportsCount = useMemo(() => {
@@ -5495,6 +5562,18 @@ App Link: ${window.location.origin}`;
                 <Info className="w-[18px] h-[18px] text-teal-200 hover:text-white" />
               </button>
 
+              {/* --- 4.5. POWERPOINT GUIDE (PPTX) --- */}
+              <button
+                onClick={() => setShowPptxGuide(true)}
+                className="hover:scale-105 active:scale-95 transition-transform cursor-pointer shrink-0"
+                title="Tải & Xem File PowerPoint (.pptx) Hướng Dẫn Sử Dụng Chi Tiết"
+              >
+                <div className="flex items-center gap-1 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white font-extrabold text-[10px] px-2 py-0.5 rounded-full shadow-sm border border-orange-300 animate-pulse">
+                  <Presentation className="w-3.5 h-3.5 stroke-[2.5]" />
+                  <span translate="no" className="notranslate"><T>PPTX HƯỚNG DẪN</T></span>
+                </div>
+              </button>
+
               {/* --- 5. QR CODE (Secondary) --- */}
               <button
                 onClick={() => setShowQrCodeView(true)}
@@ -5832,14 +5911,16 @@ App Link: ${window.location.origin}`;
                 setSelectedOnlyTransferredFilter(false);
                 setSelectedProcessStatusFilter("ALL");
               }}
-              className={`h-[26px] px-1.5 sm:px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center gap-0.5 leading-none ${
+              className={`h-[26px] px-1.5 sm:px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center gap-0.5 leading-none relative ${
                 selectedOnlyTaggedFilter
                   ? "bg-purple-700 text-white border-purple-700 shadow-3xs ring-1 ring-purple-400/50 font-black"
+                  : taggedReportsCount > 0
+                  ? "bg-purple-600 text-white border-purple-600 font-extrabold shadow-md animate-pulse ring-2 ring-purple-400/80"
                   : "bg-purple-50 text-purple-800 border-purple-200/80 hover:bg-purple-100 font-extrabold"
               }`}
-              title="Chỉ hiển thị các bản tin có tag (@nhắc tên) bạn"
+              title="Chỉ hiển thị các bản tin có tag (@nhắc tên) hoặc task giao cho bạn"
             >
-              <AtSign className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
+              <AtSign className={`w-3.5 h-3.5 stroke-[2.5] shrink-0 ${taggedReportsCount > 0 ? "animate-bounce text-yellow-300" : ""}`} />
               <span translate="no" className="notranslate"><T>{`(${taggedReportsCount})`}</T></span>
             </button>
           </div>
@@ -7493,6 +7574,8 @@ App Link: ${window.location.origin}`;
             }
           }}
           initialSelectedTopicId={activeForumTopicId}
+          autoOpenActionsCatalogTopicId={autoOpenActionsCatalogTopicId}
+          onClearAutoOpenActionsCatalog={() => setAutoOpenActionsCatalogTopicId(null)}
           onTopicSelect={handleForumTopicSelect}
         />
       ) : (
@@ -7784,8 +7867,9 @@ App Link: ${window.location.origin}`;
 
                   {/* Action Button: 🔥 Thảo luận chuyên đề */}
                   {(() => {
-                    const existingTopic = topics.find(t => t.reportId === report.id);
+                    const existingTopic = topics.find(t => t.reportId === report.id || (report.reportCode && t.reportId === report.reportCode));
                     const replyCount = existingTopic ? replies.filter(r => r.topicId === existingTopic.id).length : 0;
+                    const hasUserTaskInTopic = checkUserTaskInDiscussion(report, currentUser);
 
                     if (existingTopic) {
                       const isResolved = existingTopic.status === "RESOLVED";
@@ -7798,13 +7882,37 @@ App Link: ${window.location.origin}`;
                               setActiveForumTopicId(existingTopic.id);
                               setActiveBottomTab("TRAO_ĐỔI");
                             }}
-                            className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white font-extrabold text-[11px] rounded-lg shadow-md cursor-pointer hover:shadow-lg active:scale-98 transition-all select-none uppercase tracking-wider border border-emerald-300/40 relative overflow-hidden group"
+                            className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white font-extrabold text-[11px] rounded-lg shadow-md cursor-pointer hover:shadow-lg active:scale-98 transition-all select-none uppercase tracking-wider border border-emerald-300/40 relative overflow-visible group"
                           >
                             <div className="w-6 h-6 rounded-full bg-white text-emerald-600 shadow-md flex items-center justify-center shrink-0">
                               <CheckCircle2 className="w-4 h-4 fill-emerald-500 text-white" />
                             </div>
                             <span translate="no" className="notranslate flex items-center gap-1.5">
-                              <T>ĐÃ CHỐT GIẢI PHÁP</T> <span className="bg-white/20 px-1.5 py-0.5 rounded-full text-[10px] text-emerald-100 border border-white/30">({replyCount} <T>ý kiến</T>)</span>
+                              <T>ĐÃ CHỐT GIẢI PHÁP</T> ({replyCount})
+                              {hasUserTaskInTopic && (
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveForumTopicId(existingTopic.id);
+                                    setAutoOpenActionsCatalogTopicId(existingTopic.id);
+                                    setActiveBottomTab("TRAO_ĐỔI");
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                      e.stopPropagation();
+                                      setActiveForumTopicId(existingTopic.id);
+                                      setAutoOpenActionsCatalogTopicId(existingTopic.id);
+                                      setActiveBottomTab("TRAO_ĐỔI");
+                                    }
+                                  }}
+                                  title="Mở Danh mục Task công việc thuộc thảo luận này"
+                                  className="bg-yellow-400 hover:bg-yellow-300 text-purple-950 font-black text-[10px] px-1.5 py-0.5 rounded-full animate-pulse flex items-center gap-0.5 cursor-pointer shadow-xs border border-yellow-200 active:scale-95 transition-all shrink-0 z-10"
+                                >
+                                  <AtSign className="w-3 h-3 stroke-[3] animate-bounce" /> TASK
+                                </span>
+                              )}
                             </span>
                           </button>
                         );
@@ -7817,7 +7925,7 @@ App Link: ${window.location.origin}`;
                             setActiveForumTopicId(existingTopic.id);
                             setActiveBottomTab("TRAO_ĐỔI");
                           }}
-                          className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 bg-gradient-to-r from-red-600 via-orange-600 to-amber-600 hover:from-red-700 hover:to-amber-700 text-white font-extrabold text-[11px] rounded-lg shadow-md cursor-pointer hover:shadow-lg active:scale-98 transition-all select-none uppercase tracking-wider border border-amber-300/40 relative overflow-hidden group"
+                          className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 bg-gradient-to-r from-red-600 via-orange-600 to-amber-600 hover:from-red-700 hover:to-amber-700 text-white font-extrabold text-[11px] rounded-lg shadow-md cursor-pointer hover:shadow-lg active:scale-98 transition-all select-none uppercase tracking-wider border border-amber-300/40 relative overflow-visible group"
                         >
                           {/* High-Contrast Active Flame Badge with Live Ping Indicator */}
                           <div className="relative flex items-center justify-center shrink-0">
@@ -7830,7 +7938,31 @@ App Link: ${window.location.origin}`;
                             </div>
                           </div>
                           <span translate="no" className="notranslate flex items-center gap-1.5">
-                            <T>ĐANG THẢO LUẬN CHUYÊN ĐỀ</T> <span className="bg-white/20 px-1.5 py-0.5 rounded-full text-[10px] text-amber-100 border border-white/30">({replyCount} <T>ý kiến</T>)</span>
+                            <T>ĐANG THẢO LUẬN CHUYÊN ĐỀ</T> ({replyCount})
+                            {hasUserTaskInTopic && (
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveForumTopicId(existingTopic.id);
+                                  setAutoOpenActionsCatalogTopicId(existingTopic.id);
+                                  setActiveBottomTab("TRAO_ĐỔI");
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" || e.key === " ") {
+                                    e.stopPropagation();
+                                    setActiveForumTopicId(existingTopic.id);
+                                    setAutoOpenActionsCatalogTopicId(existingTopic.id);
+                                    setActiveBottomTab("TRAO_ĐỔI");
+                                  }
+                                }}
+                                title="Mở Danh mục Task công việc thuộc thảo luận này"
+                                className="bg-yellow-400 hover:bg-yellow-300 text-purple-950 font-black text-[10px] px-1.5 py-0.5 rounded-full animate-pulse flex items-center gap-0.5 cursor-pointer shadow-xs border border-yellow-200 active:scale-95 transition-all shrink-0 z-10"
+                              >
+                                <AtSign className="w-3 h-3 stroke-[3] animate-bounce" /> TASK
+                              </span>
+                            )}
                           </span>
                         </button>
                       );
@@ -7840,11 +7972,43 @@ App Link: ${window.location.origin}`;
                       <button
                         type="button"
                         onClick={() => handleOpenEmergencyDiscussionModal(report)}
-                        className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-600 hover:from-amber-600 hover:to-rose-700 text-white font-extrabold text-[11px] rounded-lg shadow-sm cursor-pointer hover:shadow active:scale-98 transition-all select-none uppercase tracking-wider"
+                        className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-600 hover:from-amber-600 hover:to-rose-700 text-white font-extrabold text-[11px] rounded-lg shadow-sm cursor-pointer hover:shadow active:scale-98 transition-all select-none uppercase tracking-wider relative overflow-visible"
                       >
                         <Flame className="w-4 h-4 text-amber-200 fill-amber-200 shrink-0" />
-                        <span translate="no" className="notranslate">
+                        <span translate="no" className="notranslate flex items-center gap-1.5">
                           <T>THẢO LUẬN CHUYÊN ĐỀ</T>
+                          {hasUserTaskInTopic && (
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (existingTopic) {
+                                  setActiveForumTopicId(existingTopic.id);
+                                  setAutoOpenActionsCatalogTopicId(existingTopic.id);
+                                  setActiveBottomTab("TRAO_ĐỔI");
+                                } else {
+                                  handleOpenEmergencyDiscussionModal(report);
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.stopPropagation();
+                                  if (existingTopic) {
+                                    setActiveForumTopicId(existingTopic.id);
+                                    setAutoOpenActionsCatalogTopicId(existingTopic.id);
+                                    setActiveBottomTab("TRAO_ĐỔI");
+                                  } else {
+                                    handleOpenEmergencyDiscussionModal(report);
+                                  }
+                                }
+                              }}
+                              title="Mở Danh mục Task công việc thuộc thảo luận này"
+                              className="bg-yellow-400 hover:bg-yellow-300 text-purple-950 font-black text-[10px] px-1.5 py-0.5 rounded-full animate-pulse flex items-center gap-0.5 cursor-pointer shadow-xs border border-yellow-200 active:scale-95 transition-all shrink-0 z-10"
+                            >
+                              <AtSign className="w-3 h-3 stroke-[3] animate-bounce" /> TASK
+                            </span>
+                          )}
                         </span>
                       </button>
                     );
@@ -13383,6 +13547,12 @@ App Link: ${window.location.origin}`}
           </div>
         </div>
       )}
+
+      {/* PowerPoint (.pptx) User Guide Modal */}
+      <PowerPointGuideModal 
+        isOpen={showPptxGuide} 
+        onClose={() => setShowPptxGuide(false)} 
+      />
 
     </div>
   );
