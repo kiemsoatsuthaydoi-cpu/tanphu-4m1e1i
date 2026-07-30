@@ -48,7 +48,8 @@ import {
   FileText,
   Download,
   Eye,
-  Heart
+  Heart,
+  Camera
 } from "lucide-react";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
@@ -246,29 +247,73 @@ export default function MobileForumView({
   // Image Lightbox Modal state
   const [previewImageModal, setPreviewImageModal] = useState<string | null>(null);
 
-  const handleImagesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+  // Helper to process array of image files with client-side canvas compression under 100KB
+  const processAndAttachImageFiles = async (files: File[]) => {
     if (!files || files.length === 0) return;
     setIsCompressingImages(true);
     try {
       const newImgs: { base64: string; sizeKb: number; name?: string }[] = [];
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      for (const file of files) {
         if (!file.type.startsWith("image/")) continue;
         const img = await loadImage(file);
         const res = await processImage(img, { rotationAngle: 0, targetMaxKb: 100 });
         newImgs.push({
           base64: res.compressedBase64,
           sizeKb: res.compressedSizeKb,
-          name: file.name
+          name: file.name || `Image_${newImgs.length + 1}.png`
         });
       }
-      setAttachedImages(prev => [...prev, ...newImgs].slice(0, 3));
+      if (newImgs.length > 0) {
+        setAttachedImages(prev => [...prev, ...newImgs].slice(0, 5));
+      }
     } catch (err) {
-      console.error("Lỗi nén ảnh:", err);
+      console.error("Lỗi xử lý dán/nén hình ảnh:", err);
     } finally {
       setIsCompressingImages(false);
-      if (imageInputRef.current) imageInputRef.current.value = "";
+    }
+  };
+
+  const handleImagesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const fileArray = Array.from(files);
+    await processAndAttachImageFiles(fileArray);
+    if (imageInputRef.current) imageInputRef.current.value = "";
+  };
+
+  // Clipboard Paste Event Handler (Ctrl + V / Cmd + V)
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const clipboardData = e.clipboardData;
+    if (!clipboardData) return;
+
+    const imageFiles: File[] = [];
+
+    // 1. Check clipboard files
+    if (clipboardData.files && clipboardData.files.length > 0) {
+      for (let i = 0; i < clipboardData.files.length; i++) {
+        const file = clipboardData.files[i];
+        if (file.type.startsWith("image/")) {
+          imageFiles.push(file);
+        }
+      }
+    }
+
+    // 2. Check clipboard items
+    if (imageFiles.length === 0 && clipboardData.items) {
+      for (let i = 0; i < clipboardData.items.length; i++) {
+        const item = clipboardData.items[i];
+        if (item.type.indexOf("image") !== -1) {
+          const file = item.getAsFile();
+          if (file) {
+            imageFiles.push(file);
+          }
+        }
+      }
+    }
+
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      await processAndAttachImageFiles(imageFiles);
     }
   };
 
@@ -2022,7 +2067,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                     type="button"
                     onClick={() => imageInputRef.current?.click()}
                     className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
-                    title="Đính kèm hình ảnh (Nén siêu nhẹ)"
+                    title="Đính kèm hình ảnh từ tập tin (Nén siêu nhẹ)"
                   >
                     <ImageIcon className="w-4 h-4" />
                   </button>
@@ -2039,9 +2084,10 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
 
                 <MentionInput
                   users={users}
-                  placeholder="Nhập ý kiến trao đổi của bạn..."
+                  placeholder="Nhập ý kiến trao đổi... (Hỗ trợ Ctrl+V dán ảnh nén)"
                   value={replyMessage}
                   onChange={setReplyMessage}
+                  onPaste={handlePaste}
                   className="bg-slate-100 border border-slate-200 outline-none px-3 py-2 rounded-xl text-[13px] font-medium placeholder:text-slate-400 focus:bg-white focus:border-blue-500"
                 />
                 <button

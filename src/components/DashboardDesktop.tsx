@@ -115,7 +115,6 @@ import { parseReportTimestamp } from "../utils/notificationHelper";
 import { STANDARDIZED_QC_DEPT } from "../data";
 import { generateDailyReportPDF } from "../utils/pdfGenerator";
 import { formatNameCapitalized, canUserManageDirective, isSameBranchOrFactory } from "../utils/branchHelpers";
-import OrderPipeline from "./OrderPipeline";
 import { MentionInput, MentionTextArea } from "./MentionTextArea";
 import FirebaseQuotaMonitor from "./FirebaseQuotaMonitor";
 import StatisticsDashboard from "./StatisticsDashboard";
@@ -1177,7 +1176,7 @@ export default function DashboardDesktop({
   onToggleQcFeature
 }: DashboardDesktopProps) {
   const [activeTab, setActiveTab] = useState<
-    "PHÊ_DUYỆT" | "MÃ_HÓA" | "THỐNG_KÊ" | "DỮ_LIỆU" | "QUY_CHẾ" | "CÁ_NHÂN" | "THÔNG_BÁO" | "TRAO_ĐỔI" | "TRIỂN_KHAI" | "ĐỀ_XUẤT" | "QUOTA_CLOUD"
+    "PHÊ_DUYỆT" | "MÃ_HÓA" | "THỐNG_KÊ" | "DỮ_LIỆU" | "QUY_CHẾ" | "CÁ_NHÂN" | "THÔNG_BÁO" | "TRAO_ĐỔI" | "ĐỀ_XUẤT" | "QUOTA_CLOUD"
   >(() => {
     if (currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) {
       return "PHÊ_DUYỆT";
@@ -2891,13 +2890,14 @@ export default function DashboardDesktop({
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shrink-0 shadow-sm text-slate-800">
         <div>
           <div className="flex items-center gap-3">
-            <div className="bg-blue-600 text-white text-xs font-black px-2.5 py-1 rounded-md tracking-wider">
-              <T>TÂN PHÚ 4M1E1I</T>
+            <div className="bg-blue-600 text-white font-black px-3 py-1.5 rounded-lg shadow-2xs flex flex-col items-start justify-center">
+              <span className="text-[14px] tracking-wider leading-none"><T>META ANDON</T></span>
+              <span className="text-[9px] font-semibold tracking-tight leading-none mt-1 opacity-90"><T>Mỗi Nhân Viên Là Một QC</T></span>
             </div>
             <T className="text-xs text-slate-500 font-bold tracking-wide uppercase">HỆ THỐNG KIỂM SOÁT THAY ĐỔI THEO THỜI GIAN THỰC</T>
           </div>
           <h1 className="text-xl font-bold tracking-tight text-slate-900 mt-1.5 flex items-center gap-2">
-            <T>Trang Quản Trị Hệ Thống Tân Phú Group</T>
+            <T>Trang Quản Trị Hệ Thống META ANDON</T>
             <span className="text-xs font-medium text-slate-400 block">v4.1.3</span>
           </h1>
         </div>
@@ -3051,7 +3051,6 @@ export default function DashboardDesktop({
                 ]
               : []),
             { id: "MÃ_HÓA", label: "Khai báo mã hóa", icon: Sliders, color: "text-purple-400" },
-            { id: "TRIỂN_KHAI", label: "Triển khai đơn hàng", icon: Package, color: "text-rose-400" },
             { id: "THỐNG_KÊ", label: "Báo cáo thống kê", icon: BarChart4, color: "text-emerald-400" },
             ...(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.REVIEWER
               ? [{ id: "ĐỀ_XUẤT", label: "Đề xuất chờ duyệt", icon: CheckSquare, count: pendingReportsCount, color: "text-sky-400" }]
@@ -5312,24 +5311,6 @@ export default function DashboardDesktop({
             </div>
           )}
 
-          {activeTab === "TRIỂN_KHAI" && (
-            <OrderPipeline
-              currentUser={currentUser}
-              branches={branches}
-              departments={departments}
-              productionRequests={productionRequests}
-              setProductionRequests={setProductionRequests}
-              productionRequestItemsMap={productionRequestItemsMap}
-              setProductionRequestItemsMap={setProductionRequestItemsMap}
-              orderImplementations={orderImplementations}
-              setOrderImplementations={setOrderImplementations}
-              productsCatalog={productsCatalog}
-              setProductsCatalog={setProductsCatalog}
-              moldsCatalog={moldsCatalog}
-              setMoldsCatalog={setMoldsCatalog}
-            />
-          )}
-
           {/* TAB 3: THỐNG KÊ (Business Analytics) */}
           {activeTab === "THỐNG_KÊ" && (() => {
             const { total, kph, dsa, safeRate } = getStatsCountersValue();
@@ -6586,7 +6567,7 @@ export default function DashboardDesktop({
                                       className="mt-2.5 flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-[10px] rounded-lg shadow-sm border border-emerald-500/10 cursor-pointer hover:shadow active:scale-95 transition-all select-none uppercase tracking-wide"
                                     >
                                       <Bot className="w-3.5 h-3.5 text-emerald-100" />
-                                      <span translate="no" className="notranslate">Phân tích Cơ hội & Rủi ro (Thách thức)</span>
+                                      <span translate="no" className="notranslate">PHÂN TÍCH CƠ HỘI & THÁCH THỨC</span>
                                     </button>
                                   )}
 
@@ -8803,7 +8784,7 @@ export default function DashboardDesktop({
                         } uppercase tracking-wider`}>
                           <span translate="no" className="notranslate">
                             {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                              ? "Phân tích Cơ hội & Rủi ro (Thách thức) 4M1E1I"
+                              ? "Phân tích Cơ hội & Thách thức 4M1E1I"
                               : "5-WHYs & CƠ HỘI CẢI TIẾN"}
                           </span>
                         </p>
@@ -8833,7 +8814,7 @@ export default function DashboardDesktop({
                       <Brain className="w-4 h-4" />
                       <span translate="no" className="notranslate">
                         {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                          ? "Bảng Phân tích Cơ hội & Rủi ro (Thách thức)"
+                          ? "Bảng Phân tích Cơ hội & Thách thức"
                           : "5-WHYs & CƠ HỘI CẢI TIẾN"}
                       </span>
                     </button>
@@ -8920,14 +8901,14 @@ export default function DashboardDesktop({
                               <p className="text-xs font-black text-slate-750 animate-pulse">
                                 <span translate="no" className="notranslate">
                                   {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                                    ? "Trí tuệ nhân tạo đang phân tích cơ hội & rủi ro (thách thức)..."
+                                    ? "Trí tuệ nhân tạo đang phân tích cơ hội & thách thức..."
                                     : "Trí tuệ nhân tạo đang phân tích lỗi..."}
                                 </span>
                               </p>
                               <p className="text-[10px] text-slate-400 mt-1">
                                 <span translate="no" className="notranslate">
                                   {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                                    ? "Đang rà soát cơ hội, rủi ro (thách thức) và đánh giá quy tắc nghiêm ngặt 4M1E1I"
+                                    ? "Đang rà soát cơ hội, thách thức và đánh giá quy tắc nghiêm ngặt 4M1E1I"
                                     : `Đang áp dụng mô hình 5-Why và đề xuất giải pháp cho ${companyName}`}
                                 </span>
                               </p>
@@ -8943,7 +8924,7 @@ export default function DashboardDesktop({
                             <p className="text-xs">
                               <span translate="no" className="notranslate">
                                 {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                                  ? "Bấm nút \"Phân tích Cơ hội & Rủi ro (Thách thức)\" để bắt đầu"
+                                  ? "Bấm nút \"PHÂN TÍCH CƠ HỘI & THÁCH THỨC\" để bắt đầu"
                                   : "Bấm nút \"5-WHYs & CƠ HỘI CẢI TIẾN\" để bắt đầu"}
                               </span>
                             </p>

@@ -75,6 +75,7 @@ interface MentionControlsProps {
   name?: string;
   onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onInput?: (e: React.FormEvent<HTMLTextAreaElement>) => void;
+  onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
 }
 
 export function MentionTextArea({
@@ -88,7 +89,8 @@ export function MentionTextArea({
   style,
   name,
   onKeyDown,
-  onInput
+  onInput,
+  onPaste
 }: MentionControlsProps) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -236,6 +238,7 @@ export function MentionTextArea({
         onKeyDown={handleKeyDown}
         onBlur={handleBlur}
         onInput={onInput}
+        onPaste={onPaste}
         rows={rows}
         className={className}
         style={style}
@@ -332,6 +335,7 @@ interface MentionInputProps {
   onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onFocus?: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
   onBlur?: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
+  onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
 }
 
 export function MentionInput({
@@ -346,7 +350,8 @@ export function MentionInput({
   name,
   onKeyDown,
   onFocus,
-  onBlur
+  onBlur,
+  onPaste
 }: MentionInputProps) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -528,6 +533,7 @@ export function MentionInput({
         onKeyDown={handleKeyDown}
         onFocus={handleFocus}
         onBlur={handleBlur}
+        onPaste={onPaste}
         rows={1}
         className={`w-full resize-none overflow-y-auto leading-normal transition-all block ${className || ""}`}
         style={{

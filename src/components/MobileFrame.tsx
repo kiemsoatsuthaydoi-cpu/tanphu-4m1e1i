@@ -5413,7 +5413,7 @@ App Link: ${window.location.origin}`;
                 </div>
               ) : (
                 <div className="relative bg-white text-[9px] font-black px-1.5 py-0.5 rounded flex items-center justify-center font-sans tracking-tighter shadow-xs group-hover:bg-amber-50 transition-colors" style={{ color: "var(--color-primary, #1e3a8a)" }}>
-                  <span translate="no" className="notranslate"><T>TANPHU</T></span>
+                  <span translate="no" className="notranslate"><T>ANDON</T></span>
                   {currentUser?.role === UserRole.ADMIN && (
                     <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 text-slate-900 rounded-full flex items-center justify-center opacity-80 group-hover:opacity-100 shadow-2xs">
                       <Camera className="w-1.5 h-1.5" />
@@ -5423,8 +5423,8 @@ App Link: ${window.location.origin}`;
               )}
             </button>
             <div className="flex flex-col justify-center select-none">
-              <T className="font-bold text-[13.2px] tracking-wide whitespace-nowrap leading-none block text-left">META ANDON</T>
-              <T className="text-[8px] font-bold tracking-[-0.015em] opacity-90 whitespace-nowrap block text-left leading-none mt-1">Mỗi nhân viên là một QC</T>
+              <T className="font-bold text-[15.2px] tracking-wide whitespace-nowrap leading-none block text-left">META ANDON</T>
+              <T className="text-[8px] font-bold tracking-[-0.015em] opacity-90 whitespace-nowrap block text-left leading-none mt-1">Mỗi Nhân Viên Là Một QC</T>
             </div>
           </div>
           <div className="relative flex items-center select-none">
@@ -7778,7 +7778,7 @@ App Link: ${window.location.origin}`;
                       className="mt-3 w-full flex items-center justify-center gap-1.5 px-3 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-[11px] rounded-lg shadow-sm cursor-pointer hover:shadow active:scale-98 transition-all select-none uppercase tracking-wider"
                     >
                       <Bot className="w-4 h-4 text-emerald-100" />
-                      <span translate="no" className="notranslate">Phân tích Cơ hội & Rủi ro (Thách thức)</span>
+                      <span translate="no" className="notranslate">PHÂN TÍCH CƠ HỘI & THÁCH THỨC</span>
                     </button>
                   )}
 
@@ -12639,7 +12639,7 @@ App Link: ${window.location.origin}`}
                   <img src={headerLogoAvatar} alt="Logo Preview" className="w-10 h-10 rounded-lg object-cover border border-white shadow" />
                 ) : (
                   <div className="bg-white text-xs font-black px-2 py-1 rounded text-blue-900 font-sans tracking-tighter shadow">
-                    TANPHU
+                    ANDON
                   </div>
                 )}
               </div>
@@ -12703,19 +12703,19 @@ App Link: ${window.location.origin}`}
               </div>
             </div>
 
-            {/* Reset to default TANPHU */}
+            {/* Reset to default ANDON */}
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
               <button
                 type="button"
                 onClick={() => {
                   handleSaveHeaderLogoAvatar("");
                   setShowLogoAvatarModal(false);
-                  showToast("Đã khôi phục biểu tượng chữ TANPHU mặc định!");
+                  showToast("Đã khôi phục biểu tượng chữ ANDON mặc định!");
                 }}
                 className="text-xs font-bold text-rose-600 hover:text-rose-800 flex items-center gap-1 cursor-pointer"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
-                <span translate="no" className="notranslate"><T>Đặt lại TANPHU mặc định</T></span>
+                <span translate="no" className="notranslate"><T>Đặt lại ANDON mặc định</T></span>
               </button>
 
               <button
@@ -12926,7 +12926,7 @@ App Link: ${window.location.origin}`}
                     } uppercase tracking-wider`}>
                       <span translate="no" className="notranslate">
                         {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                          ? "Phân tích cơ hội & rủi ro (thách thức) 4M1E1I"
+                          ? "Phân tích Cơ hội & Thách thức 4M1E1I"
                           : "5-WHYs & CƠ HỘI CẢI TIẾN"}
                       </span>
                     </p>
@@ -13041,14 +13041,14 @@ App Link: ${window.location.origin}`}
                           <p className="text-[11px] font-black text-slate-750 animate-pulse">
                             <span translate="no" className="notranslate">
                               {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                                ? "AI đang phân tích cơ hội & rủi ro (thách thức)..."
+                                ? "AI đang phân tích cơ hội & thách thức..."
                                 : "AI đang phân tích lỗi..."}
                             </span>
                           </p>
                           <p className="text-[9px] text-slate-400 mt-0.5">
                             <span translate="no" className="notranslate">
                               {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                                ? "Đang rà soát, đánh giá cơ hội & rủi ro (thách thức) 4M1E1I"
+                                ? "Đang rà soát, đánh giá cơ hội & thách thức 4M1E1I"
                                 : "Đang áp dụng mô hình 5-Why chất lượng Tân Phú"}
                             </span>
                           </p>
@@ -13064,7 +13064,7 @@ App Link: ${window.location.origin}`}
                         <p className="text-[11px]">
                           <span translate="no" className="notranslate">
                             {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                              ? "Bấm nút \"Phân tích Cơ hội & Rủi ro (Thách thức)\" để bắt đầu"
+                              ? "Bấm nút \"PHÂN TÍCH CƠ HỘI & THÁCH THỨC\" để bắt đầu"
                               : "Bấm nút \"5-WHYs & CƠ HỘI CẢI TIẾN\" để bắt đầu"}
                           </span>
                         </p>
@@ -13087,7 +13087,7 @@ App Link: ${window.location.origin}`}
                     <span className="text-[10px] font-bold">
                       <span translate="no" className="notranslate">
                         {aiAnalysisReport?.reportType === "DSA" || aiAnalysisReport?.isSpotlight
-                          ? "Hỏi đáp về cơ hội & rủi ro (thách thức) của Điểm Sáng này"
+                          ? "Hỏi đáp về cơ hội & thách thức của Điểm Sáng này"
                           : "Đặt câu hỏi chuyên sâu về lỗi 4M1E1I này"}
                       </span>
                     </span>
