@@ -448,6 +448,7 @@ export interface ForumReply {
   senderRole: string;
   message: string;
   timestamp: string;
+  isDeleted?: boolean;
   likes?: number;
   likedBy?: string[];
   actionType?: "DIRECTIVE" | "TASK";

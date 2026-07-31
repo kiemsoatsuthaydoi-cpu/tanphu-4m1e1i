@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import html2canvas from "html2canvas";
-import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, BellRing, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, CheckCircle2, AlertCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send, Award, Calendar, Clock, Lightbulb, Newspaper, AtSign, Flame, Presentation } from "lucide-react";
+import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, BellRing, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, CheckCircle2, AlertCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send, Award, Calendar, Clock, Lightbulb, Newspaper, AtSign, Flame } from "lucide-react";
 import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Department, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus, QualityReportBadge, AppNotification, ErrorCatalogItem, BadgePointConfigItem } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
@@ -18,7 +18,6 @@ import StatisticsDashboard from "./StatisticsDashboard";
 import ProgressTrackingDashboard from "./ProgressTrackingDashboard";
 import BadgeStatisticsDashboard from "./BadgeStatisticsDashboard";
 import MobileForumView from "./MobileForumView";
-import { PowerPointGuideModal } from "./PowerPointGuideModal";
 import {
   ResponsiveContainer,
   RadarChart,
@@ -2279,7 +2278,6 @@ export default function MobileFrame({
   const [invitedSearchQuery, setInvitedSearchQuery] = useState("");
   const [activeForumTopicId, setActiveForumTopicId] = useState<string | null>(null);
   const [autoOpenActionsCatalogTopicId, setAutoOpenActionsCatalogTopicId] = useState<string | null>(null);
-  const [showPptxGuide, setShowPptxGuide] = useState(false);
   const handleForumTopicSelect = useCallback((topicId: string | null) => {
     activeForumTopicIdRef.current = topicId;
     setActiveForumTopicId(topicId);
@@ -5560,18 +5558,6 @@ App Link: ${window.location.origin}`;
                 title="Hướng dẫn nhanh"
               >
                 <Info className="w-[18px] h-[18px] text-teal-200 hover:text-white" />
-              </button>
-
-              {/* --- 4.5. POWERPOINT GUIDE (PPTX) --- */}
-              <button
-                onClick={() => setShowPptxGuide(true)}
-                className="hover:scale-105 active:scale-95 transition-transform cursor-pointer shrink-0"
-                title="Tải & Xem File PowerPoint (.pptx) Hướng Dẫn Sử Dụng Chi Tiết"
-              >
-                <div className="flex items-center gap-1 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white font-extrabold text-[10px] px-2 py-0.5 rounded-full shadow-sm border border-orange-300 animate-pulse">
-                  <Presentation className="w-3.5 h-3.5 stroke-[2.5]" />
-                  <span translate="no" className="notranslate"><T>PPTX HƯỚNG DẪN</T></span>
-                </div>
               </button>
 
               {/* --- 5. QR CODE (Secondary) --- */}
@@ -13547,12 +13533,6 @@ App Link: ${window.location.origin}`}
           </div>
         </div>
       )}
-
-      {/* PowerPoint (.pptx) User Guide Modal */}
-      <PowerPointGuideModal 
-        isOpen={showPptxGuide} 
-        onClose={() => setShowPptxGuide(false)} 
-      />
 
     </div>
   );

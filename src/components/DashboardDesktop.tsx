@@ -60,10 +60,8 @@ import {
   ChevronRight,
   ChevronDown,
   User as UserIcon,
-  Award,
-  Presentation
+  Award
 } from "lucide-react";
-import { PowerPointGuideModal } from "./PowerPointGuideModal";
 import {
   BarChart,
   Bar,
@@ -1192,7 +1190,6 @@ export default function DashboardDesktop({
   const [errorCodeFilter, setErrorCodeFilter] = useState("");
   const [errorCategoryFilter, setErrorCategoryFilter] = useState<"ALL" | "BBM" | "BBC">("ALL");
   const [editingErrorItem, setEditingErrorItem] = useState<ErrorCatalogItem | null>(null);
-  const [showPptxGuide, setShowPptxGuide] = useState(false);
   
   // States for new/edit form
   const [errorFormCode, setErrorFormCode] = useState("");
@@ -2920,17 +2917,6 @@ export default function DashboardDesktop({
             <>
               <div className="border-l border-slate-300 h-8 self-center" />
               
-              {/* Nút Hướng Dẫn PowerPoint (.pptx) */}
-              <button
-                type="button"
-                onClick={() => setShowPptxGuide(true)}
-                className="px-3 py-1.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 border border-orange-300 text-white text-[10px] font-extrabold rounded-lg flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs animate-pulse"
-                title="Xem & Tải File PowerPoint (.pptx) Hướng Dẫn Sử Dụng Meta Andon"
-              >
-                <Presentation className="w-4 h-4" />
-                <span translate="no" className="notranslate"><T>SLIDE HƯỚNG DẪN (PPTX)</T></span>
-              </button>
-
               {/* Nút hiển thị số người online cực đẹp */}
               <div className="relative">
                 <button
@@ -9070,11 +9056,6 @@ export default function DashboardDesktop({
         </main>
       </div>
 
-      {/* PowerPoint (.pptx) User Guide Modal */}
-      <PowerPointGuideModal
-        isOpen={showPptxGuide}
-        onClose={() => setShowPptxGuide(false)}
-      />
     </div>
   );
 }
