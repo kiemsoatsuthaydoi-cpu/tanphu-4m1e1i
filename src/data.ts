@@ -3,18 +3,13 @@ import { User, UserRole, UserStatus, QualityReport, Company, Branch, Department,
 // Standardize the term "Phòng Quản Lý Chất Lượng"
 export const STANDARDIZED_QC_DEPT = "Phòng Quản Lý Chất Lượng";
 
-// Base64 SVGs to act as beautiful, realistic, extremely lightweight factory quality concern photos
-const svgManIcon = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='250' viewBox='0 0 400 250'><rect width='100%' height='100%' fill='%23eef2ff'/><text x='50%' y='40%' font-family='sans-serif' font-size='22' font-weight='bold' fill='%234f46e5' text-anchor='middle'>CON NGƯỜI (MAN)</text><text x='50%' y='60%' font-family='sans-serif' font-size='14' fill='%2364748b' text-anchor='middle'>Sản phẩm không dán tem phụ, lỗi lọt sang kho</text><rect x='100' y='180' width='200' height='30' rx='5' fill='%23ef4444'/><text x='50%' y='200' font-family='sans-serif' font-size='12' font-weight='bold' fill='white' text-anchor='middle'>CẢNH BÁO: SAI SÓT HOẠT ĐỘNG</text></svg>";
-
-const svgMaterialIcon = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='250' viewBox='0 0 400 250'><rect width='100%' height='100%' fill='%23fdf4ff'/><text x='50%' y='40%' font-family='sans-serif' font-size='22' font-weight='bold' fill='%23c026d3' text-anchor='middle'>NGUYÊN VẬT LIỆU</text><text x='50%' y='60%' font-family='sans-serif' font-size='14' fill='%2364748b' text-anchor='middle'>Thử nghiệm phôi 670g có tỉ lệ phế phẩm</text><rect x='100' y='180' width='200' height='30' rx='5' fill='%23f59e0b'/><text x='50%' y='200' font-family='sans-serif' font-size='12' font-weight='bold' fill='white' text-anchor='middle'>NGHIÊN CỨU: KHÔNG ĐẠT MÀU</text></svg>";
-
-const svgMachineIcon = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='250' viewBox='0 0 400 250'><rect width='100%' height='100%' fill='%23f0fdf4'/><text x='50%' y='40%' font-family='sans-serif' font-size='22' font-weight='bold' fill='%2316a34a' text-anchor='middle'>MÁY MÓC (MACHINE)</text><text x='50%' y='60%' font-family='sans-serif' font-size='14' fill='%2364748b' text-anchor='middle'>Máy C16 mối dán túi bị kéo sợi zipper</text><rect x='80' y='180' width='240' height='30' rx='5' fill='%23d97706'/><text x='50%' y='200' font-family='sans-serif' font-size='12' font-weight='bold' fill='white' text-anchor='middle'>BẢO TRÌ: ĐIỀU CHỈNH ĐỘ NÓNG</text></svg>";
-
-const svgMethodIcon = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='250' viewBox='0 0 400 250'><rect width='100%' height='100%' fill='%23fffbeb'/><text x='50%' y='40%' font-family='sans-serif' font-size='22' font-weight='bold' fill='%23d97706' text-anchor='middle'>PHƯƠNG PHÁP (METHOD)</text><text x='50%' y='60%' font-family='sans-serif' font-size='14' fill='%2364748b' text-anchor='middle'>Quy định dán nhãn barcode 3 size S-M-L</text></svg>";
-
-const svgEnvIcon = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='250' viewBox='0 0 400 250'><rect width='100%' height='100%' fill='%23f0fdfa'/><text x='50%' y='40%' font-family='sans-serif' font-size='22' font-weight='bold' fill='%230d9488' text-anchor='middle'>MÔI TRƯỜNG (ENV)</text><text x='50%' y='60%' font-family='sans-serif' font-size='14' fill='%2364748b' text-anchor='middle'>Dự án lắp đặt hệ thống điện mặt trời Tasco</text></svg>";
-
-const svgInfoIcon = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='250' viewBox='0 0 400 250'><rect width='100%' height='100%' fill='%23f8fafc'/><text x='50%' y='40%' font-family='sans-serif' font-size='22' font-weight='bold' fill='%23475569' text-anchor='middle'>THÔNG TIN (INFO)</text><text x='50%' y='60%' font-family='sans-serif' font-size='14' fill='%2364748b' text-anchor='middle'>Đón đoàn đánh giá tiêu chuẩn BRC xưởng sạch</text></svg>";
+// Base64 or Unsplash URLs to act as realistic, high-quality factory quality concern photos
+const svgManIcon = "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=800&q=80";
+const svgMaterialIcon = "https://images.unsplash.com/photo-1616401784845-180882ba9ba8?auto=format&fit=crop&w=800&q=80";
+const svgMachineIcon = "https://images.unsplash.com/photo-1581092335397-9583fe92d232?auto=format&fit=crop&w=800&q=80";
+const svgMethodIcon = "https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?auto=format&fit=crop&w=800&q=80";
+const svgEnvIcon = "https://images.unsplash.com/photo-1581092162384-8987c1d64718?auto=format&fit=crop&w=800&q=80";
+const svgInfoIcon = "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=800&q=80";
 
 export const initialCompanies: Company[] = [
   { id: "TPP", name: "TÂN PHÚ VIỆT NAM" },

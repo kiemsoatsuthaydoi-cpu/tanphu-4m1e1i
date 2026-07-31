@@ -239,25 +239,25 @@ export function getCategoryFallbackImage(category: string): string {
   const norm = (category || "").toUpperCase().trim();
   
   if (norm.includes("CON NGƯỜI") || norm.includes("MAN")) {
-    return "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='250' viewBox='0 0 400 250'><rect width='100%' height='100%' fill='%23eef2ff'/><text x='50%' y='40%' font-family='sans-serif' font-size='22' font-weight='bold' fill='%234f46e5' text-anchor='middle' class='notranslate' translate='no'>CON NGƯỜI (MAN)</text><text x='50%' y='60%' font-family='sans-serif' font-size='14' fill='%2364748b' text-anchor='middle' class='notranslate' translate='no'>Sự cố / Thay đổi thao tác hoạt động</text><rect x='100' y='180' width='200' height='30' rx='5' fill='%23ef4444'/><text x='50%' y='200' font-family='sans-serif' font-size='12' font-weight='bold' fill='white' text-anchor='middle' class='notranslate' translate='no'>HÌNH ẢNH TỰ ĐỘNG KHÔI PHỤC</text></svg>";
+    return "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=800&q=80";
   }
   
   if (norm.includes("NGUYÊN VẬT LIỆU") || norm.includes("MATERIAL")) {
-    return "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='250' viewBox='0 0 400 250'><rect width='100%' height='100%' fill='%23fdf4ff'/><text x='50%' y='40%' font-family='sans-serif' font-size='22' font-weight='bold' fill='%23c026d3' text-anchor='middle' class='notranslate' translate='no'>NGUYÊN VẬT LIỆU</text><text x='50%' y='60%' font-family='sans-serif' font-size='14' fill='%2364748b' text-anchor='middle' class='notranslate' translate='no'>Sự cố / Thay đổi nguyên vật liệu</text><rect x='100' y='180' width='200' height='30' rx='5' fill='%23f59e0b'/><text x='50%' y='200' font-family='sans-serif' font-size='12' font-weight='bold' fill='white' text-anchor='middle' class='notranslate' translate='no'>HÌNH ẢNH TỰ ĐỘNG KHÔI PHỤC</text></svg>";
+    return "https://images.unsplash.com/photo-1616401784845-180882ba9ba8?auto=format&fit=crop&w=800&q=80";
   }
   
   if (norm.includes("MÁY MÓC") || norm.includes("MACHINE")) {
-    return "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='250' viewBox='0 0 400 250'><rect width='100%' height='100%' fill='%23f0fdf4'/><text x='50%' y='40%' font-family='sans-serif' font-size='22' font-weight='bold' fill='%2316a34a' text-anchor='middle' class='notranslate' translate='no'>MÁY MÓC (MACHINE)</text><text x='50%' y='60%' font-family='sans-serif' font-size='14' fill='%2364748b' text-anchor='middle' class='notranslate' translate='no'>Sự cố / Thay đổi thiết bị máy móc</text><rect x='100' y='180' width='200' height='30' rx='5' fill='%23d97706'/><text x='50%' y='200' font-family='sans-serif' font-size='12' font-weight='bold' fill='white' text-anchor='middle' class='notranslate' translate='no'>HÌNH ẢNH TỰ ĐỘNG KHÔI PHỤC</text></svg>";
+    return "https://images.unsplash.com/photo-1581092335397-9583fe92d232?auto=format&fit=crop&w=800&q=80";
   }
   
   if (norm.includes("PHƯƠNG PHÁP") || norm.includes("METHOD")) {
-    return "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='250' viewBox='0 0 400 250'><rect width='100%' height='100%' fill='%23fffbeb'/><text x='50%' y='40%' font-family='sans-serif' font-size='22' font-weight='bold' fill='%23d97706' text-anchor='middle' class='notranslate' translate='no'>PHƯƠNG PHÁP (METHOD)</text><text x='50%' y='60%' font-family='sans-serif' font-size='14' fill='%2364748b' text-anchor='middle' class='notranslate' translate='no'>Sự cố / Thay đổi quy trình phương pháp</text><rect x='100' y='180' width='200' height='30' rx='5' fill='%233b82f6'/><text x='50%' y='200' font-family='sans-serif' font-size='12' font-weight='bold' fill='white' text-anchor='middle' class='notranslate' translate='no'>HÌNH ẢNH TỰ ĐỘNG KHÔI PHỤC</text></svg>";
+    return "https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?auto=format&fit=crop&w=800&q=80";
   }
   
   if (norm.includes("MÔI TRƯỜNG") || norm.includes("ENV")) {
-    return "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='250' viewBox='0 0 400 250'><rect width='100%' height='100%' fill='%23f0fdfa'/><text x='50%' y='40%' font-family='sans-serif' font-size='22' font-weight='bold' fill='%230d9488' text-anchor='middle' class='notranslate' translate='no'>MÔI TRƯỜNG (ENV)</text><text x='50%' y='60%' font-family='sans-serif' font-size='14' fill='%2364748b' text-anchor='middle' class='notranslate' translate='no'>Sự cố / Thay đổi môi trường làm việc</text><rect x='100' y='180' width='200' height='30' rx='5' fill='%2310b981'/><text x='50%' y='200' font-family='sans-serif' font-size='12' font-weight='bold' fill='white' text-anchor='middle' class='notranslate' translate='no'>HÌNH ẢNH TỰ ĐỘNG KHÔI PHỤC</text></svg>";
+    return "https://images.unsplash.com/photo-1581092162384-8987c1d64718?auto=format&fit=crop&w=800&q=80";
   }
   
-  return "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='250' viewBox='0 0 400 250'><rect width='100%' height='100%' fill='%23f8fafc'/><text x='50%' y='40%' font-family='sans-serif' font-size='22' font-weight='bold' fill='%23475569' text-anchor='middle' class='notranslate' translate='no'>THÔNG TIN (INFO)</text><text x='50%' y='60%' font-family='sans-serif' font-size='14' fill='%2364748b' text-anchor='middle' class='notranslate' translate='no'>Sự cố / Thay đổi luồng thông tin truyền đạt</text><rect x='100' y='180' width='200' height='30' rx='5' fill='%236366f1'/><text x='50%' y='200' font-family='sans-serif' font-size='12' font-weight='bold' fill='white' text-anchor='middle' class='notranslate' translate='no'>HÌNH ẢNH TỰ ĐỘNG KHÔI PHỤC</text></svg>";
+  return "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=800&q=80";
 }
 

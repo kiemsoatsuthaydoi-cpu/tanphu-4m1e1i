@@ -1,3 +1,15 @@
+export interface DirectMessageItem {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderRole?: string;
+  receiverId: string;
+  receiverName: string;
+  content: string;
+  timestamp: string; // dd/mm/yy HH:mm
+  createdAt: number;
+}
+
 export enum UserRole {
   ADMIN = "CHỦ ADMIN",
   REVIEWER = "DUYỆT VIÊN",

@@ -26,6 +26,7 @@ import {
   ErrorCatalogItem
 } from "./types";
 import { generateNotifications } from "./utils/notificationHelper";
+import { getCategoryFallbackImage } from "./utils/imageProcessor";
 import {
   initialUsers,
   initialReports,
@@ -458,25 +459,26 @@ const attachLocalImages = (rawReports: QualityReport[]): QualityReport[] => {
     const storedImg = safeGetItem(`4m1e1i_img_${r.id}`);
     const storedImgUrls = safeParseJSON(safeGetItem(`4m1e1i_img_urls_${r.id}`), []);
     
-    // Ưu tiên hình ảnh từ dữ liệu báo cáo / Firestore
-    const hasServerUrls = Array.isArray(r.imageUrls) && r.imageUrls.length > 0;
-    const hasServerUrl = Boolean(r.imageUrl && r.imageUrl.trim() !== "");
+    // Check if URL is a valid real photo (not an old SVG placeholder)
+    const isRealPhoto = (url?: string) => url && url.trim() !== "" && !url.includes("data:image/svg");
 
-    const finalUrls = hasServerUrls
-      ? r.imageUrls
-      : (storedImgUrls && storedImgUrls.length > 0)
-        ? storedImgUrls
-        : hasServerUrl
-          ? [r.imageUrl!]
-          : storedImg
-            ? [storedImg]
-            : [];
+    let rawUrls: string[] = [];
+    if (Array.isArray(r.imageUrls) && r.imageUrls.length > 0) {
+      rawUrls = r.imageUrls.filter(isRealPhoto);
+    } else if (storedImgUrls && storedImgUrls.length > 0) {
+      rawUrls = storedImgUrls.filter(isRealPhoto);
+    }
 
-    const finalSingleUrl = hasServerUrl
-      ? r.imageUrl!
-      : (finalUrls && finalUrls.length > 0)
-        ? finalUrls[0]
-        : storedImg || "";
+    if (rawUrls.length === 0 && isRealPhoto(r.imageUrl)) {
+      rawUrls = [r.imageUrl!];
+    } else if (rawUrls.length === 0 && isRealPhoto(storedImg)) {
+      rawUrls = [storedImg!];
+    }
+
+    const fallbackPhoto = getCategoryFallbackImage(r.category);
+
+    const finalUrls = rawUrls.length > 0 ? rawUrls : [fallbackPhoto];
+    const finalSingleUrl = isRealPhoto(r.imageUrl) ? r.imageUrl! : finalUrls[0];
 
     return {
       ...r,

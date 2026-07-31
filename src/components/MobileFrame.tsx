@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import ReactMarkdown from "react-markdown";
 import html2canvas from "html2canvas";
 import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, BellRing, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, CheckCircle2, AlertCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send, Award, Calendar, Clock, Lightbulb, Newspaper, AtSign, Flame } from "lucide-react";
-import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Department, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus, QualityReportBadge, AppNotification, ErrorCatalogItem, BadgePointConfigItem } from "../types";
+import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Department, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus, QualityReportBadge, AppNotification, ErrorCatalogItem, BadgePointConfigItem, DirectMessageItem } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
 import { findMentionedUsers, parseReportTimestamp, calculateTimeDurationText } from "../utils/notificationHelper";
@@ -3151,7 +3151,138 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
   }, [tickerConfig]);
   const [showOnlineUsersDrawer, setShowOnlineUsersDrawer] = useState(false);
   const [onlineSearchTerm, setOnlineSearchTerm] = useState("");
-  const [onlineTabFilter, setOnlineTabFilter] = useState<"ONLINE" | "ALL">("ONLINE");
+  const [onlineTabFilter, setOnlineTabFilter] = useState<"INBOX" | "ONLINE" | "ALL">("INBOX");
+  
+  const [activeDirectChatUser, setActiveDirectChatUser] = useState<User | null>(null);
+  const [directMessageInput, setDirectMessageInput] = useState("");
+  const directChatScrollRef = useRef<HTMLDivElement | null>(null);
+
+  const [directMessages, setDirectMessages] = useState<DirectMessageItem[]>(() => {
+    try {
+      const saved = safeGetItem("4m1e1i_direct_messages_v1");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [
+      {
+        id: "dm-1",
+        senderId: "USR-ADMIN",
+        senderName: "BAN QUẢN TRỊ (ADMIN)",
+        receiverId: "USR-001",
+        receiverName: "MAI VY",
+        content: "Hello",
+        timestamp: "07/07/26 20:17",
+        createdAt: Date.now() - 864000000
+      },
+      {
+        id: "dm-2",
+        senderId: "USR-ADMIN",
+        senderName: "BAN QUẢN TRỊ (ADMIN)",
+        receiverId: "USR-001",
+        receiverName: "MAI VY",
+        content: "Hello",
+        timestamp: "25/07/26 12:08",
+        createdAt: Date.now() - 432000000
+      }
+    ];
+  });
+
+  useEffect(() => {
+    try {
+      safeSetItem("4m1e1i_direct_messages_v1", JSON.stringify(directMessages));
+    } catch {}
+  }, [directMessages]);
+
+  const [readDirectMsgIds, setReadDirectMsgIds] = useState<string[]>(() => {
+    try {
+      const saved = safeGetItem("4m1e1i_read_direct_msg_ids_v1");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
+
+  useEffect(() => {
+    try {
+      safeSetItem("4m1e1i_read_direct_msg_ids_v1", JSON.stringify(readDirectMsgIds));
+    } catch {}
+  }, [readDirectMsgIds]);
+
+  const markAllDirectMessagesAsRead = useCallback(() => {
+    setReadDirectMsgIds((prev) => {
+      const allIds = directMessages.map((m) => m.id);
+      const newSet = new Set([...prev, ...allIds]);
+      return Array.from(newSet);
+    });
+  }, [directMessages]);
+
+  const unreadDirectMessagesCount = useMemo(() => {
+    return directMessages.filter((m) => !readDirectMsgIds.includes(m.id)).length;
+  }, [directMessages, readDirectMsgIds]);
+
+  const markPartnerMessagesAsRead = useCallback((partner: User) => {
+    setReadDirectMsgIds((prev) => {
+      const partnerMsgIds = directMessages
+        .filter((m) => 
+          m.senderId === partner.id || 
+          m.senderName?.toLowerCase() === partner.fullName.toLowerCase()
+        )
+        .map((m) => m.id);
+      const newSet = new Set([...prev, ...partnerMsgIds]);
+      return Array.from(newSet);
+    });
+  }, [directMessages]);
+
+  useEffect(() => {
+    if (activeDirectChatUser) {
+      markPartnerMessagesAsRead(activeDirectChatUser);
+    }
+  }, [activeDirectChatUser, markPartnerMessagesAsRead]);
+
+  const handleSendDirectMessage = useCallback(() => {
+    if (!activeDirectChatUser || !directMessageInput.trim()) return;
+
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const year = String(now.getFullYear()).slice(-2);
+    const hours = String(now.getHours()).padStart(2, '0');
+    const mins = String(now.getMinutes()).padStart(2, '0');
+    const formattedTime = `${day}/${month}/${year} ${hours}:${mins}`;
+
+    const senderName = currentUser.role === UserRole.ADMIN ? "BAN QUẢN TRỊ (ADMIN)" : currentUser.fullName;
+
+    const newMsg: DirectMessageItem = {
+      id: `dm-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      senderId: currentUser.id || "USR-ADMIN",
+      senderName: senderName,
+      senderRole: currentUser.role,
+      receiverId: activeDirectChatUser.id,
+      receiverName: activeDirectChatUser.fullName,
+      content: directMessageInput.trim(),
+      timestamp: formattedTime,
+      createdAt: Date.now()
+    };
+
+    setDirectMessages(prev => [...prev, newMsg]);
+    setReadDirectMsgIds(prev => [...prev, newMsg.id]);
+    setDirectMessageInput("");
+
+    setTimeout(() => {
+      if (directChatScrollRef.current) {
+        directChatScrollRef.current.scrollTop = directChatScrollRef.current.scrollHeight;
+      }
+    }, 100);
+  }, [activeDirectChatUser, directMessageInput, currentUser]);
+
+  const handleClearDirectMessages = useCallback(() => {
+    if (!activeDirectChatUser) return;
+    setDirectMessages(prev => prev.filter(m => 
+      !(
+        (m.senderId === currentUser.id && m.receiverId === activeDirectChatUser.id) ||
+        (m.senderId === activeDirectChatUser.id && m.receiverId === currentUser.id) ||
+        (m.receiverName === activeDirectChatUser.fullName)
+      )
+    ));
+  }, [activeDirectChatUser, currentUser]);
   const [localReadNotifIds, setLocalReadNotifIds] = useState<string[]>(() => {
     try {
       const saved = safeGetItem("4m1e1i_read_notifications");
@@ -7601,9 +7732,46 @@ App Link: ${window.location.origin}`;
                     <T className={`font-black block leading-tight truncate ${theme.text} ${factoryFontSizeClass}`}>
                       {getFactoryDisplayName(report.factory)?.toUpperCase()}
                     </T>
-                    <T className="text-[10px] text-slate-605 block font-extrabold mt-0.5">
-                      <UserIcon className="w-3.5 h-3.5 inline-block mr-0.5 align-text-bottom stroke-[2.5] text-blue-600" /> {formatNameCapitalized(resolvedUploader.fullName)} <span className="text-slate-300 mx-1.5 font-normal">|</span> <span className="text-[9px] text-slate-400 font-sans font-semibold">{report.timestamp}</span>
-                    </T>
+                    <div className="text-[10px] text-slate-600 font-extrabold mt-0.5 flex items-center flex-wrap gap-1">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const targetUser: User = users.find(
+                            (u) =>
+                              u.id === resolvedUploader.id ||
+                              u.fullName.toLowerCase() === resolvedUploader.fullName.toLowerCase()
+                          ) || {
+                            id: resolvedUploader.id || `usr-${Date.now()}`,
+                            fullName: resolvedUploader.fullName,
+                            role: UserRole.REVIEWER,
+                            status: UserStatus.ACTIVE,
+                            branch: report.factory || "Tân Phú",
+                            department: "Phòng Quản Lý Chất Lượng",
+                            phone: resolvedUploader.phone || ""
+                          };
+
+                          const nameParts = (resolvedUploader.fullName || "bạn").trim().split(" ");
+                          const rawFirstName = nameParts[nameParts.length - 1] || "bạn";
+                          const shortName = formatNameCapitalized(rawFirstName);
+                          const rawContent = (report.content || report.notes || report.category || "vấn đề bản tin").trim();
+                          const firstLine = rawContent.split("\n")[0];
+                          const summary = firstLine.length > 60 ? firstLine.slice(0, 57) + "..." : firstLine;
+
+                          const defaultQuestion = `${shortName} ơi, cho anh hỏi vấn đề "${summary}" là như thế nào em nhỉ?`;
+
+                          setDirectMessageInput(defaultQuestion);
+                          setActiveDirectChatUser(targetUser);
+                        }}
+                        className="hover:underline text-blue-700 hover:text-blue-900 font-black flex items-center gap-0.5 cursor-pointer transition-colors active:scale-95"
+                        title="Bấm để trao đổi 1:1 với nhân viên về bản tin này"
+                      >
+                        <UserIcon className="w-3.5 h-3.5 stroke-[2.5] text-blue-600 shrink-0" />
+                        <span translate="no" className="notranslate">{formatNameCapitalized(resolvedUploader.fullName)}</span>
+                      </button>
+                      <span className="text-slate-300 mx-1 font-normal">|</span>
+                      <span className="text-[9px] text-slate-400 font-sans font-semibold">{report.timestamp}</span>
+                    </div>
                   </div>
                   <div className="shrink-0 flex flex-col items-end gap-1">
                     {report.reportType === "RRO" ? (
@@ -9759,6 +9927,26 @@ App Link: ${window.location.origin}`;
               <ChevronLeft className="w-3.5 h-3.5 text-white stroke-[2.5px]" />
             </button>
 
+            {/* Nút Tin nhắn / Trao đổi 1:1 có bong bóng số thông báo */}
+            <button
+              type="button"
+              onClick={() => {
+                if (isFabDraggingRef.current) return;
+                setOnlineTabFilter("INBOX");
+                setShowOnlineUsersDrawer(true);
+                markAllDirectMessagesAsRead();
+              }}
+              className="relative w-5.5 h-5.5 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/35 active:scale-90 transition-all cursor-pointer border border-white/25"
+              title="Nhắn tin / Trao đổi"
+            >
+              <MessageSquare className="w-3 h-3 text-white stroke-[2.5px]" />
+              {unreadDirectMessagesCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[8px] font-black rounded-full px-1 min-w-[14px] h-3.5 flex items-center justify-center font-mono border border-white animate-pulse shadow-2xs">
+                  {unreadDirectMessagesCount > 99 ? "99+" : unreadDirectMessagesCount}
+                </span>
+              )}
+            </button>
+
             {/* Nút Cuộn lên đầu trang (hiển thị khi có thể cuộn) */}
             {showScrollTop && (
               <button
@@ -9809,6 +9997,26 @@ App Link: ${window.location.origin}`;
               title="Ẩn nút vào cạnh phải"
             >
               <ChevronRight className="w-3.5 h-3.5 text-white" />
+            </button>
+
+            {/* Nút Tin nhắn / Trao đổi 1:1 có bong bóng số thông báo */}
+            <button
+              type="button"
+              onClick={() => {
+                if (isFabDraggingRef.current) return;
+                setOnlineTabFilter("INBOX");
+                setShowOnlineUsersDrawer(true);
+                markAllDirectMessagesAsRead();
+              }}
+              className="relative w-8.5 h-8.5 bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-lg flex items-center justify-center shadow-lg transition-all cursor-pointer border border-white/20"
+              title="Nhắn tin / Trao đổi"
+            >
+              <MessageSquare className="w-4 h-4 text-white stroke-[2.5px]" />
+              {unreadDirectMessagesCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[9px] font-black rounded-full px-1.5 min-w-[18px] h-4.5 flex items-center justify-center font-mono border-2 border-white animate-pulse shadow-xs">
+                  {unreadDirectMessagesCount > 99 ? "99+" : unreadDirectMessagesCount}
+                </span>
+              )}
             </button>
 
             {/* Scroll to Top floating button */}
@@ -12299,86 +12507,315 @@ App Link: ${window.location.origin}`}
         </div>
       )}
 
-      {/* Online Users Statistics Drawer */}
+      {/* Online Users Statistics View - Fullscreen */}
       {showOnlineUsersDrawer && (
-        <div className="fixed lg:absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-end justify-center z-50 select-none animate-fadeIn">
-          <div className="bg-white rounded-t-3xl w-full max-h-[85%] overflow-hidden flex flex-col shadow-2xl border-t border-slate-100 animate-slideUp">
+        <div className="fixed lg:absolute inset-0 bg-white z-50 flex flex-col select-none animate-fadeIn">
+          <div className="bg-white w-full h-full overflow-hidden flex flex-col">
             {/* Header */}
-            <div className="flex justify-between items-center px-4 py-4 border-b border-slate-100 shrink-0 bg-slate-50">
-              <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-emerald-600 animate-pulse" />
-                <span className="font-extrabold text-[13px] text-[#1e3a8a] tracking-tight uppercase">
-                  <T>THỐNG KÊ TRỰC TUYẾN</T>
-                </span>
-                <span className="bg-emerald-100 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded-full ml-1">
-                  <T>ONLINE</T> <span translate="no" className="font-mono">{onlineCount}</span>
-                </span>
-              </div>
-              <button
-                onClick={() => setShowOnlineUsersDrawer(false)}
-                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-xs"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
+            {(() => {
+              const convPartnersSet = new Set<string>();
+              directMessages.forEach((m) => {
+                const isMeSender = m.senderId === currentUser?.id || m.senderName?.includes("ADMIN") || m.senderId === "USR-ADMIN";
+                const pName = isMeSender ? m.receiverName : m.senderName;
+                if (pName) convPartnersSet.add(pName.toLowerCase());
+              });
+              const uniqueConvCount = convPartnersSet.size;
 
-            {/* Tabs & Search */}
-            <div className="p-3 bg-white border-b border-slate-100 space-y-2.5 shrink-0">
-              {/* Search Bar */}
-              <div className="relative">
-                <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Tìm nhân viên, Mã nhân sự..."
-                  value={onlineSearchTerm}
-                  onChange={(e) => setOnlineSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-8 py-2 bg-slate-50 text-[11px] font-semibold border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white text-slate-700 font-sans"
-                />
-                {onlineSearchTerm && (
-                  <button
-                    onClick={() => setOnlineSearchTerm("")}
-                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 text-xs"
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
+              return (
+                <>
+                  <div className="flex justify-between items-center px-4 py-3.5 border-b border-emerald-100 shrink-0 bg-gradient-to-r from-emerald-50/80 via-white to-slate-50">
+                    <button
+                      type="button"
+                      onClick={() => setShowOnlineUsersDrawer(false)}
+                      className="flex items-center gap-1.5 text-emerald-800 hover:text-emerald-950 font-black text-[12.5px] cursor-pointer transition-colors active:scale-95"
+                    >
+                      <ArrowLeft className="w-4 h-4 text-emerald-700 stroke-[2.5]" />
+                      <T>Sảnh chính</T>
+                    </button>
 
-              {/* Tab Filters */}
-              <div className="flex bg-slate-100 p-0.5 rounded-xl text-[10px] font-extrabold">
-                <button
-                  type="button"
-                  onClick={() => setOnlineTabFilter("ONLINE")}
-                  className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer ${
-                    onlineTabFilter === "ONLINE"
-                      ? "bg-white text-emerald-750 shadow-sm"
-                      : "text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  <T>ĐANG ONLINE ({onlineCount})</T>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setOnlineTabFilter("ALL")}
-                  className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer ${
-                    onlineTabFilter === "ALL"
-                      ? "bg-white text-slate-800 shadow-sm"
-                      : "text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  <T>TẤT CẢ ({users.length})</T>
-                </button>
-              </div>
-            </div>
+                    <div className="flex items-center gap-1.5">
+                      {onlineTabFilter === "INBOX" ? (
+                        <MessageSquare className="w-4 h-4 text-emerald-600 stroke-[2.5]" />
+                      ) : (
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-xs" />
+                      )}
+                      <span className="font-black text-[13px] text-emerald-900 tracking-tight uppercase">
+                        <T>{onlineTabFilter === "INBOX" ? "HỘP THOẠI TRAO ĐỔI" : "DANH SÁCH ONLINE"}</T>
+                      </span>
+                      <span translate="no" className="bg-emerald-100 text-emerald-800 text-[11px] font-black px-2 py-0.5 rounded-full font-mono ml-0.5 notranslate">
+                        ({onlineTabFilter === "INBOX" ? uniqueConvCount : onlineTabFilter === "ONLINE" ? onlineCount : users.length})
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {onlineTabFilter === "INBOX" && unreadDirectMessagesCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => markAllDirectMessagesAsRead()}
+                          className="px-2 py-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-extrabold text-[10px] cursor-pointer transition-all active:scale-95 flex items-center gap-1"
+                          title="Đánh dấu tất cả đã đọc"
+                        >
+                          <Check className="w-3 h-3 text-emerald-700 stroke-[3]" />
+                          <T>Đã đọc tất cả</T>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setOnlineSearchTerm("")}
+                        className="w-8 h-8 rounded-full bg-emerald-100/70 hover:bg-emerald-200 text-emerald-800 flex items-center justify-center cursor-pointer transition-all active:scale-90"
+                        title="Làm mới"
+                      >
+                        <RotateCw className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Tabs & Search */}
+                  <div className="p-3 bg-white border-b border-slate-100 space-y-2.5 shrink-0">
+                    {/* Search Bar */}
+                    <div className="relative">
+                      <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder={onlineTabFilter === "INBOX" ? "Tìm tin nhắn, tên người nhắn..." : "Tìm nhân viên, Mã nhân sự..."}
+                        value={onlineSearchTerm}
+                        onChange={(e) => setOnlineSearchTerm(e.target.value)}
+                        className="w-full pl-9 pr-8 py-2 bg-slate-50 text-[11px] font-semibold border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:bg-white text-slate-700 font-sans"
+                      />
+                      {onlineSearchTerm && (
+                        <button
+                          onClick={() => setOnlineSearchTerm("")}
+                          className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 text-xs"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Tab Filters */}
+                    <div className="flex bg-slate-100 p-0.5 rounded-xl text-[10px] font-extrabold">
+                      <button
+                        type="button"
+                        onClick={() => setOnlineTabFilter("INBOX")}
+                        className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer ${
+                          onlineTabFilter === "INBOX"
+                            ? "bg-white text-emerald-800 shadow-xs"
+                            : "text-slate-500 hover:text-slate-800"
+                        }`}
+                      >
+                        <T>HỘP THOẠI ({uniqueConvCount})</T>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setOnlineTabFilter("ONLINE")}
+                        className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer ${
+                          onlineTabFilter === "ONLINE"
+                            ? "bg-white text-emerald-800 shadow-xs"
+                            : "text-slate-500 hover:text-slate-800"
+                        }`}
+                      >
+                        <T>ONLINE ({onlineCount})</T>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setOnlineTabFilter("ALL")}
+                        className={`flex-1 py-1.5 rounded-lg transition-all cursor-pointer ${
+                          onlineTabFilter === "ALL"
+                            ? "bg-white text-slate-800 shadow-xs"
+                            : "text-slate-500 hover:text-slate-800"
+                        }`}
+                      >
+                        <T>TẤT CẢ ({users.length})</T>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
 
             {/* List */}
             <div 
               ref={onlineScrollRef}
               onScroll={(e) => setOnlineScrollTop(e.currentTarget.scrollTop)}
-              className="flex-1 overflow-y-auto p-3 bg-slate-50/50 space-y-2 pb-16 online-scroll-container"
+              className="flex-1 overflow-y-auto p-3 bg-slate-50/50 space-y-2.5 pb-16 online-scroll-container"
             >
               {(() => {
                 const searchClean = onlineSearchTerm.toLowerCase().trim();
+
+                if (onlineTabFilter === "INBOX") {
+                  // Aggregated conversations list
+                  const convMap = new Map<string, { partnerUser: User; lastMsg: DirectMessageItem; msgCount: number }>();
+
+                  directMessages.forEach((m) => {
+                    const isMeSender = m.senderId === currentUser?.id || m.senderName?.includes("ADMIN") || m.senderId === "USR-ADMIN";
+                    const partnerName = isMeSender ? m.receiverName : m.senderName;
+                    const partnerId = isMeSender ? m.receiverId : m.senderId;
+
+                    let partnerUser = users.find((u) => u.id === partnerId || u.fullName.toLowerCase() === partnerName?.toLowerCase());
+                    if (!partnerUser) {
+                      partnerUser = {
+                        id: partnerId || `usr-${partnerName}`,
+                        fullName: partnerName || "Đồng nghiệp",
+                        role: m.senderRole ? (m.senderRole as UserRole) : UserRole.REVIEWER,
+                        status: UserStatus.ACTIVE,
+                        branch: "Tân Phú",
+                        department: "Phòng Quản Lý Chất Lượng",
+                        phone: ""
+                      };
+                    }
+
+                    const key = partnerUser.fullName.toLowerCase();
+                    const existing = convMap.get(key);
+                    if (!existing || m.createdAt > existing.lastMsg.createdAt) {
+                      convMap.set(key, {
+                        partnerUser,
+                        lastMsg: m,
+                        msgCount: (existing?.msgCount || 0) + 1
+                      });
+                    } else {
+                      existing.msgCount += 1;
+                    }
+                  });
+
+                  const convList = Array.from(convMap.values())
+                    .filter(({ partnerUser, lastMsg }) => {
+                      if (!searchClean) return true;
+                      return (
+                        partnerUser.fullName.toLowerCase().includes(searchClean) ||
+                        partnerUser.id.toLowerCase().includes(searchClean) ||
+                        lastMsg.content.toLowerCase().includes(searchClean)
+                      );
+                    })
+                    .sort((a, b) => b.lastMsg.createdAt - a.lastMsg.createdAt);
+
+                  if (convList.length === 0) {
+                    return (
+                      <div className="py-12 text-center flex flex-col items-center justify-center gap-2">
+                        <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+                          <MessageSquare className="w-6 h-6" />
+                        </div>
+                        <div className="text-slate-700 text-xs font-black">
+                          <T>Chưa có cuộc trò chuyện nào!</T>
+                        </div>
+                        <p className="text-slate-400 text-[11px] max-w-[240px] leading-relaxed">
+                          <T>Chọn nhân sự ở tab 'ONLINE' hoặc bấm vào tên nhân viên trên bản tin để bắt đầu nhắn tin 1:1.</T>
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return convList.map(({ partnerUser, lastMsg, msgCount }) => {
+                    const isLastMsgMe = lastMsg.senderId === currentUser?.id || lastMsg.senderName?.includes("ADMIN") || lastMsg.senderId === "USR-ADMIN";
+
+                    const partnerUnreadCount = directMessages.filter(
+                      (m) => !readDirectMsgIds.includes(m.id) &&
+                      (m.senderId === partnerUser.id || m.senderName?.toLowerCase() === partnerUser.fullName.toLowerCase())
+                    ).length;
+
+                    const nameParts = (partnerUser.fullName || "").trim().split(" ");
+                    const initials = nameParts.length >= 2 
+                      ? (nameParts[nameParts.length - 2][0] + nameParts[nameParts.length - 1][0]).toUpperCase()
+                      : (partnerUser.fullName || "NV").slice(0, 2).toUpperCase();
+
+                    let roleColorClasses = "bg-slate-100 text-slate-700 border-slate-200";
+                    let roleLabel = "CBNV";
+                    if (partnerUser.role === UserRole.ADMIN) {
+                      roleColorClasses = "bg-purple-100 text-purple-800 border-purple-200";
+                      roleLabel = "ADMIN";
+                    } else if (partnerUser.role === UserRole.REVIEWER) {
+                      roleColorClasses = "bg-blue-100 text-blue-800 border-blue-200";
+                      roleLabel = "KIỂM DUYỆT";
+                    }
+
+                    return (
+                      <div
+                        key={partnerUser.fullName}
+                        onClick={() => setActiveDirectChatUser(partnerUser)}
+                        className={`p-3.5 rounded-2xl border transition-all text-left space-y-2.5 cursor-pointer active:scale-[0.99] ${
+                          partnerUnreadCount > 0
+                            ? "bg-emerald-50/60 border-emerald-400 shadow-xs"
+                            : "bg-white border-slate-200 hover:border-emerald-500 shadow-2xs"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="relative shrink-0">
+                              {partnerUser.avatar ? (
+                                <img
+                                  src={partnerUser.avatar}
+                                  alt={partnerUser.fullName}
+                                  className="w-10 h-10 rounded-full object-cover select-none border border-emerald-300"
+                                  referrerPolicy="no-referrer"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center justify-center font-black text-xs font-sans">
+                                  <span translate="no" className="notranslate">{initials}</span>
+                                </div>
+                              )}
+                              <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white flex items-center justify-center shadow-2xs" />
+                              {partnerUnreadCount > 0 && (
+                                <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-black rounded-full px-1 min-w-[16px] h-4 flex items-center justify-center font-mono border border-white shadow-2xs animate-bounce">
+                                  {partnerUnreadCount}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[13px] font-black text-slate-800 tracking-tight uppercase">
+                                  <T>{partnerUser.fullName}</T>
+                                </span>
+                                <span className={`text-[8.5px] font-black px-1.5 py-0.5 rounded border uppercase ${roleColorClasses}`}>
+                                  <T>{roleLabel}</T>
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-slate-400 font-semibold line-clamp-1 mt-0.5">
+                                <T>{partnerUser.department || partnerUser.branch || "Tân Phú"}</T>
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col items-end gap-1 shrink-0">
+                            <span className="text-[10px] font-mono text-slate-400 font-bold" translate="no">
+                              {lastMsg.timestamp}
+                            </span>
+                            {partnerUnreadCount > 0 && (
+                              <span className="bg-rose-500 text-white text-[9.5px] font-black px-2 py-0.5 rounded-full font-mono shadow-2xs flex items-center gap-1 animate-pulse">
+                                <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping" />
+                                <T>{partnerUnreadCount} tin mới</T>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Last Message Snippet */}
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2 text-[11.5px]">
+                          <p className="text-slate-600 font-medium line-clamp-1 flex-1">
+                            {isLastMsgMe ? (
+                              <span className="font-extrabold text-blue-700 mr-1"><T>Bạn:</T></span>
+                            ) : (
+                              <span className="font-extrabold text-slate-800 mr-1"><T>{(partnerUser.fullName || "").split(" ").slice(-1)[0]}:</T></span>
+                            )}
+                            <span translate="no" className="notranslate">{lastMsg.content}</span>
+                          </p>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveDirectChatUser(partnerUser);
+                            }}
+                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[10.5px] rounded-lg flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs active:scale-95 transition-all"
+                          >
+                            <MessageSquare className="w-3 h-3 text-white" />
+                            <T>Trả lời</T>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  });
+                }
+
                 const processedUsers = getOnlineUsers().filter((u) => {
                   const matchesSearch = 
                     u.fullName.toLowerCase().includes(searchClean) ||
@@ -12405,16 +12842,16 @@ App Link: ${window.location.origin}`}
                   );
                 }
 
-                return processedUsers.map((u) => {
+                return processedUsers.map((u, idx) => {
                   // Style configurations based on Role
-                  let roleColorClasses = "bg-slate-100 text-slate-700";
-                  let roleLabel = "Nhân viên";
+                  let roleColorClasses = "bg-slate-100 text-slate-700 border-slate-200";
+                  let roleLabel = "CBNV";
                   if (u.role === UserRole.ADMIN) {
-                    roleColorClasses = "bg-rose-50 text-rose-700 border border-rose-100";
-                    roleLabel = "Quản Trị Tối Cao";
+                    roleColorClasses = "bg-purple-100 text-purple-800 border-purple-200";
+                    roleLabel = "ADMIN";
                   } else if (u.role === UserRole.REVIEWER) {
-                    roleColorClasses = "bg-blue-50 text-blue-700 border border-blue-100";
-                    roleLabel = "Ban Kiểm Duyệt";
+                    roleColorClasses = "bg-blue-100 text-blue-800 border-blue-200";
+                    roleLabel = "KIỂM DUYỆT";
                   }
 
                   // Split initials for avatar preview
@@ -12423,79 +12860,105 @@ App Link: ${window.location.origin}`}
                     ? (nameParts[nameParts.length - 2][0] + nameParts[nameParts.length - 1][0]).toUpperCase()
                     : u.fullName.slice(0, 2).toUpperCase();
 
-                  // Random cute theme background for user avatar
-                  const colorSeed = u.fullName.charCodeAt(0) + u.fullName.charCodeAt(u.fullName.length - 1);
-                  const bgColors = ["bg-blue-600", "bg-indigo-600", "bg-emerald-600", "bg-violet-600", "bg-[#eab308]", "bg-teal-600"];
-                  const avatarBg = bgColors[colorSeed % bgColors.length];
+                  // Active time string calculation
+                  let activeTimeStr = "Vừa xong";
+                  if (u.isOnlineSimulated) {
+                    const secOffset = ((idx * 17 + 5) % 40) + 12;
+                    activeTimeStr = `${secOffset} giây trước`;
+                  } else {
+                    activeTimeStr = "Offline";
+                  }
+
+                  // Calculate report count / activity level
+                  const userReports = reports ? reports.filter(r => r.registrantName === u.fullName || r.userId === u.id) : [];
+                  const reportCount = userReports.length;
+                  const userLevel = u.role === UserRole.ADMIN ? "Cấp 1" : "Cấp 2";
+
+                  // Department / Branch formatting
+                  const branchName = u.branch || u.company || "Tân Phú";
+                  const deptName = u.department || "Phòng Quản Lý Chất Lượng";
+                  const locationPath = `${branchName} → ${deptName}`;
 
                   return (
                     <div 
                       key={u.id}
-                      className="bg-white p-3 rounded-2xl border border-slate-100 flex items-center justify-between gap-3 shadow-xs hover:border-slate-200 transition-all text-left"
+                      className="bg-white p-3.5 rounded-2xl border border-slate-200 hover:border-emerald-500/60 shadow-xs transition-all text-left space-y-2.5"
                     >
-                      <div className="flex items-center gap-3">
-                        {/* Avatar */}
-                        <div className="relative">
-                          {u.avatar ? (
-                            <img 
-                              src={u.avatar} 
-                              alt="User Avatar" 
-                              className="w-10 h-10 rounded-full object-cover shrink-0 select-none border border-slate-200"
-                              referrerPolicy="no-referrer"
-                            />
-                          ) : (
-                            <div className={`w-10 h-10 rounded-full ${avatarBg} text-white flex items-center justify-center font-black text-xs font-sans tracking-tighter`}>
-                              <span translate="no" className="notranslate">{initials}</span>
-                            </div>
-                          )}
-                          
-                          {/* Live Pulse status bubble */}
-                          {u.isOnlineSimulated ? (
-                            <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border border-white flex items-center justify-center shadow-md animate-pulse">
-                              <span className="w-1.5 h-1.5 bg-green-200 rounded-full animate-ping" />
-                            </span>
-                          ) : (
-                            <span className="absolute bottom-0 right-0 w-3 h-3 bg-slate-350 rounded-full border border-white shadow-xs" />
-                          )}
-                        </div>
-
-                        {/* Info details */}
-                        <div className="text-left font-sans flex-1">
-                          {/* Name heading */}
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[12px] font-black text-slate-800 tracking-tight leading-tight">
-                              <T>{u.fullName}</T>
-                            </span>
-                            <span className={`text-[8px] font-extrabold px-1.5 py-0.5 rounded-full uppercase scale-90 ${roleColorClasses}`}>
-                              <T>{roleLabel}</T>
-                            </span>
+                      {/* Top Header Row */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {/* Avatar with status indicator */}
+                          <div className="relative shrink-0">
+                            {u.avatar ? (
+                              <img 
+                                src={u.avatar} 
+                                alt={u.fullName} 
+                                className="w-10 h-10 rounded-full object-cover select-none border border-emerald-300"
+                                referrerPolicy="no-referrer"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 flex items-center justify-center font-black text-xs font-sans">
+                                <span translate="no" className="notranslate">{initials}</span>
+                              </div>
+                            )}
+                            
+                            {u.isOnlineSimulated && (
+                              <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white flex items-center justify-center shadow-xs">
+                                <span className="w-1.5 h-1.5 bg-green-200 rounded-full animate-ping" />
+                              </span>
+                            )}
                           </div>
 
-                          {/* ID and branch code info */}
-                          <p className="text-[9.5px] text-slate-400 font-bold mt-0.5">
-                            <T>Mã NS:</T> <span translate="no" className="font-mono text-slate-500 mr-2">{u.id}</span>
-                            <T>SĐT:</T> <span translate="no" className="font-mono text-slate-500">{u.phone || "---"}</span>
-                          </p>
+                          {/* Name & Role */}
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[13px] font-black text-slate-800 tracking-tight leading-snug uppercase">
+                                <T>{u.fullName}</T>
+                              </span>
+                              <span className={`text-[8.5px] font-black px-1.5 py-0.5 rounded border uppercase ${roleColorClasses}`}>
+                                <T>{roleLabel}</T>
+                              </span>
+                            </div>
+                            <p className="text-[9.5px] text-slate-500 font-semibold mt-0.5 line-clamp-1">
+                              <T>{locationPath}</T>
+                            </p>
+                          </div>
+                        </div>
 
-                          {/* Department details */}
-                          <p className="text-[9px] text-slate-500 font-bold mt-0.5 line-clamp-1 max-w-[190px]">
-                            <T>{u.department || u.branch || "---"}</T>
+                        {/* Top-Right: Time & MNV */}
+                        <div className="text-right shrink-0">
+                          {u.isOnlineSimulated ? (
+                            <div className="flex items-center justify-end gap-1 text-emerald-700 font-bold text-[11px]">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                              <span translate="no" className="notranslate">{activeTimeStr}</span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 font-semibold text-[10px]">Offline</span>
+                          )}
+                          <p className="text-[9.5px] font-mono text-slate-400 font-bold mt-0.5">
+                            MNV: <span translate="no" className="notranslate">{u.id}</span>
                           </p>
                         </div>
                       </div>
 
-                      {/* Right-side alignment display (Last Active time marker or live badge) */}
-                      <div className="text-right flex flex-col items-end shrink-0 select-none">
-                        {u.isOnlineSimulated ? (
-                          <span className="bg-emerald-50 text-emerald-700 text-[8.5px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 animate-pulse border border-emerald-100">
-                            <span className="w-1 h-1 bg-emerald-500 rounded-full" />
-                            <T>ĐANG HOẠT ĐỘNG</T>
-                          </span>
-                        ) : (
-                          <span className="bg-slate-100 text-slate-500 text-[8px] font-extrabold px-1.5 py-0.5 rounded">
-                            <T>OFFLINE</T>
-                          </span>
-                        )}
+                      {/* Bottom Action Row */}
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[10.5px]">
+                        <div className="text-slate-600 font-semibold truncate max-w-[210px]">
+                          <T>Cấp độ hiện tại:</T> <span className="font-extrabold text-slate-800">{userLevel}</span>
+                          <span className="text-slate-300 mx-1">|</span>
+                          <T>Đã báo cáo:</T> <span className="font-extrabold text-slate-800">{reportCount}</span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveDirectChatUser(u);
+                          }}
+                          className="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-800 border border-emerald-300 font-extrabold text-[11px] rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5 text-emerald-700" />
+                          <T>Nhắn tin</T>
+                        </button>
                       </div>
                     </div>
                   );
@@ -12525,6 +12988,135 @@ App Link: ${window.location.origin}`}
               <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />
             </button>
           )}
+        </div>
+      )}
+
+      {/* 1:1 Direct Chat Screen */}
+      {activeDirectChatUser && (
+        <div className="fixed lg:absolute inset-0 bg-white z-[60] flex flex-col select-none animate-fadeIn font-sans">
+          {/* Top Header matching user screenshot */}
+          <div className="flex justify-between items-center px-4 py-3 border-b border-slate-200 shrink-0 bg-white">
+            <button
+              type="button"
+              onClick={() => setActiveDirectChatUser(null)}
+              className="flex items-center gap-1.5 text-slate-700 hover:text-slate-900 font-black text-[12.5px] cursor-pointer transition-colors active:scale-95"
+            >
+              <ArrowLeft className="w-4 h-4 text-slate-700 stroke-[2.5]" />
+              <T>Quay lại</T>
+            </button>
+
+            <div className="text-center px-2">
+              <h2 className="font-black text-[13px] text-slate-900 tracking-tight uppercase">
+                <T>TRAO ĐỔI VỚI</T> <span translate="no" className="notranslate">{activeDirectChatUser.fullName}</span>
+              </h2>
+              <p className="text-[10px] font-black text-amber-600 uppercase tracking-wide mt-0.5">
+                <T>{activeDirectChatUser.role === UserRole.ADMIN ? "BAN QUẢN TRỊ (ADMIN)" : `CBNV: ${activeDirectChatUser.fullName}`}</T>
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleClearDirectMessages}
+              className="w-8 h-8 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-500 flex items-center justify-center cursor-pointer transition-all active:scale-90"
+              title="Xóa lịch sử nhắn tin"
+            >
+              <Trash2 className="w-4 h-4 stroke-[2]" />
+            </button>
+          </div>
+
+          {/* Chat Messages Body */}
+          <div 
+            ref={directChatScrollRef}
+            className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/40"
+          >
+            {(() => {
+              const convMsgs = directMessages.filter(
+                (m) =>
+                  (m.senderId === currentUser.id && m.receiverId === activeDirectChatUser.id) ||
+                  (m.senderId === activeDirectChatUser.id && m.receiverId === currentUser.id) ||
+                  (m.receiverName === activeDirectChatUser.fullName)
+              );
+
+              if (convMsgs.length === 0) {
+                return (
+                  <div className="flex flex-col items-center justify-center h-full text-center py-12 px-4">
+                    <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
+                      <MessageSquare className="w-6 h-6" />
+                    </div>
+                    <p className="text-xs font-bold text-slate-600">
+                      <T>Chưa có nội dung trao đổi nào.</T>
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      <T>Gửi tin nhắn đầu tiên để bắt đầu thảo luận với</T> <span translate="no" className="font-semibold notranslate">{activeDirectChatUser.fullName}</span>
+                    </p>
+                  </div>
+                );
+              }
+
+              return convMsgs.map((m) => {
+                const isMe = m.senderId === currentUser.id || m.senderName.includes("ADMIN") || m.senderId === "USR-ADMIN";
+
+                return (
+                  <div key={m.id} className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
+                    <div className="text-[9.5px] font-black text-slate-600 uppercase tracking-tight mb-1">
+                      <span translate="no" className="notranslate">{m.senderName}</span> · <span translate="no" className="notranslate">{m.timestamp}</span>
+                    </div>
+
+                    <div
+                      className={`px-4 py-2.5 max-w-[82%] text-[13px] font-semibold leading-relaxed shadow-2xs font-sans ${
+                        isMe
+                          ? "bg-[#2563eb] text-white rounded-2xl rounded-tr-xs"
+                          : "bg-slate-200 text-slate-800 rounded-2xl rounded-tl-xs"
+                      }`}
+                    >
+                      <span translate="no" className="notranslate">{m.content}</span>
+                    </div>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+
+          {/* Floating Home Button matching screenshot */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveDirectChatUser(null);
+              setShowOnlineUsersDrawer(false);
+            }}
+            className="absolute bottom-16 right-4 w-11 h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-10 cursor-pointer active:scale-90"
+            title="Trở về Trang Home"
+          >
+            <Home className="w-5 h-5 text-white stroke-[2.2]" />
+          </button>
+
+          {/* Bottom Chat Input Bar matching screenshot */}
+          <div className="p-3 bg-white border-t border-slate-200 flex items-center gap-2 shrink-0">
+            <input
+              type="text"
+              value={directMessageInput}
+              onChange={(e) => setDirectMessageInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleSendDirectMessage();
+                }
+              }}
+              placeholder="Nhập nội dung trao đổi..."
+              className="flex-1 px-4 py-2.5 bg-white border border-slate-300 focus:border-blue-500 rounded-full text-xs font-semibold text-slate-800 focus:outline-none placeholder:text-slate-400 font-sans shadow-2xs"
+            />
+            <button
+              type="button"
+              onClick={handleSendDirectMessage}
+              className={`w-10 h-10 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                directMessageInput.trim()
+                  ? "bg-blue-600 text-white hover:bg-blue-700 shadow-md active:scale-90"
+                  : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+              }`}
+            >
+              <Send className="w-4 h-4 -mr-0.5" />
+            </button>
+          </div>
         </div>
       )}
 
