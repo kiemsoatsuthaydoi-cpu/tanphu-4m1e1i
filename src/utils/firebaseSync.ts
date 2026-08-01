@@ -31,7 +31,8 @@ export const COLLECTIONS = {
   PRODUCTS_CATALOG: "productsCatalog",
   MOLDS_CATALOG: "moldsCatalog",
   TOPICS: "forum_topics",
-  TOPIC_REPLIES: "forum_replies"
+  TOPIC_REPLIES: "forum_replies",
+  DIRECT_MESSAGES: "direct_messages"
 };
 
 /**

@@ -18,6 +18,9 @@ import StatisticsDashboard from "./StatisticsDashboard";
 import ProgressTrackingDashboard from "./ProgressTrackingDashboard";
 import BadgeStatisticsDashboard from "./BadgeStatisticsDashboard";
 import MobileForumView from "./MobileForumView";
+import { db } from "../utils/firebase";
+import { collection, onSnapshot } from "firebase/firestore";
+import { COLLECTIONS, saveDocument, deleteDocument } from "../utils/firebaseSync";
 import {
   ResponsiveContainer,
   RadarChart,
@@ -3197,6 +3200,33 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
     } catch {}
   }, [directMessages]);
 
+  useEffect(() => {
+    if (!db) return;
+    try {
+      const unsubscribe = onSnapshot(
+        collection(db, COLLECTIONS.DIRECT_MESSAGES),
+        (snapshot) => {
+          const list: DirectMessageItem[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as DirectMessageItem;
+            if (data && data.id) {
+              list.push(data);
+            }
+          });
+          if (list.length > 0) {
+            setDirectMessages(list);
+          }
+        },
+        (err) => {
+          console.warn("[Firestore] direct_messages realtime sync error:", err);
+        }
+      );
+      return () => unsubscribe();
+    } catch (e) {
+      console.warn("[Firestore] Failed to subscribe direct_messages:", e);
+    }
+  }, []);
+
   const [readDirectMsgIds, setReadDirectMsgIds] = useState<string[]>(() => {
     try {
       const saved = safeGetItem("4m1e1i_read_direct_msg_ids_v1");
@@ -3311,6 +3341,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
     };
 
     setDirectMessages(prev => [...prev, newMsg]);
+    saveDocument(COLLECTIONS.DIRECT_MESSAGES, newMsg.id, newMsg);
     markMsgAsReadForUser([newMsg.id], currentUser);
     setDirectMessageInput("");
 
@@ -3324,18 +3355,36 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
 
   const handleClearDirectMessages = useCallback(() => {
     if (!activeDirectChatUser || !currentUser) return;
+    directMessages.forEach(m => {
+      if ((isMsgFromUser(m, currentUser) && isMsgToUser(m, activeDirectChatUser)) ||
+          (isMsgFromUser(m, activeDirectChatUser) && isMsgToUser(m, currentUser))) {
+        deleteDocument(COLLECTIONS.DIRECT_MESSAGES, m.id);
+      }
+    });
     setDirectMessages(prev => prev.filter(m => 
       !(
         (isMsgFromUser(m, currentUser) && isMsgToUser(m, activeDirectChatUser)) ||
         (isMsgFromUser(m, activeDirectChatUser) && isMsgToUser(m, currentUser))
       )
     ));
-  }, [activeDirectChatUser, currentUser, isMsgFromUser, isMsgToUser]);
+  }, [activeDirectChatUser, currentUser, directMessages, isMsgFromUser, isMsgToUser]);
 
   const handleDeleteConversation = useCallback((partner: User) => {
     if (!currentUser) return;
     const partnerNameClean = partner.fullName?.trim().toLowerCase();
     
+    directMessages.forEach(m => {
+      const isFromMe = isMsgFromUser(m, currentUser);
+      const isToMe = isMsgToUser(m, currentUser);
+      const isFromPartner = isMsgFromUser(m, partner) || (partnerNameClean && m.senderName?.trim().toLowerCase() === partnerNameClean);
+      const isToPartner = isMsgToUser(m, partner) || (partnerNameClean && m.receiverName?.trim().toLowerCase() === partnerNameClean);
+
+      const isBetweenUs = (isFromMe && isToPartner) || (isFromPartner && isToMe);
+      if (isBetweenUs) {
+        deleteDocument(COLLECTIONS.DIRECT_MESSAGES, m.id);
+      }
+    });
+
     setDirectMessages(prev => prev.filter(m => {
       const isFromMe = isMsgFromUser(m, currentUser);
       const isToMe = isMsgToUser(m, currentUser);
@@ -3352,7 +3401,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
     )) {
       setActiveDirectChatUser(null);
     }
-  }, [currentUser, activeDirectChatUser, isMsgFromUser, isMsgToUser]);
+  }, [currentUser, activeDirectChatUser, directMessages, isMsgFromUser, isMsgToUser]);
   const [localReadNotifIds, setLocalReadNotifIds] = useState<string[]>(() => {
     try {
       const saved = safeGetItem("4m1e1i_read_notifications");
@@ -12968,7 +13017,7 @@ App Link: ${window.location.origin}`}
                   }
 
                   // Calculate report count / activity level
-                  const userReports = reports ? reports.filter(r => r.registrantName === u.fullName || r.userId === u.id) : [];
+                  const userReports = reports ? reports.filter(r => r.uploaderName === u.fullName || r.uploaderId === u.id) : [];
                   const reportCount = userReports.length;
                   const userLevel = u.role === UserRole.ADMIN ? "Cấp 1" : "Cấp 2";
 
