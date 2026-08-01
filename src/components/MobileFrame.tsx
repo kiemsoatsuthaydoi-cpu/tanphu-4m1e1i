@@ -3160,7 +3160,10 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
   const [directMessages, setDirectMessages] = useState<DirectMessageItem[]>(() => {
     try {
       const saved = safeGetItem("4m1e1i_direct_messages_v1");
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed: DirectMessageItem[] = JSON.parse(saved);
+        return parsed.filter(m => !m.id?.startsWith("dm-reply-") && !m.content?.includes("Dạ em chào anh/chị"));
+      }
     } catch {}
     return [
       {
@@ -3195,7 +3198,10 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
   const [readDirectMsgIds, setReadDirectMsgIds] = useState<string[]>(() => {
     try {
       const saved = safeGetItem("4m1e1i_read_direct_msg_ids_v1");
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed: string[] = JSON.parse(saved);
+        return parsed.filter((id) => typeof id === "string" && id.includes("::"));
+      }
     } catch {}
     return [];
   });
@@ -3206,39 +3212,77 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
     } catch {}
   }, [readDirectMsgIds]);
 
-  const markAllDirectMessagesAsRead = useCallback(() => {
+  const getUserKey = useCallback((u: User | null | undefined): string => {
+    if (!u) return "GUEST";
+    const isUserAdmin = u.role === UserRole.ADMIN || u.id === "USR-ADMIN" || u.fullName?.toUpperCase().includes("ADMIN");
+    if (isUserAdmin) return "USR-ADMIN";
+    return u.id || u.fullName || "GUEST";
+  }, []);
+
+  const isMsgReadByUser = useCallback((msgId: string, u: User | null | undefined): boolean => {
+    if (!u) return true;
+    const userKey = getUserKey(u);
+    return readDirectMsgIds.includes(`${userKey}::${msgId}`);
+  }, [readDirectMsgIds, getUserKey]);
+
+  const markMsgAsReadForUser = useCallback((msgIds: string[], u: User | null | undefined) => {
+    if (!u || msgIds.length === 0) return;
+    const userKey = getUserKey(u);
     setReadDirectMsgIds((prev) => {
-      const allIds = directMessages.map((m) => m.id);
-      const newSet = new Set([...prev, ...allIds]);
+      const newKeys = msgIds.map((id) => `${userKey}::${id}`);
+      const newSet = new Set([...prev, ...newKeys]);
       return Array.from(newSet);
     });
-  }, [directMessages]);
+  }, [getUserKey]);
+
+  const isMsgFromUser = useCallback((m: DirectMessageItem, u: User | null | undefined): boolean => {
+    if (!u) return false;
+    if (m.senderId && u.id && m.senderId === u.id) return true;
+    if (m.senderName && u.fullName && m.senderName.trim().toLowerCase() === u.fullName.trim().toLowerCase()) return true;
+    const isUserAdmin = u.role === UserRole.ADMIN || u.id === "USR-ADMIN" || u.fullName?.toUpperCase().includes("ADMIN");
+    if (isUserAdmin && (m.senderId === "USR-ADMIN" || m.senderName?.includes("ADMIN"))) return true;
+    return false;
+  }, []);
+
+  const isMsgToUser = useCallback((m: DirectMessageItem, u: User | null | undefined): boolean => {
+    if (!u) return false;
+    if (m.receiverId && u.id && m.receiverId === u.id) return true;
+    if (m.receiverName && u.fullName && m.receiverName.trim().toLowerCase() === u.fullName.trim().toLowerCase()) return true;
+    const isUserAdmin = u.role === UserRole.ADMIN || u.id === "USR-ADMIN" || u.fullName?.toUpperCase().includes("ADMIN");
+    if (isUserAdmin && (m.receiverId === "USR-ADMIN" || m.receiverName?.includes("ADMIN"))) return true;
+    return false;
+  }, []);
+
+  const markAllDirectMessagesAsRead = useCallback(() => {
+    const myIncomingMsgIds = directMessages
+      .filter((m) => isMsgToUser(m, currentUser))
+      .map((m) => m.id);
+    markMsgAsReadForUser(myIncomingMsgIds, currentUser);
+  }, [directMessages, currentUser, isMsgToUser, markMsgAsReadForUser]);
 
   const unreadDirectMessagesCount = useMemo(() => {
-    return directMessages.filter((m) => !readDirectMsgIds.includes(m.id)).length;
-  }, [directMessages, readDirectMsgIds]);
+    return directMessages.filter((m) => {
+      const isToMe = isMsgToUser(m, currentUser);
+      const isFromMe = isMsgFromUser(m, currentUser);
+      return isToMe && !isFromMe && !isMsgReadByUser(m.id, currentUser);
+    }).length;
+  }, [directMessages, currentUser, isMsgToUser, isMsgFromUser, isMsgReadByUser]);
 
   const markPartnerMessagesAsRead = useCallback((partner: User) => {
-    setReadDirectMsgIds((prev) => {
-      const partnerMsgIds = directMessages
-        .filter((m) => 
-          m.senderId === partner.id || 
-          m.senderName?.toLowerCase() === partner.fullName.toLowerCase()
-        )
-        .map((m) => m.id);
-      const newSet = new Set([...prev, ...partnerMsgIds]);
-      return Array.from(newSet);
-    });
-  }, [directMessages]);
+    const partnerMsgIds = directMessages
+      .filter((m) => isMsgFromUser(m, partner) && isMsgToUser(m, currentUser))
+      .map((m) => m.id);
+    markMsgAsReadForUser(partnerMsgIds, currentUser);
+  }, [directMessages, currentUser, isMsgFromUser, isMsgToUser, markMsgAsReadForUser]);
 
   useEffect(() => {
-    if (activeDirectChatUser) {
+    if (showOnlineUsersDrawer && activeDirectChatUser) {
       markPartnerMessagesAsRead(activeDirectChatUser);
     }
-  }, [activeDirectChatUser, markPartnerMessagesAsRead]);
+  }, [showOnlineUsersDrawer, activeDirectChatUser, directMessages, markPartnerMessagesAsRead]);
 
   const handleSendDirectMessage = useCallback(() => {
-    if (!activeDirectChatUser || !directMessageInput.trim()) return;
+    if (!activeDirectChatUser || !directMessageInput.trim() || !currentUser) return;
 
     const now = new Date();
     const day = String(now.getDate()).padStart(2, '0');
@@ -3248,7 +3292,9 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
     const mins = String(now.getMinutes()).padStart(2, '0');
     const formattedTime = `${day}/${month}/${year} ${hours}:${mins}`;
 
-    const senderName = currentUser.role === UserRole.ADMIN ? "BAN QUẢN TRỊ (ADMIN)" : currentUser.fullName;
+    const senderName = (currentUser.role === UserRole.ADMIN || currentUser.fullName?.toUpperCase().includes("ADMIN"))
+      ? "BAN QUẢN TRỊ (ADMIN)"
+      : currentUser.fullName;
 
     const newMsg: DirectMessageItem = {
       id: `dm-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -3263,7 +3309,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
     };
 
     setDirectMessages(prev => [...prev, newMsg]);
-    setReadDirectMsgIds(prev => [...prev, newMsg.id]);
+    markMsgAsReadForUser([newMsg.id], currentUser);
     setDirectMessageInput("");
 
     setTimeout(() => {
@@ -3274,15 +3320,14 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
   }, [activeDirectChatUser, directMessageInput, currentUser]);
 
   const handleClearDirectMessages = useCallback(() => {
-    if (!activeDirectChatUser) return;
+    if (!activeDirectChatUser || !currentUser) return;
     setDirectMessages(prev => prev.filter(m => 
       !(
-        (m.senderId === currentUser.id && m.receiverId === activeDirectChatUser.id) ||
-        (m.senderId === activeDirectChatUser.id && m.receiverId === currentUser.id) ||
-        (m.receiverName === activeDirectChatUser.fullName)
+        (isMsgFromUser(m, currentUser) && isMsgToUser(m, activeDirectChatUser)) ||
+        (isMsgFromUser(m, activeDirectChatUser) && isMsgToUser(m, currentUser))
       )
     ));
-  }, [activeDirectChatUser, currentUser]);
+  }, [activeDirectChatUser, currentUser, isMsgFromUser, isMsgToUser]);
   const [localReadNotifIds, setLocalReadNotifIds] = useState<string[]>(() => {
     try {
       const saved = safeGetItem("4m1e1i_read_notifications");
@@ -5702,13 +5747,24 @@ App Link: ${window.location.origin}`;
 
               {/* --- 5.5. TRAO ĐỔI (CHAT / DISCUSSION) ICON --- */}
               <button
-                onClick={() => setActiveBottomTab("TRAO_ĐỔI")}
+                type="button"
+                onClick={() => {
+                  setOnlineSearchTerm("");
+                  setOnlineTabFilter("INBOX");
+                  setActiveDirectChatUser(null);
+                  setShowOnlineUsersDrawer(true);
+                }}
                 className={`relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer shrink-0 ${
                   activeBottomTab === "TRAO_ĐỔI" ? "text-cyan-300 scale-110" : "text-sky-200 hover:text-white"
                 }`}
-                title="Kênh trao đổi / Thảo luận"
+                title="Tin nhắn / Hộp thoại trao đổi 1:1"
               >
                 <MessageSquare className="w-[18px] h-[18px]" />
+                {unreadDirectMessagesCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[8px] font-black rounded-full px-1 min-w-[14px] h-3.5 flex items-center justify-center font-mono border border-white animate-pulse shadow-2xs">
+                    {unreadDirectMessagesCount > 99 ? "99+" : unreadDirectMessagesCount}
+                  </span>
+                )}
               </button>
 
               {/* --- 6. ONLINE COUNT (Main) --- */}
@@ -9933,8 +9989,8 @@ App Link: ${window.location.origin}`;
               onClick={() => {
                 if (isFabDraggingRef.current) return;
                 setOnlineTabFilter("INBOX");
+                setActiveDirectChatUser(null);
                 setShowOnlineUsersDrawer(true);
-                markAllDirectMessagesAsRead();
               }}
               className="relative w-5.5 h-5.5 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/35 active:scale-90 transition-all cursor-pointer border border-white/25"
               title="Nhắn tin / Trao đổi"
@@ -10005,8 +10061,8 @@ App Link: ${window.location.origin}`;
               onClick={() => {
                 if (isFabDraggingRef.current) return;
                 setOnlineTabFilter("INBOX");
+                setActiveDirectChatUser(null);
                 setShowOnlineUsersDrawer(true);
-                markAllDirectMessagesAsRead();
               }}
               className="relative w-8.5 h-8.5 bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-lg flex items-center justify-center shadow-lg transition-all cursor-pointer border border-white/20"
               title="Nhắn tin / Trao đổi"
@@ -12513,11 +12569,12 @@ App Link: ${window.location.origin}`}
           <div className="bg-white w-full h-full overflow-hidden flex flex-col">
             {/* Header */}
             {(() => {
+              const myMessages = directMessages.filter((m) => isMsgFromUser(m, currentUser) || isMsgToUser(m, currentUser));
               const convPartnersSet = new Set<string>();
-              directMessages.forEach((m) => {
-                const isMeSender = m.senderId === currentUser?.id || m.senderName?.includes("ADMIN") || m.senderId === "USR-ADMIN";
-                const pName = isMeSender ? m.receiverName : m.senderName;
-                if (pName) convPartnersSet.add(pName.toLowerCase());
+              myMessages.forEach((m) => {
+                const isFromMe = isMsgFromUser(m, currentUser);
+                const partnerName = isFromMe ? m.receiverName : m.senderName;
+                if (partnerName) convPartnersSet.add(partnerName.toLowerCase());
               });
               const uniqueConvCount = convPartnersSet.size;
 
@@ -12526,7 +12583,10 @@ App Link: ${window.location.origin}`}
                   <div className="flex justify-between items-center px-4 py-3.5 border-b border-emerald-100 shrink-0 bg-gradient-to-r from-emerald-50/80 via-white to-slate-50">
                     <button
                       type="button"
-                      onClick={() => setShowOnlineUsersDrawer(false)}
+                      onClick={() => {
+                        setShowOnlineUsersDrawer(false);
+                        setActiveDirectChatUser(null);
+                      }}
                       className="flex items-center gap-1.5 text-emerald-800 hover:text-emerald-950 font-black text-[12.5px] cursor-pointer transition-colors active:scale-95"
                     >
                       <ArrowLeft className="w-4 h-4 text-emerald-700 stroke-[2.5]" />
@@ -12643,20 +12703,21 @@ App Link: ${window.location.origin}`}
                 const searchClean = onlineSearchTerm.toLowerCase().trim();
 
                 if (onlineTabFilter === "INBOX") {
-                  // Aggregated conversations list
+                  // Aggregated conversations list for currentUser
+                  const myMessages = directMessages.filter((m) => isMsgFromUser(m, currentUser) || isMsgToUser(m, currentUser));
                   const convMap = new Map<string, { partnerUser: User; lastMsg: DirectMessageItem; msgCount: number }>();
 
-                  directMessages.forEach((m) => {
-                    const isMeSender = m.senderId === currentUser?.id || m.senderName?.includes("ADMIN") || m.senderId === "USR-ADMIN";
-                    const partnerName = isMeSender ? m.receiverName : m.senderName;
-                    const partnerId = isMeSender ? m.receiverId : m.senderId;
+                  myMessages.forEach((m) => {
+                    const isFromMe = isMsgFromUser(m, currentUser);
+                    const partnerName = isFromMe ? m.receiverName : m.senderName;
+                    const partnerId = isFromMe ? m.receiverId : m.senderId;
 
                     let partnerUser = users.find((u) => u.id === partnerId || u.fullName.toLowerCase() === partnerName?.toLowerCase());
                     if (!partnerUser) {
                       partnerUser = {
                         id: partnerId || `usr-${partnerName}`,
                         fullName: partnerName || "Đồng nghiệp",
-                        role: m.senderRole ? (m.senderRole as UserRole) : UserRole.REVIEWER,
+                        role: (partnerName?.toUpperCase().includes("ADMIN") || partnerId === "USR-ADMIN") ? UserRole.ADMIN : UserRole.REVIEWER,
                         status: UserStatus.ACTIVE,
                         branch: "Tân Phú",
                         department: "Phòng Quản Lý Chất Lượng",
@@ -12704,12 +12765,11 @@ App Link: ${window.location.origin}`}
                     );
                   }
 
-                  return convList.map(({ partnerUser, lastMsg, msgCount }) => {
-                    const isLastMsgMe = lastMsg.senderId === currentUser?.id || lastMsg.senderName?.includes("ADMIN") || lastMsg.senderId === "USR-ADMIN";
+                  return convList.map(({ partnerUser, lastMsg }) => {
+                    const isLastMsgMe = isMsgFromUser(lastMsg, currentUser);
 
                     const partnerUnreadCount = directMessages.filter(
-                      (m) => !readDirectMsgIds.includes(m.id) &&
-                      (m.senderId === partnerUser.id || m.senderName?.toLowerCase() === partnerUser.fullName.toLowerCase())
+                      (m) => isMsgFromUser(m, partnerUser) && isMsgToUser(m, currentUser) && !isMsgReadByUser(m.id, currentUser)
                     ).length;
 
                     const nameParts = (partnerUser.fullName || "").trim().split(" ");
@@ -13032,9 +13092,8 @@ App Link: ${window.location.origin}`}
             {(() => {
               const convMsgs = directMessages.filter(
                 (m) =>
-                  (m.senderId === currentUser.id && m.receiverId === activeDirectChatUser.id) ||
-                  (m.senderId === activeDirectChatUser.id && m.receiverId === currentUser.id) ||
-                  (m.receiverName === activeDirectChatUser.fullName)
+                  (isMsgFromUser(m, currentUser) && isMsgToUser(m, activeDirectChatUser)) ||
+                  (isMsgFromUser(m, activeDirectChatUser) && isMsgToUser(m, currentUser))
               );
 
               if (convMsgs.length === 0) {
@@ -13054,7 +13113,7 @@ App Link: ${window.location.origin}`}
               }
 
               return convMsgs.map((m) => {
-                const isMe = m.senderId === currentUser.id || m.senderName.includes("ADMIN") || m.senderId === "USR-ADMIN";
+                const isMe = isMsgFromUser(m, currentUser);
 
                 return (
                   <div key={m.id} className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
