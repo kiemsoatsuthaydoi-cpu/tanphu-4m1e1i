@@ -3150,12 +3150,14 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
     }
   }, [tickerConfig]);
   const [showOnlineUsersDrawer, setShowOnlineUsersDrawer] = useState(false);
+  const [confirmDeletePartnerUser, setConfirmDeletePartnerUser] = useState<User | null>(null);
   const [onlineSearchTerm, setOnlineSearchTerm] = useState("");
   const [onlineTabFilter, setOnlineTabFilter] = useState<"INBOX" | "ONLINE" | "ALL">("INBOX");
   
   const [activeDirectChatUser, setActiveDirectChatUser] = useState<User | null>(null);
   const [directMessageInput, setDirectMessageInput] = useState("");
   const directChatScrollRef = useRef<HTMLDivElement | null>(null);
+  const directMessageInputRef = useRef<HTMLInputElement | null>(null);
 
   const [directMessages, setDirectMessages] = useState<DirectMessageItem[]>(() => {
     try {
@@ -3316,8 +3318,9 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
       if (directChatScrollRef.current) {
         directChatScrollRef.current.scrollTop = directChatScrollRef.current.scrollHeight;
       }
-    }, 100);
-  }, [activeDirectChatUser, directMessageInput, currentUser]);
+      directMessageInputRef.current?.focus();
+    }, 50);
+  }, [activeDirectChatUser, directMessageInput, currentUser, markMsgAsReadForUser]);
 
   const handleClearDirectMessages = useCallback(() => {
     if (!activeDirectChatUser || !currentUser) return;
@@ -3328,6 +3331,28 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
       )
     ));
   }, [activeDirectChatUser, currentUser, isMsgFromUser, isMsgToUser]);
+
+  const handleDeleteConversation = useCallback((partner: User) => {
+    if (!currentUser) return;
+    const partnerNameClean = partner.fullName?.trim().toLowerCase();
+    
+    setDirectMessages(prev => prev.filter(m => {
+      const isFromMe = isMsgFromUser(m, currentUser);
+      const isToMe = isMsgToUser(m, currentUser);
+      const isFromPartner = isMsgFromUser(m, partner) || (partnerNameClean && m.senderName?.trim().toLowerCase() === partnerNameClean);
+      const isToPartner = isMsgToUser(m, partner) || (partnerNameClean && m.receiverName?.trim().toLowerCase() === partnerNameClean);
+
+      const isBetweenUs = (isFromMe && isToPartner) || (isFromPartner && isToMe);
+      return !isBetweenUs;
+    }));
+
+    if (activeDirectChatUser && (
+      (partner.id && activeDirectChatUser.id === partner.id) ||
+      (partner.fullName && activeDirectChatUser.fullName?.toLowerCase() === partner.fullName.toLowerCase())
+    )) {
+      setActiveDirectChatUser(null);
+    }
+  }, [currentUser, activeDirectChatUser, isMsgFromUser, isMsgToUser]);
   const [localReadNotifIds, setLocalReadNotifIds] = useState<string[]>(() => {
     try {
       const saved = safeGetItem("4m1e1i_read_notifications");
@@ -12839,12 +12864,25 @@ App Link: ${window.location.origin}`}
                             <span className="text-[10px] font-mono text-slate-400 font-bold" translate="no">
                               {lastMsg.timestamp}
                             </span>
-                            {partnerUnreadCount > 0 && (
-                              <span className="bg-rose-500 text-white text-[9.5px] font-black px-2 py-0.5 rounded-full font-mono shadow-2xs flex items-center gap-1 animate-pulse">
-                                <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping" />
-                                <T>{partnerUnreadCount} tin mới</T>
-                              </span>
-                            )}
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              {partnerUnreadCount > 0 && (
+                                <span className="bg-rose-500 text-white text-[9.5px] font-black px-2 py-0.5 rounded-full font-mono shadow-2xs flex items-center gap-1 animate-pulse">
+                                  <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping" />
+                                  <T>{partnerUnreadCount} tin mới</T>
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConfirmDeletePartnerUser(partnerUser);
+                                }}
+                                className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 active:scale-90 transition-all cursor-pointer"
+                                title="Xóa cuộc trò chuyện này"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
                         </div>
 
@@ -13150,23 +13188,30 @@ App Link: ${window.location.origin}`}
           </button>
 
           {/* Bottom Chat Input Bar matching screenshot */}
-          <div className="p-3 bg-white border-t border-slate-200 flex items-center gap-2 shrink-0">
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSendDirectMessage();
+              directMessageInputRef.current?.focus();
+            }}
+            className="p-3 bg-white border-t border-slate-200 flex items-center gap-2 shrink-0"
+          >
             <input
+              ref={directMessageInputRef}
               type="text"
               value={directMessageInput}
               onChange={(e) => setDirectMessageInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  handleSendDirectMessage();
-                }
-              }}
               placeholder="Nhập nội dung trao đổi..."
               className="flex-1 px-4 py-2.5 bg-white border border-slate-300 focus:border-blue-500 rounded-full text-xs font-semibold text-slate-800 focus:outline-none placeholder:text-slate-400 font-sans shadow-2xs"
             />
             <button
-              type="button"
-              onClick={handleSendDirectMessage}
+              type="submit"
+              onMouseDown={(e) => e.preventDefault()}
+              onTouchStart={(e) => {
+                e.preventDefault();
+                handleSendDirectMessage();
+                directMessageInputRef.current?.focus();
+              }}
               className={`w-10 h-10 rounded-full flex items-center justify-center transition-all cursor-pointer ${
                 directMessageInput.trim()
                   ? "bg-blue-600 text-white hover:bg-blue-700 shadow-md active:scale-90"
@@ -13175,6 +13220,50 @@ App Link: ${window.location.origin}`}
             >
               <Send className="w-4 h-4 -mr-0.5" />
             </button>
+          </form>
+        </div>
+      )}
+
+      {confirmDeletePartnerUser && (
+        <div 
+          onClick={() => setConfirmDeletePartnerUser(null)}
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[90] flex items-center justify-center p-4 animate-fadeIn cursor-pointer"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl max-w-[290px] w-full p-5 shadow-2xl border border-slate-100 flex flex-col items-center text-center space-y-3 animate-in fade-in zoom-in-95 duration-150 cursor-default"
+          >
+            <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shadow-inner">
+              <Trash2 className="w-6 h-6 stroke-[2.2]" />
+            </div>
+            <div>
+              <h3 className="font-black text-sm text-slate-900 uppercase tracking-tight">
+                <T>Xóa cuộc trò chuyện?</T>
+              </h3>
+              <p className="text-[11.5px] text-slate-600 font-medium mt-1.5 leading-snug">
+                <T>Bạn có chắc chắn muốn xóa toàn bộ tin nhắn trao đổi với</T>{" "}
+                <span translate="no" className="font-extrabold text-slate-900 notranslate">{confirmDeletePartnerUser.fullName}</span>?
+              </p>
+            </div>
+            <div className="flex items-center gap-2 w-full pt-1">
+              <button
+                type="button"
+                onClick={() => setConfirmDeletePartnerUser(null)}
+                className="flex-1 py-2 px-3 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer transition-colors"
+              >
+                <T>Hủy</T>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleDeleteConversation(confirmDeletePartnerUser);
+                  setConfirmDeletePartnerUser(null);
+                }}
+                className="flex-1 py-2 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-xs shadow-md cursor-pointer transition-all"
+              >
+                <T>Xóa ngay</T>
+              </button>
+            </div>
           </div>
         </div>
       )}
