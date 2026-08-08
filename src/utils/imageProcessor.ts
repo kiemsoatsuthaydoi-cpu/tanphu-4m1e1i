@@ -233,31 +233,52 @@ export async function compressAvatar(file: File): Promise<string> {
 }
 
 /**
- * Generates a beautiful SVG fallback illustration matching the 4M1E1I category when images are offline/pruned.
+ * Generates an offline SVG fallback illustration matching the 4M1E1I category.
+ * Embeds direct Vector SVG (Data URI) into source code for 100% offline availability,
+ * zero network overhead, and zero broken image frames.
  */
+function createCategorySvgBanner(title: string, subtitle: string, mainColor: string, bgColor: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="340" viewBox="0 0 600 340">
+  <rect width="100%" height="100%" fill="${bgColor}"/>
+  <g transform="translate(300, 170)" text-anchor="middle" font-family="system-ui, -apple-system, blinkmacsystemfont, 'Segoe UI', roboto, sans-serif">
+    <text y="-32" font-size="28" font-weight="800" fill="${mainColor}" letter-spacing="0.5">${title}</text>
+    <text y="16" font-size="16" font-weight="500" fill="#64748b">${subtitle}</text>
+    <g transform="translate(-135, 48)">
+      <rect width="270" height="38" rx="10" fill="#d97706"/>
+      <text x="135" y="24" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle" letter-spacing="0.5">HÌNH ẢNH TỰ ĐỘNG KHÔI PHỤC</text>
+    </g>
+  </g>
+</svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
 export function getCategoryFallbackImage(category: string): string {
   const norm = (category || "").toUpperCase().trim();
   
   if (norm.includes("CON NGƯỜI") || norm.includes("MAN")) {
-    return "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=800&q=80";
+    return createCategorySvgBanner("CON NGƯỜI (MANPOOL)", "Sự cố / Thay đổi nhân sự con người", "#1d4ed8", "#eff6ff");
   }
   
   if (norm.includes("NGUYÊN VẬT LIỆU") || norm.includes("MATERIAL")) {
-    return "https://images.unsplash.com/photo-1616401784845-180882ba9ba8?auto=format&fit=crop&w=800&q=80";
+    return createCategorySvgBanner("NGUYÊN VẬT LIỆU (MATERIAL)", "Sự cố / Thay đổi nguyên vật liệu", "#a21caf", "#fdf4ff");
   }
   
   if (norm.includes("MÁY MÓC") || norm.includes("MACHINE")) {
-    return "https://images.unsplash.com/photo-1581092335397-9583fe92d232?auto=format&fit=crop&w=800&q=80";
+    return createCategorySvgBanner("MÁY MÓC (MACHINE)", "Sự cố / Thay đổi thiết bị máy móc", "#15803d", "#f0fdf4");
   }
   
   if (norm.includes("PHƯƠNG PHÁP") || norm.includes("METHOD")) {
-    return "https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?auto=format&fit=crop&w=800&q=80";
+    return createCategorySvgBanner("PHƯƠNG PHÁP (METHOD)", "Sự cố / Thay đổi quy trình phương pháp", "#b45309", "#fffbeb");
   }
   
   if (norm.includes("MÔI TRƯỜNG") || norm.includes("ENV")) {
-    return "https://images.unsplash.com/photo-1581092162384-8987c1d64718?auto=format&fit=crop&w=800&q=80";
+    return createCategorySvgBanner("MÔI TRƯỜNG (ENVIRONMENT)", "Sự cố / Thay đổi điều kiện môi trường", "#0f766e", "#f0fdfa");
   }
   
-  return "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=800&q=80";
+  if (norm.includes("THÔNG TIN") || norm.includes("INFO")) {
+    return createCategorySvgBanner("THÔNG TIN (INFORMATION)", "Sự cố / Thay đổi dữ liệu thông tin", "#4338ca", "#eef2ff");
+  }
+  
+  return createCategorySvgBanner("QUẢN LÝ THAY ĐỔI (4M1E1I)", "Hệ thống ghi nhận sự cố / điểm sáng", "#334155", "#f8fafc");
 }
 

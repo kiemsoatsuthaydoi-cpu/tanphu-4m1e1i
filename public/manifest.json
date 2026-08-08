@@ -1,6 +1,7 @@
 {
   "short_name": "META ANDON",
   "name": "META ANDON - Mỗi Nhân Viên Là Một QC",
+  "description": "Hệ thống kiểm soát biến động - ngăn chặn rủi ro 4M1E1I",
   "icons": [
     {
       "src": "/icon-192.png",
@@ -27,8 +28,18 @@
       "purpose": "maskable"
     },
     {
-      "src": "/logo_meta.jpg",
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo_meta.png",
       "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo_meta.jpg",
+      "sizes": "1024x1024",
       "type": "image/jpeg"
     }
   ],
