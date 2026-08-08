@@ -13017,7 +13017,7 @@ App Link: ${window.location.origin}`}
                   }
 
                   // Calculate report count / activity level
-                  const userReports = reports ? reports.filter(r => r.uploaderName === u.fullName || r.uploaderId === u.id) : [];
+                  const userReports = reports ? reports.filter(r => r.registrantName === u.fullName || r.userId === u.id) : [];
                   const reportCount = userReports.length;
                   const userLevel = u.role === UserRole.ADMIN ? "Cấp 1" : "Cấp 2";
 
