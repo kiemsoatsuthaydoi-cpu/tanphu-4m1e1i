@@ -1,5 +1,5 @@
 // Service Worker for META ANDON PWA support to enable Badging on Home Screen
-const CACHE_NAME = 'meta-andon-v5';
+const CACHE_NAME = 'meta-andon-v6';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -38,6 +38,9 @@ self.addEventListener('activate', (event) => {
 
 // Intercept fetch requests (Network First strategy to avoid stale whitescreens on code updates)
 self.addEventListener('fetch', (event) => {
+  // CHỈ cache request GET, bỏ qua POST / PUT / DELETE
+  if (event.request.method !== 'GET') return;
+
   const url = new URL(event.request.url);
   
   if (url.origin === self.location.origin) {

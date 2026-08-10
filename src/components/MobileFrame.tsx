@@ -5738,7 +5738,7 @@ App Link: ${window.location.origin}`;
               )}
             </button>
             <div className="flex flex-col justify-center select-none">
-              <T className="font-bold text-[15.2px] tracking-wide whitespace-nowrap leading-none block text-left">META ANDON</T>
+              <T className="font-bold text-[13.7px] tracking-wide whitespace-nowrap leading-none block text-left">META ANDON</T>
               <T className="text-[8px] font-bold tracking-[-0.015em] opacity-90 whitespace-nowrap block text-left leading-none mt-1">Mỗi Nhân Viên Là Một QC</T>
             </div>
           </div>
