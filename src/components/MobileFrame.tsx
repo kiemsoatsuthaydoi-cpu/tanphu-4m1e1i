@@ -5918,6 +5918,19 @@ App Link: ${window.location.origin}`;
                 )}
               </button>
 
+              {/* --- 7.5. PWA INSTALL BUTTON (Header Quick Access) --- */}
+              {!isPwaInstalled && (
+                <button
+                  type="button"
+                  onClick={handleInstallPwaClick}
+                  className="relative hover:scale-110 active:scale-95 transition-all px-2 py-0.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-extrabold text-[9.5px] rounded-full flex items-center gap-1 shadow-md cursor-pointer shrink-0 border border-white/50 animate-pulse"
+                  title="Cài đặt App META ANDON ra Màn hình chính"
+                >
+                  <Smartphone className="w-3.5 h-3.5 text-slate-950" />
+                  <span translate="no" className="notranslate whitespace-nowrap font-black">Cài App</span>
+                </button>
+              )}
+
               {/* --- 8. FULLSCREEN MODE (Main) --- */}
               <button
                 onClick={toggleFullscreen}
