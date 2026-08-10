@@ -26,9 +26,8 @@
     }
   ],
   "rewrites": [
-    { "handle": "filesystem" },
     {
-      "source": "/((?!api/).*)",
+      "source": "/((?!api/|.*\\.(?:png|jpg|jpeg|gif|svg|ico|json|js|css|woff2?|ttf|eot)).*)",
       "destination": "/index.html"
     }
   ]
