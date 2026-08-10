@@ -1767,6 +1767,49 @@ export default function MobileFrame({
     return "unsupported";
   });
 
+  const [pwaPrompt, setPwaPrompt] = useState<any>(null);
+  const [isPwaInstalled, setIsPwaInstalled] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return (
+        window.matchMedia("(display-mode: standalone)").matches ||
+        (navigator as any).standalone === true
+      );
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setPwaPrompt(e);
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallPwaClick = () => {
+    if (pwaPrompt) {
+      pwaPrompt.prompt();
+      pwaPrompt.userChoice.then((choiceResult: any) => {
+        if (choiceResult.outcome === "accepted") {
+          showToast("Cảm ơn bạn đã cài đặt App META ANDON! 🎉");
+          setIsPwaInstalled(true);
+        }
+        setPwaPrompt(null);
+      });
+    } else {
+      alert(
+        "Để cài đặt App META ANDON ra Màn hình chính:\n\n" +
+        "• Trên Chrome (Android): Bấm biểu tượng 3 chấm (...) ở góc trên phải -> chọn \"Cài đặt ứng dụng\" hoặc \"Thêm vào MH chính\".\n\n" +
+        "• Trên Safari (iPhone / iPad): Bấm nút Chia sẻ (Share ⎋) ở thanh dưới -> chọn \"Thêm vào MH chính\" (Add to Home Screen)."
+      );
+    }
+  };
+
   const handleRequestNotificationPermission = async () => {
     if (typeof window === "undefined" || !("Notification" in window)) {
       showToast("Trình duyệt không hỗ trợ thông báo đẩy!");
@@ -12256,7 +12299,7 @@ App Link: ${window.location.origin}`}
                       <div className="space-y-1.5 text-[9px] text-slate-650">
                         <div className="flex gap-1.5 items-start bg-white p-2 rounded-xl border border-blue-50 shadow-3xs">
                           <span className="text-blue-600 font-extrabold shrink-0">1.</span>
-                          <div className="leading-relaxed">
+                          <div className="flex-1 leading-relaxed">
                             <span translate="no" className="font-bold text-slate-700 notranslate">Cài đặt Màn hình chính:</span>
                             <span translate="no" className="text-slate-500 notranslate"> Nhấn biểu tượng </span>
                             <span translate="no" className="font-extrabold text-[#1e3a8a] notranslate">Chia sẻ (Safari)</span>
@@ -12265,6 +12308,15 @@ App Link: ${window.location.origin}`}
                             <span translate="no" className="text-slate-500 notranslate"> rồi chọn </span>
                             <span translate="no" className="font-black text-blue-700 underline notranslate">"Thêm vào Màn hình chính" (Add to Home Screen)</span>
                             <span translate="no" className="text-slate-500 notranslate"> để sử dụng ứng dụng độc lập.</span>
+
+                            {!isPwaInstalled && (
+                              <button
+                                onClick={handleInstallPwaClick}
+                                className="mt-1.5 w-full bg-blue-700 hover:bg-blue-800 text-white text-[8.5px] font-black py-1.5 px-3 rounded-lg cursor-pointer transition-colors flex items-center justify-center gap-1.5 uppercase shadow-xs border-none"
+                              >
+                                📱 <T><span translate="no" className="notranslate font-black">CÀI ĐẶT APP META ANDON</span></T>
+                              </button>
+                            )}
                           </div>
                         </div>
 
