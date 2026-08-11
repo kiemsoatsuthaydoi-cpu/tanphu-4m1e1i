@@ -1767,6 +1767,49 @@ export default function MobileFrame({
     return "unsupported";
   });
 
+  const [pwaPrompt, setPwaPrompt] = useState<any>(null);
+  const [isPwaInstalled, setIsPwaInstalled] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return (
+        window.matchMedia("(display-mode: standalone)").matches ||
+        (navigator as any).standalone === true
+      );
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setPwaPrompt(e);
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallPwaClick = () => {
+    if (pwaPrompt) {
+      pwaPrompt.prompt();
+      pwaPrompt.userChoice.then((choiceResult: any) => {
+        if (choiceResult.outcome === "accepted") {
+          showToast("Cảm ơn bạn đã cài đặt App META ANDON! 🎉");
+          setIsPwaInstalled(true);
+        }
+        setPwaPrompt(null);
+      });
+    } else {
+      alert(
+        "Để cài đặt App META ANDON ra Màn hình chính:\n\n" +
+        "• Trên Chrome (Android): Bấm biểu tượng 3 chấm (...) ở góc trên phải -> chọn \"Cài đặt ứng dụng\" hoặc \"Thêm vào MH chính\".\n\n" +
+        "• Trên Safari (iPhone / iPad): Bấm nút Chia sẻ (Share ⎋) ở thanh dưới -> chọn \"Thêm vào MH chính\" (Add to Home Screen)."
+      );
+    }
+  };
+
   const handleRequestNotificationPermission = async () => {
     if (typeof window === "undefined" || !("Notification" in window)) {
       showToast("Trình duyệt không hỗ trợ thông báo đẩy!");
@@ -5738,7 +5781,7 @@ App Link: ${window.location.origin}`;
               )}
             </button>
             <div className="flex flex-col justify-center select-none">
-              <T className="font-bold text-[15.2px] tracking-wide whitespace-nowrap leading-none block text-left">META ANDON</T>
+              <T className="font-bold text-[13.7px] tracking-wide whitespace-nowrap leading-none block text-left">META ANDON</T>
               <T className="text-[8px] font-bold tracking-[-0.015em] opacity-90 whitespace-nowrap block text-left leading-none mt-1">Mỗi Nhân Viên Là Một QC</T>
             </div>
           </div>
@@ -5874,6 +5917,7 @@ App Link: ${window.location.origin}`;
                   </span>
                 )}
               </button>
+
 
               {/* --- 8. FULLSCREEN MODE (Main) --- */}
               <button

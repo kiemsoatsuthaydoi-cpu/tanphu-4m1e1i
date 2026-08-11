@@ -1,29 +1,21 @@
 // Service Worker for META ANDON PWA support to enable Badging on Home Screen
-const CACHE_NAME = 'meta-andon-v20';
+const CACHE_NAME = 'meta-andon-v6';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
-  '/manifest.json?v=20',
-  '/favicon.ico?v=20',
-  '/apple-touch-icon.png?v=20',
-  '/favicon-32x32.png?v=20',
-  '/favicon-16x16.png?v=20',
-  '/icon-192.png?v=20',
-  '/icon-512.png?v=20',
-  '/maskable-icon-512.png?v=20',
-  '/og-image.png?v=20'
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/apple-touch-icon.png',
+  '/favicon.png',
+  '/logo_meta.png',
+  '/logo_meta.jpg'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(async (cache) => {
-      for (const asset of ASSETS_TO_CACHE) {
-        try {
-          await cache.add(asset);
-        } catch (err) {
-          console.warn('Cache add warning for asset:', asset, err);
-        }
-      }
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(ASSETS_TO_CACHE);
     })
   );
   self.skipWaiting();
@@ -46,6 +38,9 @@ self.addEventListener('activate', (event) => {
 
 // Intercept fetch requests (Network First strategy to avoid stale whitescreens on code updates)
 self.addEventListener('fetch', (event) => {
+  // CHỈ cache request GET, bỏ qua POST / PUT / DELETE
+  if (event.request.method !== 'GET') return;
+
   const url = new URL(event.request.url);
   
   if (url.origin === self.location.origin) {
