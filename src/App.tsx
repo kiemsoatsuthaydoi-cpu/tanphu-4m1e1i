@@ -3769,8 +3769,13 @@ export default function App() {
           
           {/* Corporate branding header: Logo META 4M1E1I as requested */}
           <div className="flex flex-col items-center select-none text-center animate-fade-in mb-6">
-            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl flex items-center justify-center shadow-lg border border-blue-400/20 transform transition hover:scale-105 duration-200 mb-3.5 overflow-hidden bg-blue-700">
-              <img src="/logo_meta.jpg" alt="META ANDON" className="w-full h-full object-cover rounded-3xl" />
+            <div className="w-24 h-24 sm:w-28 sm:h-28 bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-700 rounded-3xl flex flex-col items-center justify-center shadow-lg border border-blue-400/20 transform transition hover:scale-105 duration-200 mb-3.5">
+              <span translate="no" className="notranslate font-sans font-black text-xs sm:text-sm tracking-[0.25em] text-blue-100 uppercase mb-1 leading-none">
+                META
+              </span>
+              <span translate="no" className="notranslate font-sans font-black text-lg sm:text-xl tracking-wider text-white leading-none">
+                ANDON
+              </span>
             </div>
             <p className="text-[10px] text-slate-500 font-bold tracking-normal mt-0.5 uppercase">
               <T>KIỂM SOÁT BIẾN ĐỘNG - NGĂN CHẶN RỦI RO</T>
