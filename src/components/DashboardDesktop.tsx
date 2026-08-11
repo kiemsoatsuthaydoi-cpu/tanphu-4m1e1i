@@ -2890,10 +2890,11 @@ export default function DashboardDesktop({
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shrink-0 shadow-sm text-slate-800">
         <div>
           <div className="flex items-center gap-3">
-            <div className="bg-blue-600 text-white font-black px-3 py-1.5 rounded-lg shadow-2xs flex flex-col items-start justify-center">
-              <span className="text-[14px] tracking-wider leading-none"><T>META ANDON</T></span>
-              <span className="text-[9px] font-semibold tracking-tight leading-none mt-1 opacity-90"><T>Mỗi Nhân Viên Là Một QC</T></span>
-            </div>
+            <img 
+              src="/logo_meta.svg" 
+              alt="META ANDON Logo" 
+              className="w-12 h-12 object-contain drop-shadow-xs rounded-xl cursor-pointer hover:scale-105 transition-transform" 
+            />
             <T className="text-xs text-slate-500 font-bold tracking-wide uppercase">HỆ THỐNG KIỂM SOÁT THAY ĐỔI THEO THỜI GIAN THỰC</T>
           </div>
           <h1 className="text-xl font-bold tracking-tight text-slate-900 mt-1.5 flex items-center gap-2">

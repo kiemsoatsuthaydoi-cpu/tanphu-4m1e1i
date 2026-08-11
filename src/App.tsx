@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { getBranchCodeSuffix, formatNameCapitalized } from "./utils/branchHelpers";
-import { AlertCircle, LogIn, Heart, ShieldCheck, Wifi, WifiOff, RefreshCw, Smartphone, Monitor, Lock, Building, ChevronDown, Briefcase, User as UserIcon, Check, CheckCircle, XCircle, AlertTriangle, Info } from "lucide-react";
+import { AlertCircle, LogIn, Heart, ShieldCheck, Wifi, WifiOff, RefreshCw, Smartphone, Monitor, Lock, Building, ChevronDown, Briefcase, User as UserIcon, Check, CheckCircle, XCircle, AlertTriangle, Info, Eye, EyeOff } from "lucide-react";
 import { T } from "./components/TranslateText";
 import {
   User,
@@ -1233,6 +1233,7 @@ export default function App() {
   const [loginId, setLoginId] = useState("");
   const [loginPhone, setLoginPhone] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [authError, setAuthError] = useState("");
   const [registerSuccessMsg, setRegisterSuccessMsg] = useState("");
 
@@ -1247,6 +1248,8 @@ export default function App() {
   const [regRole, setRegRole] = useState<UserRole>(UserRole.STAFF);
   const [regPassword, setRegPassword] = useState("");
   const [regConfirmPassword, setRegConfirmPassword] = useState("");
+  const [showRegPassword, setShowRegPassword] = useState(false);
+  const [showRegConfirmPassword, setShowRegConfirmPassword] = useState(false);
 
   const [isOpenRegCompany, setIsOpenRegCompany] = useState(false);
   const [isOpenRegBranch, setIsOpenRegBranch] = useState(false);
@@ -3769,14 +3772,11 @@ export default function App() {
           
           {/* Corporate branding header: Logo META 4M1E1I as requested */}
           <div className="flex flex-col items-center select-none text-center animate-fade-in mb-6">
-            <div className="w-24 h-24 sm:w-28 sm:h-28 bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-700 rounded-3xl flex flex-col items-center justify-center shadow-lg border border-blue-400/20 transform transition hover:scale-105 duration-200 mb-3.5">
-              <span translate="no" className="notranslate font-sans font-black text-xs sm:text-sm tracking-[0.25em] text-blue-100 uppercase mb-1 leading-none">
-                META
-              </span>
-              <span translate="no" className="notranslate font-sans font-black text-lg sm:text-xl tracking-wider text-white leading-none">
-                ANDON
-              </span>
-            </div>
+            <img 
+              src="/logo_meta.svg" 
+              alt="META ANDON Logo" 
+              className="w-24 h-24 sm:w-28 sm:h-28 object-contain drop-shadow-md transform transition hover:scale-105 duration-200 mb-3.5" 
+            />
             <p className="text-[10px] text-slate-500 font-bold tracking-normal mt-0.5 uppercase">
               <T>KIỂM SOÁT BIẾN ĐỘNG - NGĂN CHẶN RỦI RO</T>
             </p>
@@ -3891,12 +3891,20 @@ export default function App() {
                     <Lock className="w-4 h-4" />
                   </div>
                   <input
-                    type="password"
+                    type={showLoginPassword ? "text" : "password"}
                     placeholder="Nhập mật khẩu..."
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-850 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-10 py-2.5 text-xs text-slate-850 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowLoginPassword(!showLoginPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer"
+                    title={showLoginPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                  >
+                    {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
               </div>
 
@@ -4039,12 +4047,20 @@ export default function App() {
                       <Lock className="w-4 h-4" />
                     </div>
                     <input
-                      type="password"
+                      type={showRegPassword ? "text" : "password"}
                       placeholder="Mật khẩu..."
                       value={regPassword}
                       onChange={(e) => setRegPassword(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-850 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-10 py-2.5 text-xs text-slate-850 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowRegPassword(!showRegPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer"
+                      title={showRegPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                    >
+                      {showRegPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
                   </div>
                 </div>
 
@@ -4057,12 +4073,20 @@ export default function App() {
                       <Lock className="w-4 h-4" />
                     </div>
                     <input
-                      type="password"
+                      type={showRegConfirmPassword ? "text" : "password"}
                       placeholder="Nhập lại..."
                       value={regConfirmPassword}
                       onChange={(e) => setRegConfirmPassword(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-850 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-10 py-2.5 text-xs text-slate-850 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowRegConfirmPassword(!showRegConfirmPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer"
+                      title={showRegConfirmPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                    >
+                      {showRegConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
                   </div>
                   {regPassword !== regConfirmPassword && regConfirmPassword.length > 0 && (
                     <span translate="no" className="notranslate text-red-500 text-[10px] block mt-1 font-bold">

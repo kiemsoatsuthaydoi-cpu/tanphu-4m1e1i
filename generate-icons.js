@@ -13,10 +13,17 @@ if (!fs.existsSync(svgPath)) {
 
 const svgBuffer = fs.readFileSync(svgPath);
 
+const fontPath = path.resolve('public/Orbitron.ttf');
+const fontBuffer = fs.existsSync(fontPath) ? fs.readFileSync(fontPath) : null;
+
 function renderPng(width, height, relativeOutPath) {
   try {
     const resvg = new Resvg(svgBuffer, {
       fitTo: { mode: 'width', value: width },
+      font: fontBuffer ? {
+        fontBuffers: [fontBuffer],
+        defaultFontFamily: 'Orbitron'
+      } : undefined
     });
     const pngBuffer = resvg.render().asPng();
     const outPath = path.resolve(relativeOutPath);
@@ -36,4 +43,5 @@ renderPng(512, 512, 'public/logo-512.png');
 renderPng(192, 192, 'public/logo-192.png');
 renderPng(512, 512, 'public/logo_meta.png');
 console.log('[Icon Generator] All icons successfully generated.');
+
 
