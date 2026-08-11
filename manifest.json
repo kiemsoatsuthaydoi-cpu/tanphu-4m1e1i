@@ -19,11 +19,6 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
-    },
-    {
-      "src": "/logo_meta.jpg",
-      "sizes": "1024x1024",
-      "type": "image/jpeg"
     }
   ],
   "start_url": "/",
