@@ -396,16 +396,90 @@ export interface Incident {
   resolvedAt?: string;
 }
 
-export type LineStatus = "normal" | "warning" | "stopped";
+export type LineStatus = "normal" | "warning" | "stopped" | "NORMAL" | "WARNING" | "STOPPED";
 
 export interface ProductionLine {
   id: string;
+  code?: string;
   name: string;
-  manager: string;
+  workshop?: string;
+  manager?: string;
   status: LineStatus;
-  targetOutput: number;
-  actualOutput: number;
+  targetOutput?: number;
+  targetQty?: number;
+  actualOutput?: number;
+  actualQty?: number;
+  defectQty?: number;
+  activeOperatorCount?: number;
   oee?: number;
+}
+
+export type Role = UserRole | string;
+export type TicketStatus = "NEW" | "ACKNOWLEDGED" | "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED" | "Đang xử lý" | "Đã xử lý";
+export type IssueCategory = Category4M1E1I | string;
+export type Severity = IncidentSeverity | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | string;
+
+export interface FiveWhyItem {
+  why: string;
+  answer: string;
+}
+
+export interface AndonTicket {
+  id: string;
+  ticketNo?: string;
+  ticketCode?: string;
+  lineId?: string;
+  lineName?: string;
+  stationId?: string;
+  stationName?: string;
+  category?: string;
+  severity?: string;
+  title?: string;
+  description?: string;
+  status?: TicketStatus;
+  createdAt?: string;
+  reportedAt?: string;
+  acknowledgedBy?: string;
+  acknowledgedAt?: string;
+  resolvedAt?: string;
+  reportedBy?: string;
+  assignedTo?: string;
+  downtimeMinutes?: number;
+  fiveWhys?: FiveWhyItem[];
+  capaActions?: string[];
+  aiRcaSuggestion?: string;
+  imageUrl?: string;
+  resolutionSummary?: string;
+}
+
+export interface Workstation {
+  id: string;
+  code?: string;
+  name: string;
+  lineId?: string;
+  operatorName?: string;
+  status?: string;
+}
+
+export interface ShiftSummary {
+  shiftName: string;
+  totalTickets: number;
+  resolvedTickets?: number;
+  criticalStops?: number;
+  avgResponseTimeSec?: number;
+  avgResolutionTimeMin?: number;
+  downtimeMinutes?: number;
+  oee?: number;
+  yieldRate?: number;
+}
+
+export interface AppEnvConfig {
+  appName: string;
+  version: string;
+  apiEndpoint?: string;
+  nodeEnv?: string;
+  geminiConnected?: boolean;
+  activeLineCount?: number;
 }
 
 export interface FactoryMetrics {
