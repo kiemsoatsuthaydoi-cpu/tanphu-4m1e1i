@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb" />
+      <stop offset="50%" stop-color="#4f46e5" />
+      <stop offset="100%" stop-color="#6d28d9" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="110" fill="url(#grad)" />
+  <g text-anchor="middle" font-family="system-ui, -apple-system, blinkmacsystemfont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+    <text x="268" y="225" font-size="52" font-weight="900" letter-spacing="14" fill="#dbeafe">META</text>
+    <text x="256" y="325" font-size="78" font-weight="900" letter-spacing="3" fill="#ffffff">ANDON</text>
+  </g>
+</svg>

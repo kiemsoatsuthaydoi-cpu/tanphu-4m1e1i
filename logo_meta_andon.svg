@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="metaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb" />
+      <stop offset="50%" stop-color="#4f46e5" />
+      <stop offset="100%" stop-color="#6d28d9" />
+    </linearGradient>
+  </defs>
+  <!-- Squircle / Rounded rectangle background matching rounded-3xl -->
+  <rect width="512" height="512" rx="120" fill="url(#metaGrad)" />
+  <rect x="4" y="4" width="504" height="504" rx="116" fill="none" stroke="#93c5fd" stroke-opacity="0.25" stroke-width="8" />
+  
+  <g text-anchor="middle" font-family="system-ui, -apple-system, blinkmacsystemfont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+    <!-- META -->
+    <text x="268" y="215" font-size="62" font-weight="900" letter-spacing="18" fill="#dbeafe">META</text>
+    <!-- ANDON -->
+    <text x="256" y="325" font-size="90" font-weight="900" letter-spacing="6" fill="#ffffff">ANDON</text>
+  </g>
+</svg>

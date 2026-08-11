@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="maskGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1d4ed8" />
+      <stop offset="50%" stop-color="#4338ca" />
+      <stop offset="100%" stop-color="#5b21b6" />
+    </linearGradient>
+    <linearGradient id="innerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb" />
+      <stop offset="50%" stop-color="#4f46e5" />
+      <stop offset="100%" stop-color="#6d28d9" />
+    </linearGradient>
+  </defs>
+  <!-- Full bleed background for Android Maskable Icon cropping -->
+  <rect width="512" height="512" fill="url(#maskGrad)" />
+  
+  <!-- Central inner card inside safe area (66% ~ 80% zone) -->
+  <rect x="66" y="66" width="380" height="380" rx="88" fill="url(#innerGrad)" stroke="#93c5fd" stroke-opacity="0.3" stroke-width="6" />
+  
+  <g text-anchor="middle" font-family="system-ui, -apple-system, blinkmacsystemfont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+    <!-- META -->
+    <text x="265" y="222" font-size="48" font-weight="900" letter-spacing="14" fill="#dbeafe">META</text>
+    <!-- ANDON -->
+    <text x="256" y="306" font-size="70" font-weight="900" letter-spacing="4" fill="#ffffff">ANDON</text>
+  </g>
+</svg>
