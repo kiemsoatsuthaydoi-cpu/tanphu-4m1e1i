@@ -1,15 +1,15 @@
 // Service Worker for META ANDON PWA support to enable Badging on Home Screen
-const CACHE_NAME = 'meta-andon-v6';
+const CACHE_NAME = 'meta-andon-v10';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
-  '/manifest.json',
-  '/apple-touch-icon.png',
-  '/favicon-32x32.png',
-  '/favicon-16x16.png',
-  '/icon-192.png',
-  '/icon-512.png',
-  '/maskable-icon-512.png'
+  '/manifest.json?v=10',
+  '/apple-touch-icon.png?v=10',
+  '/favicon-32x32.png?v=10',
+  '/favicon-16x16.png?v=10',
+  '/icon-192.png?v=10',
+  '/icon-512.png?v=10',
+  '/maskable-icon-512.png?v=10'
 ];
 
 self.addEventListener('install', (event) => {
