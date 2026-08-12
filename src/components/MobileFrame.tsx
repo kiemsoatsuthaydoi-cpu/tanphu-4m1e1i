@@ -5781,7 +5781,7 @@ App Link: ${window.location.origin}`;
               )}
             </button>
             <div className="flex flex-col justify-center select-none">
-              <T className="font-black text-[13.7px] tracking-wider whitespace-nowrap leading-none block text-left font-['Orbitron',sans-serif]">META ANDON</T>
+              <T className="font-black text-[11.7px] tracking-wider whitespace-nowrap leading-none block text-left font-['Orbitron',sans-serif]">META ANDON</T>
               <T className="text-[8px] font-bold tracking-[-0.015em] opacity-90 whitespace-nowrap block text-left leading-none mt-1">Mỗi Nhân Viên Là Một QC</T>
             </div>
           </div>
@@ -8155,7 +8155,7 @@ App Link: ${window.location.origin}`;
                   </div>
 
                   {report.notes && (
-                    <div className="mt-2 bg-slate-50/90 rounded p-2 text-[12px] text-slate-800 font-medium italic border-l-2 border-blue-500 leading-relaxed whitespace-pre-wrap break-words">
+                    <div className="mt-2 bg-slate-50/90 rounded p-2 text-[12px] text-slate-800 font-medium italic border-l-2 border-blue-500 leading-relaxed whitespace-pre-wrap break-words max-h-[115px] overflow-y-auto thin-scrollbar">
                       <span translate="no" className="notranslate font-semibold text-slate-600 not-italic">Ghi chú: </span>
                       {renderTaggedText(report.notes, users)}
                     </div>
