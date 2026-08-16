@@ -1,399 +1,619 @@
 import React, { useState, useEffect, useRef } from "react";
-import { UserCheck, Building, AtSign, Bell, Check } from "lucide-react";
+import { User, UserRole } from "../types";
+import { T } from "./TranslateText";
+import { isLeadershipUser, canUserTagLeadership } from "../utils/tagHelpers";
 
-export interface MentionItem {
-  id: string;
-  name: string;
-  type: "person" | "dept";
-  detail?: string;
+// Accent remover helper for intuitive Vietnamese typing
+export function removeVietnameseTones(str: string): string {
+  let res = str;
+  res = res.replace(/à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ/g, "a");
+  res = res.replace(/è|é|ẹ|ẻ|ẽ|ê|ề|ế|ệ|ể|ễ/g, "e");
+  res = res.replace(/ì|í|ị|ỉ|ĩ/g, "i");
+  res = res.replace(/ò|ó|ọ|ỏ|õ|ô|ồ|ố|ộ|ổ|ỗ|ơ|ờ|ớ|ợ|ở|ỡ/g, "o");
+  res = res.replace(/ù|ú|ụ|ủ|ũ|ư|ừ|ứ|ự|ử|ữ/g, "u");
+  res = res.replace(/ỳ|ý|ỵ|ỷ|ỹ/g, "y");
+  res = res.replace(/đ/g, "d");
+  res = res.replace(/À|Á|Ạ|Ả|Ã|Â|Ầ|Ấ|Ậ|Ẩ|Ẫ|Ă|Ằ|Ắ|Ặ|Ẳ|Ẵ/g, "A");
+  res = res.replace(/È|É|Ẹ|Ẻ|Ẽ|Ê|Ề|Ế|Ệ|Ể|Ễ/g, "E");
+  res = res.replace(/Ì|Í|Ị|Ỉ|Ĩ/g, "I");
+  res = res.replace(/Ò|Ó|Ọ|Ỏ|Ỗ|Ô|Ồ|Ố|Ộ|Ổ|Ỗ|Ơ|Ờ|Ớ|Ợ|Ở|Ỡ/g, "O");
+  res = res.replace(/Ù|Ú|Ụ|Ủ|Ũ|Ư|Ừ|Ứ|Ự|Ử|Ữ/g, "U");
+  res = res.replace(/Ỳ|Ý|Y|Ỷ|Ỹ/g, "Y");
+  res = res.replace(/Đ/g, "D");
+  res = res.replace(/\u0300|\u0301|\u0309|\u0303|\u0323/g, ""); 
+  res = res.replace(/\u02C6|\u0306|\u031B/g, ""); 
+  return res;
 }
 
-export const DEFAULT_MENTION_ITEMS: MentionItem[] = [
-  // Key Personnel
-  { id: "p1", name: "Giáp", type: "person", detail: "Mr. Giáp - P. Mua Hàng" },
-  { id: "p2", name: "Lê Nhật Trường", type: "person", detail: "Trưởng ban QLCL" },
-  { id: "p3", name: "Trần Huy Tiến", type: "person", detail: "Cán bộ QLCL" },
-  { id: "p4", name: "Bùi Tài", type: "person", detail: "Phụ trách QA/QC" },
-  { id: "p5", name: "Lê Nguyễn Phú", type: "person", detail: "Giám sát Chất lượng" },
-  { id: "p6", name: "Phạm Thị Tuyền", type: "person", detail: "Trưởng BP Chất lượng (QC Head)" },
-  { id: "p7", name: "Lê Thị Phương", type: "person", detail: "Cán bộ Kiểm soát KPH" },
-  { id: "p8", name: "Trương Thị Thanh Thiện", type: "person", detail: "Nhân viên QC / Người lập" },
-  { id: "p9", name: "Mr. Võ Thái Bình", type: "person", detail: "Quản lý Chi nhánh" },
-  { id: "p10", name: "Trần Minh Đức", type: "person", detail: "Tổ Trưởng Ca 1" },
-  { id: "p11", name: "Lê Hoàng Nam", type: "person", detail: "Kỹ Thuật SMT" },
-  { id: "p12", name: "Nguyễn Văn Anh", type: "person", detail: "QC Line" },
-  { id: "p13", name: "Lê Văn Cường", type: "person", detail: "Ngoại quan AOI" },
+// Vietnam text standard formatting helper
+export function formatVietnameseInputText(text: string): string {
+  if (!text) return "";
+  let result = text;
 
-  // Key Departments
-  { id: "d1", name: "P.MH", type: "dept", detail: "Phòng Mua Hàng / Vật tư" },
-  { id: "d2", name: "P.SX", type: "dept", detail: "Phòng Sản Xuất" },
-  { id: "d3", name: "P.QLCL", type: "dept", detail: "Phòng Quản Lý Chất Lượng" },
-  { id: "d4", name: "P.HSE", type: "dept", detail: "Phòng An Toàn Môi Trường" },
-  { id: "d5", name: "Kho", type: "dept", detail: "Bộ phận Kho & Tiếp liệu" },
-  { id: "d6", name: "P.Kỹ Thuật", type: "dept", detail: "Phòng Kỹ Thuật / Bảo Trì" },
-  { id: "d7", name: "Xưởng TPP-LAN", type: "dept", detail: "Chi nhánh Long An" },
-  { id: "d8", name: "Xưởng DNP-BBM", type: "dept", detail: "Nhà máy BBM" },
-  { id: "d9", name: "BGĐ", type: "dept", detail: "Ban Giám Đốc" },
-];
+  // 1. Trim spaces before punctuation: "lỗi  , sản" -> "lỗi, sản"
+  result = result.replace(/\s+([.,;:!?])/g, "$1");
 
-interface MentionTextAreaProps {
+  // 2. Ensure space after punctuation if followed by any char except a space
+  // Avoid formatting numbers like "3.5" or "10,000" or "12.34"
+  result = result.replace(/([.,;:!?])([^\s])/g, (match, punc, nextChar, offset) => {
+    // Check character before the punctuation
+    const prevChar = offset > 0 ? result[offset - 1] : "";
+    const isPrevDigit = /\d/.test(prevChar);
+    const isNextDigit = /\d/.test(nextChar);
+    
+    // If both are digits, do not insert a space (e.g. 3.5 or 10,000)
+    if ((punc === "." || punc === ",") && isPrevDigit && isNextDigit) {
+      return match;
+    }
+    return punc + " " + nextChar;
+  });
+
+  // 3. Capitalize the very first letter of the text (Đầu dòng viết hoa)
+  // We find the first letter or word character and uppercase it.
+  result = result.replace(/^(\s*)([a-zà-ỹđ])/i, (match, p1, p2) => {
+    return p1 + p2.toUpperCase();
+  });
+
+  // 4. Capitalize after periods, question marks, and exclamation marks (Sau dấu chấm viết hoa)
+  // Look for any period, exclamation, or question mark followed by whitespace and a letter.
+  result = result.replace(/([.!?])(\s+)([a-zà-ỹđ])/g, (match, p1, p2, p3) => {
+    return p1 + p2 + p3.toUpperCase();
+  });
+
+  return result;
+}
+
+interface MentionControlsProps {
+  users?: User[];
+  currentUser?: User | null;
   value: string;
   onChange: (val: string) => void;
   placeholder?: string;
   className?: string;
   rows?: number;
-  customMentions?: MentionItem[];
-  onShowNotification?: (mentionName: string) => void;
-  disabled?: boolean;
-  users?: any[];
-  onKeyDown?: (e: any) => void;
-  onPaste?: (e: any) => void;
-  onInput?: (e: any) => void;
   style?: React.CSSProperties;
-  containerClassName?: string;
+  name?: string;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  onInput?: (e: React.FormEvent<HTMLTextAreaElement>) => void;
+  onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
 }
 
 export function MentionTextArea({
+  users = [],
+  currentUser,
   value,
   onChange,
   placeholder,
-  className = "w-full bg-transparent text-blue-700 print:text-black font-semibold text-xs leading-relaxed focus:bg-amber-50 focus:outline-none resize-y",
+  className,
   rows = 3,
-  customMentions,
-  onShowNotification,
-  disabled = false,
-  onKeyDown,
-  onPaste,
-  onInput,
   style,
-  containerClassName,
-}: MentionTextAreaProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [filterQuery, setFilterQuery] = useState("");
-  const [cursorPos, setCursorPos] = useState(0);
+  name,
+  onKeyDown,
+  onInput,
+  onPaste
+}: MentionControlsProps) {
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [annotationStartIdx, setAnnotationStartIdx] = useState(-1);
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const mentionList = customMentions && customMentions.length > 0 ? customMentions : DEFAULT_MENTION_ITEMS;
+  // Determine active user
+  let activeUser = currentUser;
+  if (!activeUser) {
+    try {
+      const stored = localStorage.getItem("4m1e1i_current_user");
+      if (stored) {
+        activeUser = JSON.parse(stored);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
 
-  const filteredMentions = mentionList.filter((m) => {
-    if (!filterQuery) return true;
-    const q = filterQuery.toLowerCase();
-    return m.name.toLowerCase().includes(q) || (m.detail && m.detail.toLowerCase().includes(q));
-  });
+  const userCanTagLeaders = canUserTagLeadership(activeUser);
 
-  // Handle textarea change and detect @
-  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  // Filter active users on matching searchQuery and tag authority
+  const filteredUsers = users
+    .filter((u) => {
+      // Rule: Only manager level or above can tag Executive Leadership
+      if (isLeadershipUser(u) && !userCanTagLeaders) {
+        return false;
+      }
+      if (!searchQuery) return true;
+      const normalizedName = removeVietnameseTones(u.fullName.toLowerCase());
+      const normalizedDept = removeVietnameseTones((u.department || "").toLowerCase());
+      const normalizedQuery = removeVietnameseTones(searchQuery.toLowerCase());
+      return normalizedName.includes(normalizedQuery) || normalizedDept.includes(normalizedQuery);
+    })
+    .slice(0, 8); // Top 8 suggestions
+
+  const handleSelectUser = (user: User) => {
+    if (!textareaRef.current) return;
+    const cursorPosition = textareaRef.current.selectionStart || 0;
+    const textBefore = value.slice(0, annotationStartIdx);
+    const textAfter = value.slice(cursorPosition);
+
+    const tag = `@${user.fullName} `;
+    const newValue = textBefore + tag + textAfter;
+
+    onChange(newValue);
+    setShowDropdown(false);
+
+    // Reposition cursor immediately
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        const nextCursor = textBefore.length + tag.length;
+        textareaRef.current.setSelectionRange(nextCursor, nextCursor);
+      }
+    }, 10);
+  };
+
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
-    const pos = e.target.selectionStart;
     onChange(val);
-    setCursorPos(pos);
 
-    const textBefore = val.slice(0, pos);
-    const match = textBefore.match(/@([a-zA-Z0-9_À-ỹ. -]*)$/);
+    const selectionStart = e.target.selectionStart || 0;
+    const textBeforeCursor = val.slice(0, selectionStart);
+    const match = textBeforeCursor.match(/@([^@\s]*)$/);
 
     if (match) {
-      setFilterQuery(match[1]);
-      setIsOpen(true);
+      const query = match[1];
+      const atIndex = textBeforeCursor.lastIndexOf("@");
+      setAnnotationStartIdx(atIndex);
+      setSearchQuery(query);
+      setShowDropdown(true);
+      setSelectedIndex(0);
     } else {
-      setIsOpen(false);
+      setShowDropdown(false);
     }
   };
 
-  const handleSelectMention = (item: MentionItem) => {
-    if (!textareaRef.current) return;
-    const pos = textareaRef.current.selectionStart || cursorPos;
-    const textBefore = value.slice(0, pos);
-    const textAfter = value.slice(pos);
-
-    const lastAtIndex = textBefore.lastIndexOf("@");
-    if (lastAtIndex !== -1) {
-      const newTextBefore = textBefore.slice(0, lastAtIndex) + "@" + item.name + " ";
-      const newValue = newTextBefore + textAfter;
-      onChange(newValue);
-
-      // Reset focus & cursor position
-      setTimeout(() => {
-        if (textareaRef.current) {
-          textareaRef.current.focus();
-          const newCursor = newTextBefore.length;
-          textareaRef.current.setSelectionRange(newCursor, newCursor);
-        }
-      }, 50);
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (showDropdown && filteredUsers.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev + 1) % filteredUsers.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev - 1 + filteredUsers.length) % filteredUsers.length);
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleSelectUser(filteredUsers[selectedIndex]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setShowDropdown(false);
+        return;
+      }
+    } else if (e.key === "Enter" && !e.shiftKey) {
+      const formatted = formatVietnameseInputText(value);
+      if (formatted !== value) {
+        onChange(formatted);
+      }
     }
-
-    setIsOpen(false);
-    if (onShowNotification) {
-      onShowNotification(item.name);
+    if (onKeyDown) {
+      onKeyDown(e);
     }
   };
 
-  // Close menu on outside click
+  const handleBlur = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+    const formatted = formatVietnameseInputText(e.target.value);
+    if (formatted !== e.target.value) {
+      onChange(formatted);
+    }
+  };
+
+  // Close when clicking outside
   useEffect(() => {
-    const handleClickOutside = (ev: MouseEvent) => {
+    const handleOutsideClick = (e: MouseEvent) => {
       if (
-        menuRef.current &&
-        !menuRef.current.contains(ev.target as Node) &&
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node) &&
         textareaRef.current &&
-        !textareaRef.current.contains(ev.target as Node)
+        !textareaRef.current.contains(e.target as Node)
       ) {
-        setIsOpen(false);
+        setShowDropdown(false);
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
 
-  // Auto-expand height to fit all content lines without scrollbars
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    if (el.scrollHeight > 0) {
-      el.style.height = `${el.scrollHeight}px`;
-    }
-  }, [value]);
-
   return (
-    <div className={`relative group ${containerClassName || "w-full"}`}>
+    <div className="relative w-full">
       <textarea
         ref={textareaRef}
-        rows={rows}
-        value={value}
-        onChange={handleChange}
+        name={name}
         placeholder={placeholder}
-        disabled={disabled}
-        className={className}
-        onKeyDown={onKeyDown}
-        onPaste={onPaste}
+        value={value}
+        onChange={handleTextareaChange}
+        onKeyDown={handleKeyDown}
+        onBlur={handleBlur}
         onInput={onInput}
+        onPaste={onPaste}
+        rows={rows}
+        className={className}
         style={style}
       />
 
-      {/* Mention Dropdown Popup */}
-      {isOpen && (
-        <div
-          ref={menuRef}
-          className="absolute z-50 mt-1 left-0 w-72 bg-white border border-slate-300 rounded-xl shadow-xl p-1.5 space-y-1 animate-in fade-in zoom-in-95 duration-100 no-print"
-        >
-          <div className="px-2 py-1 text-[10px] font-black text-slate-500 uppercase tracking-wider flex items-center justify-between border-b border-slate-100">
-            <span className="flex items-center gap-1">
-              <AtSign className="w-3 h-3 text-indigo-600" />
-              <span translate="no" className="notranslate">TAG NGƯỜI / BỘ PHẬN LIÊN QUAN</span>
-            </span>
-            <span className="text-[9px] font-normal text-slate-400">Gõ @ để mở</span>
-          </div>
-
-          <div className="max-h-48 overflow-y-auto space-y-0.5 pr-0.5">
-            {filteredMentions.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-slate-400 italic text-center">
-                Không tìm thấy "{filterQuery}"
-              </div>
-            ) : (
-              filteredMentions.map((item) => (
+      {showDropdown && (
+        filteredUsers.length > 0 ? (
+          <div
+            ref={dropdownRef}
+            className="absolute left-0 right-0 bottom-full mb-1 sm:bottom-auto sm:top-full sm:mt-1 max-h-48 overflow-y-auto bg-white border border-slate-250 rounded-xl shadow-xl z-[999999] p-1.5 space-y-0.5"
+          >
+            <div className="px-2 py-1 text-[9px] text-slate-400 font-bold uppercase tracking-wider border-b border-slate-50 mb-1 flex items-center justify-between">
+              <span><T><span translate="no" className="notranslate">Nhấn phím lên/xuống & Enter để Tag nhanh:</span></T></span>
+              {userCanTagLeaders && (
+                <span className="text-[8px] text-indigo-600 bg-indigo-50 px-1 py-0.2 rounded font-extrabold">
+                  <span translate="no" className="notranslate">⚡ Quyền Tag Lãnh Đạo</span>
+                </span>
+              )}
+            </div>
+            {filteredUsers.map((u, i) => {
+              const isLeader = isLeadershipUser(u);
+              return (
                 <button
-                  key={item.id}
+                  key={u.id || i}
                   type="button"
-                  onClick={() => handleSelectMention(item)}
-                  className="w-full text-left px-2.5 py-1.5 hover:bg-indigo-50/80 rounded-lg transition-colors flex items-center justify-between group cursor-pointer border border-transparent hover:border-indigo-100"
+                  onClick={() => handleSelectUser(u)}
+                  className={`w-full flex items-center gap-2.5 px-2.5 py-2 text-left rounded-lg transition-all ${
+                    i === selectedIndex
+                      ? "bg-amber-100 text-amber-900 font-semibold"
+                      : "hover:bg-slate-50 text-slate-700"
+                  }`}
                 >
-                  <div className="flex items-center gap-2 truncate">
-                    {item.type === "person" ? (
-                      <span className="p-1 bg-blue-100 text-blue-700 rounded-md">
-                        <UserCheck className="w-3.5 h-3.5 shrink-0" />
-                      </span>
-                    ) : (
-                      <span className="p-1 bg-amber-100 text-amber-800 rounded-md">
-                        <Building className="w-3.5 h-3.5 shrink-0" />
-                      </span>
-                    )}
-                    <div className="truncate">
-                      <div className="text-xs font-bold text-slate-900 group-hover:text-indigo-700">
-                        <span translate="no" className="notranslate">@{item.name}</span>
-                      </div>
-                      {item.detail && (
-                        <div className="text-[10px] text-slate-500 truncate">
-                          <span translate="no" className="notranslate">{item.detail}</span>
-                        </div>
+                  <div className={`w-6 h-6 rounded-full text-[10px] font-black flex items-center justify-center ${
+                    isLeader
+                      ? "bg-purple-600 text-white ring-2 ring-purple-200"
+                      : i === selectedIndex ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-600"
+                  }`}>
+                    <span translate="no" className="notranslate">
+                      {u.fullName.split(" ").pop()?.slice(0, 2).toUpperCase() || "NV"}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs truncate flex items-center gap-1.5">
+                      <span translate="no" className="notranslate">{u.fullName}</span>
+                      {isLeader && (
+                        <span className="text-[8px] bg-purple-100 text-purple-700 font-extrabold px-1 py-0.2 rounded border border-purple-200">
+                          <span translate="no" className="notranslate">LÃNH ĐẠO</span>
+                        </span>
                       )}
                     </div>
+                    <div className="text-[9px] opacity-75 truncate">
+                      <span translate="no" className="notranslate">
+                        {u.position ? `${u.position} • ` : ""}{u.department || "QC"} • {u.role === UserRole.ADMIN ? "Quản trị" : u.role}
+                      </span>
+                    </div>
                   </div>
-                  <span className="text-[9px] font-bold text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                    Chọnn
-                  </span>
                 </button>
-              ))
-            )}
+              );
+            })}
           </div>
-        </div>
+        ) : (
+          !userCanTagLeaders && users.some((u) => isLeadershipUser(u)) ? (
+            <div
+              ref={dropdownRef}
+              className="absolute left-0 right-0 bottom-full mb-1 sm:bottom-auto sm:top-full sm:mt-1 bg-amber-50 border border-amber-200 rounded-xl shadow-xl z-[999999] p-2.5 text-center space-y-1"
+            >
+              <div className="text-amber-900 font-extrabold text-[10.5px] flex items-center justify-center gap-1">
+                <span translate="no" className="notranslate">🔒 GIỚI HẠN QUYỀN TAG LÃNH ĐẠO</span>
+              </div>
+              <div className="text-amber-800 text-[9.5px] leading-snug">
+                <span translate="no" className="notranslate">
+                  Chỉ Trưởng phòng, Phó phòng trở lên hoặc cấp tương đương mới được quyền Tag Ban TGĐ, Chủ tịch, Phó TGĐ...
+                </span>
+              </div>
+            </div>
+          ) : null
+        )
       )}
     </div>
   );
 }
 
 interface MentionInputProps {
+  users?: User[];
+  currentUser?: User | null;
   value: string;
   onChange: (val: string) => void;
   placeholder?: string;
   className?: string;
-  customMentions?: MentionItem[];
-  onShowNotification?: (mentionName: string) => void;
-  disabled?: boolean;
-  users?: any[];
-  onKeyDown?: (e: any) => void;
-  onPaste?: (e: any) => void;
-  onInput?: (e: any) => void;
+  containerClassName?: string;
   style?: React.CSSProperties;
+  name?: string;
+  type?: string;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  onFocus?: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
+  onBlur?: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
+  onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
 }
 
 export function MentionInput({
+  users = [],
+  currentUser,
   value,
   onChange,
   placeholder,
-  className = "w-full bg-transparent text-blue-700 print:text-black font-semibold text-xs focus:bg-amber-50 focus:outline-none",
-  customMentions,
-  onShowNotification,
-  disabled = false,
-  onKeyDown,
-  onPaste,
-  onInput,
+  className,
+  containerClassName,
   style,
+  name,
+  onKeyDown,
+  onFocus,
+  onBlur,
+  onPaste
 }: MentionInputProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [filterQuery, setFilterQuery] = useState("");
-  const [cursorPos, setCursorPos] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [annotationStartIdx, setAnnotationStartIdx] = useState(-1);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const mentionList = customMentions && customMentions.length > 0 ? customMentions : DEFAULT_MENTION_ITEMS;
+  // Auto-resize logic: expand up to 3 lines max (~76px) and collapse when empty
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
 
-  const filteredMentions = mentionList.filter((m) => {
-    if (!filterQuery) return true;
-    const q = filterQuery.toLowerCase();
-    return m.name.toLowerCase().includes(q) || (m.detail && m.detail.toLowerCase().includes(q));
-  });
+    el.style.height = "auto";
+    if (value) {
+      const scrollH = el.scrollHeight;
+      const maxHeight = 76; // max ~3 lines
+      const newH = Math.min(scrollH, maxHeight);
+      el.style.height = `${Math.max(36, newH)}px`;
+    } else {
+      el.style.height = "36px";
+    }
+  }, [value]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Determine active user
+  let activeUser = currentUser;
+  if (!activeUser) {
+    try {
+      const stored = localStorage.getItem("4m1e1i_current_user");
+      if (stored) {
+        activeUser = JSON.parse(stored);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  const userCanTagLeaders = canUserTagLeadership(activeUser);
+
+  const filteredUsers = users
+    .filter((u) => {
+      if (isLeadershipUser(u) && !userCanTagLeaders) {
+        return false;
+      }
+      if (!searchQuery) return true;
+      const normalizedName = removeVietnameseTones(u.fullName.toLowerCase());
+      const normalizedDept = removeVietnameseTones((u.department || "").toLowerCase());
+      const normalizedQuery = removeVietnameseTones(searchQuery.toLowerCase());
+      return normalizedName.includes(normalizedQuery) || normalizedDept.includes(normalizedQuery);
+    })
+    .slice(0, 8);
+
+  const handleSelectUser = (user: User) => {
+    if (!textareaRef.current) return;
+    const cursorPosition = textareaRef.current.selectionStart || 0;
+    const textBefore = value.slice(0, annotationStartIdx);
+    const textAfter = value.slice(cursorPosition);
+
+    const tag = `@${user.fullName} `;
+    const newValue = textBefore + tag + textAfter;
+
+    onChange(newValue);
+    setShowDropdown(false);
+
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        const nextCursor = textBefore.length + tag.length;
+        textareaRef.current.setSelectionRange(nextCursor, nextCursor);
+      }
+    }, 10);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
-    const pos = e.target.selectionStart || 0;
     onChange(val);
-    setCursorPos(pos);
 
-    const textBefore = val.slice(0, pos);
-    const match = textBefore.match(/@([a-zA-Z0-9_À-ỹ. -]*)$/);
+    const selectionStart = e.target.selectionStart || 0;
+    const textBeforeCursor = val.slice(0, selectionStart);
+    const match = textBeforeCursor.match(/@([^@\s]*)$/);
 
     if (match) {
-      setFilterQuery(match[1]);
-      setIsOpen(true);
+      const query = match[1];
+      const atIndex = textBeforeCursor.lastIndexOf("@");
+      setAnnotationStartIdx(atIndex);
+      setSearchQuery(query);
+      setShowDropdown(true);
+      setSelectedIndex(0);
     } else {
-      setIsOpen(false);
+      setShowDropdown(false);
     }
   };
 
-  const handleSelectMention = (item: MentionItem) => {
-    if (!inputRef.current) return;
-    const pos = inputRef.current.selectionStart || cursorPos;
-    const textBefore = value.slice(0, pos);
-    const textAfter = value.slice(pos);
-
-    const lastAtIndex = textBefore.lastIndexOf("@");
-    if (lastAtIndex !== -1) {
-      const newTextBefore = textBefore.slice(0, lastAtIndex) + "@" + item.name + " ";
-      const newValue = newTextBefore + textAfter;
-      onChange(newValue);
-
-      setTimeout(() => {
-        if (inputRef.current) {
-          inputRef.current.focus();
-          const newCursor = newTextBefore.length;
-          inputRef.current.setSelectionRange(newCursor, newCursor);
-        }
-      }, 50);
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (showDropdown && filteredUsers.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev + 1) % filteredUsers.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev - 1 + filteredUsers.length) % filteredUsers.length);
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleSelectUser(filteredUsers[selectedIndex]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setShowDropdown(false);
+        return;
+      }
+    } else if (e.key === "Enter" && !e.shiftKey) {
+      const formatted = formatVietnameseInputText(value);
+      if (formatted !== value) {
+        onChange(formatted);
+      }
+      e.preventDefault();
+      const form = textareaRef.current?.form;
+      if (form) {
+        form.requestSubmit();
+      }
     }
+    if (onKeyDown) {
+      onKeyDown(e);
+    }
+  };
 
-    setIsOpen(false);
-    if (onShowNotification) {
-      onShowNotification(item.name);
+  const handleFocus = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+    const target = e.target;
+    setTimeout(() => {
+      try {
+        target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      } catch {
+        // ignore
+      }
+    }, 250);
+    if (onFocus) {
+      onFocus(e);
+    }
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+    const formatted = formatVietnameseInputText(e.target.value);
+    if (formatted !== e.target.value) {
+      onChange(formatted);
+    }
+    if (onBlur) {
+      onBlur(e);
     }
   };
 
   useEffect(() => {
-    const handleClickOutside = (ev: MouseEvent) => {
+    const handleOutsideClick = (e: MouseEvent) => {
       if (
-        menuRef.current &&
-        !menuRef.current.contains(ev.target as Node) &&
-        inputRef.current &&
-        !inputRef.current.contains(ev.target as Node)
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node) &&
+        textareaRef.current &&
+        !textareaRef.current.contains(e.target as Node)
       ) {
-        setIsOpen(false);
+        setShowDropdown(false);
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
 
   return (
-    <div className="relative w-full">
-      <input
-        ref={inputRef}
-        type="text"
-        value={value}
-        onChange={handleChange}
+    <div className={`relative flex-1 min-w-0 ${containerClassName || ""}`}>
+      <textarea
+        ref={textareaRef}
+        name={name}
         placeholder={placeholder}
-        disabled={disabled}
-        className={className}
-        onKeyDown={onKeyDown}
+        value={value}
+        onChange={handleInputChange}
+        onKeyDown={handleKeyDown}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
         onPaste={onPaste}
-        onInput={onInput}
-        style={style}
+        rows={1}
+        className={`w-full resize-none overflow-y-auto leading-normal transition-all block ${className || ""}`}
+        style={{
+          boxSizing: "border-box",
+          ...style
+        }}
       />
 
-      {isOpen && (
-        <div
-          ref={menuRef}
-          className="absolute z-50 mt-1 left-0 w-72 bg-white border border-slate-300 rounded-xl shadow-xl p-1.5 space-y-1 animate-in fade-in zoom-in-95 duration-100 no-print"
-        >
-          <div className="px-2 py-1 text-[10px] font-black text-slate-500 uppercase tracking-wider flex items-center justify-between border-b border-slate-100">
-            <span className="flex items-center gap-1">
-              <AtSign className="w-3 h-3 text-indigo-600" />
-              <span translate="no" className="notranslate">TAG NGƯỜI / BỘ PHẬN</span>
-            </span>
-          </div>
-
-          <div className="max-h-44 overflow-y-auto space-y-0.5 pr-0.5">
-            {filteredMentions.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-slate-400 italic text-center">
-                Không tìm thấy "{filterQuery}"
-              </div>
-            ) : (
-              filteredMentions.map((item) => (
+      {showDropdown && (
+        filteredUsers.length > 0 ? (
+          <div
+            ref={dropdownRef}
+            className="absolute left-0 right-0 bottom-full mb-1 sm:bottom-auto sm:top-full sm:mt-1 max-h-48 overflow-y-auto bg-white border border-slate-250 rounded-xl shadow-xl z-[999999] p-1.5 space-y-0.5"
+          >
+            <div className="px-2 py-1 text-[9px] text-slate-400 font-bold uppercase tracking-wider border-b border-slate-50 mb-1 flex items-center justify-between">
+              <span><T><span translate="no" className="notranslate">Nhấn phím lên/xuống & Enter để Tag nhanh:</span></T></span>
+              {userCanTagLeaders && (
+                <span className="text-[8px] text-indigo-600 bg-indigo-50 px-1 py-0.2 rounded font-extrabold">
+                  <span translate="no" className="notranslate">⚡ Quyền Tag LÃNH ĐẠO</span>
+                </span>
+              )}
+            </div>
+            {filteredUsers.map((u, i) => {
+              const isLeader = isLeadershipUser(u);
+              return (
                 <button
-                  key={item.id}
+                  key={u.id || i}
                   type="button"
-                  onClick={() => handleSelectMention(item)}
-                  className="w-full text-left px-2.5 py-1.5 hover:bg-indigo-50/80 rounded-lg transition-colors flex items-center justify-between group cursor-pointer"
+                  onClick={() => handleSelectUser(u)}
+                  className={`w-full flex items-center gap-2.5 px-2.5 py-2 text-left rounded-lg transition-all ${
+                    i === selectedIndex
+                      ? "bg-amber-100 text-amber-900 font-semibold"
+                      : "hover:bg-slate-50 text-slate-700"
+                  }`}
                 >
-                  <div className="flex items-center gap-2 truncate">
-                    {item.type === "person" ? (
-                      <span className="p-1 bg-blue-100 text-blue-700 rounded-md">
-                        <UserCheck className="w-3 h-3 shrink-0" />
+                  <div className={`w-6 h-6 rounded-full text-[10px] font-black flex items-center justify-center ${
+                    isLeader
+                      ? "bg-purple-600 text-white ring-2 ring-purple-200"
+                      : i === selectedIndex ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-600"
+                  }`}>
+                    <span translate="no" className="notranslate">
+                      {u.fullName.split(" ").pop()?.slice(0, 2).toUpperCase() || "NV"}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs truncate flex items-center gap-1.5">
+                      <span translate="no" className="notranslate">{u.fullName}</span>
+                      {isLeader && (
+                        <span className="text-[8px] bg-purple-100 text-purple-700 font-extrabold px-1 py-0.2 rounded border border-purple-200">
+                          <span translate="no" className="notranslate">LÃNH ĐẠO</span>
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[9px] opacity-75 truncate">
+                      <span translate="no" className="notranslate">
+                        {u.position ? `${u.position} • ` : ""}{u.department || "QC"} • {u.role === UserRole.ADMIN ? "Quản trị" : u.role}
                       </span>
-                    ) : (
-                      <span className="p-1 bg-amber-100 text-amber-800 rounded-md">
-                        <Building className="w-3 h-3 shrink-0" />
-                      </span>
-                    )}
-                    <div className="truncate">
-                      <div className="text-xs font-bold text-slate-900 group-hover:text-indigo-700">
-                        <span translate="no" className="notranslate">@{item.name}</span>
-                      </div>
                     </div>
                   </div>
                 </button>
-              ))
-            )}
+              );
+            })}
           </div>
-        </div>
+        ) : (
+          !userCanTagLeaders && users.some((u) => isLeadershipUser(u)) ? (
+            <div
+              ref={dropdownRef}
+              className="absolute left-0 right-0 bottom-full mb-1 sm:bottom-auto sm:top-full sm:mt-1 bg-amber-50 border border-amber-200 rounded-xl shadow-xl z-[999999] p-2.5 text-center space-y-1"
+            >
+              <div className="text-amber-900 font-extrabold text-[10.5px] flex items-center justify-center gap-1">
+                <span translate="no" className="notranslate">🔒 GIỚI HẠN QUYỀN TAG LÃNH ĐẠO</span>
+              </div>
+              <div className="text-amber-800 text-[9.5px] leading-snug">
+                <span translate="no" className="notranslate">
+                  Chỉ Trưởng phòng, Phó phòng trở lên hoặc cấp tương đương mới được quyền Tag Ban TGĐ, Chủ tịch, Phó TGĐ...
+                </span>
+              </div>
+            </div>
+          ) : null
+        )
       )}
     </div>
   );

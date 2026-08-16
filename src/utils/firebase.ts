@@ -6,14 +6,12 @@ import {
   persistentMultipleTabManager,
   setLogLevel
 } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
 
 // Suppress internal connection attempt logs/warnings in sandboxed/offline environments
 setLogLevel("silent");
 
 let firebaseApp: any = null;
 let db: any = null;
-let storage: any = null;
 let parsedConfig: any = null;
 
 const rawConf = (import.meta as any).env?.VITE_FIREBASE_CONF || (import.meta as any).env?.VITE_FIREBASE_CONFIG || "";
@@ -48,7 +46,7 @@ if (rawConf) {
         apiKey: apiKeyMatch ? apiKeyMatch[1] : "",
         authDomain: authDomainMatch ? authDomainMatch[1] : "tanphu-4m1e1i.firebaseapp.com",
         projectId: projectIdMatch ? projectIdMatch[1] : "tanphu-4m1e1i",
-        storageBucket: storageBucketMatch ? storageBucketMatch[1] : "tanphu-4m1e1i.firebasestorage.app",
+        storageBucket: storageBucketMatch ? storageBucketMatch[1] : "tanphu-4m1e1i.appspot.com",
         messagingSenderId: messagingSenderIdMatch ? messagingSenderIdMatch[1] : "",
         appId: appIdMatch ? appIdMatch[1] : ""
       };
@@ -64,7 +62,7 @@ if (!parsedConfig) {
     apiKey: "AIzaSyDummyKeyForViteDevServerOnly",
     authDomain: "tanphu-4m1e1i.firebaseapp.com",
     projectId: "tanphu-4m1e1i",
-    storageBucket: "tanphu-4m1e1i.firebasestorage.app",
+    storageBucket: "tanphu-4m1e1i.appspot.com",
     messagingSenderId: "10384729102",
     appId: "1:10384729102:web:cbd594c4fcf14eb7b8ce7f"
   };
@@ -80,27 +78,28 @@ if (!isDummy) {
       firebaseApp = getApp();
     }
     
-    // Get standard Firestore instance safely
+    // Enable offline multiple-tab persistence and force long polling to bypass WebSocket 10s timeout in sandboxed environment
     try {
-      db = getFirestore(firebaseApp);
-    } catch (getDbErr) {
-      console.warn("Firestore initialization fallback:", getDbErr);
-      db = null;
-    }
-    try {
-      storage = getStorage(firebaseApp);
-    } catch (storageErr) {
-      storage = null;
+      db = initializeFirestore(firebaseApp, {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager()
+        }),
+        experimentalForceLongPolling: true
+      });
+    } catch (cacheErr) {
+      try {
+        db = getFirestore(firebaseApp);
+      } catch (getDbErr) {
+        console.warn("Firestore getFirestore fallback failed:", getDbErr);
+      }
     }
   } catch (error) {
-    console.warn("Firebase client initialization failed:", error);
+    console.warn("Firebase/Firestore client initialization failed:", error);
     db = null;
-    storage = null;
   }
 } else {
   console.log("Firebase is not configured or setup was declined. Running in Local/Offline fallback mode.");
   db = null;
-  storage = null;
 }
 
-export { firebaseApp, db, storage, parsedConfig as config };
+export { firebaseApp, db, parsedConfig as config };
