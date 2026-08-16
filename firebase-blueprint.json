@@ -42,6 +42,20 @@
         "imageUrl": { "type": "string" },
         "googleDrivePath": { "type": "string" }
       }
+    },
+    "CapaDocument": {
+      "title": "CapaDocument",
+      "description": "Represents ISO BM01-ISO-QT04-KPPN CAPA reports and multi-version history.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "reportId": { "type": "string" },
+        "activeFormData": { "type": "object" },
+        "versions": { "type": "array" },
+        "activeVersionTag": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "lastSyncedAt": { "type": "string" }
+      }
     }
   },
   "firestore": {
@@ -52,6 +66,10 @@
     "/reports/{reportId}": {
       "schema": "QualityReport",
       "description": "4M1E1I quality reports list."
+    },
+    "/capa_documents/{reportId}": {
+      "schema": "CapaDocument",
+      "description": "CAPA 4M1E1I document reports and version history."
     }
   }
 }

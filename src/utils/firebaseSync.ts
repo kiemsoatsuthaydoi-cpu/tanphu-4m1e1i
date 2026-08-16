@@ -13,7 +13,8 @@ import {
   initialMoldsCatalog, 
   initialProductionRequests, 
   initialProductionRequestItemsMap, 
-  initialOrderImplementations 
+  initialOrderImplementations,
+  initialKnowledgeDocs 
 } from "../data";
 
 // Collections list
@@ -32,7 +33,9 @@ export const COLLECTIONS = {
   MOLDS_CATALOG: "moldsCatalog",
   TOPICS: "forum_topics",
   TOPIC_REPLIES: "forum_replies",
-  DIRECT_MESSAGES: "direct_messages"
+  DIRECT_MESSAGES: "direct_messages",
+  KNOWLEDGE_BASE: "knowledge_base",
+  CAPA_DOCUMENTS: "capa_documents"
 };
 
 /**
@@ -219,6 +222,12 @@ export async function seedFirestoreIfNeeded(): Promise<boolean> {
       initialReplies.forEach((r) => {
         const docRef = doc(db, COLLECTIONS.TOPIC_REPLIES, r.id);
         batch.set(docRef, r);
+      });
+
+      // Seed Knowledge Base docs
+      initialKnowledgeDocs.forEach((k) => {
+        const docRef = doc(db, COLLECTIONS.KNOWLEDGE_BASE, k.id);
+        batch.set(docRef, k);
       });
 
       // Seed default configs

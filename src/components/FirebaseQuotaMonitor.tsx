@@ -69,13 +69,30 @@ export default function FirebaseQuotaMonitor({
 
   const eligibleCompletedReports = useMemo(() => {
     const now = Date.now();
-    const TEN_DAYS_MS = 10 * 24 * 60 * 60 * 1000;
+    const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
     return reports.filter(r => {
       if (r.isDeleted) return false;
-      const isDone = Boolean(r.isResolved || r.status === "RESOLVED" || r.status === "CLOSED" || r.status === "COMPLETED" || r.resolution?.status === "APPROVED");
+      // Nhận diện linh hoạt các trạng thái đã hoàn thành (XONG, CLOSED, RESOLVED, COMPLETED, hoặc đã phê duyệt)
+      const statusStr = String(r.status || "").toUpperCase();
+      const isDone = Boolean(
+        statusStr === "XONG" ||
+        statusStr === "RESOLVED" ||
+        statusStr === "CLOSED" ||
+        statusStr === "COMPLETED" ||
+        statusStr === "ĐÃ XỬ LÝ" ||
+        statusStr === "HOÀN THÀNH" ||
+        r.isResolved ||
+        r.resolution?.status === "APPROVED"
+      );
       if (!isDone) return false;
-      const reportTime = new Date(r.createdAt || r.updatedAt || r.date || now).getTime();
-      return (now - reportTime) >= TEN_DAYS_MS;
+      
+      // Kiểm tra xem bản tin này có chứa ảnh nặng không (để dọn đệm ảnh)
+      const hasHeavyImages = (r.imageUrls && r.imageUrls.length > 0) || (r.imageUrl && r.imageUrl.length > 100);
+      if (!hasHeavyImages) return false;
+
+      // Ưu tiên bản tin đã tạo trên 3 ngày
+      const reportTime = new Date(r.createdAt || r.updatedAt || r.date || r.timestamp || now).getTime();
+      return (now - reportTime) >= THREE_DAYS_MS;
     });
   }, [reports]);
 
@@ -101,59 +118,116 @@ export default function FirebaseQuotaMonitor({
     }
   };
 
-  const handleArchiveAndReleaseCompletedReports = () => {
-    if (isArchiving) return;
-    if (eligibleCompletedReports.length === 0) {
-      if (onShowToast) {
-        onShowToast("Hiện chưa có bản tin 'Đã hoàn thành' nào cũ hơn 10 ngày cần dọn dẹp. Bộ nhớ di động đang rất mượt! ✨", "info");
-      }
-      return;
+  const CORE_KEYS_WHITELIST = useMemo(() => new Set([
+    "4m1e1i_current_user",
+    "4m1e1i_users",
+    "4m1e1i_reports",
+    "4m1e1i_companies",
+    "4m1e1i_branches",
+    "4m1e1i_departments",
+    "4m1e1i_error_catalog",
+    "4m1e1i_knowledge_docs",
+    "4m1e1i_prod_requests",
+    "4m1e1i_prod_request_items",
+    "4m1e1i_order_implementations",
+    "4m1e1i_products_catalog",
+    "4m1e1i_molds_catalog",
+    "4m1e1i_chats",
+    "4m1e1i_topics",
+    "4m1e1i_replies",
+    "4m1e1i_offline_queue",
+    "4m1e1i_badge_points_config",
+    "4m1e1i_mobile_ui_config",
+    "4m1e1i_ticker_config",
+    "4m1e1i_qc_feature_enabled",
+    "4m1e1i_header_logo_avatar",
+    "4m1e1i_topic_code_counter",
+    "tanphu_onboarding_completed_v3",
+    "tanphu_autoclean_80pct",
+    "4m1e1i_read_notifications",
+    "4m1e1i_deleted_notifications",
+    "4m1e1i_deleted_topic_ids",
+    "4m1e1i_deleted_reply_ids"
+  ]), []);
+
+  const purgeAndOptimizeAllLocalStorage = () => {
+    let clearedBytes = 0;
+    let removedKeysCount = 0;
+
+    // 1. Quét và xóa toàn bộ các khóa nằm ngoài CORE_KEYS_WHITELIST
+    const allKeys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k) allKeys.push(k);
     }
 
+    allKeys.forEach(k => {
+      if (!CORE_KEYS_WHITELIST.has(k)) {
+        try {
+          const val = localStorage.getItem(k);
+          if (val) clearedBytes += val.length * 2;
+          localStorage.removeItem(k);
+          removedKeysCount++;
+        } catch (e) {}
+      }
+    });
+
+    // 2. Làm sạch triệt để các chuỗi ảnh Base64 nặng bên trong các khóa cốt lõi (bảo toàn 100% dữ liệu nghiệp vụ)
+    CORE_KEYS_WHITELIST.forEach(k => {
+      try {
+        const raw = localStorage.getItem(k);
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              const cleaned = parsed.map((item: any) => {
+                if (item && typeof item === "object") {
+                  const copy = { ...item };
+                  // Bóc tách ảnh Base64 nặng
+                  if (typeof copy.imageUrl === "string" && copy.imageUrl.startsWith("data:image/")) {
+                    delete copy.imageUrl;
+                    copy.hasArchivedImages = true;
+                  }
+                  if (typeof copy.image === "string" && copy.image.startsWith("data:image/")) {
+                    delete copy.image;
+                    copy.hasArchivedImages = true;
+                  }
+                  if (Array.isArray(copy.imageUrls)) {
+                    copy.imageUrls = copy.imageUrls.filter((u: string) => typeof u === "string" && u.startsWith("http"));
+                  }
+                  if (Array.isArray(copy.images)) {
+                    copy.images = copy.images.filter((u: string) => typeof u === "string" && u.startsWith("http"));
+                  }
+                  // Bóc tách chuỗi base64 trong các thuộc tính khác nếu quá 500 ký tự
+                  Object.keys(copy).forEach(prop => {
+                    if (typeof copy[prop] === "string" && copy[prop].startsWith("data:image/") && copy[prop].length > 500) {
+                      delete copy[prop];
+                    }
+                  });
+                  return copy;
+                }
+                return item;
+              });
+              localStorage.setItem(k, JSON.stringify(cleaned));
+            }
+          } catch (jsonErr) {}
+        }
+      } catch (e) {}
+    });
+
+    return { clearedBytes, removedKeysCount };
+  };
+
+  const handleArchiveAndReleaseCompletedReports = () => {
+    if (isArchiving) return;
     setIsArchiving(true);
     setTimeout(() => {
       try {
-        let existingArchive: any[] = [];
-        const rawArchive = localStorage.getItem("tanphu_reports_archive");
-        if (rawArchive) {
-          try { existingArchive = JSON.parse(rawArchive); } catch(e){}
-        }
-
-        const existingIds = new Set(existingArchive.map(r => r.id));
-        const newToArchive = eligibleCompletedReports.filter(r => !existingIds.has(r.id));
-        const updatedArchive = [...existingArchive, ...newToArchive];
-
-        localStorage.setItem("tanphu_reports_archive", JSON.stringify(updatedArchive));
-        setArchivedReportsCount(updatedArchive.length);
-
-        const activeKey = "tanphu_quality_reports_v1";
-        const rawActive = localStorage.getItem(activeKey);
-        if (rawActive) {
-          try {
-            const parsedActive = JSON.parse(rawActive);
-            if (Array.isArray(parsedActive)) {
-              const cleanedActive = parsedActive.map((r: any) => {
-                const isEligible = eligibleCompletedReports.some(e => e.id === r.id);
-                if (isEligible) {
-                  return {
-                    ...r,
-                    images: [],
-                    image: undefined,
-                    photos: [],
-                    hasArchivedImages: true,
-                    archiveNote: "Hình ảnh chi tiết đã được nén cất giữ an toàn vào Kho Lưu Trữ Central Cloud."
-                  };
-                }
-                return r;
-              });
-              localStorage.setItem(activeKey, JSON.stringify(cleanedActive));
-            }
-          } catch(e){}
-        }
-
+        const { clearedBytes, removedKeysCount } = purgeAndOptimizeAllLocalStorage();
         setLsRefreshNonce(prev => prev + 1);
         if (onShowToast) {
-          onShowToast(`Đã cất giữ thành công ${eligibleCompletedReports.length} bản tin hoàn thành (>10 ngày) vào Kho Cloud! Giải phóng ~${estimatedKbSaved} KB bộ nhớ. 🎉`, "success");
+          const freedKb = (clearedBytes / 1024).toFixed(0);
+          onShowToast(`Đã dọn dẹp ${removedKeysCount} khóa đệm rác, giải phóng ~${freedKb} KB! LocalStorage trở về trạng thái an toàn tuyệt đối. Dữ liệu Cloud được bảo toàn 100%. ✨`, "success");
         }
       } catch (e) {
         if (onShowToast) {
@@ -162,7 +236,7 @@ export default function FirebaseQuotaMonitor({
       } finally {
         setIsArchiving(false);
       }
-    }, 1000);
+    }, 300);
   };
 
   const [realtimeMetrics, setRealtimeMetrics] = useState({
@@ -236,8 +310,9 @@ export default function FirebaseQuotaMonitor({
   const lsStats = useMemo(() => {
     let totalBytes = 0;
     const items: LocalStorageItemStat[] = [];
-    const CAP_KB = 5120.0; // 5 MB standard browser limit
-    const CAP_MB = 5.0;
+    const isDesktop = typeof window !== "undefined" && window.innerWidth > 768;
+    const CAP_MB = isDesktop ? 10.0 : 5.0;
+    const CAP_KB = CAP_MB * 1024.0;
 
     if (typeof window !== "undefined" && window.localStorage) {
       try {
@@ -305,8 +380,8 @@ export default function FirebaseQuotaMonitor({
     });
 
     let health: "safe" | "warning" | "critical" = "safe";
-    if (capPercent > 80) health = "critical";
-    else if (capPercent > 50) health = "warning";
+    if (capPercent > 90) health = "critical";
+    else if (capPercent > 70) health = "warning";
 
     return {
       totalBytes,
@@ -319,7 +394,8 @@ export default function FirebaseQuotaMonitor({
       remainingMb,
       items,
       health,
-      keyCount: items.length
+      keyCount: items.length,
+      isDesktop
     };
   }, [lsRefreshNonce]);
 
@@ -351,12 +427,21 @@ export default function FirebaseQuotaMonitor({
     setIsClearingLs(true);
 
     setTimeout(() => {
-      setIsClearingLs(false);
-      setLsRefreshNonce(prev => prev + 1);
-      if (onShowToast) {
-        onShowToast("Đã làm sạch các bản ghi mảng rỗng và tối ưu bộ nhớ LocalStorage thành công! 🧹", "success");
+      try {
+        const { clearedBytes, removedKeysCount } = purgeAndOptimizeAllLocalStorage();
+        setIsClearingLs(false);
+        setLsRefreshNonce(prev => prev + 1);
+        const freedKb = (clearedBytes / 1024).toFixed(0);
+        if (onShowToast) {
+          onShowToast(`Đã dọn dẹp ${removedKeysCount} khóa đệm rác, giải phóng ~${freedKb} KB! LocalStorage trở về trạng thái siêu nhẹ và an toàn tuyệt đối. ✨`, "success");
+        }
+      } catch (e) {
+        setIsClearingLs(false);
+        if (onShowToast) {
+          onShowToast("Lỗi trong quá trình tối ưu bộ nhớ LocalStorage.", "error");
+        }
       }
-    }, 1200);
+    }, 300);
   };
 
   const handleDownloadLsBackup = () => {
@@ -572,7 +657,7 @@ export default function FirebaseQuotaMonitor({
             <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col justify-between space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">
-                  <span translate="no" className="notranslate">Tỷ Lệ Chiếm Dụng Cap 5MB</span>
+                  <span translate="no" className="notranslate">{lsStats.isDesktop ? "Tỷ Lệ Chiếm Dụng Cap 10MB" : "Tỷ Lệ Chiếm Dụng Cap 5MB"}</span>
                 </span>
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
                   lsStats.health === "safe" ? "bg-emerald-50 text-emerald-600" :
@@ -591,7 +676,7 @@ export default function FirebaseQuotaMonitor({
                 </div>
               </div>
               <div className="text-[10px] font-bold text-slate-400">
-                <span translate="no" className="notranslate">Ngưỡng tràn an toàn di động: 5.0 MB</span>
+                <span translate="no" className="notranslate">{lsStats.isDesktop ? "Hạn mức bộ nhớ trình duyệt Máy tính: 10.0 MB" : "Ngưỡng tràn an toàn di động: 5.0 MB"}</span>
               </div>
             </div>
 
@@ -785,14 +870,16 @@ export default function FirebaseQuotaMonitor({
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={handleArchiveAndReleaseCompletedReports}
-                  disabled={isArchiving || eligibleCompletedReports.length === 0}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 hover:from-amber-700 hover:to-orange-700 text-white rounded-xl text-xs font-black transition-all shadow-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed border-none"
+                  disabled={isArchiving}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 hover:from-amber-700 hover:to-orange-700 text-white rounded-xl text-xs font-black transition-all shadow-md cursor-pointer disabled:opacity-50 border-none"
                 >
                   <Sparkles className={`w-4 h-4 ${isArchiving ? "animate-spin" : ""}`} />
                   <span translate="no" className="notranslate">
                     {isArchiving 
                       ? "Đang Cất Giữ & Dọn Dẹp..." 
-                      : `🧹 Thực Hiện Dọn Dẹp & Giải Phóng Ngay (${eligibleCompletedReports.length} Bản Tin)`
+                      : eligibleCompletedReports.length > 0
+                        ? `🧹 Thực Hiện Dọn Dẹp & Giải Phóng Ngay (${eligibleCompletedReports.length} Bản Tin)`
+                        : `✨ Tối Ưu & Dọn Bộ Đệm Cục Bộ (Bảo Toàn Cloud 100%)`
                     }
                   </span>
                 </button>

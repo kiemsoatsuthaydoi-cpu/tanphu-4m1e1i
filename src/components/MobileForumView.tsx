@@ -1683,7 +1683,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                           <div
                             id={`reply-${reply.id}`}
                             onClick={() => setActiveMessageId(prev => prev === reply.id ? null : reply.id)}
-                            className={`p-3 max-w-[88%] text-[12.5px] leading-relaxed break-words shadow-2xs relative transition-all rounded-2xl cursor-pointer select-none ${
+                            className={`p-3.5 max-w-[88%] text-[15px] leading-relaxed break-words shadow-2xs relative transition-all rounded-2xl cursor-pointer select-none ${
                               likeCount > 0 ? "pb-3.5 mb-1" : ""
                             } ${
                               isActiveMessage
@@ -1693,8 +1693,8 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                                 : "hover:brightness-98"
                             } ${
                               isMe
-                                ? "bg-[#1d4ed8] text-white font-semibold rounded-tr-none shadow-blue-500/10"
-                                : "bg-white text-slate-800 font-medium rounded-tl-none border border-slate-200/90"
+                                ? "bg-[#e8f2fe] text-slate-900 font-normal rounded-tr-none border border-blue-200/90 shadow-2xs"
+                                : "bg-white text-slate-800 font-normal rounded-tl-none border border-slate-200/90"
                             }`}
                           >
                             {/* Distinct Task Icon Badge for Converted Messages */}
@@ -1730,24 +1730,24 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                                   e.stopPropagation();
                                   scrollToReply(reply.quotedReply!.id);
                                 }}
-                                className={`mb-2 p-2 rounded-xl border-l-4 text-[11px] cursor-pointer transition-opacity hover:opacity-90 ${
-                                  isMe ? "bg-blue-800/60 text-blue-100 border-amber-400" : "bg-slate-100 text-slate-700 border-amber-500"
+                                className={`mb-2 p-2.5 rounded-xl border-l-4 text-[12.5px] cursor-pointer transition-opacity hover:opacity-90 ${
+                                  isMe ? "bg-[#d8e8fe]/80 text-slate-800 border-blue-600" : "bg-slate-100 text-slate-700 border-amber-500"
                                 }`}
                               >
-                                <div className="flex items-center gap-1 font-bold text-[10px] opacity-90 pb-0.5">
+                                <div className={`flex items-center gap-1 font-bold text-[11.5px] pb-0.5 ${isMe ? "text-blue-900" : "opacity-90"}`}>
                                   <CornerUpLeft className="w-3 h-3" />
                                   <span translate="no" className="notranslate">{reply.quotedReply.senderName}</span>
                                 </div>
-                                <p translate="no" className="notranslate line-clamp-2 italic text-[10.5px]">
-                                  "{renderMentionText(reply.quotedReply.message, isMe)}"
+                                <p translate="no" className="notranslate line-clamp-2 italic text-[12px]">
+                                  "{renderMentionText(reply.quotedReply.message, false)}"
                                 </p>
                               </div>
                             )}
 
                             {/* Text message */}
                             {reply.message && (
-                              <span translate="no" className="notranslate whitespace-pre-wrap">
-                                {renderMentionText(reply.message, isMe)}
+                              <span translate="no" className="notranslate whitespace-pre-wrap text-slate-900 text-[15px] leading-relaxed">
+                                {renderMentionText(reply.message, false)}
                               </span>
                             )}
 
