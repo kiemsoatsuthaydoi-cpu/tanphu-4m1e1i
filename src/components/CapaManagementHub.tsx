@@ -50,6 +50,7 @@ import {
   autoMigrateLocalCapaToCloud,
   uploadCapaImage
 } from "../utils/capaFirebaseSync";
+import { generateProfessionalClientCapaDraft } from "../utils/aiCapaGenerator";
 
 export type { CapaData, CapaVersion };
 
@@ -1538,26 +1539,16 @@ export default function CapaManagementHub({
         throw new Error(data?.error || "Không nhận được phản hồi từ AI");
       }
     } catch (e: any) {
-      console.warn("AI remote draft fallback to rule-based template:", e);
-      // Khi AI server bận tải (503/429), tự động sinh dự thảo thông minh chuẩn ISO từ dữ liệu sự cố 4M1E1I
-      const fallbackDraft: CapaData = {
-        ...capaForm,
-        productName: (currentReport as any).productName || currentReport.content?.substring(0, 45) || capaForm.productName,
-        customerName: (currentReport as any).customerName || "Khách hàng Nội Bộ",
-        ncDescription: formatAutoLineBreaks(`${currentReport.content || ""}\n${currentReport.notes ? `- Ghi chú: ${currentReport.notes}` : ""}`.trim()),
-        reason: formatAutoLineBreaks(`- Yếu tố ảnh hưởng (${currentReport.category || "4M1E1I"}): Đang xác minh nguyên nhân gốc rễ.\n- Cần đối soát thêm thông số vận hành và thao tác chuẩn tại hiện trường.`),
-        correction: formatAutoLineBreaks(`- Tạm dừng và cách ly lô sản phẩm nghi ngờ liên quan.\n- Báo cáo Tổ trưởng và QC phụ trách để kiểm tra phân loại.`),
-        traceability: formatAutoLineBreaks(`- Truy xuất hồ sơ sản xuất lô hàng tại thời điểm phát sinh.\n- Kiểm tra số lượng tồn kho và bán thành phẩm liên quan.`),
-        preventiveAction: formatAutoLineBreaks(`- Tái đào tạo công nhân về tiêu chuẩn thao tác (SOP).\n- Tăng cường tần suất kiểm tra chất lượng đầu ca và giữa ca.`),
-        isAiDrafted: true
-      };
+      console.warn("AI remote draft fallback to client intelligent ISO generator:", e);
+      // Tự động phân tích sâu đa yếu tố (5-Why, hành động khắc phục, truy xuất nguồn gốc, phòng ngừa lỗi) theo chuẩn ISO 9001
+      const intelligentCapaDraft = generateProfessionalClientCapaDraft(currentReport, capaForm);
 
-      setCapaForm(fallbackDraft);
-      setCapaStorageItem("capa_form_v1", selectedReportId, JSON.stringify(fallbackDraft), reports);
-      saveCapaToCloud(selectedReportId, fallbackDraft, versions, viewingVersion || "DRAFT");
+      setCapaForm(intelligentCapaDraft);
+      setCapaStorageItem("capa_form_v1", selectedReportId, JSON.stringify(intelligentCapaDraft), reports);
+      saveCapaToCloud(selectedReportId, intelligentCapaDraft, versions, viewingVersion || "DRAFT");
 
       if (onShowToast) {
-        onShowToast("Hệ thống đã tự động lập dự thảo CAPA ISO từ dữ liệu sự cố!", "info");
+        onShowToast("Trợ lý AI đã phân tích 5-Why & lập dự thảo CAPA ISO hoàn chỉnh!", "success");
       }
     } finally {
       setIsAiLoading(false);

@@ -2278,7 +2278,7 @@ export default function MobileFrame({
   const [selectedOnlyTransferredFilter, setSelectedOnlyTransferredFilter] = useState(false);
   const [selectedOnlyTaggedFilter, setSelectedOnlyTaggedFilter] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [activeFilterSheet, setActiveFilterSheet] = useState<"BRANCH" | "CATEGORY" | "WEEK" | null>(null);
+  const [activeFilterSheet, setActiveFilterSheet] = useState<"BRANCH" | "CATEGORY" | "WEEK" | "TRIAL_BRANCH" | null>(null);
   const [onboardingStep, setOnboardingStep] = useState<number | null>(null);
 
   useEffect(() => {
@@ -2323,7 +2323,9 @@ export default function MobileFrame({
   const [mobileFeedSubTab, setMobileFeedSubTab] = useState<"FEED" | "PROPOSAL">("FEED");
   const [mobileFeedViewMode, setMobileFeedViewMode] = useState<"REPORT" | "TRIAL">("REPORT");
   const [mobileTrialSearchQuery, setMobileTrialSearchQuery] = useState("");
+  const [mobileTrialBranchFilter, setMobileTrialBranchFilter] = useState<string>("ALL");
   const [mobileTrialStatusFilter, setMobileTrialStatusFilter] = useState<"ALL" | "IN_PROGRESS" | "COMPLETED_PASS" | "COMPLETED_FAIL">("ALL");
+  const [mobileTrialTypeFilter, setMobileTrialTypeFilter] = useState<"ALL" | "B2B" | "B2C">("ALL");
   const [isCreateTrialModalOpen, setIsCreateTrialModalOpen] = useState(false);
   const [isTrialSearchFocused, setIsTrialSearchFocused] = useState(false);
   const [showTrash, setShowTrash] = useState(false);
@@ -5955,7 +5957,7 @@ App Link: ${window.location.origin}`;
       {/* Internal layout controls (Search inputs & Status filters) */}
       {activeBottomTab === "BAO_CAO" && (
         <div className={`transition-all duration-300 overflow-hidden shrink-0 ${
-          showFilters ? "max-h-[105px] opacity-100" : "max-h-0 opacity-0 pointer-events-none"
+          showFilters ? (mobileFeedViewMode === "TRIAL" ? "max-h-[140px] opacity-100" : "max-h-[105px] opacity-100") : "max-h-0 opacity-0 pointer-events-none"
         }`}>
           {mobileFeedViewMode === "TRIAL" ? (
             /* TRIAL TRACKING SPECIFIC FILTER & SEARCH BAR */
@@ -5991,9 +5993,9 @@ App Link: ${window.location.origin}`;
                 <div className="w-[85px] shrink-0">
                   <button
                     type="button"
-                    onClick={() => setActiveFilterSheet("BRANCH")}
+                    onClick={() => setActiveFilterSheet("TRIAL_BRANCH")}
                     className={`w-full text-[8.5px] font-black rounded-lg px-1.5 py-1 focus:ring-1 focus:ring-teal-500 outline-none select-none h-[26px] cursor-pointer flex items-center justify-between gap-0.5 transition-all ${
-                      selectedFactoryFilters.length > 0
+                      mobileTrialBranchFilter !== "ALL"
                         ? "bg-teal-50 text-teal-900 border border-teal-300 shadow-3xs"
                         : "bg-slate-100 text-slate-700 border border-slate-200"
                     }`}
@@ -6001,26 +6003,68 @@ App Link: ${window.location.origin}`;
                     <span className="truncate block text-left">
                       <span translate="no" className="notranslate">
                         {(() => {
-                          if (selectedFactoryFilters.length === 0) return "TẤT CẢ";
-                          if (selectedFactoryFilters.length === 1) {
-                            const foundBranch = (branches || []).find(b => b.id === selectedFactoryFilters[0] || b.name === selectedFactoryFilters[0]);
-                            return foundBranch ? getFactoryDisplayName(foundBranch.name) : selectedFactoryFilters[0];
-                          }
-                          return `${selectedFactoryFilters.length} CN`;
+                          if (mobileTrialBranchFilter === "ALL") return "TẤT CẢ";
+                          const foundBranch = (branches || []).find(b => b.id === mobileTrialBranchFilter || b.name === mobileTrialBranchFilter);
+                          return foundBranch ? getFactoryDisplayName(foundBranch.name) : mobileTrialBranchFilter;
                         })()}
                       </span>
                     </span>
-                    <span className={`text-[7px] shrink-0 ${selectedFactoryFilters.length > 0 ? "text-teal-600 font-bold" : "text-slate-400"}`}>▼</span>
+                    <span className={`text-[7px] shrink-0 ${mobileTrialBranchFilter !== "ALL" ? "text-teal-600 font-bold" : "text-slate-400"}`}>▼</span>
                   </button>
                 </div>
               </div>
 
-              {/* Row 2: Trial Status Filter Strip */}
+              {/* Row 2: 1-Touch Pill Bar for Trial Stream (TN-B2B / TN-B2C) */}
               <div className="flex items-center gap-1 overflow-x-auto scrollbar-none text-[8.5px] font-extrabold tracking-tight pt-0.5">
+                <span className="text-[8px] text-slate-400 font-bold uppercase shrink-0 mr-0.5">
+                  <span translate="no" className="notranslate">Phân hệ:</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setMobileTrialTypeFilter("ALL")}
+                  className={`h-[23px] px-2.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center ${
+                    mobileTrialTypeFilter === "ALL"
+                      ? "bg-slate-800 text-white border-slate-800 shadow-3xs"
+                      : "bg-slate-100 text-slate-700 border-slate-200/80 hover:bg-slate-200"
+                  }`}
+                >
+                  <span translate="no" className="notranslate">TẤT CẢ LOẠI</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMobileTrialTypeFilter("B2B")}
+                  className={`h-[23px] px-2.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1 justify-center ${
+                    mobileTrialTypeFilter === "B2B"
+                      ? "bg-blue-600 text-white border-blue-600 shadow-3xs"
+                      : "bg-blue-50 text-blue-800 border-blue-200/80 hover:bg-blue-100"
+                  }`}
+                >
+                  <span>🏢</span>
+                  <span translate="no" className="notranslate">TN-B2B (Công nghiệp)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMobileTrialTypeFilter("B2C")}
+                  className={`h-[23px] px-2.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1 justify-center ${
+                    mobileTrialTypeFilter === "B2C"
+                      ? "bg-purple-600 text-white border-purple-600 shadow-3xs"
+                      : "bg-purple-50 text-purple-800 border-purple-200/80 hover:bg-purple-100"
+                  }`}
+                >
+                  <span>🛍️</span>
+                  <span translate="no" className="notranslate">TN-B2C (Gia dụng)</span>
+                </button>
+              </div>
+
+              {/* Row 3: Trial Status Filter Strip */}
+              <div className="flex items-center gap-1 overflow-x-auto scrollbar-none text-[8.5px] font-extrabold tracking-tight pt-0.5">
+                <span className="text-[8px] text-slate-400 font-bold uppercase shrink-0 mr-0.5">
+                  <span translate="no" className="notranslate">Tình trạng:</span>
+                </span>
                 <button
                   type="button"
                   onClick={() => setMobileTrialStatusFilter("ALL")}
-                  className={`h-[24px] px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center ${
+                  className={`h-[23px] px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center ${
                     mobileTrialStatusFilter === "ALL"
                       ? "bg-teal-700 text-white border-teal-700 shadow-3xs"
                       : "bg-slate-100 text-slate-700 border-slate-200/80 hover:bg-slate-200"
@@ -6031,7 +6075,7 @@ App Link: ${window.location.origin}`;
                 <button
                   type="button"
                   onClick={() => setMobileTrialStatusFilter("IN_PROGRESS")}
-                  className={`h-[24px] px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center ${
+                  className={`h-[23px] px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center ${
                     mobileTrialStatusFilter === "IN_PROGRESS"
                       ? "bg-amber-600 text-white border-amber-600 shadow-3xs"
                       : "bg-amber-50 text-amber-800 border-amber-200/80 hover:bg-amber-100"
@@ -6042,7 +6086,7 @@ App Link: ${window.location.origin}`;
                 <button
                   type="button"
                   onClick={() => setMobileTrialStatusFilter("COMPLETED_PASS")}
-                  className={`h-[24px] px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center ${
+                  className={`h-[23px] px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center ${
                     mobileTrialStatusFilter === "COMPLETED_PASS"
                       ? "bg-emerald-600 text-white border-emerald-600 shadow-3xs"
                       : "bg-emerald-50 text-emerald-800 border-emerald-200/80 hover:bg-emerald-100"
@@ -6053,7 +6097,7 @@ App Link: ${window.location.origin}`;
                 <button
                   type="button"
                   onClick={() => setMobileTrialStatusFilter("COMPLETED_FAIL")}
-                  className={`h-[24px] px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center ${
+                  className={`h-[23px] px-2 rounded-lg border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center justify-center ${
                     mobileTrialStatusFilter === "COMPLETED_FAIL"
                       ? "bg-rose-600 text-white border-rose-600 shadow-3xs"
                       : "bg-rose-50 text-rose-800 border-rose-200/80 hover:bg-rose-100"
@@ -8036,13 +8080,15 @@ App Link: ${window.location.origin}`;
             currentUser={currentUser}
             selectedCompany={selectedNewsCompanyFilter}
             onCompanyChange={(c) => setSelectedNewsCompanyFilter(c)}
-            selectedBranch={selectedFactoryFilters.length === 0 ? "ALL" : selectedFactoryFilters[0]}
-            onBranchChange={(b) => setSelectedFactoryFilters(b === "ALL" ? [] : [b])}
+            selectedBranch={mobileTrialBranchFilter}
+            onBranchChange={setMobileTrialBranchFilter}
             branches={branches}
             searchQuery={mobileTrialSearchQuery}
             onSearchQueryChange={setMobileTrialSearchQuery}
             statusFilter={mobileTrialStatusFilter}
             onStatusFilterChange={setMobileTrialStatusFilter}
+            trialTypeFilter={mobileTrialTypeFilter}
+            onTrialTypeFilterChange={setMobileTrialTypeFilter}
             isCreateModalOpen={isCreateTrialModalOpen}
             onOpenCreateModalChange={setIsCreateTrialModalOpen}
             isMobileView={true}
@@ -14071,30 +14117,31 @@ App Link: ${window.location.origin}`}
       {activeFilterSheet && (
         <div 
           onClick={() => setActiveFilterSheet(null)}
-          className="fixed lg:absolute inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-[70] select-none animate-fadeIn cursor-pointer"
+          className="fixed lg:absolute inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-[70] select-none animate-fadeIn cursor-pointer"
         >
           <div 
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl w-full max-w-[280px] p-4 shadow-2xl border border-slate-150 flex flex-col animate-in fade-in zoom-in-95 duration-150 cursor-default"
+            className="bg-white rounded-2xl w-full max-w-[320px] max-h-[84dvh] p-3.5 sm:p-4 shadow-2xl border border-slate-150 flex flex-col animate-in fade-in zoom-in-95 duration-150 cursor-default"
           >
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-2 shrink-0">
-              <span className="font-extrabold text-[10px] text-slate-850 tracking-wider uppercase">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5 mb-2.5 shrink-0">
+              <span className="font-extrabold text-[11px] text-slate-850 tracking-wider uppercase">
                 {activeFilterSheet === "BRANCH" && <T>Lọc theo Nhà máy</T>}
+                {activeFilterSheet === "TRIAL_BRANCH" && <T>Lọc theo Chi nhánh (Thử nghiệm)</T>}
                 {activeFilterSheet === "CATEGORY" && <T>Lọc theo Yếu tố 4M1E1I</T>}
                 {activeFilterSheet === "WEEK" && <T>Lọc theo Tuần</T>}
               </span>
               <button
                 type="button"
                 onClick={() => setActiveFilterSheet(null)}
-                className="w-5 h-5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-[9px] border-none"
+                className="w-5.5 h-5.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center cursor-pointer transition-colors text-[10px] border-none"
               >
                 ✕
               </button>
             </div>
 
             {/* List Option Container */}
-            <div className="max-h-[220px] overflow-y-auto space-y-1 pr-0.5 thin-scrollbar">
+            <div className="flex-1 overflow-y-auto space-y-1.5 pr-0.5 thin-scrollbar max-h-[58dvh] sm:max-h-[460px]">
               {activeFilterSheet === "BRANCH" && (() => {
                 const rawChips = branches && branches.length > 0
                   ? branches
@@ -14250,6 +14297,97 @@ App Link: ${window.location.origin}`}
                         </span>
                       </button>
                     </div>
+                  </div>
+                );
+              })()}
+
+              {activeFilterSheet === "TRIAL_BRANCH" && (() => {
+                const activeBranches = branches || [];
+                const isAllSelected = mobileTrialBranchFilter === "ALL";
+
+                return (
+                  <div className="flex flex-col gap-1.5">
+                    {/* Header summary */}
+                    <div className="flex items-center justify-between pb-1.5 mb-1 border-b border-teal-100 px-0.5">
+                      <div className="text-[8.5px] font-bold text-slate-500">
+                        {isAllSelected ? (
+                          <span className="text-teal-800 font-extrabold">Đang xem: Tất cả chi nhánh</span>
+                        ) : (
+                          <span className="text-teal-800 font-extrabold">Chi nhánh: {getFactoryDisplayName(mobileTrialBranchFilter)}</span>
+                        )}
+                      </div>
+                      {!isAllSelected && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMobileTrialBranchFilter("ALL");
+                            setActiveFilterSheet(null);
+                          }}
+                          className="text-[8.5px] px-2 py-0.5 rounded-md font-bold text-teal-800 hover:bg-teal-50 border border-teal-200 transition-all cursor-pointer"
+                        >
+                          <T>Tất cả</T>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Option All */}
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => {
+                        setMobileTrialBranchFilter("ALL");
+                        setActiveFilterSheet(null);
+                      }}
+                      className={`w-full flex items-center justify-between p-2 rounded-xl text-left text-[9.5px] font-bold transition-all cursor-pointer border ${
+                        isAllSelected 
+                          ? "bg-teal-50 text-teal-900 border-teal-300 font-extrabold shadow-3xs" 
+                          : "bg-white text-slate-700 border-slate-150 hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className={`w-4 h-4 rounded flex items-center justify-center border transition-all ${
+                          isAllSelected ? "bg-teal-700 border-teal-700 text-white" : "border-slate-300 bg-white"
+                        }`}>
+                          {isAllSelected && <Check className="w-3 h-3 stroke-[3px]" />}
+                        </div>
+                        <span><T>TẤT CẢ CHI NHÁNH</T></span>
+                      </div>
+                    </div>
+
+                    {/* Branch List */}
+                    {activeBranches.map((b) => {
+                      const isSelected = mobileTrialBranchFilter === b.name || mobileTrialBranchFilter === b.id;
+                      return (
+                        <div
+                          key={b.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => {
+                            setMobileTrialBranchFilter(b.name);
+                            setActiveFilterSheet(null);
+                          }}
+                          className={`w-full flex items-center justify-between p-2 rounded-xl text-left text-[9.5px] font-bold transition-all cursor-pointer border ${
+                            isSelected 
+                              ? "bg-teal-50 text-teal-900 border-teal-300 font-extrabold shadow-3xs" 
+                              : "bg-white text-slate-700 border-slate-150 hover:bg-slate-50"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <div className={`w-4 h-4 rounded shrink-0 flex items-center justify-center border transition-all ${
+                              isSelected ? "bg-teal-700 border-teal-700 text-white" : "border-slate-300 bg-white"
+                            }`}>
+                              {isSelected && <Check className="w-3 h-3 stroke-[3px]" />}
+                            </div>
+                            <span className="truncate"><T>{b.name}</T></span>
+                          </div>
+                          {b.companyId && (
+                            <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0">
+                              {b.companyId}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })()}
