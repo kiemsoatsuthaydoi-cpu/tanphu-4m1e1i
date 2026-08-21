@@ -23,10 +23,14 @@ import {
   ForumReply,
   ForumTopicCategory,
   ForumTopicStatus,
-  ErrorCatalogItem
+  ErrorCatalogItem,
+  KnowledgeDoc,
+  FestiveBannerConfig
 } from "./types";
+import { FestiveTopBanner } from "./components/FestiveTopBanner";
 import { generateNotifications } from "./utils/notificationHelper";
 import { getCategoryFallbackImage } from "./utils/imageProcessor";
+import { extractTaggedUserIds, getDefaultMembersForReport } from "./utils/userResolver";
 import {
   initialUsers,
   initialReports,
@@ -41,7 +45,8 @@ import {
   initialProductionRequests,
   initialProductionRequestItemsMap,
   initialOrderImplementations,
-  initialErrorCatalog
+  initialErrorCatalog,
+  initialKnowledgeDocs
 } from "./data";
 import MobileFrame from "./components/MobileFrame";
 import { MobileListOnly } from "./components/MobileListOnly";
@@ -230,26 +235,28 @@ const sanitizeAndMigrateDepartments = (rawDepts: Department[]): Department[] => 
     if (name.includes("(BBC)")) {
       name = name.replace("(BBC)", "(DNP-BBC)");
     }
-    return { ...d, branchId: bId, name };
+    const initialMatch = initialDepartments.find(initD => initD.id === d.id || initD.name === d.name);
+    const shortName = d.shortName || initialMatch?.shortName;
+    return { ...d, branchId: bId, name, shortName };
   });
 
   // Ensure default departments for DNP-BBM and DNP-BBC exist
   const bbmQCExist = list.some(d => d.branchId === "DNP-BBM" && d.name.includes("Quản Lý Chất Lượng"));
   if (!bbmQCExist) {
-    list.push({ id: "bbm-1", name: "Phòng Quản Lý Chất Lượng (DNP-BBM)", branchId: "DNP-BBM" });
+    list.push({ id: "bbm-1", name: "Phòng Quản Lý Chất Lượng (DNP-BBM)", shortName: "QLCL", branchId: "DNP-BBM" });
   }
   const bbmKTExist = list.some(d => d.branchId === "DNP-BBM" && d.name.includes("Tài chính Kế toán"));
   if (!bbmKTExist) {
-    list.push({ id: "bbm-2", name: "Phòng Tài chính Kế toán (DNP-BBM)", branchId: "DNP-BBM" });
+    list.push({ id: "bbm-2", name: "Phòng Tài chính Kế toán (DNP-BBM)", shortName: "TCKT", branchId: "DNP-BBM" });
   }
 
   const bbcQCExist = list.some(d => d.branchId === "DNP-BBC" && d.name.includes("Quản Lý Chất Lượng"));
   if (!bbcQCExist) {
-    list.push({ id: "bbc-1", name: "Phòng Quản Lý Chất Lượng (DNP-BBC)", branchId: "DNP-BBC" });
+    list.push({ id: "bbc-1", name: "Phòng Quản Lý Chất Lượng (DNP-BBC)", shortName: "QLCL", branchId: "DNP-BBC" });
   }
   const bbcKTExist = list.some(d => d.branchId === "DNP-BBC" && d.name.includes("Tài chính Kế toán"));
   if (!bbcKTExist) {
-    list.push({ id: "bbc-2", name: "Phòng Tài chính Kế toán (DNP-BBC)", branchId: "DNP-BBC" });
+    list.push({ id: "bbc-2", name: "Phòng Tài chính Kế toán (DNP-BBC)", shortName: "TCKT", branchId: "DNP-BBC" });
   }
 
   // Group by branchId to migrate DEPT- IDs deterministically
@@ -810,6 +817,11 @@ export default function App() {
     return safeParseJSON(saved, initialMoldsCatalog);
   });
 
+  const [knowledgeDocs, setKnowledgeDocs] = useState<KnowledgeDoc[]>(() => {
+    const saved = safeGetItem("4m1e1i_knowledge_docs");
+    return safeParseJSON(saved, initialKnowledgeDocs);
+  });
+
   // Global settings
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const saved = safeGetItem("4m1e1i_current_user");
@@ -821,7 +833,11 @@ export default function App() {
   });
 
   const [offlineMode, setOfflineMode] = useState(false);
-  const [showMobilePreview, setShowMobilePreview] = useState(true);
+  const [showMobilePreview, setShowMobilePreview] = useState(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("print") === "true") return false;
+    return true;
+  });
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingReport, setEditingReport] = useState<QualityReport | null>(null);
   const [isNativeScrollActive, setIsNativeScrollActive] = useState(false);
@@ -909,6 +925,24 @@ export default function App() {
   const [headerLogoAvatar, setHeaderLogoAvatar] = useState(() => {
     return safeGetItem("4m1e1i_header_logo_avatar") || "";
   });
+
+  const [festiveBannerConfig, setFestiveBannerConfig] = useState<FestiveBannerConfig | null>(() => {
+    const saved = safeGetItem("4m1e1i_festive_banner_config");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (festiveBannerConfig) {
+      safeSetItem("4m1e1i_festive_banner_config", JSON.stringify(festiveBannerConfig));
+    }
+  }, [festiveBannerConfig]);
 
   useEffect(() => {
     safeSetItem("4m1e1i_header_logo_avatar", headerLogoAvatar);
@@ -1273,6 +1307,15 @@ export default function App() {
     }
   }, [toast]);
 
+  const handleUpdateFestiveBannerConfig = useCallback((newConfig: FestiveBannerConfig) => {
+    setFestiveBannerConfig(newConfig);
+    safeSetItem("4m1e1i_festive_banner_config", JSON.stringify(newConfig));
+    if (dbConnected) {
+      saveDocument("config", "festive_banner", newConfig).catch(console.error);
+    }
+    showToast("Đã lưu và cập nhật cấu hình Banner Lễ Hội thành công!", "success");
+  }, [dbConnected]);
+
   // Synchronize and Cascade registration selections with master data lists
   useEffect(() => {
     if (!regCompany) return; // Do not force initial company selection on load
@@ -1435,7 +1478,8 @@ export default function App() {
         fMolds,
         fConfigs,
         fTopics,
-        fReplies
+        fReplies,
+        fKnowledgeDocs
       ] = await Promise.all([
         fetchCollection<User>(COLLECTIONS.USERS),
         fetchCollection<QualityReport>(COLLECTIONS.REPORTS),
@@ -1451,7 +1495,8 @@ export default function App() {
         fetchCollection<CatalogMold>(COLLECTIONS.MOLDS_CATALOG),
         fetchCollection<any>("config"),
         fetchCollection<ForumTopic>(COLLECTIONS.TOPICS),
-        fetchCollection<ForumReply>(COLLECTIONS.TOPIC_REPLIES)
+        fetchCollection<ForumReply>(COLLECTIONS.TOPIC_REPLIES),
+        fetchCollection<KnowledgeDoc>(COLLECTIONS.KNOWLEDGE_BASE)
       ]);
 
       let finalUsers = [...users];
@@ -1694,6 +1739,10 @@ export default function App() {
         setMoldsCatalog(fMolds);
       }
 
+      if (fKnowledgeDocs && fKnowledgeDocs.length > 0) {
+        setKnowledgeDocs(fKnowledgeDocs);
+      }
+
       const remoteConfig = fConfigs.find((c: any) => c.id === "mobile_ui");
       if (remoteConfig) {
         const { id, ...cleanCfg } = remoteConfig;
@@ -1730,6 +1779,11 @@ export default function App() {
         saveDocument("config", "qc_feature", { enabled: isQcFeatureEnabled }).catch(console.error);
       }
 
+      const remoteFestiveBanner = fConfigs.find((c: any) => c.id === "festive_banner");
+      if (remoteFestiveBanner) {
+        setFestiveBannerConfig(remoteFestiveBanner);
+      }
+
       setDbConnected(true);
       setSyncCompleted(true);
       setDbStatus("Đồng bộ liên kết với server thành công!");
@@ -1751,6 +1805,57 @@ export default function App() {
       setDbLoading(false);
     }
   };
+
+  // Immediate auto-cleanup of legacy image cache keys on application mount to ensure ultra-lightweight storage and prevent QuotaExceededError
+  useEffect(() => {
+    try {
+      const CORE_KEYS_WHITELIST = new Set([
+        "4m1e1i_current_user",
+        "4m1e1i_users",
+        "4m1e1i_reports",
+        "4m1e1i_companies",
+        "4m1e1i_branches",
+        "4m1e1i_departments",
+        "4m1e1i_error_catalog",
+        "4m1e1i_knowledge_docs",
+        "4m1e1i_prod_requests",
+        "4m1e1i_prod_request_items",
+        "4m1e1i_order_implementations",
+        "4m1e1i_products_catalog",
+        "4m1e1i_molds_catalog",
+        "4m1e1i_chats",
+        "4m1e1i_topics",
+        "4m1e1i_replies",
+        "4m1e1i_offline_queue",
+        "4m1e1i_badge_points_config",
+        "4m1e1i_mobile_ui_config",
+        "4m1e1i_ticker_config",
+        "4m1e1i_festive_banner_config",
+        "4m1e1i_qc_feature_enabled",
+        "4m1e1i_header_logo_avatar",
+        "4m1e1i_topic_code_counter",
+        "tanphu_onboarding_completed_v3",
+        "tanphu_autoclean_80pct",
+        "4m1e1i_read_notifications",
+        "4m1e1i_deleted_notifications",
+        "4m1e1i_deleted_topic_ids",
+        "4m1e1i_deleted_reply_ids"
+      ]);
+
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && !CORE_KEYS_WHITELIST.has(k)) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach((k) => {
+        try {
+          localStorage.removeItem(k);
+        } catch (e) {}
+      });
+    } catch (e) {}
+  }, []);
 
   // Synchronize with Firestore upon startup
   useEffect(() => {
@@ -3025,6 +3130,29 @@ export default function App() {
     setTopicCodeCounter(nextCounter);
     safeSetItem("4m1e1i_topic_code_counter", nextCounter.toString());
 
+    // Extract any tagged users in topic title or description
+    const tagged = extractTaggedUserIds(`${title} ${description}`, users);
+    const initialInvited = invitedUserIds ? [...invitedUserIds] : [];
+    
+    // If topic is created for a Report (Bản tin KPH / chuyên đề), automatically ensure creator, uploader, and tagged members are included
+    if (reportId) {
+      const rep = reports.find((r) => r.id === reportId || r.reportCode === reportId);
+      if (rep) {
+        const repDefaults = getDefaultMembersForReport(rep, users, currentUser);
+        repDefaults.memberIds.forEach((mId) => {
+          if (!initialInvited.includes(mId)) {
+            initialInvited.push(mId);
+          }
+        });
+      }
+    }
+
+    tagged.userIds.forEach((uId) => {
+      if (!initialInvited.includes(uId)) {
+        initialInvited.push(uId);
+      }
+    });
+
     const newTopic: ForumTopic = {
       id: `TOPIC-${Date.now()}`,
       topicCode,
@@ -3038,7 +3166,7 @@ export default function App() {
       status: "OPEN",
       isPinned: false,
       reportId,
-      invitedUserIds
+      invitedUserIds: initialInvited.length > 0 ? initialInvited : undefined
     };
     setTopics((prev) => [...prev, newTopic]);
     if (dbConnected) {
@@ -3047,7 +3175,11 @@ export default function App() {
       });
     }
 
-    showToast(reportId ? "🔥 Đã mở phòng thảo luận chuyên đề khẩn!" : "Đã tạo chủ đề trao đổi mới!", "success");
+    if (tagged.userNames.length > 0) {
+      showToast(`Đã tạo chủ đề và tự động thêm ${tagged.userNames.join(", ")} vào nhóm! 👥`, "success");
+    } else {
+      showToast(reportId ? "🔥 Đã mở phòng thảo luận chuyên đề khẩn!" : "Đã tạo chủ đề trao đổi mới!", "success");
+    }
     return newTopic.id;
   };
 
@@ -3073,15 +3205,71 @@ export default function App() {
         console.error("Lỗi khi gửi phản hồi lên Firestore:", err);
       });
     }
+
+    // Auto-detect tagged or assigned individual and add them into the topic group
+    const tagged = extractTaggedUserIds(
+      `${message} ${extraData?.actionData?.note || ""}`,
+      users,
+      extraData?.actionData
+        ? {
+            id: extraData.actionData.assignedToId,
+            fullName: extraData.actionData.assignedToName,
+          }
+        : undefined
+    );
+
+    if (tagged.userIds.length > 0) {
+      setTopics((prevTopics) => {
+        let addedNames: string[] = [];
+        const nextTopics = prevTopics.map((t) => {
+          if (t.id !== topicId) return t;
+          const currentInvited = t.invitedUserIds ? [...t.invitedUserIds] : [];
+          let hasChange = false;
+
+          tagged.userIds.forEach((uId, idx) => {
+            if (!currentInvited.includes(uId)) {
+              currentInvited.push(uId);
+              hasChange = true;
+              const name = tagged.userNames[idx];
+              if (name && !addedNames.includes(name)) {
+                addedNames.push(name);
+              }
+            }
+          });
+
+          if (hasChange) {
+            const updatedTopic: ForumTopic = {
+              ...t,
+              invitedUserIds: currentInvited
+            };
+            if (dbConnected) {
+              saveDocument(COLLECTIONS.TOPICS, updatedTopic.id, updatedTopic).catch((err) => {
+                console.error("Lỗi khi cập nhật thành viên vào chủ đề:", err);
+              });
+            }
+            return updatedTopic;
+          }
+          return t;
+        });
+
+        if (addedNames.length > 0) {
+          showToast(`Đã tự động thêm ${addedNames.join(", ")} vào nhóm thảo luận! 👥`, "info");
+        }
+
+        return nextTopics;
+      });
+    }
   };
 
   const handleEditForumReply = (
     replyId: string,
     updatedData: string | Partial<ForumReply>
   ) => {
+    let targetTopicId: string | undefined;
     setReplies((prev) => {
       const next = prev.map((r) => {
         if (r.id !== replyId) return r;
+        targetTopicId = r.topicId;
         const updated: ForumReply = typeof updatedData === "string"
           ? { ...r, message: updatedData }
           : { ...r, ...updatedData };
@@ -3095,6 +3283,64 @@ export default function App() {
       safeSetItem("4m1e1i_replies", JSON.stringify(next));
       return next;
     });
+
+    // Check if edited message or actionData contains tagged/assigned users
+    const textToCheck = typeof updatedData === "string" ? updatedData : (updatedData.message || "");
+    const actionDataToCheck = typeof updatedData === "object" ? updatedData.actionData : undefined;
+    if (targetTopicId && (textToCheck || actionDataToCheck)) {
+      const tagged = extractTaggedUserIds(
+        `${textToCheck} ${actionDataToCheck?.note || ""}`,
+        users,
+        actionDataToCheck
+          ? {
+              id: actionDataToCheck.assignedToId,
+              fullName: actionDataToCheck.assignedToName,
+            }
+          : undefined
+      );
+
+      if (tagged.userIds.length > 0) {
+        setTopics((prevTopics) => {
+          let addedNames: string[] = [];
+          const nextTopics = prevTopics.map((t) => {
+            if (t.id !== targetTopicId) return t;
+            const currentInvited = t.invitedUserIds ? [...t.invitedUserIds] : [];
+            let hasChange = false;
+
+            tagged.userIds.forEach((uId, idx) => {
+              if (!currentInvited.includes(uId)) {
+                currentInvited.push(uId);
+                hasChange = true;
+                const name = tagged.userNames[idx];
+                if (name && !addedNames.includes(name)) {
+                  addedNames.push(name);
+                }
+              }
+            });
+
+            if (hasChange) {
+              const updatedTopic: ForumTopic = {
+                ...t,
+                invitedUserIds: currentInvited
+              };
+              if (dbConnected) {
+                saveDocument(COLLECTIONS.TOPICS, updatedTopic.id, updatedTopic).catch((err) => {
+                  console.error("Lỗi khi cập nhật thành viên vào chủ đề:", err);
+                });
+              }
+              return updatedTopic;
+            }
+            return t;
+          });
+
+          if (addedNames.length > 0) {
+            showToast(`Đã tự động thêm ${addedNames.join(", ")} vào nhóm thảo luận! 👥`, "info");
+          }
+
+          return nextTopics;
+        });
+      }
+    }
   };
 
   const handleDeleteForumReply = (replyId: string) => {
@@ -3182,9 +3428,25 @@ export default function App() {
     description: string, 
     category: ForumTopicCategory
   ) => {
+    // Extract any tagged users in updated title/description
+    const tagged = extractTaggedUserIds(`${title} ${description}`, users);
+
     setTopics((prev) => prev.map((t) => {
       if (t.id !== topicId) return t;
-      const updated = { ...t, title, description, category };
+      const currentInvited = t.invitedUserIds ? [...t.invitedUserIds] : [];
+      tagged.userIds.forEach((uId) => {
+        if (!currentInvited.includes(uId)) {
+          currentInvited.push(uId);
+        }
+      });
+
+      const updated = {
+        ...t,
+        title,
+        description,
+        category,
+        invitedUserIds: currentInvited.length > 0 ? currentInvited : undefined
+      };
       if (dbConnected) {
         saveDocument(COLLECTIONS.TOPICS, updated.id, updated).catch((err) => {
           console.error("Lỗi khi sửa chủ đề:", err);
@@ -3680,6 +3942,62 @@ export default function App() {
     showToast("Đã xóa mã lỗi khỏi danh mục! 🗑️", "success");
   }, []);
 
+  const handleAddKnowledgeDoc = useCallback((docData: Omit<KnowledgeDoc, "id" | "updatedAt">) => {
+    const now = new Date();
+    const dd = String(now.getDate()).padStart(2, "0");
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const yy = String(now.getFullYear()).slice(-2);
+    const timeStr = `${dd}/${mm}/${yy}`;
+    const newId = `DOC-KB-${Date.now()}`;
+    const newDoc: KnowledgeDoc = {
+      ...docData,
+      id: newId,
+      updatedAt: timeStr
+    };
+    setKnowledgeDocs((prev) => {
+      const updated = [newDoc, ...prev];
+      safeSetItem("4m1e1i_knowledge_docs", JSON.stringify(updated));
+      return updated;
+    });
+    if (dbConnected) {
+      saveDocument(COLLECTIONS.KNOWLEDGE_BASE, newId, newDoc).catch(console.error);
+    }
+    showToast("Đã thêm tài liệu tiêu chuẩn mới vào Kho Tri Thức! 📚", "success");
+  }, [dbConnected]);
+
+  const handleUpdateKnowledgeDoc = useCallback((doc: KnowledgeDoc) => {
+    const now = new Date();
+    const dd = String(now.getDate()).padStart(2, "0");
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const yy = String(now.getFullYear()).slice(-2);
+    const timeStr = `${dd}/${mm}/${yy}`;
+    const updatedDoc: KnowledgeDoc = {
+      ...doc,
+      updatedAt: timeStr
+    };
+    setKnowledgeDocs((prev) => {
+      const updated = prev.map((d) => (d.id === doc.id ? updatedDoc : d));
+      safeSetItem("4m1e1i_knowledge_docs", JSON.stringify(updated));
+      return updated;
+    });
+    if (dbConnected) {
+      saveDocument(COLLECTIONS.KNOWLEDGE_BASE, doc.id, updatedDoc).catch(console.error);
+    }
+    showToast("Đã cập nhật nội dung tài liệu thành công! 💾", "success");
+  }, [dbConnected]);
+
+  const handleDeleteKnowledgeDoc = useCallback((id: string) => {
+    setKnowledgeDocs((prev) => {
+      const updated = prev.filter((d) => d.id !== id);
+      safeSetItem("4m1e1i_knowledge_docs", JSON.stringify(updated));
+      return updated;
+    });
+    if (dbConnected) {
+      deleteDocument(COLLECTIONS.KNOWLEDGE_BASE, id).catch(console.error);
+    }
+    showToast("Đã xóa tài liệu khỏi Kho Tri Thức! 🗑️", "success");
+  }, [dbConnected]);
+
   // Export full reports backup (including image Base64 strings)
   const handleExportBackup = useCallback(() => {
     try {
@@ -3750,7 +4068,15 @@ export default function App() {
   }, [dbConnected]);
 
   // Render Authentication Section (Login / registration cards)
+  const isPrintModeUrl = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("print") === "true";
+  
   if (!currentUser) {
+    if (isPrintModeUrl) {
+      const defaultUser = users.find((u) => u.role === UserRole.ADMIN || u.role === UserRole.REVIEWER) || users[0];
+      if (defaultUser) {
+        setCurrentUser(defaultUser);
+      }
+    }
     const isRegIdValid = /^\d{4}\.\d{5}$/.test(regId);
     const isRegPhoneValid = regPhone.replace(/\s+/g, "").length === 10 && regPhone.replace(/\s+/g, "").startsWith("0");
     const isLoginPhoneValid = loginPhone.replace(/\s+/g, "").length === 10 && loginPhone.replace(/\s+/g, "").startsWith("0");
@@ -4514,147 +4840,13 @@ export default function App() {
   }
 
   // Active user view workspace: 1. Real mobile device logic (Strictly separate DOM from Desktop layout)
-  if (currentUser && isMobile) {
+  if (currentUser && isMobile && !isPrintModeUrl) {
     return (
       <div className="min-h-screen bg-white flex flex-col font-sans relative overflow-x-hidden p-0">
-        {isFormOpen ? (
-          <ReportForm
-            key={editingReport ? editingReport.id : "new"}
-            currentUser={currentUser}
-            users={users}
-            editingReport={editingReport}
-            onCancel={() => {
-              setIsFormOpen(false);
-              setEditingReport(null);
-            }}
-            onSubmitReport={handleSubmitReport}
-            offlineMode={offlineMode}
-            branches={branches}
-            mobileUIConfig={mobileUIConfig}
-            onShowToast={showToast}
-            isQcFeatureEnabled={isQcFeatureEnabled}
-          />
-        ) : (
-          <MobileFrame
-            isFormOpen={isFormOpen}
-            onCloseForm={() => setIsFormOpen(false)}
-            editingReport={editingReport}
-            onCloseEditingReport={() => setEditingReport(null)}
-            confirmDialog={confirmDialog}
-            onCloseConfirmDialog={() => setConfirmDialog(null)}
-            headerLogoAvatar={headerLogoAvatar}
-            onUpdateHeaderLogoAvatar={handleUpdateHeaderLogoAvatar}
-            errorCatalog={errorCatalog}
-            onAddErrorCatalogItem={handleAddErrorCatalogItem}
-            isQcFeatureEnabled={isQcFeatureEnabled}
-            onToggleQcFeature={handleToggleQcFeature}
-            reports={reports}
-            currentUserId={currentUser.id}
-            onOpenReportForm={() => setIsFormOpen(true)}
-            onDeleteReport={handleDeleteReportTrigger}
-            onEditReport={handleEditReportTrigger}
-            offlineMode={offlineMode}
-            currentUser={currentUser}
-            onUpdateReport={handleUpdateReport}
-            mobileUIConfig={mobileUIConfig}
-            onUpdateMobileUIConfig={handleUpdateMobileUIConfig}
-            onLogout={() => setCurrentUser(null)}
-            branches={branches}
-            onManualRefresh={syncFromDb}
-            users={users}
-            companies={companies}
-            onSwitchToDesktop={() => {}}
-            chats={chats}
-            onAddChatMessage={handleAddChatMessage}
-            onEditChatMessage={handleEditChatMessage}
-            onDeleteChatMessage={handleDeleteChatMessage}
-            onToggleLikeChatMessage={handleToggleLikeChatMessage}
-            onUpdateUserStatus={handleUpdateStatus}
-            onUpdateUserRole={handleUpdateRole}
-            isNativeScrollActive={isNativeScrollActive}
-            setIsNativeScrollActive={handleSetNativeScrollActive}
-            tickerConfig={tickerConfig}
-            broadcasts={broadcasts}
-            onUpdateTickerConfig={handleUpdateTickerConfig}
-            aiKnowledgeText={aiKnowledgeText}
-            onUpdateAiKnowledge={handleUpdateAiKnowledge}
-            onAddBroadcast={handleAddBroadcast}
-            onDeleteBroadcast={handleDeleteBroadcast}
-            deletedNotifIds={deletedNotifIds}
-            onDeleteNotification={handleDeleteNotification}
-            systemNotifications={systemNotifications}
-            readNotifIds={readNotifIds}
-            setReadNotifIds={setReadNotifIds}
-            topics={topics}
-            replies={replies}
-            onAddForumTopic={handleAddForumTopic}
-            onAddForumReply={handleAddForumReply}
-            onEditForumReply={handleEditForumReply}
-            onDeleteForumReply={handleDeleteForumReply}
-            onLikeForumReply={handleLikeForumReply}
-            onUpdateForumTopicStatus={handleUpdateForumTopicStatus}
-            onToggleForumTopicPin={handleToggleForumTopicPin}
-            onEditForumTopic={handleEditForumTopic}
-            onUpdateTopicInvitedUsers={handleUpdateTopicInvitedUsers}
-            onDeleteForumTopic={handleDeleteForumTopic}
-            onExportBackup={handleExportBackup}
-            onImportBackup={handleImportBackup}
-          />
-        )}
-
-        {/* High-fidelity elegant Custom Toast system for CBNV */}
-        {toast && (
-          <div 
-            style={{ zIndex: 100000 }} 
-            className="fixed top-6 left-1/2 -translate-x-1/2 max-w-[90vw] w-fit min-w-[300px] bg-slate-900/95 backdrop-blur-md text-white rounded-2xl p-4 shadow-2xl flex items-center gap-3 border border-slate-700/50 select-none animate-fadeIn transition-all"
-          >
-            {toast.type === "success" && (
-              <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-                <Check className="w-4 h-4" />
-              </div>
-            )}
-            {toast.type === "error" && (
-              <div className="w-7 h-7 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
-                <AlertCircle className="w-4 h-4" />
-              </div>
-            )}
-            {toast.type === "warning" && (
-              <div className="w-7 h-7 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-4 h-4" />
-              </div>
-            )}
-            {toast.type === "info" && (
-              <div className="w-7 h-7 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
-                <Info className="w-4 h-4" />
-              </div>
-            )}
-            
-            <div className="flex-1 text-left text-[11px] font-bold leading-normal text-slate-100 pr-2">
-              <T>{toast.message}</T>
-            </div>
-            
-            <button
-              onClick={() => setToast(null)}
-              className="text-slate-400 hover:text-white transition-colors cursor-pointer text-xs font-semibold px-1 rounded-sm active:scale-95"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-
-        {confirmDialogMarkup}
-      </div>
-    );
-  }
-
-  // Active user view workspace: 2. Simulated smartphone workspace on desktop screens for STAFF or REVIEWER
-  if (currentUser && (currentUser.role === UserRole.STAFF || currentUser.role === UserRole.REVIEWER)) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#2563eb] to-[#1d4ed8] flex items-center justify-center p-0 sm:p-4 relative font-sans overflow-hidden select-none">
-        {/* Ambient decorative glowing spots */}
-        <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-cyan-400 bg-opacity-30 rounded-full blur-[140px] pointer-events-none" />
-        <div className="absolute bottom-1/4 right-1/4 w-[600px] h-[600px] bg-[#6366f1] bg-opacity-35 rounded-full blur-[140px] pointer-events-none" />
-
+        <FestiveTopBanner
+          config={festiveBannerConfig}
+          isAdmin={currentUser?.role === UserRole.ADMIN}
+        />
         {isFormOpen ? (
           <ReportForm
             key={editingReport ? editingReport.id : "new"}
@@ -4786,55 +4978,14 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F0F2F5] flex flex-col relative overflow-hidden font-sans">
-      {/* Upper header line with simulated offline trigger */}
-      <div className="hidden lg:flex bg-[#1E293B] px-6 py-2 border-b border-slate-700 justify-between items-center select-none text-[10px] text-slate-300 shrink-0 main-app-header">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
-          <T>BỘ PHẬN CHỈ ĐẠO:</T>
-          <T className="font-bold text-white uppercase">{STANDARDIZED_QC_DEPT} TÂN PHÚ VIỆT NAM</T>
-          <span className="text-slate-600 mx-1">|</span>
-          <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-mono leading-none ${
-            dbConnected 
-              ? "bg-emerald-500/20 text-emerald-405 border border-emerald-500/30" 
-              : dbLoading 
-                ? "bg-blue-500/25 text-blue-300 border border-blue-500/30"
-                : "bg-slate-700 text-slate-400 border border-slate-600"
-          }`}>
-            <span className={`w-1 h-1 rounded-full ${dbConnected ? "bg-emerald-400" : dbLoading ? "bg-blue-500 animate-ping" : "bg-slate-400"}`} />
-            <span translate="no" className="notranslate">CLOUD DB: {dbStatus}</span>
-          </span>
-        </div>
-
-        <div className="flex items-center gap-4">
-          {/* OFFLINE PRETEST MODE CONTROLLER */}
-          <button
-            onClick={handleToggleOfflineMode}
-            className={`px-3 py-1 rounded-full text-[9px] font-extrabold flex items-center gap-1.5 transition-all select-none cursor-pointer ${
-              offlineMode
-                ? "bg-red-500/20 text-red-400 border border-red-500/30 font-bold"
-                : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
-            }`}
-            title="Nhấn để ngắt/kết nối mạng để giả lập chế độ offline"
-          >
-            {offlineMode ? <WifiOff className="w-3 h-3 text-red-500" /> : <Wifi className="w-3 h-3 text-emerald-400" />}
-            <T>{offlineMode ? "ĐANG OFFLINE (Gỉa lập mất mạng)" : "ĐANG ONLINE (Giả lập có mạng)"}</T>
-          </button>
-
-          {/* Toggle preview visualizer */}
-          <button
-            onClick={() => setShowMobilePreview(!showMobilePreview)}
-            className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[9px] font-bold rounded-full flex items-center gap-1 transition-all cursor-pointer"
-          >
-            {showMobilePreview ? <Monitor className="w-3 h-3" /> : <Smartphone className="w-3 h-3" />}
-            <T>{showMobilePreview ? "ĐÓNG GIẢ LẬP MOBILE" : "MỞ GIẢ LẬP MOBILE"}</T>
-          </button>
-        </div>
-      </div>
-
+    <div className="h-screen max-h-screen bg-[#F0F2F5] flex flex-col relative overflow-hidden font-sans">
+      <FestiveTopBanner
+        config={festiveBannerConfig}
+        isAdmin={currentUser?.role === UserRole.ADMIN}
+      />
       {/* Side-by-side layout (Desktop view takes full remaining space, accompanied by a luxury Floating/Stuck iPhone preview) */}
-      <div className="flex-1 flex min-h-0">
-        <div className="hidden lg:flex flex-1 min-w-0 flex-col dashboard-desktop-wrapper">
+      <div className="flex-1 flex min-h-0 overflow-hidden h-full">
+        <div className="hidden lg:flex flex-1 min-w-0 flex-col dashboard-desktop-wrapper h-full overflow-hidden">
           <DashboardDesktop
             currentUser={currentUser}
             users={users}
@@ -4895,6 +5046,24 @@ export default function App() {
             onDeleteErrorCatalogItem={handleDeleteErrorCatalogItem}
             isQcFeatureEnabled={isQcFeatureEnabled}
             onToggleQcFeature={handleToggleQcFeature}
+            topics={topics}
+            replies={replies}
+            onAddForumTopic={handleAddForumTopic}
+            onAddForumReply={handleAddForumReply}
+            onEditForumReply={handleEditForumReply}
+            onDeleteForumReply={handleDeleteForumReply}
+            onLikeForumReply={handleLikeForumReply}
+            onUpdateForumTopicStatus={handleUpdateForumTopicStatus}
+            onToggleForumTopicPin={handleToggleForumTopicPin}
+            onEditForumTopic={handleEditForumTopic}
+            onUpdateTopicInvitedUsers={handleUpdateTopicInvitedUsers}
+            onDeleteForumTopic={handleDeleteForumTopic}
+            knowledgeDocs={knowledgeDocs}
+            onAddKnowledgeDoc={handleAddKnowledgeDoc}
+            onUpdateKnowledgeDoc={handleUpdateKnowledgeDoc}
+            onDeleteKnowledgeDoc={handleDeleteKnowledgeDoc}
+            festiveBannerConfig={festiveBannerConfig}
+            onUpdateFestiveBannerConfig={handleUpdateFestiveBannerConfig}
           />
         </div>
 

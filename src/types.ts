@@ -8,6 +8,10 @@ export interface DirectMessageItem {
   content: string;
   timestamp: string; // dd/mm/yy HH:mm
   createdAt: number;
+  isRead?: boolean;
+  quotedText?: string;
+  reportRefId?: string;
+  attachments?: ForumReplyAttachment[];
 }
 
 export enum UserRole {
@@ -230,6 +234,7 @@ export interface Branch {
 export interface Department {
   id: string;
   name: string;
+  shortName?: string; // Tên viết tắt (VD: QLCL, R&D, TCKT)
   branchId: string;
   isScoring?: boolean; // Tính điểm
 }
@@ -396,16 +401,92 @@ export interface Incident {
   resolvedAt?: string;
 }
 
-export type LineStatus = "normal" | "warning" | "stopped";
+export type LineStatus = "normal" | "warning" | "stopped" | "NORMAL" | "WARNING" | "STOPPED";
 
 export interface ProductionLine {
   id: string;
   name: string;
-  manager: string;
+  code?: string;
+  workshop?: string;
+  manager?: string;
   status: LineStatus;
-  targetOutput: number;
-  actualOutput: number;
+  targetOutput?: number;
+  actualOutput?: number;
+  targetQty?: number;
+  actualQty?: number;
+  defectQty?: number;
+  activeOperatorCount?: number;
   oee?: number;
+}
+
+export interface Workstation {
+  id: string;
+  lineId: string;
+  code: string;
+  name: string;
+  operatorName?: string;
+  status: "NORMAL" | "ALERT" | "WARNING";
+}
+
+export type Role = "OPERATOR" | "QC_LEADER" | "QC_INSPECTOR" | "SUPERVISOR" | "MAINTENANCE" | "FACTORY_MANAGER" | "ADMIN" | string;
+export type TicketStatus = "NEW" | "ACKNOWLEDGED" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
+export type IssueCategory = "QUALITY" | "EQUIPMENT" | "MATERIAL" | "SAFETY" | "METHOD";
+export type Severity = "CRITICAL" | "WARNING" | "INFO";
+
+export interface FiveWhyItem {
+  why: string;
+  answer: string;
+}
+
+export interface AndonTicket {
+  id: string;
+  ticketCode: string;
+  lineId: string;
+  lineName: string;
+  stationId: string;
+  stationName: string;
+  category: IssueCategory;
+  severity: Severity;
+  status: TicketStatus;
+  title: string;
+  description: string;
+  reportedBy: string;
+  reportedAt: string;
+  acknowledgedBy?: string;
+  acknowledgedAt?: string;
+  assignedTo?: string;
+  resolvedAt?: string;
+  resolutionSummary?: string;
+  downtimeMinutes?: number;
+  fiveWhys?: FiveWhyItem[];
+  capaActions?: string[];
+  aiRcaSuggestion?: string;
+  imageUrl?: string;
+}
+
+export interface ShiftSummary {
+  shiftName: string;
+  totalTickets: number;
+  criticalStops: number;
+  avgResponseTimeSec: number;
+  avgResolutionTimeMin: number;
+  oee: number;
+  yieldRate: number;
+}
+
+export interface AppEnvConfig {
+  appName: string;
+  version: string;
+  nodeEnv?: string;
+  geminiConnected?: boolean;
+  activeLineCount?: number;
+  autoEscalationTimeMinutes?: number;
+  enableSoundAlert?: boolean;
+  defaultSLA?: {
+    CRITICAL: number;
+    WARNING: number;
+  };
+  customWorkshops?: string[];
 }
 
 export interface FactoryMetrics {
@@ -429,10 +510,16 @@ export interface ForumTopic {
   creatorName: string;
   creatorPhone: string;
   creatorRole: string;
+  creatorId?: string;
+  authorPhone?: string;
+  author?: string;
+  authorId?: string;
   timestamp: string;
   status: ForumTopicStatus;
   isPinned: boolean;
   reportId?: string;
+  targetCompany?: "ALL" | "TPP" | "DNP" | string;
+  factory?: string;
   invitedUserIds?: string[];
   isDeleted?: boolean;
   aiSummary?: string;
@@ -489,4 +576,198 @@ export interface ErrorCatalogItem {
   createdAt: string;   // dd/mm/yy
 }
 
+export type KnowledgeStandardType = 
+  | "TIÊU_CHUẨN_QUỐC_TẾ"
+  | "QUY_TRÌNH_NỘI_BỘ"
+  | "HƯỚNG_DẪN_CÔNG_VIỆC"
+  | "QUY_CHẾ_CHẤT_LƯỢNG"
+  | "ISO_9001"
+  | "BRCGS"
+  | "BSCI"
+  | "SCAN"
+  | "ISO_22000"
+  | "ISO_14001"
+  | "MOC_4M1E"
+  | "CAPA_SOP"
+  | "FACTORY_INTERNAL";
 
+export interface KnowledgeDoc {
+  id: string;
+  factory?: string; // "TẤT_CẢ" | "TPP-BNI" | "TPP-LAN" | "TPP-314" | "DNP-BBM" | "DNP-BBC" | "TPP-CTY"
+  branchId?: string; // Branch ID or "ALL"
+  standardType: KnowledgeStandardType;
+  category?: "STANDARD" | "PROCEDURE" | "WORK_INSTRUCTION" | "REGULATION" | string;
+  title: string;
+  code: string;
+  summary?: string;
+  content: string; // Plain text / Markdown dạng Notepad siêu nhẹ
+  effectiveDate: string; // dd/mm/yy
+  version: string;
+  status?: "ĐANG_ÁP_DỤNG" | "DỰ_THẢO" | "HẾT_HIỆU_LỰC";
+  isActive?: boolean;
+  tags?: string[];
+  keywords?: string[];
+  updatedBy?: string;
+  updatedAt: string; // dd/mm/yy HH:mm:ss
+  createdByName?: string;
+  createdByPhone?: string;
+}
+
+export interface CapaData {
+  reportId: string;
+  docNo: string; // BM01-ISO-QT04-KPPN
+  rev: string; // 01
+  effDate: string; // 20/9/2025
+  occurDate: string; // dd/mm/yy
+  sendDate: string; // dd/mm/yy
+  ncNumber: string;
+  poNumber: string;
+  productType: "finished" | "semi" | "raw" | "reject";
+  productName: string;
+  customerName: string;
+  productCode: string;
+  totalQuantity: string;
+  ncQuantity: string;
+  ncStatus: "on_hold" | "special_release" | "reject";
+  ncDescription: string;
+  illustrationUrls: string[];
+  reason: string;
+  correction: string;
+  correctionTargetDate: string;
+  correctionResponsible: string;
+  traceability: string;
+  traceabilityTargetDate: string;
+  traceabilityResponsible: string;
+  preventiveAction: string;
+  preventiveTargetDate: string;
+  preventiveResponsible: string;
+  qcStaffName?: string;
+  qcStaffDate?: string;
+  qcStaffSigned?: boolean;
+  supplierRepName: string;
+  supplierRepDate?: string;
+  supplierRepSigned?: boolean;
+  qcHeadName: string;
+  approvalDate: string;
+  approvalNote?: string;
+  stampStatus?: "PASS" | "PENDING" | "REJECTED" | "NONE";
+  customerFeedbackStatus: "satisfy" | "acceptable" | "non_satisfy" | "";
+  customerOpinion: string;
+  customerRepName?: string;
+  customerRepDate?: string;
+  customerRepSigned?: boolean;
+  verificationResult?: string;
+  verificationDate?: string;
+  verificationBy?: string;
+  verificationStatus?: "effective" | "need_further_action" | "closed" | "";
+  additionalNotes?: string;
+  isAiDrafted?: boolean;
+  companyLogoUrl?: string;
+}
+
+export interface CapaVersion {
+  version: string;
+  versionNumber: number;
+  savedAt: string;
+  signedBy: string;
+  signedDate: string;
+  stampStatus?: "PASS" | "PENDING" | "REJECTED" | "NONE";
+  note?: string;
+  data: CapaData;
+}
+
+export interface CapaDocument {
+  id: string; // reportId
+  reportId: string;
+  activeFormData?: CapaData;
+  versions?: CapaVersion[];
+  activeVersionTag?: string;
+  updatedAt?: string;
+  lastSyncedAt?: string;
+}
+
+// -------------------------------------------------------------
+// TIẾN TRÌNH THỬ NGHIỆM (TRIAL TRACKING - SHOPEE STEPPER STYLE)
+// -------------------------------------------------------------
+export type TrialStepKey = string;
+
+export interface TrialStepDetail {
+  key: string;
+  stepNumber: string; // "1", "2", "3A", "3B", "4", "5", "6", "A", "B"...
+  name: string; // "ĐN thử nghiệm", "LSX thử", "Trộn NL", "Lên khuôn", "Thử nghiệm", "Đánh giá"...
+  roleResponsible: string; // "QA/R&D", "Phòng Kế hoạch", "Tổ Liệu", "Kỹ thuật Khuôn", "Sản xuất/Trưởng ca", "QA/QC"...
+  isCompleted: boolean;
+  completedAt?: string; // dd/mm/yy HH:mm
+  completedBy?: string; // Họ tên người tích
+  completedByRole?: string;
+  completedByPhone?: string;
+  notes?: string;
+  resultStatus?: "PASS" | "CONDITIONAL" | "FAIL" | "PENDING"; // Kết quả đánh giá từng bước (Đạt / Tạm chấp nhận / Không đạt / Đã phát hành / Chờ điều chỉnh...)
+  customCode?: string; // Mã ĐN, Số LSX, Mã khuôn nhập nhanh
+  isEvaluationStep?: boolean; // Đánh dấu đây là bước quyết định nghiệm thu kết quả cuối cùng
+  images?: string[]; // Danh sách ảnh đính kèm minh chứng công đoạn (Tối đa 2 ảnh)
+}
+
+export interface TrialTrackingItem {
+  id: string; // VD: TN-BNI-2608001
+  code: string; // Mã đợt thử nghiệm
+  title: string; // Tên đợt thử nghiệm
+  targetCompany: "TPP" | "DNP" | "ALL";
+  factory: string; // "Chi Nhánh Bắc Ninh (TPP-BNI)", "Nhà máy DNP-BBM"...
+  workshop?: string; // "Xưởng Ép", "Xưởng Thổi", "Xưởng In"...
+  category4M: Category4M1E1I; // NGUYÊN VẬT LIỆU, MÁY MÓC, PHƯƠNG PHÁP...
+  productName: string;
+  requestDocNo?: string; // Số Đề Nghị
+  planDocNo?: string; // Số Lệnh Sản Xuất
+  sampleQuantity?: string; // Số lượng mẫu thử dự kiến
+  createdAt: string; // dd/mm/yy HH:mm
+  createdTimestamp: number;
+  createdByName: string;
+  createdByPhone: string;
+  createdByRole?: string;
+  overallStatus: "IN_PROGRESS" | "COMPLETED_PASS" | "COMPLETED_FAIL" | "CANCELLED";
+  currentStepKey: string;
+  steps: Record<string, TrialStepDetail>;
+  customStepOrder?: string[]; // Thứ tự hiển thị các bước tùy chỉnh [key1, key2, ...]
+  attachments?: string[];
+  images?: string[]; // Danh sách ảnh đợt thử nghiệm (Tối đa 2 ảnh)
+  imageUrl?: string; // Ảnh chính đại diện
+  finalConclusion?: string;
+  updatedAt: string;
+  likedBy?: string[];
+  commentsCount?: number;
+  comments?: { id: string; author: string; role?: string; text: string; timestamp: string; avatar?: string }[];
+  directives?: QualityReportDirective[];
+  badges?: QualityReportBadge[];
+  isDeleted?: boolean;
+}
+
+export type FestiveBannerTheme = 
+  | "TET_NGUYEN_DAN"       // Tết Nguyên Đán (Xuân Thịnh Vượng)
+  | "QUOC_KHANH_2_9"      // Quốc khánh 2/9
+  | "GIAI_PHONG_30_4"     // Giải phóng miền Nam 30/4
+  | "QUOC_TE_LAO_DONG_1_5" // Quốc tế Lao động 1/5
+  | "GIO_TO_HUNG_VUONG"   // Giỗ Tổ Hùng Vương (10/3 ÂL)
+  | "TRUNG_THU"           // Tết Trung Thu (Đoàn Viên)
+  | "GIANG_SINH_NOEL"     // Giáng Sinh & Năm Mới
+  | "NGAY_NHA_GIAO_20_11"  // Ngày Nhà giáo VN 20/11
+  | "PHU_NU_8_3_20_10"    // Ngày Phụ nữ VN & Quốc tế Phụ nữ
+  | "KY_NIEM_TAN_PHU"     // Kỷ niệm Thành lập / Thi đua Tân Phú
+  | "CUSTOM_IMAGE";       // Tự tải ảnh / chèn URL riêng
+
+export interface FestiveBannerConfig {
+  enabled: boolean;
+  theme: FestiveBannerTheme;
+  title: string;
+  subtitle: string;
+  startDate?: string;         // dd/mm/yy
+  endDate?: string;           // dd/mm/yy
+  customImageUrl?: string;
+  linkUrl?: string;
+  animationEnabled?: boolean;
+  marqueeEnabled?: boolean;
+  marqueeSpeed?: number;      // seconds per loop
+  marqueeGap?: number;        // px or rem spacing between ticker items (e.g. 50, 100, 150, 200)
+  bgColor?: string;
+  textColor?: string;
+}

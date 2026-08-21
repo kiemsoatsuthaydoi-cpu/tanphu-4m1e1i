@@ -121,7 +121,7 @@ export const SourceIntegrationPanel: React.FC = () => {
           <p className="font-extrabold text-white text-base mt-1">
             {envInfo?.geminiConnected ? 'Đã Kết Nối' : 'Chờ API Key'}
           </p>
-          <p className="text-[10px] text-slate-400 mt-0.5">Model: gemini-2.5-flash</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Model: gemini-3.7-flash</p>
         </div>
 
         <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">

@@ -8,9 +8,10 @@ interface AutoImageSliderProps {
   isAbnormal?: boolean;
   isSpotlight?: boolean;
   reportType?: "KPH" | "DSA" | "KNN" | "RRO" | "NORMAL";
+  className?: string;
 }
 
-export function AutoImageSlider({ imageUrls, fallbackUrl, isAbnormal, isSpotlight, reportType }: AutoImageSliderProps) {
+export function AutoImageSlider({ imageUrls, fallbackUrl, isAbnormal, isSpotlight, reportType, className }: AutoImageSliderProps) {
   const list = imageUrls && imageUrls.length > 0 ? imageUrls : [fallbackUrl];
   const [index, setIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -162,7 +163,7 @@ export function AutoImageSlider({ imageUrls, fallbackUrl, isAbnormal, isSpotligh
     <>
       <div 
         onClick={handleOpenLightbox}
-        className="relative group bg-slate-900 border-b border-slate-100 flex items-center justify-center overflow-hidden h-[211px] w-full select-none cursor-pointer"
+        className={`relative group bg-slate-900 flex items-center justify-center overflow-hidden select-none cursor-pointer ${className ? className : "border-b border-slate-100 h-[211px] w-full"}`}
       >
         {list.map((url, i) => (
           <img

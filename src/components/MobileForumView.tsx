@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { 
   ForumTopic, 
   ForumReply, 
@@ -10,7 +10,8 @@ import {
   QualityReport,
   QualityReportResolution 
 } from "../types";
-import { resolveSenderInfo } from "../utils/userResolver";
+import { isTopicInScope, getEffectiveCompanyScope, isUserAllowedToViewTopic } from "../utils/companyScope";
+import { resolveSenderInfo, isCurrentUserSender } from "../utils/userResolver";
 import { loadImage, processImage } from "../utils/imageProcessor";
 import { 
   Search, 
@@ -42,6 +43,8 @@ import {
   ListTodo,
   Calendar,
   CornerUpLeft,
+  Crown,
+  UserMinus,
   Smile,
   Image as ImageIcon,
   Paperclip,
@@ -49,10 +52,18 @@ import {
   Download,
   Eye,
   Heart,
-  Camera
+  Camera,
+  Bold,
+  Italic,
+  Underline as UnderlineIcon,
+  Highlighter
 } from "lucide-react";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
+import { TaskStructuredContent } from "./TaskStructuredContent";
+import { renderFormattedMessage } from "../utils/formatMessage";
+import { formatNameCapitalized } from "../utils/branchHelpers";
+import { EMOJI_CATEGORIES } from "./RichChatInputBox";
 
 interface MobileForumViewProps {
   topics: ForumTopic[];
@@ -85,6 +96,7 @@ interface MobileForumViewProps {
   onEditForumReply?: (replyId: string, updatedData: string | Partial<ForumReply>) => void;
   onDeleteForumReply?: (replyId: string) => void;
   onLikeForumReply?: (replyId: string) => void;
+  onOpenDirectChat?: (user: User) => void;
 }
 
 export default function MobileForumView({
@@ -110,7 +122,8 @@ export default function MobileForumView({
   initialSelectedTopicId,
   autoOpenActionsCatalogTopicId,
   onClearAutoOpenActionsCatalog,
-  onTopicSelect
+  onTopicSelect,
+  onOpenDirectChat
 }: MobileForumViewProps) {
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(initialSelectedTopicId || null);
   const [isDescExpanded, setIsDescExpanded] = useState(false);
@@ -171,6 +184,7 @@ export default function MobileForumView({
   const [newTitle, setNewTitle] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [newCategory, setNewCategory] = useState<ForumTopicCategory>("Góp ý chức năng");
+  const [newInvitedUserIds, setNewInvitedUserIds] = useState<string[]>([]);
   const [replyMessage, setReplyMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
@@ -192,6 +206,7 @@ export default function MobileForumView({
   // Members invitation modal state
   const [showMembersModal, setShowMembersModal] = useState(false);
   const [memberSearchQuery, setMemberSearchQuery] = useState("");
+  const [memberModalTab, setMemberModalTab] = useState<"MEMBERS" | "ADD">("MEMBERS");
 
   // Feature 4: Convert Chat to Action state
   const [convertModalReply, setConvertModalReply] = useState<ForumReply | null>(null);
@@ -251,6 +266,9 @@ export default function MobileForumView({
 
   // Zalo-style Emoji Quick Picker state
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [activeForumEmojiTab, setActiveForumEmojiTab] = useState<string>("ALL");
+  const [showForumSizeDropdown, setShowForumSizeDropdown] = useState(false);
+  const [forumTextSize, setForumTextSize] = useState<"S" | "M" | "L">("M");
   const EMOJI_LIST = ["👍", "👏", "💪", "❤️", "😊", "🎉", "🤝", "💡", "✅", "🔥", "📌", "🎯", "🙏", "🙌", "⭐", "✨", "🚀", "😅", "😍", "🍻"];
 
   // Compressed Image Attachments state
@@ -420,19 +438,38 @@ export default function MobileForumView({
   const forumScrollRef = useRef<HTMLDivElement>(null);
   const repliesEndRef = useRef<HTMLDivElement>(null);
 
-  const selectedTopic = topics.find(t => t.id === selectedTopicId);
+  const effectiveCompany = getEffectiveCompanyScope(currentUser, "ALL");
+
+  const scopedTopics = useMemo(() => {
+    return topics.filter(t => {
+      if (!isTopicInScope(t, effectiveCompany)) {
+        return false;
+      }
+      return isUserAllowedToViewTopic(t, currentUser, replies, reports);
+    });
+  }, [topics, effectiveCompany, currentUser, replies, reports]);
+
+  const selectedTopic = scopedTopics.find(t => t.id === selectedTopicId) || null;
   const matchedReport = selectedTopic?.reportId ? reports.find(r => r.id === selectedTopic.reportId || r.reportCode === selectedTopic.reportId) : null;
   const topicReplies = localReplies
     .filter(r => r.topicId === selectedTopicId)
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
+  // Helper: Check if user is Topic Leader
+  const checkIsTopicLeader = (topic?: ForumTopic | null, user?: User | null): boolean => {
+    if (!topic || !user) return false;
+    return Boolean(
+      (topic.creatorPhone && (user.phone === topic.creatorPhone || user.id === topic.creatorPhone)) ||
+      (topic.creatorName && user.fullName?.trim().toLowerCase() === topic.creatorName?.trim().toLowerCase()) ||
+      (topic.authorPhone && (user.phone === topic.authorPhone || user.id === topic.authorPhone)) ||
+      (topic.author && user.fullName?.trim().toLowerCase() === topic.author?.trim().toLowerCase()) ||
+      (topic.authorId && (user.id === topic.authorId || user.phone === topic.authorId))
+    );
+  };
+
   const checkUserJoined = (user: User) => {
     if (!selectedTopic) return false;
-    if (
-      (user.phone && selectedTopic.creatorPhone === user.phone) ||
-      (user.fullName && selectedTopic.creatorName === user.fullName) ||
-      (user.id && selectedTopic.creatorPhone === user.id)
-    ) {
+    if (checkIsTopicLeader(selectedTopic, user)) {
       return true;
     }
     const invitedList = selectedTopic.invitedUserIds || [];
@@ -441,6 +478,18 @@ export default function MobileForumView({
       invitedList.includes(user.phone) ||
       invitedList.includes(user.fullName)
     );
+  };
+
+  // Handler: Kick / Remove member from Topic (Leader / Admin)
+  const handleRemoveUserFromTopic = (user: User) => {
+    if (!selectedTopic) return;
+    const currentList = selectedTopic.invitedUserIds || [];
+    const newList = currentList.filter(
+      id => id !== user.id && id !== user.phone && id !== user.fullName
+    );
+    if (onUpdateTopicInvitedUsers) {
+      onUpdateTopicInvitedUsers(selectedTopic.id, newList);
+    }
   };
 
   const handleToggleUserInvite = (user: User) => {
@@ -621,10 +670,7 @@ export default function MobileForumView({
   // Helper function to capitalize words
   const capitalizeWords = (str: string): string => {
     if (!str) return "";
-    return str
-      .split(/\s+/)
-      .map((word) => (word ? word.charAt(0).toUpperCase() + word.slice(1) : ""))
-      .join(" ");
+    return formatNameCapitalized(str);
   };
 
   // Helper function to render @mentions in blue
@@ -946,11 +992,12 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
     e.preventDefault();
     if (!newTitle.trim()) return;
     if (onAddForumTopic) {
-      onAddForumTopic(newTitle, newDesc.trim() || newTitle, newCategory);
+      onAddForumTopic(newTitle, newDesc.trim() || newTitle, newCategory, undefined, newInvitedUserIds);
     }
     setNewTitle("");
     setNewDesc("");
     setNewCategory("Góp ý chức năng");
+    setNewInvitedUserIds([]);
     setIsCreatingTopic(false);
   };
 
@@ -1001,7 +1048,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
     }
   };
 
-  const filteredTopics = topics
+  const filteredTopics = scopedTopics
     .filter(t => {
       const matchSearch = t.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           t.description.toLowerCase().includes(searchQuery.toLowerCase());
@@ -1091,19 +1138,29 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
         ) : (
           filteredTopics.map((topic) => {
             const replyCount = replies.filter(r => r.topicId === topic.id).length;
+            const getMobileStatusCardStyle = () => {
+              if (topic.status === "RESOLVED") {
+                return "bg-emerald-50/40 border-emerald-200/90 hover:border-emerald-400";
+              }
+              if (topic.status === "PROCESSING") {
+                return "bg-amber-50/40 border-amber-200/90 hover:border-amber-400";
+              }
+              return "bg-blue-50/40 border-blue-200/90 hover:border-blue-400";
+            };
+
             return (
               <div
                 key={topic.id}
                 onClick={() => handleSelectTopic(topic.id)}
-                className={`bg-white p-3 rounded-lg border transition-all cursor-pointer relative ${
+                className={`p-3 rounded-lg border transition-all cursor-pointer relative ${
                   topic.isPinned 
-                    ? "border-amber-300 bg-amber-50/10 hover:border-amber-400" 
-                    : "border-slate-200 hover:border-slate-350"
+                    ? "border-amber-300 ring-1 ring-amber-300/50 " + getMobileStatusCardStyle()
+                    : getMobileStatusCardStyle()
                 }`}
               >
                 {/* Topic Code & Category Row */}
                 <div className="flex items-center justify-between gap-1 mb-1.5">
-                  <span className="text-[9px] font-extrabold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                  <span className="text-[9px] font-extrabold text-slate-700 bg-white/90 px-2 py-0.5 rounded border border-slate-200 shadow-2xs">
                     <span translate="no" className="notranslate">{topic.category}</span>
                   </span>
                   {topic.topicCode && (
@@ -1579,12 +1636,10 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
               ) : (
                 topicReplies.map((reply, idx) => {
                   const resolvedSender = resolveSenderInfo(users, reply.senderPhone, reply.senderName, reply.senderRole);
-                  const isMe = currentUser && (
-                    (currentUser.phone && reply.senderPhone === currentUser.phone) ||
-                    (currentUser.fullName && reply.senderName === currentUser.fullName) ||
-                    (currentUser.id && reply.senderPhone === currentUser.id)
-                  );
-                  const canManage = isMe || (currentUser?.role === UserRole.ADMIN);
+                  const isMe = isCurrentUserSender(currentUser, reply.senderPhone, reply.senderName, (reply as any).senderId, reply.senderRole);
+                  const isTopicLeader = checkIsTopicLeader(selectedTopic, currentUser);
+                  const isSenderTopicLeader = checkIsTopicLeader(selectedTopic, resolvedSender as any);
+                  const canManage = isMe || (currentUser?.role === UserRole.ADMIN) || isTopicLeader;
                   const hasLiked = currentUser && reply.likedBy?.includes(currentUser.phone || currentUser.id);
                   const likeCount = reply.likes || (reply.likedBy ? reply.likedBy.length : 0);
                   const isEditingThis = editingReplyId === reply.id;
@@ -1603,14 +1658,19 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
 
                   return (
                     <div key={reply.id} className={`group ${isConsecutive ? "space-y-0.5 mt-0.5" : "space-y-1 mt-2"}`}>
-                      {/* Sender Name & Role above message bubble - Only for incoming messages (!isMe) on the first message of a group */}
+                      {/* Sender Name above message bubble - On first message of a group */}
                       {showSenderHeader && (
                         <div className="flex items-center gap-1.5 text-[10.5px] font-extrabold px-1 justify-start text-slate-700 pt-1">
                           <span translate="no" className="notranslate font-black text-slate-800">
-                            {resolvedSender.fullName}
+                            {formatNameCapitalized(resolvedSender.fullName || reply.senderName)}
                           </span>
-                          <span translate="no" className="notranslate text-slate-400 font-semibold text-[9.5px]">
-                            ({resolvedSender.position || (resolvedSender.role === UserRole.ADMIN ? "Trưởng Phòng" : "Nhân viên")})
+                        </div>
+                      )}
+
+                      {isMe && !isConsecutive && (
+                        <div className="flex items-center gap-1.5 text-[10.5px] font-extrabold px-1 justify-end text-slate-700 pt-1">
+                          <span translate="no" className="notranslate font-black text-slate-800">
+                            TÔI ({formatNameCapitalized(currentUser?.fullName || "BẠN")})
                           </span>
                         </div>
                       )}
@@ -1683,7 +1743,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                           <div
                             id={`reply-${reply.id}`}
                             onClick={() => setActiveMessageId(prev => prev === reply.id ? null : reply.id)}
-                            className={`p-3 max-w-[88%] text-[12.5px] leading-relaxed break-words shadow-2xs relative transition-all rounded-2xl cursor-pointer select-none ${
+                            className={`p-3.5 w-fit max-w-[85%] text-[15px] leading-relaxed break-words shadow-2xs relative transition-all rounded-2xl cursor-pointer select-none ${
                               likeCount > 0 ? "pb-3.5 mb-1" : ""
                             } ${
                               isActiveMessage
@@ -1693,8 +1753,8 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                                 : "hover:brightness-98"
                             } ${
                               isMe
-                                ? "bg-[#1d4ed8] text-white font-semibold rounded-tr-none shadow-blue-500/10"
-                                : "bg-white text-slate-800 font-medium rounded-tl-none border border-slate-200/90"
+                                ? "bg-[#e9f2fd] text-slate-800 font-normal rounded-tr-none border border-blue-200/80 shadow-2xs"
+                                : "bg-white text-slate-800 font-normal rounded-tl-none border border-slate-200/90"
                             }`}
                           >
                             {/* Distinct Task Icon Badge for Converted Messages */}
@@ -1723,32 +1783,36 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                               </div>
                             )}
 
-                            {/* Quoted Message Box inside Chat Bubble */}
+                            {/* Quoted Message Box inside Chat Bubble (Zalo style) */}
                             {reply.quotedReply && (
                               <div
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   scrollToReply(reply.quotedReply!.id);
                                 }}
-                                className={`mb-2 p-2 rounded-xl border-l-4 text-[11px] cursor-pointer transition-opacity hover:opacity-90 ${
-                                  isMe ? "bg-blue-800/60 text-blue-100 border-amber-400" : "bg-slate-100 text-slate-700 border-amber-500"
+                                className={`mb-2 p-2 px-2.5 rounded-r-lg rounded-l-xs border-l-[3px] text-[12.5px] cursor-pointer transition-opacity hover:opacity-90 ${
+                                  isMe ? "bg-[#dbe9fa] text-slate-800 border-[#0068ff]" : "bg-slate-100 text-slate-700 border-amber-500"
                                 }`}
                               >
-                                <div className="flex items-center gap-1 font-bold text-[10px] opacity-90 pb-0.5">
+                                <div className={`flex items-center gap-1 font-semibold text-[11.5px] pb-0.5 ${isMe ? "text-slate-800" : "opacity-90"}`}>
                                   <CornerUpLeft className="w-3 h-3" />
-                                  <span translate="no" className="notranslate">{reply.quotedReply.senderName}</span>
+                                  <span translate="no" className="notranslate">{formatNameCapitalized(reply.quotedReply.senderName)}</span>
                                 </div>
-                                <p translate="no" className="notranslate line-clamp-2 italic text-[10.5px]">
-                                  "{renderMentionText(reply.quotedReply.message, isMe)}"
-                                </p>
+                                <div className="line-clamp-2 italic text-[12px] text-slate-600">
+                                  "{renderFormattedMessage(reply.quotedReply.message, { isMe, users, onOpenDirectChat })}"
+                                </div>
                               </div>
                             )}
 
                             {/* Text message */}
                             {reply.message && (
-                              <span translate="no" className="notranslate whitespace-pre-wrap">
-                                {renderMentionText(reply.message, isMe)}
-                              </span>
+                              <div className="text-[14.5px] leading-relaxed text-slate-900 font-sans">
+                                {renderFormattedMessage(reply.message, {
+                                  isMe,
+                                  users,
+                                  onOpenDirectChat
+                                })}
+                              </div>
                             )}
 
                             {/* Attachments inside Chat Bubble */}
@@ -1785,7 +1849,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                                   <div
                                     key={idx}
                                     className={`p-2 rounded-xl border flex items-center justify-between gap-2 text-xs ${
-                                      isMe ? "bg-blue-800/80 border-blue-400/50 text-white" : "bg-rose-50/90 border-rose-200 text-slate-800"
+                                      isMe ? "bg-white/80 border-blue-200 text-slate-800" : "bg-rose-50/90 border-rose-200 text-slate-800"
                                     }`}
                                   >
                                      <div className="flex items-center gap-2 min-w-0">
@@ -1803,15 +1867,17 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                                        target="_blank"
                                        rel="noopener noreferrer"
                                        onClick={(e) => e.stopPropagation()}
-                                       className="px-2 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-current text-[10px] font-bold flex items-center gap-1 shrink-0 no-underline cursor-pointer"
+                                       className={`px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 shrink-0 no-underline cursor-pointer ${
+                                         isMe ? "bg-blue-100 hover:bg-blue-200 text-blue-800" : "bg-white/20 hover:bg-white/30 text-current"
+                                       }`}
                                      >
                                        <Download className="w-3 h-3" />
                                        <T>Tải về</T>
                                      </a>
                                    </div>
-                                 ))}
-                               </div>
-                             )}
+                                ))}
+                              </div>
+                            )}
 
                             {/* Reaction Badge attached to bottom corner when likes > 0 */}
                             {likeCount > 0 && (
@@ -1988,7 +2054,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
               )}
 
               {/* Attached Files Banner */}
-              {(attachedImages.length > 0 || attachedPdf || isCompressingImages) && (
+              {(attachedImages.length > 0 || isCompressingImages) && (
                 <div className="p-2 bg-slate-50 border-b border-slate-200 flex items-center gap-2 overflow-x-auto">
                   {isCompressingImages && (
                     <div className="text-[11px] text-amber-700 font-bold flex items-center gap-1">
@@ -2011,40 +2077,192 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                       </button>
                     </div>
                   ))}
-                  {attachedPdf && (
-                    <div className="flex items-center gap-1.5 bg-rose-50 border border-rose-200 px-2.5 py-1.5 rounded-lg text-xs font-bold text-rose-900 shrink-0">
-                      <FileText className="w-4 h-4 text-rose-600" />
-                      <div className="flex flex-col text-[10px] max-w-[120px] truncate">
-                        <span translate="no" className="notranslate truncate font-extrabold">{attachedPdf.name}</span>
-                        <span className="text-[9px] text-rose-600">{attachedPdf.sizeKb} KB</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setAttachedPdf(null)}
-                        className="p-0.5 text-rose-600 hover:bg-rose-100 rounded-full cursor-pointer ml-1"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  )}
                 </div>
               )}
 
-              {/* Emoji Picker Row */}
-              {showEmojiPicker && (
-                <div className="p-2 bg-slate-100 border-b border-slate-200 flex flex-wrap gap-1.5 max-h-24 overflow-y-auto animate-fadeIn">
-                  {EMOJI_LIST.map((emoji) => (
+              {/* Formatting Toolbar (B I U Size Highlight + Quick Smileys) */}
+              <div className="flex items-center justify-between px-2 pt-1.5 pb-1 border-b border-slate-100 bg-slate-50/70">
+                <div className="flex items-center gap-1">
+                  {/* B I U Pill */}
+                  <div className="flex items-center bg-white border border-slate-200 rounded-lg p-0.5 shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => setReplyMessage(prev => prev ? `**${prev}**` : "**văn bản**")}
+                      className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-slate-100 text-slate-700 hover:text-blue-600 transition-colors font-black text-xs cursor-pointer active:scale-95"
+                      title="In đậm (Ctrl+B)"
+                    >
+                      <span className="font-extrabold text-xs">B</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReplyMessage(prev => prev ? `*${prev}*` : "*văn bản*")}
+                      className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-slate-100 text-slate-700 hover:text-blue-600 transition-colors italic text-xs cursor-pointer active:scale-95"
+                      title="In nghiêng (Ctrl+I)"
+                    >
+                      <span className="font-serif italic font-bold text-xs">I</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReplyMessage(prev => prev ? `<u>${prev}</u>` : "<u>văn bản</u>")}
+                      className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-slate-100 text-slate-700 hover:text-blue-600 transition-colors text-xs cursor-pointer active:scale-95"
+                      title="Gạch chân (Ctrl+U)"
+                    >
+                      <span className="underline decoration-1 underline-offset-2 font-bold text-xs">U</span>
+                    </button>
+                  </div>
+
+                  <div className="h-3.5 w-px bg-slate-300 mx-0.5" />
+
+                  {/* Size Dropdown */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowForumSizeDropdown(prev => !prev)}
+                      className="h-6 px-1.5 flex items-center gap-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 font-bold text-[11px] transition-colors cursor-pointer shadow-2xs"
+                      title="Kích thước chữ"
+                    >
+                      <span>{forumTextSize}</span>
+                      <ChevronDown className="w-2.5 h-2.5 text-slate-500" />
+                    </button>
+
+                    {showForumSizeDropdown && (
+                      <div className="absolute left-0 bottom-7 bg-white border border-slate-200 rounded-xl shadow-xl p-1 z-50 min-w-[110px] animate-scaleUp">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setForumTextSize("S");
+                            setShowForumSizeDropdown(false);
+                            setReplyMessage(prev => prev ? `[size=S]${prev}[/size]` : "[size=S]văn bản[/size]");
+                          }}
+                          className="w-full text-left px-2 py-1 rounded-md text-xs hover:bg-slate-50 hover:text-blue-600 font-medium flex items-center justify-between cursor-pointer"
+                        >
+                          <span className="text-[11px]"><T>Nhỏ (S)</T></span>
+                          {forumTextSize === "S" && <span className="text-blue-600 font-bold">✓</span>}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setForumTextSize("M");
+                            setShowForumSizeDropdown(false);
+                          }}
+                          className="w-full text-left px-2 py-1 rounded-md text-xs hover:bg-slate-50 hover:text-blue-600 font-medium flex items-center justify-between cursor-pointer"
+                        >
+                          <span className="text-xs"><T>Vừa (M)</T></span>
+                          {forumTextSize === "M" && <span className="text-blue-600 font-bold">✓</span>}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setForumTextSize("L");
+                            setShowForumSizeDropdown(false);
+                            setReplyMessage(prev => prev ? `[size=L]${prev}[/size]` : "[size=L]văn bản[/size]");
+                          }}
+                          className="w-full text-left px-2 py-1 rounded-md text-xs hover:bg-slate-50 hover:text-blue-600 font-medium flex items-center justify-between cursor-pointer"
+                        >
+                          <span className="text-sm font-bold"><T>Lớn (L)</T></span>
+                          {forumTextSize === "L" && <span className="text-blue-600 font-bold">✓</span>}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Highlight */}
+                  <button
+                    type="button"
+                    onClick={() => setReplyMessage(prev => prev ? `==${prev}==` : "==nội dung nổi bật==")}
+                    className="w-6 h-6 flex items-center justify-center bg-white hover:bg-amber-100 border border-slate-200 rounded-lg text-slate-700 hover:text-amber-800 transition-colors text-xs cursor-pointer shadow-2xs"
+                    title="Đánh dấu nổi bật (==nội dung==)"
+                  >
+                    <div className="w-3 h-2.5 bg-amber-400 rounded-xs border border-amber-500 shadow-2xs" />
+                  </button>
+                </div>
+
+                {/* Quick Smileys Bar */}
+                <div className="flex items-center gap-1">
+                  {["👍", "😊", "❤️", "🎉"].map((emoji) => (
                     <button
                       key={emoji}
                       type="button"
-                      onClick={() => {
-                        setReplyMessage(prev => prev + emoji);
-                      }}
-                      className="w-8 h-8 flex items-center justify-center text-lg hover:bg-white rounded-lg transition-transform active:scale-125 cursor-pointer"
+                      onClick={() => setReplyMessage(prev => prev + emoji)}
+                      className="w-6 h-6 flex items-center justify-center text-sm rounded-md hover:bg-white active:scale-125 transition-transform cursor-pointer"
                     >
                       {emoji}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* Emoji Picker Popover Modal */}
+              {showEmojiPicker && (
+                <div className="p-2.5 bg-slate-50 border-b border-slate-200 animate-fadeIn">
+                  <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-200">
+                    <span className="font-extrabold text-xs text-slate-800 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                      <span><T>Biểu tượng cảm xúc vui vẻ</T></span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowEmojiPicker(false)}
+                      className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Category Pills */}
+                  <div className="flex items-center gap-1 overflow-x-auto pb-1 mb-2 scrollbar-none">
+                    <button
+                      type="button"
+                      onClick={() => setActiveForumEmojiTab("ALL")}
+                      className={`px-2 py-0.5 rounded-md text-[10.5px] font-bold whitespace-nowrap cursor-pointer transition-colors ${
+                        activeForumEmojiTab === "ALL"
+                          ? "bg-blue-600 text-white"
+                          : "bg-white text-slate-600 hover:bg-slate-200 border border-slate-200"
+                      }`}
+                    >
+                      <T>Tất cả</T>
+                    </button>
+                    {EMOJI_CATEGORIES.map((cat, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setActiveForumEmojiTab(cat.name)}
+                        className={`px-2 py-0.5 rounded-md text-[10.5px] font-bold whitespace-nowrap cursor-pointer transition-colors flex items-center gap-1 ${
+                          activeForumEmojiTab === cat.name
+                            ? "bg-blue-600 text-white"
+                            : "bg-white text-slate-600 hover:bg-slate-200 border border-slate-200"
+                        }`}
+                      >
+                        <span>{cat.icon}</span>
+                        <span translate="no" className="notranslate">{cat.name}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Grid */}
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {EMOJI_CATEGORIES.filter(c => activeForumEmojiTab === "ALL" || activeForumEmojiTab === c.name).map((cat, idx) => (
+                      <div key={idx} className="space-y-1">
+                        <div className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                          <span>{cat.icon}</span>
+                          <span translate="no" className="notranslate">{cat.name}</span>
+                        </div>
+                        <div className="grid grid-cols-7 gap-1">
+                          {cat.emojis.map((emoji, eIdx) => (
+                            <button
+                              key={eIdx}
+                              type="button"
+                              onClick={() => setReplyMessage(prev => prev + emoji)}
+                              className="w-8 h-8 rounded-lg hover:bg-white active:scale-125 text-lg flex items-center justify-center transition-all cursor-pointer border-none bg-transparent"
+                              title={emoji}
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -2061,13 +2279,6 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                   multiple
                   className="hidden"
                 />
-                <input
-                  type="file"
-                  ref={pdfInputRef}
-                  onChange={handlePdfSelected}
-                  accept="application/pdf"
-                  className="hidden"
-                />
 
                 <div className="flex items-center gap-0.5 text-slate-500 shrink-0 h-9">
                   <button
@@ -2078,7 +2289,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                     }`}
                     title="Thêm biểu tượng cảm xúc (Emoji)"
                   >
-                    <Smile className="w-4 h-4" />
+                    <Smile className="w-4.5 h-4.5" />
                   </button>
 
                   <button
@@ -2087,16 +2298,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                     className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-100 text-slate-600 transition-colors cursor-pointer"
                     title="Đính kèm hình ảnh từ tập tin (Nén siêu nhẹ)"
                   >
-                    <ImageIcon className="w-4 h-4" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => alert("Chức năng đính kèm tệp PDF hiện đang được tạm khóa.")}
-                    className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 opacity-40 hover:opacity-60 transition-all cursor-not-allowed relative"
-                    title="Chức năng đính kèm PDF hiện đang tạm khóa"
-                  >
-                    <Paperclip className="w-4 h-4" />
+                    <ImageIcon className="w-4.5 h-4.5" />
                   </button>
                 </div>
 
@@ -2110,7 +2312,7 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                 />
                 <button
                   type="submit"
-                  disabled={!replyMessage.trim() && attachedImages.length === 0 && !attachedPdf}
+                  disabled={!replyMessage.trim() && attachedImages.length === 0}
                   className={`w-9 h-9 rounded-xl ${theme.bg} hover:opacity-90 active:scale-95 text-white disabled:bg-slate-300 disabled:opacity-50 transition-all border-none cursor-pointer flex items-center justify-center shrink-0 shadow-xs`}
                 >
                   <Send className="w-4 h-4 text-white" />
@@ -2226,6 +2428,76 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                   className="w-full bg-slate-50 border border-slate-250 focus:border-blue-500 focus:bg-white rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-none transition-all placeholder:text-slate-400 placeholder:font-normal"
                 />
               </div>
+
+              {/* Members Selection */}
+              {users && users.length > 0 && (
+                <div className="space-y-1.5 pt-1 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                      <Users className="w-3.5 h-3.5 text-blue-600" />
+                      <T>Mời thành viên</T> ({newInvitedUserIds.length})
+                    </label>
+                    <span className="text-[9.5px] text-slate-400">
+                      <T>Chỉ người được mời mới thấy</T>
+                    </span>
+                  </div>
+                  <div className="max-h-36 overflow-y-auto space-y-1 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
+                    {users
+                      .filter((u) => u.id !== currentUser?.id && u.phone !== currentUser?.phone)
+                      .map((u) => {
+                        const uKey = u.id || u.phone || u.fullName;
+                        const isSelected =
+                          newInvitedUserIds.includes(uKey) ||
+                          newInvitedUserIds.includes(u.id || "") ||
+                          (u.phone && newInvitedUserIds.includes(u.phone));
+                        return (
+                          <div
+                            key={u.id || u.phone}
+                            onClick={() => {
+                              if (isSelected) {
+                                setNewInvitedUserIds(
+                                  newInvitedUserIds.filter(
+                                    (id) => id !== uKey && id !== u.id && id !== u.phone
+                                  )
+                                );
+                              } else {
+                                setNewInvitedUserIds([...newInvitedUserIds, uKey]);
+                              }
+                            }}
+                            className={`p-1.5 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer border select-none ${
+                              isSelected
+                                ? "bg-blue-50 border-blue-200 text-blue-800 font-bold"
+                                : "bg-white border-slate-100 text-slate-700 hover:bg-slate-100"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div
+                                className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center font-bold shrink-0 ${
+                                  isSelected ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-600"
+                                }`}
+                              >
+                                {u.fullName ? u.fullName.charAt(0) : "U"}
+                              </div>
+                              <span className="truncate notranslate" translate="no">
+                                {u.fullName}
+                              </span>
+                              <span className="text-[9.5px] text-slate-400 truncate">
+                                ({u.department || u.position || u.role})
+                              </span>
+                            </div>
+                            <span
+                              className={`text-[9.5px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
+                                isSelected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
+                              }`}
+                            >
+                              <T>{isSelected ? "Đã chọn ✓" : "+ Mời"}</T>
+                            </span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Footer actions */}
@@ -2397,174 +2669,339 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
           </div>
         </div>
       )}
-      {/* Member Selection / Invitation Modal */}
-      {showMembersModal && selectedTopic && (
-        <div 
-          onClick={() => {
-            setShowMembersModal(false);
-            setMemberSearchQuery("");
-          }}
-          className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-3 animate-fadeIn cursor-pointer"
-        >
-          <div 
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-h-[85vh] flex flex-col shadow-2xl border-t sm:border border-slate-200 animate-slideUp cursor-default overflow-hidden"
-          >
-            {/* Modal Header */}
-            <div className={`px-3.5 py-2.5 text-white flex justify-between items-center shrink-0 rounded-t-2xl sm:rounded-t-2xl ${theme.bg}`}>
-              <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-white shrink-0" />
-                <h3 className="font-extrabold text-[12px] uppercase tracking-wide">
-                  <T>Thành viên tham gia nhóm</T>
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowMembersModal(false);
-                  setMemberSearchQuery("");
-                }}
-                className="text-white hover:bg-white/15 p-1 rounded-lg cursor-pointer border-none bg-transparent transition-colors"
-                title="Đóng"
-              >
-                <X className="w-4 h-4 text-white" />
-              </button>
-            </div>
+      {/* Member Selection / Invitation Modal (Quản lý thành viên & Trưởng nhóm) */}
+      {showMembersModal && selectedTopic && (() => {
+        const invitedIds = selectedTopic.invitedUserIds || [];
+        const isCurrentUserLeader = checkIsTopicLeader(selectedTopic, currentUser) || (currentUser?.role === UserRole.ADMIN);
 
-            {/* Modal Body */}
-            <div className="p-3 flex flex-col min-h-0 flex-1 space-y-2.5 overflow-hidden">
-              {/* Member Count Summary Header */}
-              <div className="bg-blue-50 border border-blue-200/80 rounded-xl p-2.5 flex items-center justify-between gap-2 shrink-0">
+        // Identify Topic Leader user object
+        const leaderUser = users.find(
+          (u) =>
+            (selectedTopic.creatorPhone && (u.phone === selectedTopic.creatorPhone || u.id === selectedTopic.creatorPhone)) ||
+            (selectedTopic.creatorName && u.fullName?.trim().toLowerCase() === selectedTopic.creatorName?.trim().toLowerCase()) ||
+            (selectedTopic.authorPhone && (u.phone === selectedTopic.authorPhone || u.id === selectedTopic.authorPhone)) ||
+            (selectedTopic.author && u.fullName?.trim().toLowerCase() === selectedTopic.author?.trim().toLowerCase()) ||
+            (selectedTopic.authorId && (u.id === selectedTopic.authorId || u.phone === selectedTopic.authorId))
+        );
+
+        // Split into Joined Members and Available Non-members
+        const joinedMembers = users.filter((u) => {
+          const uid = u.id || "";
+          const uphone = u.phone || "";
+          const uname = u.fullName || "";
+          const isLeader = leaderUser && (u.id === leaderUser.id || (u.phone && u.phone === leaderUser.phone));
+          return (
+            isLeader ||
+            invitedIds.includes(uid) ||
+            invitedIds.includes(uphone) ||
+            invitedIds.includes(uname)
+          );
+        }).sort((a, b) => {
+          const aIsLeader = leaderUser && (a.id === leaderUser.id || (a.phone && a.phone === leaderUser.phone));
+          const bIsLeader = leaderUser && (b.id === leaderUser.id || (b.phone && b.phone === leaderUser.phone));
+          if (aIsLeader) return -1;
+          if (bIsLeader) return 1;
+          return a.fullName.localeCompare(b.fullName);
+        });
+
+        const nonMembers = users.filter((u) => {
+          const uid = u.id || "";
+          const uphone = u.phone || "";
+          const uname = u.fullName || "";
+          const isLeader = leaderUser && (u.id === leaderUser.id || (u.phone && u.phone === leaderUser.phone));
+          return (
+            !isLeader &&
+            !invitedIds.includes(uid) &&
+            !invitedIds.includes(uphone) &&
+            !invitedIds.includes(uname)
+          );
+        });
+
+        // Filter based on search query
+        const q = memberSearchQuery.toLowerCase().trim();
+        const filteredJoined = joinedMembers.filter((u) => {
+          if (!q) return true;
+          return (
+            u.fullName.toLowerCase().includes(q) ||
+            (u.position && u.position.toLowerCase().includes(q)) ||
+            (u.role && u.role.toLowerCase().includes(q)) ||
+            (u.department && u.department.toLowerCase().includes(q)) ||
+            (u.phone && u.phone.includes(q)) ||
+            (u.id && u.id.toLowerCase().includes(q))
+          );
+        });
+
+        const filteredNonMembers = nonMembers.filter((u) => {
+          if (!q) return true;
+          return (
+            u.fullName.toLowerCase().includes(q) ||
+            (u.position && u.position.toLowerCase().includes(q)) ||
+            (u.role && u.role.toLowerCase().includes(q)) ||
+            (u.department && u.department.toLowerCase().includes(q)) ||
+            (u.phone && u.phone.includes(q)) ||
+            (u.id && u.id.toLowerCase().includes(q))
+          );
+        });
+
+        return (
+          <div 
+            onClick={() => {
+              setShowMembersModal(false);
+              setMemberSearchQuery("");
+            }}
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-3 animate-fadeIn cursor-pointer"
+          >
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-h-[88vh] flex flex-col shadow-2xl border-t sm:border border-slate-200 animate-slideUp cursor-default overflow-hidden"
+            >
+              {/* Modal Header */}
+              <div className={`px-3.5 py-2.5 text-white flex justify-between items-center shrink-0 rounded-t-2xl sm:rounded-t-2xl ${theme.bg}`}>
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
-                    <UserCheck className="w-4 h-4" />
-                  </div>
+                  <Users className="w-4 h-4 text-white shrink-0" />
                   <div>
-                    <div className="text-[11px] font-extrabold text-blue-950 uppercase tracking-wide">
-                      <T>Số người tham gia nhóm</T>
-                    </div>
-                    <div className="text-[10.5px] text-blue-700 font-semibold">
-                      <T>Đang có</T> <span className="font-black text-blue-900 text-xs">{joinedUserCount}</span> / <span className="font-bold">{users.length}</span> <T>người</T>
+                    <h3 className="font-extrabold text-[12px] uppercase tracking-wide">
+                      <T>Thành viên nhóm thảo luận</T>
+                    </h3>
+                    <div className="text-[10px] text-white/90 font-medium flex items-center gap-1">
+                      <Crown className="w-3 h-3 text-amber-300 fill-amber-300" />
+                      <T>Trưởng nhóm:</T> <span translate="no" className="notranslate font-bold">{selectedTopic.creatorName || selectedTopic.author || leaderUser?.fullName || "Chưa gán"}</span>
                     </div>
                   </div>
                 </div>
-                <span className="bg-blue-600 text-white text-[10px] font-black px-2.5 py-1 rounded-full shadow-2xs">
-                  {joinedUserCount} <T>thành viên</T>
-                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMembersModal(false);
+                    setMemberSearchQuery("");
+                  }}
+                  className="text-white hover:bg-white/15 p-1 rounded-lg cursor-pointer border-none bg-transparent transition-colors"
+                  title="Đóng"
+                >
+                  <X className="w-4 h-4 text-white" />
+                </button>
               </div>
 
-              {/* Search Bar */}
-              <div className="relative shrink-0">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Tìm nhân viên theo tên, mã NV, phòng ban..."
-                  value={memberSearchQuery}
-                  onChange={(e) => setMemberSearchQuery(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 focus:bg-white rounded-xl pl-8 pr-7 py-1.5 text-xs font-semibold text-slate-800 outline-none transition-all placeholder:text-slate-400 placeholder:font-normal"
-                />
-                {memberSearchQuery && (
+              {/* Modal Body */}
+              <div className="p-3 flex flex-col min-h-0 flex-1 space-y-2.5 overflow-hidden">
+                {/* 2 Tabs Switcher */}
+                <div className="grid grid-cols-2 gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0">
                   <button
                     type="button"
-                    onClick={() => setMemberSearchQuery("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 border-none bg-transparent cursor-pointer p-0.5"
+                    onClick={() => setMemberModalTab("MEMBERS")}
+                    className={`py-1.5 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                      memberModalTab === "MEMBERS"
+                        ? "bg-white text-blue-700 shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <UserCheck className="w-3.5 h-3.5" />
+                    <span><T>Trong nhóm</T> ({joinedMembers.length})</span>
                   </button>
-                )}
-              </div>
+                  <button
+                    type="button"
+                    onClick={() => setMemberModalTab("ADD")}
+                    className={`py-1.5 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                      memberModalTab === "ADD"
+                        ? "bg-white text-emerald-700 shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span><T>Mời thêm</T> ({nonMembers.length})</span>
+                  </button>
+                </div>
 
-              {/* Users List */}
-              <div className="flex-1 overflow-y-auto space-y-1.5 pr-0.5 min-h-[220px] max-h-[50vh]">
-                {filteredUsers.length === 0 ? (
-                  <div className="py-8 text-center text-slate-400 text-xs font-semibold">
-                    <T>Không tìm thấy nhân viên nào phù hợp.</T>
-                  </div>
-                ) : (
-                  filteredUsers.map((u) => {
-                    const isJoined = checkUserJoined(u);
-                    const isCreator = (u.phone && selectedTopic.creatorPhone === u.phone) ||
-                      (u.fullName && selectedTopic.creatorName === u.fullName) ||
-                      (u.id && selectedTopic.creatorPhone === u.id);
+                {/* Search Bar */}
+                <div className="relative shrink-0">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder={
+                      memberModalTab === "MEMBERS"
+                        ? "Tìm kiếm trong nhóm (tên, mã NV, phòng ban)..."
+                        : "Tìm nhân sự để mời vào nhóm..."
+                    }
+                    value={memberSearchQuery}
+                    onChange={(e) => setMemberSearchQuery(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 focus:bg-white rounded-xl pl-8 pr-7 py-1.5 text-xs font-semibold text-slate-800 outline-none transition-all placeholder:text-slate-400 placeholder:font-normal"
+                  />
+                  {memberSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setMemberSearchQuery("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 border-none bg-transparent cursor-pointer p-0.5"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
 
-                    return (
-                      <div
-                        key={u.id || u.phone}
-                        onClick={() => handleToggleUserInvite(u)}
-                        className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 select-none ${
-                          isJoined
-                            ? "bg-emerald-50/60 border-emerald-200 hover:bg-emerald-50"
-                            : "bg-white border-slate-200 hover:bg-slate-50"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          {/* Avatar or initial */}
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
-                            isJoined ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-600"
-                          }`}>
-                            {u.avatar ? (
-                              <img src={u.avatar} alt="" className="w-full h-full rounded-full object-cover" />
-                            ) : (
-                              u.fullName ? u.fullName.charAt(0).toUpperCase() : "U"
-                            )}
-                          </div>
-
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-bold text-xs text-slate-850 truncate notranslate" translate="no">
-                                {u.fullName}
-                              </span>
-                              {isCreator && (
-                                <span className="text-[8px] bg-amber-100 text-amber-800 font-extrabold px-1.5 py-0.2 rounded border border-amber-200 uppercase">
-                                  <T>Chủ nhóm</T>
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-[9.5px] text-slate-500 font-medium flex items-center gap-1 flex-wrap">
-                              <span translate="no" className="notranslate">{u.id}</span>
-                              {u.department && (
-                                <>
-                                  <span>•</span>
-                                  <span translate="no" className="notranslate">{u.department}</span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Tick Green Box or Empty Box */}
-                        <div className="shrink-0 flex items-center pr-1">
-                          {isJoined ? (
-                            <div className="w-6 h-6 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-2xs animate-scaleUp">
-                              <Check className="w-4 h-4 stroke-[3px]" />
-                            </div>
-                          ) : (
-                            <div className="w-6 h-6 rounded-lg border-2 border-slate-300 bg-slate-50 hover:border-blue-400 transition-colors" />
-                          )}
-                        </div>
+                {/* Tab 1: Current Joined Members (Được xếp TOP ĐẦU) */}
+                {memberModalTab === "MEMBERS" && (
+                  <div className="flex-1 overflow-y-auto space-y-1.5 pr-0.5 min-h-[220px] max-h-[50vh]">
+                    {filteredJoined.length === 0 ? (
+                      <div className="py-8 text-center text-slate-400 text-xs font-semibold">
+                        <T>Không tìm thấy thành viên nào phù hợp.</T>
                       </div>
-                    );
-                  })
+                    ) : (
+                      filteredJoined.map((u) => {
+                        const isLeader = leaderUser && (u.id === leaderUser.id || (u.phone && u.phone === leaderUser.phone));
+                        const isMe = currentUser && (u.id === currentUser.id || (u.phone && u.phone === currentUser.phone));
+
+                        return (
+                          <div
+                            key={u.id || u.phone}
+                            className={`p-2 rounded-xl border transition-all flex items-center justify-between gap-2.5 select-none ${
+                              isLeader
+                                ? "bg-amber-50/80 border-amber-200/90 shadow-2xs"
+                                : "bg-white border-slate-200 hover:bg-slate-50"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              {/* Avatar */}
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
+                                isLeader
+                                  ? "bg-gradient-to-tr from-amber-500 to-amber-700 text-white ring-2 ring-amber-300"
+                                  : "bg-gradient-to-tr from-blue-600 to-indigo-600 text-white"
+                              }`}>
+                                {u.avatar ? (
+                                  <img src={u.avatar} alt="" className="w-full h-full rounded-full object-cover" />
+                                ) : (
+                                  u.fullName ? u.fullName.charAt(0).toUpperCase() : "U"
+                                )}
+                              </div>
+
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  <span className="font-bold text-xs text-slate-850 truncate notranslate" translate="no">
+                                    {u.fullName}
+                                  </span>
+                                  {isLeader && (
+                                    <span className="text-[8px] bg-amber-100 text-amber-900 font-extrabold px-1.5 py-0.2 rounded border border-amber-300 uppercase flex items-center gap-0.5">
+                                      <Crown className="w-2.5 h-2.5 text-amber-600 fill-amber-500" />
+                                      <T>Trưởng nhóm</T>
+                                    </span>
+                                  )}
+                                  {isMe && (
+                                    <span className="text-[8px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.2 rounded">
+                                      <T>Tôi</T>
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[9.5px] text-slate-500 font-medium flex items-center gap-1 flex-wrap">
+                                  <span translate="no" className="notranslate">{u.id}</span>
+                                  {u.department && (
+                                    <>
+                                      <span>•</span>
+                                      <span translate="no" className="notranslate">{u.department}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Action: Leader Badge or Kick Button */}
+                            <div className="shrink-0 flex items-center pr-1">
+                              {isLeader ? (
+                                <span className="px-2 py-0.5 rounded-md text-[9.5px] font-black bg-amber-100 text-amber-800 border border-amber-300 select-none">
+                                  <T>Chủ trì</T>
+                                </span>
+                              ) : isCurrentUserLeader ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveUserFromTopic(u)}
+                                  className="px-2 py-1 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 rounded-lg text-[10px] font-extrabold border border-rose-200 hover:border-rose-600 cursor-pointer flex items-center gap-1 transition-all shadow-2xs"
+                                  title="Mời thành viên này ra khỏi nhóm"
+                                >
+                                  <UserMinus className="w-3 h-3" />
+                                  <T>Mời ra</T>
+                                </button>
+                              ) : (
+                                <div className="w-6 h-6 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-2xs">
+                                  <Check className="w-4 h-4 stroke-[3px]" />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+
+                {/* Tab 2: Add New Members */}
+                {memberModalTab === "ADD" && (
+                  <div className="flex-1 overflow-y-auto space-y-1.5 pr-0.5 min-h-[220px] max-h-[50vh]">
+                    {filteredNonMembers.length === 0 ? (
+                      <div className="py-8 text-center text-slate-400 text-xs font-semibold">
+                        <T>Tất cả nhân viên đã tham gia nhóm thảo luận.</T>
+                      </div>
+                    ) : (
+                      filteredNonMembers.map((u) => {
+                        return (
+                          <div
+                            key={u.id || u.phone}
+                            className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition-all flex items-center justify-between gap-2.5 select-none"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-xs shrink-0">
+                                {u.avatar ? (
+                                  <img src={u.avatar} alt="" className="w-full h-full rounded-full object-cover" />
+                                ) : (
+                                  u.fullName ? u.fullName.charAt(0).toUpperCase() : "U"
+                                )}
+                              </div>
+
+                              <div className="min-w-0">
+                                <div className="font-bold text-xs text-slate-850 truncate notranslate" translate="no">
+                                  {u.fullName}
+                                </div>
+                                <div className="text-[9.5px] text-slate-500 font-medium flex items-center gap-1 flex-wrap">
+                                  <span translate="no" className="notranslate">{u.id}</span>
+                                  {u.department && (
+                                    <>
+                                      <span>•</span>
+                                      <span translate="no" className="notranslate">{u.department}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleToggleUserInvite(u)}
+                              className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-700 rounded-lg text-[10px] font-extrabold border border-emerald-300 hover:border-emerald-600 cursor-pointer flex items-center gap-1 transition-all shadow-2xs"
+                            >
+                              <Plus className="w-3 h-3" />
+                              <T>+ Mời</T>
+                            </button>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 )}
               </div>
-            </div>
 
-            {/* Modal Footer */}
-            <div className="bg-slate-50 border-t border-slate-200/80 p-2.5 shrink-0 flex justify-end">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowMembersModal(false);
-                  setMemberSearchQuery("");
-                }}
-                className="w-full py-2 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white rounded-xl text-xs font-extrabold cursor-pointer border-none shadow-2xs transition-all"
-              >
-                <T>HOÀN TẤT</T>
-              </button>
+              {/* Modal Footer */}
+              <div className="bg-slate-50 border-t border-slate-200/80 p-2.5 shrink-0 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMembersModal(false);
+                    setMemberSearchQuery("");
+                  }}
+                  className="w-full py-2 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white rounded-xl text-xs font-extrabold cursor-pointer border-none shadow-2xs transition-all"
+                >
+                  <T>XONG</T>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Feature 4: Convert Chat to Action Modal */}
       {convertModalReply && (
@@ -3338,16 +3775,29 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
                         </div>
                       )}
 
-                      {/* Content / Note */}
-                      <p className="text-xs text-slate-800 font-medium leading-relaxed bg-slate-50 p-2 rounded-lg border border-slate-200/80" translate="no">
-                        <span translate="no" className="notranslate">{renderMentionText(reply.actionData?.note || reply.message, false)}</span>
-                      </p>
+                      {/* Content / Note with Structured Bullets and AI Summarizer */}
+                      <TaskStructuredContent text={reply.message} type={reply.actionType} />
+
+                      {/* Directive Note / Yêu cầu chỉ đạo */}
+                      {isDirective && reply.actionData?.note && (
+                        <div className="p-2 px-2.5 rounded-xl bg-amber-50/90 border-2 border-amber-300 text-amber-950 flex items-start gap-1.5 shadow-2xs">
+                          <Zap className="w-3.5 h-3.5 text-amber-600 fill-amber-500 shrink-0 mt-0.5" />
+                          <div className="text-[12px] leading-snug">
+                            <span className="font-extrabold text-amber-900 text-[10.5px] uppercase tracking-wide mr-1 inline-block">
+                              <T>Yêu cầu:</T>
+                            </span>
+                            <strong className="font-black text-slate-900 text-[12.5px] notranslate" translate="no">
+                              "{reply.actionData.note}"
+                            </strong>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Task Details Row */}
                       {!isDirective && (
-                        <div className="flex flex-wrap items-center justify-between gap-2 text-[10.5px] font-bold text-slate-700 bg-blue-50/70 p-2 rounded-lg border border-blue-100">
-                          <span><T>Phân công:</T> <strong translate="no" className="notranslate text-blue-900">{reply.actionData?.assignedToName || "Chưa giao"}</strong></span>
-                          <span><T>Hạn chót:</T> <span translate="no" className="notranslate text-slate-900">{reply.actionData?.deadline || "dd/mm/yy"}</span></span>
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-bold text-slate-700 bg-blue-50/80 p-2 rounded-lg border border-blue-200">
+                          <span><T>Phân công:</T> <strong translate="no" className="notranslate text-blue-950 font-black">{reply.actionData?.assignedToName || "Chưa giao"}</strong></span>
+                          <span><T>Hạn chót:</T> <span translate="no" className="notranslate text-slate-900 font-mono">{reply.actionData?.deadline || "dd/mm/yy"}</span></span>
                         </div>
                       )}
 

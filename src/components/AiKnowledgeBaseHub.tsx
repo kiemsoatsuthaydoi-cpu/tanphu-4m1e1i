@@ -28,10 +28,12 @@ import {
   Hash,
   Download,
   Share2,
+  CheckCircle,
   CheckCircle2
 } from "lucide-react";
 import Markdown from "react-markdown";
 import { KnowledgeDoc, KnowledgeStandardType, User, Branch } from "../types";
+import { isKnowledgeDocInScope, isBranchInScope, getEffectiveCompanyScope } from "../utils/companyScope";
 import { T } from "./TranslateText";
 
 interface AiKnowledgeBaseHubProps {
@@ -108,6 +110,14 @@ export const AiKnowledgeBaseHub: React.FC<AiKnowledgeBaseHubProps> = ({
     REGULATION: { label: "Quy chế chất lượng", color: "text-amber-600 bg-amber-50 border-amber-200" }
   };
 
+  // Company scope calculation
+  const effectiveCompany = getEffectiveCompanyScope(currentUser, "ALL", branches);
+
+  // Filtered branches according to company scope
+  const scopedBranches = useMemo(() => {
+    return branches.filter((b) => isBranchInScope(b.id, effectiveCompany));
+  }, [branches, effectiveCompany]);
+
   // Branch map for quick lookup
   const branchMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -121,6 +131,10 @@ export const AiKnowledgeBaseHub: React.FC<AiKnowledgeBaseHubProps> = ({
   // Filtered knowledge docs
   const filteredDocs = useMemo(() => {
     return knowledgeDocs.filter((doc) => {
+      // Filter by company scope
+      if (!isKnowledgeDocInScope(doc, effectiveCompany)) {
+        return false;
+      }
       // Filter by branch
       if (selectedBranchId !== "ALL" && doc.branchId !== "ALL" && doc.branchId !== selectedBranchId) {
         return false;
@@ -147,7 +161,7 @@ export const AiKnowledgeBaseHub: React.FC<AiKnowledgeBaseHubProps> = ({
       }
       return true;
     });
-  }, [knowledgeDocs, selectedBranchId, selectedStandard, selectedCategory, searchQuery]);
+  }, [knowledgeDocs, effectiveCompany, selectedBranchId, selectedStandard, selectedCategory, searchQuery]);
 
   // Total text stats
   const totalCharacters = useMemo(() => {
@@ -286,76 +300,85 @@ ${d.content}
 
   return (
     <div id="ai_knowledge_base_hub" className="space-y-6">
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-[#0F172A] via-[#1E293B] to-[#334155] border border-slate-700/60 rounded-2xl p-6 text-white shadow-md relative overflow-hidden">
-        <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
-        
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
-          <div className="space-y-2">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-teal-500/20 border border-teal-500/30 flex items-center justify-center text-teal-400">
-                <BookOpen className="w-5 h-5" />
-              </div>
-              <div>
-                <h1 className="text-xl font-black tracking-tight text-white flex items-center gap-2">
-                  <T>Kho Tri thức Tiêu chuẩn AI</T>
-                  <span className="px-2.5 py-0.5 text-[10px] font-extrabold uppercase rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/40">
-                    <T>Notepad / Text Ingestion</T>
-                  </span>
-                </h1>
-                <T className="text-xs text-slate-300 block">
-                  Tập hợp tiêu chuẩn quốc tế (ISO 9001, BRCGS, BSCI, SCAN...) và quy chế, quy trình, hướng dẫn vận hành từng nhà máy nạp trực tiếp cho AI.
-                </T>
-              </div>
-            </div>
+      {/* Header Banner - White, bright & elegant style */}
+      <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-xs border border-slate-200/80 flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-teal-600 to-emerald-500 text-white flex items-center justify-center shadow-md shadow-teal-500/20 shrink-0">
+            <BookOpen className="w-6 h-6 text-white" />
           </div>
-
-          {/* Quick Action Buttons */}
-          <div className="flex flex-wrap items-center gap-3 shrink-0">
-            <button
-              onClick={() => setIsTestPromptOpen(true)}
-              className="px-4 py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs font-bold transition-all flex items-center gap-2 shadow-sm cursor-pointer"
-            >
-              <Zap className="w-4 h-4 text-amber-400" />
-              <T>Kiểm tra Prompt AI</T>
-            </button>
-
-            <button
-              onClick={handleOpenCreate}
-              className="px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-extrabold transition-all flex items-center gap-2 shadow-md hover:shadow-teal-500/20 cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <T>+ Nạp văn bản Notepad mới</T>
-            </button>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+              <T>KHO TRI THỨC TIÊU CHUẨN AI</T>
+            </h1>
+            <p className="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">
+              <T>Tập hợp tiêu chuẩn quốc tế (ISO 9001, BRCGS, BSCI, SCAN...) và quy chế, quy trình, hướng dẫn vận hành từng nhà máy nạp trực tiếp cho AI.</T>
+            </p>
           </div>
         </div>
 
-        {/* Lightweight Storage & Performance Metrics */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-5 border-t border-slate-700/60">
-          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-3">
-            <T className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Tổng số tài liệu</T>
-            <span className="text-lg font-black text-white mt-0.5 block">{knowledgeDocs.length}</span>
-          </div>
+        {/* Action Controls */}
+        <div className="flex flex-wrap items-center gap-2.5 ml-auto">
+          <button
+            onClick={() => setIsTestPromptOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95"
+          >
+            <Zap className="w-4 h-4 text-amber-500" />
+            <T>Kiểm tra Prompt AI</T>
+          </button>
 
-          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-3">
-            <T className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Tiêu chuẩn quốc tế</T>
-            <span className="text-lg font-black text-teal-400 mt-0.5 block">
+          <button
+            onClick={handleOpenCreate}
+            className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-extrabold transition-all flex items-center gap-1.5 shadow-sm hover:shadow-teal-500/20 cursor-pointer active:scale-95"
+          >
+            <Plus className="w-4 h-4" />
+            <T>+ Nạp văn bản Notepad mới</T>
+          </button>
+        </div>
+      </div>
+
+      {/* Lightweight Storage & Performance Metrics */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-3.5 shadow-xs flex items-center justify-between">
+          <div>
+            <T className="text-[10px] text-slate-500 font-extrabold uppercase tracking-wider block">Tổng số tài liệu</T>
+            <span className="text-2xl font-black text-slate-850 mt-0.5 block">{knowledgeDocs.length}</span>
+          </div>
+          <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600">
+            <BookOpen className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-3.5 shadow-xs flex items-center justify-between">
+          <div>
+            <T className="text-[10px] text-teal-600 font-extrabold uppercase tracking-wider block">Tiêu chuẩn quốc tế</T>
+            <span className="text-2xl font-black text-teal-600 mt-0.5 block">
               {knowledgeDocs.filter((d) => d.category === "STANDARD").length}
             </span>
           </div>
+          <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center text-teal-600">
+            <CheckCircle className="w-5 h-5" />
+          </div>
+        </div>
 
-          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-3">
-            <T className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Quy trình & Hướng dẫn SOP</T>
-            <span className="text-lg font-black text-sky-400 mt-0.5 block">
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-3.5 shadow-xs flex items-center justify-between">
+          <div>
+            <T className="text-[10px] text-sky-600 font-extrabold uppercase tracking-wider block">Quy trình & Hướng dẫn SOP</T>
+            <span className="text-2xl font-black text-sky-600 mt-0.5 block">
               {knowledgeDocs.filter((d) => d.category === "PROCEDURE" || d.category === "WORK_INSTRUCTION").length}
             </span>
           </div>
+          <div className="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center text-sky-600">
+            <FileText className="w-5 h-5" />
+          </div>
+        </div>
 
-          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-3">
-            <T className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider block">Dung lượng Text siêu nhẹ</T>
-            <span className="text-lg font-black text-emerald-300 mt-0.5 block">
-              {estimatedStorageKB} KB <span className="text-[11px] text-slate-400 font-normal">(~{totalCharacters.toLocaleString()} ký tự)</span>
-            </span>
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-3.5 shadow-xs flex items-center justify-between">
+          <div>
+            <T className="text-[10px] text-indigo-600 font-extrabold uppercase tracking-wider block">Dung lượng ước tính</T>
+            <span className="text-2xl font-black text-indigo-600 mt-0.5 block">{estimatedStorageKB} KB</span>
+          </div>
+          <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+            <Sparkles className="w-5 h-5" />
           </div>
         </div>
       </div>
@@ -383,7 +406,7 @@ ${d.content}
               className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
             >
               <option value="ALL">🏢 Tất cả Nhà máy / Toàn hệ thống</option>
-              {branches.map((b) => (
+              {scopedBranches.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name}
                 </option>

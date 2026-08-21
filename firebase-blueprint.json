@@ -42,6 +42,57 @@
         "imageUrl": { "type": "string" },
         "googleDrivePath": { "type": "string" }
       }
+    },
+    "CapaDocument": {
+      "title": "CapaDocument",
+      "description": "Represents ISO BM01-ISO-QT04-KPPN CAPA reports and multi-version history.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "reportId": { "type": "string" },
+        "activeFormData": { "type": "object" },
+        "versions": { "type": "array" },
+        "activeVersionTag": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "lastSyncedAt": { "type": "string" }
+      }
+    },
+    "TrialTrackingItem": {
+      "title": "TrialTrackingItem",
+      "description": "Represents 4M1E1I trial tracking workflows and approval stepper records.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "title": { "type": "string" },
+        "targetCompany": { "type": "string", "enum": ["TPP", "DNP", "ALL"] },
+        "factory": { "type": "string" },
+        "workshop": { "type": "string" },
+        "category4M": { "type": "string" },
+        "productName": { "type": "string" },
+        "requestDocNo": { "type": "string" },
+        "planDocNo": { "type": "string" },
+        "sampleQuantity": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "createdTimestamp": { "type": "number" },
+        "createdByName": { "type": "string" },
+        "createdByPhone": { "type": "string" },
+        "createdByRole": { "type": "string" },
+        "overallStatus": { "type": "string", "enum": ["IN_PROGRESS", "COMPLETED_PASS", "COMPLETED_FAIL", "CANCELLED"] },
+        "currentStepKey": { "type": "string" },
+        "steps": { "type": "object" },
+        "customStepOrder": { "type": "array" },
+        "attachments": { "type": "array" },
+        "finalConclusion": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "likedBy": { "type": "array" },
+        "commentsCount": { "type": "number" },
+        "comments": { "type": "array" },
+        "directives": { "type": "array" },
+        "badges": { "type": "array" },
+        "isDeleted": { "type": "boolean" }
+      },
+      "required": ["id", "code", "title", "targetCompany", "factory", "category4M", "productName", "createdAt", "createdTimestamp", "overallStatus", "steps"]
     }
   },
   "firestore": {
@@ -52,6 +103,14 @@
     "/reports/{reportId}": {
       "schema": "QualityReport",
       "description": "4M1E1I quality reports list."
+    },
+    "/capa_documents/{reportId}": {
+      "schema": "CapaDocument",
+      "description": "CAPA 4M1E1I document reports and version history."
+    },
+    "/trial_trackings/{trialId}": {
+      "schema": "TrialTrackingItem",
+      "description": "4M1E1I trial tracking workflows and approval stepper records."
     }
   }
 }

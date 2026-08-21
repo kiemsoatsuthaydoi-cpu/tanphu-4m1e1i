@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { 
   AlertTriangle, 
+  CheckCircle,
   CheckCircle2, 
   Clock, 
   Bell, 
@@ -17,14 +18,16 @@ import {
   Check
 } from "lucide-react";
 import { T } from "./TranslateText";
-import { QualityReport, User, UserRole, QualityReportResolution } from "../types";
-import { formatNameCapitalized } from "../utils/branchHelpers";
+import { QualityReport, User, UserRole, QualityReportResolution, Branch, Department } from "../types";
+import { formatNameCapitalized, isSameBranchOrFactory } from "../utils/branchHelpers";
 import { MentionTextArea } from "./MentionTextArea";
 
 interface ProgressTrackingDashboardProps {
   reports: QualityReport[];
   users: User[];
   currentUser: User | null;
+  branches?: Branch[];
+  departments?: Department[];
   onUpdateReport?: (report: QualityReport) => void;
   onAddBroadcast?: (notice: string, type: string) => void;
   showToast: (message: string, type?: "success" | "error" | "warning" | "info") => void;
@@ -35,6 +38,8 @@ export default function ProgressTrackingDashboard({
   reports = [],
   users = [],
   currentUser,
+  branches = [],
+  departments = [],
   onUpdateReport,
   onAddBroadcast,
   showToast,
@@ -145,6 +150,56 @@ export default function ProgressTrackingDashboard({
     showToast("Đã xóa đăng ký nhân rộng! 🗑️", "info");
   };
 
+  // Match factory helper for branch filtering
+  const matchFactory = (factoryName: string, filterKey: string): boolean => {
+    if (!factoryName) return false;
+    if (filterKey === "Tất cả") return true;
+    const norm = factoryName.toLowerCase();
+    const filterLower = filterKey.toLowerCase();
+    if (norm === filterLower || norm.includes(filterLower) || filterLower.includes(norm)) return true;
+    if (isSameBranchOrFactory(factoryName, filterKey)) return true;
+    const clean = (s: string) => (s || "").replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
+    if (clean(factoryName) === clean(filterKey)) return true;
+    const extractId = (s: string) => {
+      const match = s.match(/\(([^)]+)\)/);
+      return match ? match[1].trim().toUpperCase() : "";
+    };
+    const id1 = extractId(factoryName);
+    const id2 = extractId(filterKey);
+    if (id1 && id2 && id1 === id2) return true;
+    if (id1 && filterLower.includes(id1.toLowerCase())) return true;
+    if (id2 && norm.includes(id2.toLowerCase())) return true;
+    if (filterLower.includes("bắc ninh") || filterLower.includes("tpp-bni")) {
+      return norm.includes("bắc ninh") || norm.includes("tpp-bni");
+    }
+    if (filterLower.includes("long an") || filterLower.includes("tpp-lan")) {
+      return norm.includes("long an") || norm.includes("tpp-lan");
+    }
+    if (filterLower.includes("văn phòng") || filterLower.includes("tpp-cty") || filterLower.includes("vp cty")) {
+      return norm.includes("văn phòng") || norm.includes("tpp-cty") || norm.includes("vp cty");
+    }
+    if (filterLower.includes("314") || filterLower.includes("tpp-314")) {
+      return norm.includes("314") || norm.includes("tpp-314");
+    }
+    if (filterLower.includes("bbm") || filterLower.includes("dnp-bbm")) {
+      return norm.includes("bbm") || norm.includes("dnp-bbm");
+    }
+    if (filterLower.includes("bbc") || filterLower.includes("dnp-bbc")) {
+      return norm.includes("bbc") || norm.includes("dnp-bbc");
+    }
+    return false;
+  };
+
+  const availableBranches = useMemo(() => {
+    if (branches && branches.length > 0) {
+      return branches.filter((b) => b.isScoring !== false);
+    }
+    const uniqueFactories = Array.from(
+      new Set(reports.map((r) => r.factory).filter(Boolean))
+    );
+    return uniqueFactories.map((f) => ({ id: f, name: f, isScoring: true }));
+  }, [branches, reports]);
+
   // Only KPH reports (Không Phù Hợp - Abnormal/KPH) are tracked here
   const kphReports = reports.filter(
     (r) => !r.isDeleted && (r.reportType === "KPH" || r.isAbnormal)
@@ -169,21 +224,24 @@ export default function ProgressTrackingDashboard({
     return "CHUA_TIEP_NHAN";
   };
 
+  // Branch Scoped KPH List
+  const branchScopedKph = kphReports.filter((r) => {
+    if (selectedBranch !== "Tất cả") {
+      return matchFactory(r.factory, selectedBranch);
+    }
+    return true;
+  });
+
   // Stats Counters
-  const totalKph = kphReports.length;
-  const countChuaTiepNhan = kphReports.filter((r) => getKphStatus(r) === "CHUA_TIEP_NHAN").length;
-  const countDangXuLy = kphReports.filter((r) => getKphStatus(r) === "DANG_XU_LY").length;
-  const countDaXuLy = kphReports.filter((r) => getKphStatus(r) === "DA_XU_LY").length;
+  const totalKph = branchScopedKph.length;
+  const countChuaTiepNhan = branchScopedKph.filter((r) => getKphStatus(r) === "CHUA_TIEP_NHAN").length;
+  const countDangXuLy = branchScopedKph.filter((r) => getKphStatus(r) === "DANG_XU_LY").length;
+  const countDaXuLy = branchScopedKph.filter((r) => getKphStatus(r) === "DA_XU_LY").length;
 
   const percentProgress = totalKph > 0 ? Math.round((countDaXuLy / totalKph) * 100) : 0;
 
   // Filtered KPH List
-  const filteredKph = kphReports.filter((r) => {
-    // Filter by branch
-    if (selectedBranch !== "Tất cả") {
-      if (r.factory !== selectedBranch) return false;
-    }
-
+  const filteredKph = branchScopedKph.filter((r) => {
     // Filter by status
     const status = getKphStatus(r);
     if (selectedStatus !== "ALL" && status !== selectedStatus) return false;
@@ -355,87 +413,129 @@ export default function ProgressTrackingDashboard({
           }
         `}} />
       )}
+
+      {/* Branch / VP segment selector (Identical to Phân tích chất lượng 4M) */}
+      <div className="flex flex-col gap-2.5 bg-slate-50/70 p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
+        <div className="flex items-center gap-2 border-b border-slate-200/40 pb-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+          <span translate="no" className="notranslate text-[10px] uppercase font-bold tracking-wider text-slate-500 font-mono">
+            <T>LỌC CHI NHÁNH / ĐƠN VỊ THÀNH VIÊN:</T>
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => setSelectedBranch("Tất cả")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer border ${
+              selectedBranch === "Tất cả"
+                ? "bg-slate-800 border-slate-850 text-white shadow-xs font-black"
+                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-800"
+            }`}
+          >
+            <T><span translate="no" className="notranslate">Tất cả</span></T>
+          </button>
+          {availableBranches.map((b) => (
+            <button
+              key={b.id}
+              type="button"
+              onClick={() => setSelectedBranch(b.name)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer border ${
+                selectedBranch === b.name || (selectedBranch !== "Tất cả" && matchFactory(b.name, selectedBranch))
+                  ? "bg-indigo-600 border-indigo-650 text-white shadow-xs font-black"
+                  : "bg-white border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-800"
+              }`}
+            >
+              <span translate="no" className="notranslate">{b.name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn phòng ", "VP ")}</span>
+            </button>
+          ))}
+        </div>
+      </div>
       
       {/* 1. Header & KPI counters */}
-      <div className={`bg-gradient-to-br from-slate-900 to-indigo-950 rounded-xl border border-indigo-900 shadow-md text-white ${
-        isMobile ? "p-3 space-y-2.5" : "p-4 space-y-3"
-      }`}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className={`rounded-lg bg-indigo-500/20 text-indigo-300 ${isMobile ? "p-1" : "p-1.5"}`}>
-              <TrendingUp className={isMobile ? "w-3.5 h-3.5" : "w-4 h-4"} />
+      <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-xs border border-slate-200/80 space-y-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-blue-500 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 shrink-0">
+              <TrendingUp className="w-5 h-5 text-white" />
             </div>
-            <h3 className={`font-black uppercase tracking-tight ${isMobile ? "text-[12.5px]" : "text-[16.5px]"}`}>
-              <span translate="no" className="notranslate"><T>Mục Tiêu Khắc Phục KPH</T></span>
-            </h3>
+            <div>
+              <h3 className="text-base sm:text-lg font-black uppercase tracking-tight text-slate-900">
+                <span translate="no" className="notranslate"><T>Mục Tiêu Khắc Phục KPH</T></span>
+              </h3>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                <span translate="no" className="notranslate"><T>Đã hoàn thành</T>: {countDaXuLy}/{totalKph} KPH</span>
+              </p>
+            </div>
           </div>
-          <span className={`font-bold bg-indigo-550 rounded-full ${isMobile ? "text-[10.5px] px-2 py-0.5" : "text-[14px] px-2.5 py-1"}`}>
-            <span translate="no" className="notranslate">HT: {percentProgress}%</span>
-          </span>
+
+          <div className="flex items-center gap-2">
+            <span className="font-black bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-xs px-3 py-1">
+              <span translate="no" className="notranslate">Hoàn thành: {percentProgress}%</span>
+            </span>
+          </div>
         </div>
 
         {/* Big Progress bar */}
         <div className="space-y-1">
-          <div className={`w-full bg-slate-800 rounded-full overflow-hidden border border-slate-700 ${isMobile ? "h-2" : "h-2.5"}`}>
+          <div className="w-full bg-slate-100 rounded-full overflow-hidden border border-slate-200 h-2.5">
             <div 
-              className="bg-gradient-to-r from-teal-400 to-emerald-500 h-full transition-all duration-500"
+              className="bg-gradient-to-r from-teal-500 via-emerald-500 to-blue-600 h-full transition-all duration-500 rounded-full"
               style={{ width: `${percentProgress}%` }}
             />
           </div>
-          <div className={`flex justify-between items-center text-slate-400 font-bold ${isMobile ? "text-[10.5px]" : "text-[13.5px]"}`}>
-            <span translate="no" className="notranslate"><T>Đã hoàn thành</T>: {countDaXuLy}/{totalKph} KPH</span>
-            <span translate="no" className="notranslate">{percentProgress}%</span>
-          </div>
         </div>
 
-        {/* 3 Status mini blocks */}
-        <div className="grid grid-cols-3 gap-2 pt-1">
+        {/* 3 Status vibrant cards */}
+        <div className="grid grid-cols-3 gap-3 pt-1">
           <button
             onClick={() => setSelectedStatus("CHUA_TIEP_NHAN")}
-            className={`rounded-xl text-center border transition-all cursor-pointer bg-transparent ${
-              isMobile ? "p-1.5" : "p-2"
-            } ${
+            className={`relative overflow-hidden rounded-2xl p-3 sm:p-4 text-left border transition-all cursor-pointer bg-gradient-to-r from-rose-500 to-red-600 text-white shadow-sm ${
               selectedStatus === "CHUA_TIEP_NHAN"
-                ? "border-red-500 bg-red-950/40 text-red-100"
-                : "border-slate-800 hover:border-slate-700 text-slate-300"
+                ? "ring-3 ring-red-400 ring-offset-2 scale-[1.02]"
+                : "opacity-90 hover:opacity-100 hover:scale-[1.01]"
             }`}
           >
-            <div className={`font-black text-red-400 ${isMobile ? "text-[15px]" : "text-[20px]"}`}>{countChuaTiepNhan}</div>
-            <div className={`font-black uppercase tracking-wider text-slate-400 leading-tight ${isMobile ? "text-[9.5px]" : "text-[13px]"}`}>
+            <div className="absolute right-2 bottom-1 opacity-15 pointer-events-none">
+              <AlertTriangle className="w-12 h-12" />
+            </div>
+            <div className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-rose-100">
               <span translate="no" className="notranslate"><T>Chưa Tiếp Nhận</T></span>
             </div>
+            <div className="text-xl sm:text-2xl font-black text-white mt-0.5">{countChuaTiepNhan}</div>
           </button>
 
           <button
             onClick={() => setSelectedStatus("DANG_XU_LY")}
-            className={`rounded-xl text-center border transition-all cursor-pointer bg-transparent ${
-              isMobile ? "p-1.5" : "p-2"
-            } ${
+            className={`relative overflow-hidden rounded-2xl p-3 sm:p-4 text-left border transition-all cursor-pointer bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-sm ${
               selectedStatus === "DANG_XU_LY"
-                ? "border-amber-500 bg-amber-950/40 text-amber-100"
-                : "border-slate-800 hover:border-slate-700 text-slate-300"
+                ? "ring-3 ring-amber-400 ring-offset-2 scale-[1.02]"
+                : "opacity-90 hover:opacity-100 hover:scale-[1.01]"
             }`}
           >
-            <div className={`font-black text-amber-400 ${isMobile ? "text-[15px]" : "text-[20px]"}`}>{countDangXuLy}</div>
-            <div className={`font-black uppercase tracking-wider text-slate-400 leading-tight ${isMobile ? "text-[9.5px]" : "text-[13px]"}`}>
+            <div className="absolute right-2 bottom-1 opacity-15 pointer-events-none">
+              <Clock className="w-12 h-12" />
+            </div>
+            <div className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-amber-100">
               <span translate="no" className="notranslate"><T>Đang Khắc Phục</T></span>
             </div>
+            <div className="text-xl sm:text-2xl font-black text-white mt-0.5">{countDangXuLy}</div>
           </button>
 
           <button
             onClick={() => setSelectedStatus("DA_XU_LY")}
-            className={`rounded-xl text-center border transition-all cursor-pointer bg-transparent ${
-              isMobile ? "p-1.5" : "p-2"
-            } ${
+            className={`relative overflow-hidden rounded-2xl p-3 sm:p-4 text-left border transition-all cursor-pointer bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-sm ${
               selectedStatus === "DA_XU_LY"
-                ? "border-emerald-500 bg-emerald-950/40 text-emerald-100"
-                : "border-slate-800 hover:border-slate-700 text-slate-300"
+                ? "ring-3 ring-emerald-400 ring-offset-2 scale-[1.02]"
+                : "opacity-90 hover:opacity-100 hover:scale-[1.01]"
             }`}
           >
-            <div className={`font-black text-emerald-400 ${isMobile ? "text-[15px]" : "text-[20px]"}`}>{countDaXuLy}</div>
-            <div className={`font-black uppercase tracking-wider text-slate-400 leading-tight ${isMobile ? "text-[9.5px]" : "text-[13px]"}`}>
+            <div className="absolute right-2 bottom-1 opacity-15 pointer-events-none">
+              <CheckCircle className="w-12 h-12" />
+            </div>
+            <div className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-emerald-100">
               <span translate="no" className="notranslate"><T>Đã Xử Lý Xong</T></span>
             </div>
+            <div className="text-xl sm:text-2xl font-black text-white mt-0.5">{countDaXuLy}</div>
           </button>
         </div>
       </div>
@@ -526,12 +626,12 @@ export default function ProgressTrackingDashboard({
                   isMobile ? "text-[10.5px] py-1 h-[28px]" : "text-[14.5px] py-1.5"
                 }`}
               >
-                <option value="Tất cả">Tất cả chi nhánh</option>
-                <option value="Nhà máy DNP-BBM">DNP BBM</option>
-                <option value="Nhà máy DNP-BBC">DNP BBC</option>
-                <option value="Nhà máy Tân Phú - Long An">Tân Phú LA</option>
-                <option value="Nhà máy Tân Phú - Sài Gòn">Tân Phú SG</option>
-                <option value="Nhà máy Tân Phú - Bắc Ninh">Tân Phú BN</option>
+                <option value="Tất cả" translate="no" className="notranslate">Tất cả chi nhánh</option>
+                {availableBranches.map((b) => (
+                  <option key={b.id} value={b.name} translate="no" className="notranslate">
+                    {b.name}
+                  </option>
+                ))}
               </select>
               <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-slate-400">
                 <span className={isMobile ? "text-[8px]" : "text-[12px]"}>▼</span>

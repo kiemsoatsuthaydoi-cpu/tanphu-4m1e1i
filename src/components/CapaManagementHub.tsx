@@ -2078,66 +2078,28 @@ export default function CapaManagementHub({
         }
       `}</style>
 
-      {/* Header Banner */}
-      <div className="no-print bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 rounded-2xl shadow-lg border border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <span className="bg-indigo-600/30 border border-indigo-400/30 text-indigo-300 p-2 rounded-xl">
-              <FileText className="w-6 h-6 text-indigo-400" />
-            </span>
-            <div>
-              <h2 className="text-xl font-black tracking-tight text-white flex items-center gap-2">
-                <span translate="no" className="notranslate">TRUNG TÂM LẬP & QUẢN LÝ BÁO CÁO CAPA (ISO BM01-ISO-QT04-KPPN)</span>
-              </h2>
-              <p className="text-xs text-slate-300 mt-0.5">
-                <span translate="no" className="notranslate">Tự động liên thông dữ liệu Bản tin sự cố KPH/RRO & AI Trợ lý dự thảo phân tích 4M1E1I chuẩn mực</span>
-              </p>
-            </div>
+      {/* Header Banner - White, bright & lively style */}
+      <div className="no-print bg-white rounded-2xl p-4 sm:p-5 shadow-xs border border-slate-200/80 flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-indigo-600 to-blue-500 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 shrink-0">
+            <FileText className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h2 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+              <span translate="no" className="notranslate">TRUNG TÂM LẬP & QUẢN LÝ BÁO CÁO CAPA</span>
+            </h2>
+            <p className="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">
+              <span translate="no" className="notranslate">Tự động liên thông dữ liệu Bản tin sự cố KPH/RRO & AI Trợ lý dự thảo phân tích 4M1E1I chuẩn mực</span>
+            </p>
           </div>
         </div>
 
-        {/* Action Controls */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={handleGenerateAiDraft}
-            disabled={isAiLoading || !selectedReportId}
-            className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-black rounded-xl shadow-md flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
-          >
-            <Sparkles className={`w-4 h-4 ${isAiLoading ? "animate-spin" : ""}`} />
-            <span translate="no" className="notranslate">{isAiLoading ? "AI ĐANG ĐỌC & DỰ THẢO..." : "✨ AI TỰ ĐỌC ẢNH & DỰ THẢO CAPA"}</span>
-          </button>
-
-          <button
-            onClick={handleAutoFormatAllLineBreaks}
-            disabled={!capaForm}
-            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 text-xs font-bold rounded-xl shadow-md flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
-            title="Tự động phân tách các ý (1., 2., 3., 4M1E1I...) xuống dòng riêng lẻ"
-          >
-            <WrapText className="w-4 h-4 text-amber-400 shrink-0" />
-            <span translate="no" className="notranslate">⚡ TỰ ĐỘNG XUỐNG DÒNG CÁC Ý</span>
-          </button>
-
-          <button
-            onClick={handlePrint}
-            disabled={!capaForm}
-            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl shadow-md flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
-            title="Mở hộp thoại in trình duyệt để in ra máy in hoặc lưu PDF"
-          >
-            <Printer className="w-4 h-4" />
-            <span translate="no" className="notranslate">🖨️ IN BÁO CÁO</span>
-          </button>
-
-          <button
-            onClick={handleExportPdf}
-            disabled={!capaForm || isExportingPdf}
-            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-black rounded-xl shadow-md flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
-            title="Tải trực tiếp file PDF báo cáo CAPA về máy"
-          >
-            <Download className={`w-4 h-4 ${isExportingPdf ? "animate-bounce" : ""}`} />
-            <span translate="no" className="notranslate">
-              {isExportingPdf ? "ĐANG XUẤT PDF..." : "📥 XUẤT FILE PDF"}
-            </span>
-          </button>
+        {/* Cloud Sync & Quick Info */}
+        <div className="flex items-center gap-2.5 ml-auto">
+          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 shadow-2xs">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span translate="no" className="notranslate">Hệ thống CAPA trực tuyến</span>
+          </div>
         </div>
       </div>
 
@@ -2378,59 +2340,15 @@ export default function CapaManagementHub({
         <div className="lg:col-span-9 bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6 print:border-none print:shadow-none print:p-0 print:m-0 print:w-full print:max-w-none">
           
           {/* Paper Config & View Selector Bar */}
-          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-3 no-print">
-            <div className="flex items-center gap-2">
-              <Layout className="w-4 h-4 text-indigo-600" />
-              <span className="text-xs font-bold text-slate-700">
-                <span translate="no" className="notranslate">CẤU HÌNH KHỔ GIẤY & PHÂN TRANG:</span>
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              {[
-                { id: "FULL_PAGE_EXPANDED", label: "🌟 Mở rộng hết trang (100%)" },
-                { id: "A4_PORTRAIT", label: "📄 A4 Dọc (Chuẩn)" },
-                { id: "A4_LANDSCAPE", label: "📄 A4 Ngang" },
-                { id: "A3_LANDSCAPE", label: "📋 A3 Ngang (Toàn cảnh)" }
-              ].map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => setPaperSize(p.id as any)}
-                  className={`px-3 py-1.5 text-xs font-extrabold rounded-lg transition-all cursor-pointer ${
-                    paperSize === p.id
-                      ? "bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-200"
-                      : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-                  }`}
-                >
-                  <span translate="no" className="notranslate">{p.label}</span>
-                </button>
-              ))}
-
-              <div className="h-4 w-[1px] bg-slate-300 mx-1 hidden sm:block"></div>
-
-              {/* Pagination Mode Selector */}
-              <div className="flex items-center gap-1 bg-slate-200/80 p-1 rounded-lg">
-                {[
-                  { id: "AUTO", label: "📑 Tự động nhiều trang", desc: "Tự động phân trang linh hoạt theo độ dài thực tế" },
-                  { id: "ISO_2_PAGES", label: "📄 Ngắt 2 trang ISO", desc: "Trang 1: Sự cố & Ảnh / Trang 2: Phân tích 4M & Khắc phục" },
-                  { id: "COMPACT_1_PAGE", label: "📜 Gom 1 trang", desc: "Thu gọn vừa vặn 1 trang A4" }
-                ].map((m) => (
-                  <button
-                    key={m.id}
-                    onClick={() => setPaginationMode(m.id as any)}
-                    title={m.desc}
-                    className={`px-2.5 py-1 text-xs font-black rounded-md transition-all cursor-pointer ${
-                      paginationMode === m.id
-                        ? "bg-slate-900 text-white shadow-xs"
-                        : "bg-transparent text-slate-600 hover:bg-white hover:text-slate-900"
-                    }`}
-                  >
-                    <span translate="no" className="notranslate">{m.label}</span>
-                  </button>
-                ))}
+          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2.5 no-print">
+            {/* Row 1: Title on left + Firebase status on right */}
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Layout className="w-4 h-4 text-indigo-600" />
+                <span className="text-xs font-bold text-slate-800">
+                  <span translate="no" className="notranslate">CẤU HÌNH KHỔ GIẤY & PHÂN TRANG:</span>
+                </span>
               </div>
-
-              <div className="h-4 w-[1px] bg-slate-300 mx-1 hidden sm:block"></div>
 
               {/* Cloud Sync Status Indicator */}
               <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-semibold shadow-2xs">
@@ -2458,28 +2376,90 @@ export default function CapaManagementHub({
                   </>
                 )}
               </div>
+            </div>
 
-              <div className="h-4 w-[1px] bg-slate-300 mx-1 hidden sm:block"></div>
+            {/* Row 2: Controls neatly organized (Paper sizes + Pagination + Action buttons) */}
+            <div className="flex items-center justify-between gap-2 flex-wrap pt-1 border-t border-slate-200/80">
+              {/* Paper Sizes */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {[
+                  { id: "FULL_PAGE_EXPANDED", label: "🌟 Mở rộng hết trang (100%)" },
+                  { id: "A4_PORTRAIT", label: "📄 A4 Dọc (Chuẩn)" },
+                  { id: "A4_LANDSCAPE", label: "📄 A4 Ngang" },
+                  { id: "A3_LANDSCAPE", label: "📋 A3 Ngang (Toàn cảnh)" }
+                ].map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => setPaperSize(p.id as any)}
+                    className={`px-2.5 py-1.5 text-xs font-extrabold rounded-lg transition-all cursor-pointer ${
+                      paperSize === p.id
+                        ? "bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-200"
+                        : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                    }`}
+                  >
+                    <span translate="no" className="notranslate">{p.label}</span>
+                  </button>
+                ))}
+              </div>
 
-              <button
-                onClick={handlePrint}
-                disabled={!capaForm}
-                className="px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-extrabold rounded-lg shadow-2xs flex items-center gap-1 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
-                title="In trực tiếp"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                <span translate="no" className="notranslate">In nhanh</span>
-              </button>
+              <div className="h-4 w-[1px] bg-slate-300 mx-0.5 hidden md:block"></div>
 
-              <button
-                onClick={handleExportPdf}
-                disabled={!capaForm || isExportingPdf}
-                className="px-2.5 py-1.5 bg-blue-700 hover:bg-blue-600 text-white text-xs font-extrabold rounded-lg shadow-2xs flex items-center gap-1 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
-                title="Tải PDF trực tiếp"
-              >
-                <Download className={`w-3.5 h-3.5 ${isExportingPdf ? "animate-bounce" : ""}`} />
-                <span translate="no" className="notranslate">{isExportingPdf ? "Xuất PDF..." : "Xuất PDF"}</span>
-              </button>
+              {/* Pagination Mode Selector */}
+              <div className="flex items-center gap-1 bg-slate-200/80 p-0.5 rounded-lg">
+                {[
+                  { id: "AUTO", label: "📑 Tự động nhiều trang", desc: "Tự động phân trang linh hoạt theo độ dài thực tế" },
+                  { id: "ISO_2_PAGES", label: "📄 Ngắt 2 trang ISO", desc: "Trang 1: Sự cố & Ảnh / Trang 2: Phân tích 4M & Khắc phục" },
+                  { id: "COMPACT_1_PAGE", label: "📜 Gom 1 trang", desc: "Thu gọn vừa vặn 1 trang A4" }
+                ].map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => setPaginationMode(m.id as any)}
+                    title={m.desc}
+                    className={`px-2 py-1 text-xs font-black rounded-md transition-all cursor-pointer ${
+                      paginationMode === m.id
+                        ? "bg-slate-900 text-white shadow-xs"
+                        : "bg-transparent text-slate-600 hover:bg-white hover:text-slate-900"
+                    }`}
+                  >
+                    <span translate="no" className="notranslate">{m.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="h-4 w-[1px] bg-slate-300 mx-0.5 hidden md:block"></div>
+
+              {/* Export / Action Buttons */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  onClick={handlePrint}
+                  disabled={!capaForm}
+                  className="px-2.5 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-extrabold rounded-lg shadow-2xs flex items-center gap-1 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                  title="In trực tiếp"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span translate="no" className="notranslate">In nhanh</span>
+                </button>
+
+                <button
+                  onClick={handleExportPdf}
+                  disabled={!capaForm || isExportingPdf}
+                  className="px-2.5 py-1.5 bg-blue-700 hover:bg-blue-600 text-white text-xs font-extrabold rounded-lg shadow-2xs flex items-center gap-1 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                  title="Tải PDF trực tiếp"
+                >
+                  <Download className={`w-3.5 h-3.5 ${isExportingPdf ? "animate-bounce" : ""}`} />
+                  <span translate="no" className="notranslate">{isExportingPdf ? "Xuất PDF..." : "Xuất PDF"}</span>
+                </button>
+
+                <button
+                  onClick={handleAutoFormatAllLineBreaks}
+                  disabled={!capaForm}
+                  className="px-2.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-extrabold rounded-lg shadow-2xs flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                  title="Tự động phân tách các ý (1., 2., 3., 4M1E1I...) xuống dòng riêng lẻ"
+                >
+                  <WrapText className="w-3.5 h-3.5 text-white" />
+                  <span translate="no" className="notranslate">⚡ Tự động xuống dòng</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -2509,46 +2489,60 @@ export default function CapaManagementHub({
                         ? "bg-slate-900 text-white border-indigo-500/80 ring-1 ring-indigo-500/30"
                         : "bg-slate-900 text-white border-slate-800"
                     }`}>
-                      <div className="flex items-center gap-3 flex-wrap">
-                        {isViewingOldVersion ? (
-                          <span className="px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-black rounded-lg flex items-center gap-1.5 shadow-2xs">
-                            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                            <span translate="no" className="notranslate">XEM PHIÊN BẢN CŨ ({viewingVersion})</span>
-                          </span>
-                        ) : isViewingCurrentVersion ? (
-                          <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-black rounded-lg flex items-center gap-1.5 shadow-2xs">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                            <span translate="no" className="notranslate">PHIÊN BẢN HIỆN HÀNH ({viewingVersion})</span>
-                          </span>
-                        ) : versions.length === 0 ? (
-                          <span className="px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-black rounded-lg flex items-center gap-1.5 shadow-2xs">
-                            <FileText className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                            <span translate="no" className="notranslate">BẢN NHÁP (DRAFT)</span>
-                          </span>
-                        ) : (
-                          <span className="px-3 py-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/50 text-xs font-black rounded-lg flex items-center gap-1.5 shadow-2xs animate-pulse">
-                            <FileText className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                            <span translate="no" className="notranslate">BẢN NHÁP MỚI (DRAFT {nextVerTag})</span>
-                          </span>
-                        )}
-
-                        <div className="text-xs text-slate-300 font-medium">
+                      <div className="flex items-center justify-between w-full gap-3">
+                        <div className="flex items-center gap-2.5">
                           {isViewingOldVersion ? (
-                            <span translate="no" className="notranslate">
-                              Đang xem lại phiên bản cũ <b>{viewingVersion}</b> (Ký ngày {versions.find((v) => v.version === viewingVersion)?.signedDate} bởi {versions.find((v) => v.version === viewingVersion)?.signedBy}). Phiên bản hiện hành mới nhất là <b>{latestVerTag}</b>.
+                            <span className="px-3 py-1.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-black rounded-lg flex items-center gap-1.5 shadow-2xs">
+                              <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                              <span translate="no" className="notranslate">XEM PHIÊN BẢN CŨ ({viewingVersion})</span>
                             </span>
                           ) : isViewingCurrentVersion ? (
-                            <span translate="no" className="notranslate">
-                              Đang hiển thị dữ liệu chính thức của <b>{viewingVersion}</b> (Ký ngày <b>{versions.find((v) => v.version === viewingVersion)?.signedDate}</b> bởi <b>{versions.find((v) => v.version === viewingVersion)?.signedBy}</b>).
+                            <span className="px-3 py-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-black rounded-lg flex items-center gap-1.5 shadow-2xs">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                              <span translate="no" className="notranslate">PHIÊN BẢN HIỆN HÀNH ({viewingVersion})</span>
                             </span>
                           ) : versions.length === 0 ? (
-                            <span translate="no" className="notranslate">Chưa phát hành. Đang lưu nháp. Ký duyệt & phát hành v1.0 tại ô Trưởng BP QLCL bên dưới ↓</span>
+                            <span className="px-3 py-1.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-black rounded-lg flex items-center gap-1.5 shadow-2xs">
+                              <FileText className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                              <span translate="no" className="notranslate">BẢN NHÁP (DRAFT)</span>
+                            </span>
                           ) : (
-                            <span translate="no" className="notranslate">
-                              Đang biên soạn <b>bản nháp mới ({nextVerTag})</b> dựa trên phiên bản hiện hành <b>{latestVerTag}</b>. Cần Trưởng BP QLCL ký duyệt ở Bước 2 bên dưới ↓ để chính thức phát hành <b>{nextVerTag}</b>.
+                            <span className="px-3 py-1.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/50 text-xs font-black rounded-lg flex items-center gap-1.5 shadow-2xs animate-pulse">
+                              <FileText className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                              <span translate="no" className="notranslate">BẢN NHÁP MỚI (DRAFT {nextVerTag})</span>
                             </span>
                           )}
                         </div>
+
+                        {/* AI TỰ ĐỌC ẢNH & DỰ THẢO CAPA BUTTON */}
+                        <button
+                          onClick={handleGenerateAiDraft}
+                          disabled={isAiLoading || !selectedReportId}
+                          className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-black rounded-lg shadow-md flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 cursor-pointer shrink-0 ml-auto"
+                          title="AI tự động phân tích hình ảnh và điền dự thảo mẫu CAPA"
+                        >
+                          <Sparkles className={`w-3.5 h-3.5 ${isAiLoading ? "animate-spin" : ""}`} />
+                          <span translate="no" className="notranslate">{isAiLoading ? "AI ĐANG ĐỌC & DỰ THẢO..." : "✨ AI TỰ ĐỌC ẢNH & DỰ THẢO CAPA"}</span>
+                        </button>
+                      </div>
+
+                      {/* Version status text */}
+                      <div className="w-full text-xs text-slate-300 font-medium">
+                        {isViewingOldVersion ? (
+                          <span translate="no" className="notranslate">
+                            Đang xem lại phiên bản cũ <b>{viewingVersion}</b> (Ký ngày {versions.find((v) => v.version === viewingVersion)?.signedDate} bởi {versions.find((v) => v.version === viewingVersion)?.signedBy}). Phiên bản hiện hành mới nhất là <b>{latestVerTag}</b>.
+                          </span>
+                        ) : isViewingCurrentVersion ? (
+                          <span translate="no" className="notranslate">
+                            Đang hiển thị dữ liệu chính thức của <b>{viewingVersion}</b> (Ký ngày <b>{versions.find((v) => v.version === viewingVersion)?.signedDate}</b> bởi <b>{versions.find((v) => v.version === viewingVersion)?.signedBy}</b>).
+                          </span>
+                        ) : versions.length === 0 ? (
+                          <span translate="no" className="notranslate">Chưa phát hành. Đang lưu nháp. Ký duyệt & phát hành v1.0 tại ô Trưởng BP QLCL bên dưới ↓</span>
+                        ) : (
+                          <span translate="no" className="notranslate">
+                            Đang biên soạn <b>bản nháp mới ({nextVerTag})</b> dựa trên phiên bản hiện hành <b>{latestVerTag}</b>. Cần Trưởng BP QLCL ký duyệt ở Bước 2 bên dưới ↓ để chính thức phát hành <b>{nextVerTag}</b>.
+                          </span>
+                        )}
                       </div>
 
                       {/* VERSION FILTER SELECTOR DROPDOWN & SAVE DRAFT BUTTON */}

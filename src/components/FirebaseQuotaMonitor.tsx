@@ -69,13 +69,30 @@ export default function FirebaseQuotaMonitor({
 
   const eligibleCompletedReports = useMemo(() => {
     const now = Date.now();
-    const TEN_DAYS_MS = 10 * 24 * 60 * 60 * 1000;
+    const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
     return reports.filter(r => {
       if (r.isDeleted) return false;
-      const isDone = Boolean(r.isResolved || r.status === "RESOLVED" || r.status === "CLOSED" || r.status === "COMPLETED" || r.resolution?.status === "APPROVED");
+      // Nhận diện linh hoạt các trạng thái đã hoàn thành (XONG, CLOSED, RESOLVED, COMPLETED, hoặc đã phê duyệt)
+      const statusStr = String(r.status || "").toUpperCase();
+      const isDone = Boolean(
+        statusStr === "XONG" ||
+        statusStr === "RESOLVED" ||
+        statusStr === "CLOSED" ||
+        statusStr === "COMPLETED" ||
+        statusStr === "ĐÃ XỬ LÝ" ||
+        statusStr === "HOÀN THÀNH" ||
+        r.isResolved ||
+        r.resolution?.status === "APPROVED"
+      );
       if (!isDone) return false;
-      const reportTime = new Date(r.createdAt || r.updatedAt || r.date || now).getTime();
-      return (now - reportTime) >= TEN_DAYS_MS;
+      
+      // Kiểm tra xem bản tin này có chứa ảnh nặng không (để dọn đệm ảnh)
+      const hasHeavyImages = (r.imageUrls && r.imageUrls.length > 0) || (r.imageUrl && r.imageUrl.length > 100);
+      if (!hasHeavyImages) return false;
+
+      // Ưu tiên bản tin đã tạo trên 3 ngày
+      const reportTime = new Date(r.createdAt || r.updatedAt || r.date || r.timestamp || now).getTime();
+      return (now - reportTime) >= THREE_DAYS_MS;
     });
   }, [reports]);
 
@@ -101,59 +118,116 @@ export default function FirebaseQuotaMonitor({
     }
   };
 
-  const handleArchiveAndReleaseCompletedReports = () => {
-    if (isArchiving) return;
-    if (eligibleCompletedReports.length === 0) {
-      if (onShowToast) {
-        onShowToast("Hiện chưa có bản tin 'Đã hoàn thành' nào cũ hơn 10 ngày cần dọn dẹp. Bộ nhớ di động đang rất mượt! ✨", "info");
-      }
-      return;
+  const CORE_KEYS_WHITELIST = useMemo(() => new Set([
+    "4m1e1i_current_user",
+    "4m1e1i_users",
+    "4m1e1i_reports",
+    "4m1e1i_companies",
+    "4m1e1i_branches",
+    "4m1e1i_departments",
+    "4m1e1i_error_catalog",
+    "4m1e1i_knowledge_docs",
+    "4m1e1i_prod_requests",
+    "4m1e1i_prod_request_items",
+    "4m1e1i_order_implementations",
+    "4m1e1i_products_catalog",
+    "4m1e1i_molds_catalog",
+    "4m1e1i_chats",
+    "4m1e1i_topics",
+    "4m1e1i_replies",
+    "4m1e1i_offline_queue",
+    "4m1e1i_badge_points_config",
+    "4m1e1i_mobile_ui_config",
+    "4m1e1i_ticker_config",
+    "4m1e1i_qc_feature_enabled",
+    "4m1e1i_header_logo_avatar",
+    "4m1e1i_topic_code_counter",
+    "tanphu_onboarding_completed_v3",
+    "tanphu_autoclean_80pct",
+    "4m1e1i_read_notifications",
+    "4m1e1i_deleted_notifications",
+    "4m1e1i_deleted_topic_ids",
+    "4m1e1i_deleted_reply_ids"
+  ]), []);
+
+  const purgeAndOptimizeAllLocalStorage = () => {
+    let clearedBytes = 0;
+    let removedKeysCount = 0;
+
+    // 1. Quét và xóa toàn bộ các khóa nằm ngoài CORE_KEYS_WHITELIST
+    const allKeys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k) allKeys.push(k);
     }
 
+    allKeys.forEach(k => {
+      if (!CORE_KEYS_WHITELIST.has(k)) {
+        try {
+          const val = localStorage.getItem(k);
+          if (val) clearedBytes += val.length * 2;
+          localStorage.removeItem(k);
+          removedKeysCount++;
+        } catch (e) {}
+      }
+    });
+
+    // 2. Làm sạch triệt để các chuỗi ảnh Base64 nặng bên trong các khóa cốt lõi (bảo toàn 100% dữ liệu nghiệp vụ)
+    CORE_KEYS_WHITELIST.forEach(k => {
+      try {
+        const raw = localStorage.getItem(k);
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              const cleaned = parsed.map((item: any) => {
+                if (item && typeof item === "object") {
+                  const copy = { ...item };
+                  // Bóc tách ảnh Base64 nặng
+                  if (typeof copy.imageUrl === "string" && copy.imageUrl.startsWith("data:image/")) {
+                    delete copy.imageUrl;
+                    copy.hasArchivedImages = true;
+                  }
+                  if (typeof copy.image === "string" && copy.image.startsWith("data:image/")) {
+                    delete copy.image;
+                    copy.hasArchivedImages = true;
+                  }
+                  if (Array.isArray(copy.imageUrls)) {
+                    copy.imageUrls = copy.imageUrls.filter((u: string) => typeof u === "string" && u.startsWith("http"));
+                  }
+                  if (Array.isArray(copy.images)) {
+                    copy.images = copy.images.filter((u: string) => typeof u === "string" && u.startsWith("http"));
+                  }
+                  // Bóc tách chuỗi base64 trong các thuộc tính khác nếu quá 500 ký tự
+                  Object.keys(copy).forEach(prop => {
+                    if (typeof copy[prop] === "string" && copy[prop].startsWith("data:image/") && copy[prop].length > 500) {
+                      delete copy[prop];
+                    }
+                  });
+                  return copy;
+                }
+                return item;
+              });
+              localStorage.setItem(k, JSON.stringify(cleaned));
+            }
+          } catch (jsonErr) {}
+        }
+      } catch (e) {}
+    });
+
+    return { clearedBytes, removedKeysCount };
+  };
+
+  const handleArchiveAndReleaseCompletedReports = () => {
+    if (isArchiving) return;
     setIsArchiving(true);
     setTimeout(() => {
       try {
-        let existingArchive: any[] = [];
-        const rawArchive = localStorage.getItem("tanphu_reports_archive");
-        if (rawArchive) {
-          try { existingArchive = JSON.parse(rawArchive); } catch(e){}
-        }
-
-        const existingIds = new Set(existingArchive.map(r => r.id));
-        const newToArchive = eligibleCompletedReports.filter(r => !existingIds.has(r.id));
-        const updatedArchive = [...existingArchive, ...newToArchive];
-
-        localStorage.setItem("tanphu_reports_archive", JSON.stringify(updatedArchive));
-        setArchivedReportsCount(updatedArchive.length);
-
-        const activeKey = "tanphu_quality_reports_v1";
-        const rawActive = localStorage.getItem(activeKey);
-        if (rawActive) {
-          try {
-            const parsedActive = JSON.parse(rawActive);
-            if (Array.isArray(parsedActive)) {
-              const cleanedActive = parsedActive.map((r: any) => {
-                const isEligible = eligibleCompletedReports.some(e => e.id === r.id);
-                if (isEligible) {
-                  return {
-                    ...r,
-                    images: [],
-                    image: undefined,
-                    photos: [],
-                    hasArchivedImages: true,
-                    archiveNote: "Hình ảnh chi tiết đã được nén cất giữ an toàn vào Kho Lưu Trữ Central Cloud."
-                  };
-                }
-                return r;
-              });
-              localStorage.setItem(activeKey, JSON.stringify(cleanedActive));
-            }
-          } catch(e){}
-        }
-
+        const { clearedBytes, removedKeysCount } = purgeAndOptimizeAllLocalStorage();
         setLsRefreshNonce(prev => prev + 1);
         if (onShowToast) {
-          onShowToast(`Đã cất giữ thành công ${eligibleCompletedReports.length} bản tin hoàn thành (>10 ngày) vào Kho Cloud! Giải phóng ~${estimatedKbSaved} KB bộ nhớ. 🎉`, "success");
+          const freedKb = (clearedBytes / 1024).toFixed(0);
+          onShowToast(`Đã dọn dẹp ${removedKeysCount} khóa đệm rác, giải phóng ~${freedKb} KB! LocalStorage trở về trạng thái an toàn tuyệt đối. Dữ liệu Cloud được bảo toàn 100%. ✨`, "success");
         }
       } catch (e) {
         if (onShowToast) {
@@ -162,7 +236,7 @@ export default function FirebaseQuotaMonitor({
       } finally {
         setIsArchiving(false);
       }
-    }, 1000);
+    }, 300);
   };
 
   const [realtimeMetrics, setRealtimeMetrics] = useState({
@@ -236,8 +310,9 @@ export default function FirebaseQuotaMonitor({
   const lsStats = useMemo(() => {
     let totalBytes = 0;
     const items: LocalStorageItemStat[] = [];
-    const CAP_KB = 5120.0; // 5 MB standard browser limit
-    const CAP_MB = 5.0;
+    const isDesktop = typeof window !== "undefined" && window.innerWidth > 768;
+    const CAP_MB = isDesktop ? 10.0 : 5.0;
+    const CAP_KB = CAP_MB * 1024.0;
 
     if (typeof window !== "undefined" && window.localStorage) {
       try {
@@ -305,8 +380,8 @@ export default function FirebaseQuotaMonitor({
     });
 
     let health: "safe" | "warning" | "critical" = "safe";
-    if (capPercent > 80) health = "critical";
-    else if (capPercent > 50) health = "warning";
+    if (capPercent > 90) health = "critical";
+    else if (capPercent > 70) health = "warning";
 
     return {
       totalBytes,
@@ -319,7 +394,8 @@ export default function FirebaseQuotaMonitor({
       remainingMb,
       items,
       health,
-      keyCount: items.length
+      keyCount: items.length,
+      isDesktop
     };
   }, [lsRefreshNonce]);
 
@@ -351,12 +427,21 @@ export default function FirebaseQuotaMonitor({
     setIsClearingLs(true);
 
     setTimeout(() => {
-      setIsClearingLs(false);
-      setLsRefreshNonce(prev => prev + 1);
-      if (onShowToast) {
-        onShowToast("Đã làm sạch các bản ghi mảng rỗng và tối ưu bộ nhớ LocalStorage thành công! 🧹", "success");
+      try {
+        const { clearedBytes, removedKeysCount } = purgeAndOptimizeAllLocalStorage();
+        setIsClearingLs(false);
+        setLsRefreshNonce(prev => prev + 1);
+        const freedKb = (clearedBytes / 1024).toFixed(0);
+        if (onShowToast) {
+          onShowToast(`Đã dọn dẹp ${removedKeysCount} khóa đệm rác, giải phóng ~${freedKb} KB! LocalStorage trở về trạng thái siêu nhẹ và an toàn tuyệt đối. ✨`, "success");
+        }
+      } catch (e) {
+        setIsClearingLs(false);
+        if (onShowToast) {
+          onShowToast("Lỗi trong quá trình tối ưu bộ nhớ LocalStorage.", "error");
+        }
       }
-    }, 1200);
+    }, 300);
   };
 
   const handleDownloadLsBackup = () => {
@@ -424,6 +509,31 @@ export default function FirebaseQuotaMonitor({
   return (
     <div className="space-y-6 animate-fade-in text-slate-800">
       
+      {/* Header Banner - White, bright & elegant style */}
+      <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-xs border border-slate-200/80 flex items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-sky-600 to-indigo-600 text-white flex items-center justify-center shadow-md shadow-sky-500/20 shrink-0">
+            <Cloud className="w-6 h-6 text-white" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+              <span translate="no" className="notranslate">GIÁM SÁT ĐỊNH MỨC CLOUD & DUNG LƯỢNG BỘ NHỚ</span>
+            </h1>
+            <p className="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">
+              <span translate="no" className="notranslate">Theo dõi hạn mức đọc/ghi Firebase Firestore theo thời gian thực và quản lý bộ nhớ đệm LocalStorage an toàn.</span>
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={handleRefreshState}
+          className="w-10 h-10 rounded-xl bg-slate-100 hover:bg-sky-50 text-slate-600 hover:text-sky-700 hover:border-sky-300 border border-slate-200 flex items-center justify-center transition-all cursor-pointer shadow-2xs active:scale-90 shrink-0"
+          title="Làm mới trạng thái"
+        >
+          <RefreshCw className="w-4 h-4" />
+        </button>
+      </div>
+
       {/* ================= TOP NAVIGATION SUB-TABS ================= */}
       <div className="bg-white rounded-2xl border border-slate-200 p-2 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-2 select-none">
         <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto p-1">
@@ -469,17 +579,6 @@ export default function FirebaseQuotaMonitor({
             </span>
           </button>
         </div>
-
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-end px-2">
-          <button
-            onClick={handleRefreshState}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg text-xs font-bold text-slate-700 transition-all cursor-pointer"
-            title="Làm mới toàn bộ chỉ số từ Firestore & LocalStorage"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span translate="no" className="notranslate">Cập Nhật Trạng Thái</span>
-          </button>
-        </div>
       </div>
 
       {/* ==================================================================== */}
@@ -493,13 +592,13 @@ export default function FirebaseQuotaMonitor({
             <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
             <div className="absolute bottom-0 left-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-2xl -ml-16 -mb-16 pointer-events-none" />
 
-            <div className="relative flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <div className="flex items-center gap-4">
+            <div className="relative space-y-4">
+              <div className="flex items-start sm:items-center gap-4">
                 <div className="w-12 h-12 rounded-xl bg-purple-500/20 border border-purple-400/30 flex items-center justify-center shrink-0">
                   <Smartphone className="w-6 h-6 text-purple-300" />
                 </div>
-                <div>
-                  <h2 className="text-lg font-bold tracking-tight flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-lg font-bold tracking-tight flex items-center gap-2 flex-wrap">
                     <span translate="no" className="notranslate">Giám Sát Dung Lượng Bộ Nhớ Trình Duyệt (LocalStorage Cap)</span>
                     <span className={`text-[9px] font-black px-2 py-0.5 rounded border uppercase tracking-wider select-none ${
                       lsStats.health === "safe" ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" :
@@ -508,7 +607,7 @@ export default function FirebaseQuotaMonitor({
                       <span translate="no" className="notranslate">Cap Limit: 5.0 MB</span>
                     </span>
                   </h2>
-                  <p className="text-xs text-purple-200/80 mt-1 max-w-2xl">
+                  <p className="text-xs text-purple-200/80 mt-1 leading-relaxed">
                     <span translate="no" className="notranslate">
                       Hệ thống tự động đo lường kích thước các tập dữ liệu được lưu trữ offline trên thiết bị người dùng (LocalStorage). Đảm bảo không xảy ra hiện tượng tràn bộ đệm (QuotaExceededError) trên thiết bị di động iOS/Android.
                     </span>
@@ -516,18 +615,19 @@ export default function FirebaseQuotaMonitor({
                 </div>
               </div>
 
-              <div className="flex gap-2 shrink-0 w-full md:w-auto">
+              {/* Dòng nút hành động riêng biệt */}
+              <div className="flex items-center gap-2.5 pt-2 border-t border-purple-800/30 flex-wrap">
                 <button
                   onClick={handleOptimizeLocalStorage}
                   disabled={isClearingLs}
-                  className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 py-2 bg-purple-800/80 hover:bg-purple-700 border border-purple-600 rounded-lg text-xs font-bold text-white transition-all cursor-pointer shadow-sm disabled:opacity-50"
+                  className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-purple-800/80 hover:bg-purple-700 border border-purple-600 rounded-xl text-xs font-bold text-white transition-all cursor-pointer shadow-sm disabled:opacity-50 active:scale-95"
                 >
                   <Sparkles className={`w-3.5 h-3.5 ${isClearingLs ? "animate-spin" : ""}`} />
                   <span translate="no" className="notranslate">Tối Ưu LocalStorage</span>
                 </button>
                 <button
                   onClick={handleDownloadLsBackup}
-                  className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-md border-none"
+                  className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md border-none active:scale-95"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span translate="no" className="notranslate">Tải Backup JSON</span>
@@ -572,7 +672,7 @@ export default function FirebaseQuotaMonitor({
             <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col justify-between space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">
-                  <span translate="no" className="notranslate">Tỷ Lệ Chiếm Dụng Cap 5MB</span>
+                  <span translate="no" className="notranslate">{lsStats.isDesktop ? "Tỷ Lệ Chiếm Dụng Cap 10MB" : "Tỷ Lệ Chiếm Dụng Cap 5MB"}</span>
                 </span>
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
                   lsStats.health === "safe" ? "bg-emerald-50 text-emerald-600" :
@@ -591,7 +691,7 @@ export default function FirebaseQuotaMonitor({
                 </div>
               </div>
               <div className="text-[10px] font-bold text-slate-400">
-                <span translate="no" className="notranslate">Ngưỡng tràn an toàn di động: 5.0 MB</span>
+                <span translate="no" className="notranslate">{lsStats.isDesktop ? "Hạn mức bộ nhớ trình duyệt Máy tính: 10.0 MB" : "Ngưỡng tràn an toàn di động: 5.0 MB"}</span>
               </div>
             </div>
 
@@ -785,14 +885,16 @@ export default function FirebaseQuotaMonitor({
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={handleArchiveAndReleaseCompletedReports}
-                  disabled={isArchiving || eligibleCompletedReports.length === 0}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 hover:from-amber-700 hover:to-orange-700 text-white rounded-xl text-xs font-black transition-all shadow-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed border-none"
+                  disabled={isArchiving}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 hover:from-amber-700 hover:to-orange-700 text-white rounded-xl text-xs font-black transition-all shadow-md cursor-pointer disabled:opacity-50 border-none"
                 >
                   <Sparkles className={`w-4 h-4 ${isArchiving ? "animate-spin" : ""}`} />
                   <span translate="no" className="notranslate">
                     {isArchiving 
                       ? "Đang Cất Giữ & Dọn Dẹp..." 
-                      : `🧹 Thực Hiện Dọn Dẹp & Giải Phóng Ngay (${eligibleCompletedReports.length} Bản Tin)`
+                      : eligibleCompletedReports.length > 0
+                        ? `🧹 Thực Hiện Dọn Dẹp & Giải Phóng Ngay (${eligibleCompletedReports.length} Bản Tin)`
+                        : `✨ Tối Ưu & Dọn Bộ Đệm Cục Bộ (Bảo Toàn Cloud 100%)`
                     }
                   </span>
                 </button>

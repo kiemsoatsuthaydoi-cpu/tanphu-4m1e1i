@@ -21,68 +21,69 @@ export async function generateDailyReportPDF(options: PDFExportOptions): Promise
 }> {
   const { factoryName, dateString, reports, authorName } = options;
 
-  // Create temporary offscreen element for professional report rendering
+  // Create temporary offscreen element for professional full-page report rendering (A4 optimized 1100px)
   const reportContainer = document.createElement("div");
   reportContainer.style.position = "absolute";
   reportContainer.style.left = "-9999px";
   reportContainer.style.top = "-9999px";
-  reportContainer.style.width = "800px";
-  reportContainer.style.padding = "40px";
+  reportContainer.style.width = "1120px";
+  reportContainer.style.boxSizing = "border-box";
+  reportContainer.style.padding = "24px 32px";
   reportContainer.style.background = "#ffffff";
-  reportContainer.style.fontFamily = "sans-serif";
-  reportContainer.style.color = "#1e293b";
+  reportContainer.style.fontFamily = "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+  reportContainer.style.color = "#0f172a";
 
   // Build high-integrity styling markup
   const headerHtml = `
-    <div style="border-bottom: 3px double #1e3a8a; padding-bottom: 20px; margin-bottom: 25px;">
+    <div style="border-bottom: 3px double #1e3a8a; padding-bottom: 16px; margin-bottom: 20px; width: 100%;">
       <table style="width: 100%; border-collapse: collapse;">
         <tr>
-          <td style="width: 60%; vertical-align: top;">
-            <div style="font-weight: bold; font-size: 18px; color: #1e3a8a; text-transform: uppercase; letter-spacing: 0.5px;">CÔNG TY CỔ PHẦN TÂN PHÚ VIỆT NAM</div>
-            <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Hệ Thống Trực Quan Hóa Quản Lý Chất Lượng 4M1E1I</div>
-            <div style="font-size: 11px; color: #475569; font-weight: bold; margin-top: 2px;">BP quản lý: ${STANDARDIZED_QC_DEPT}</div>
+          <td style="width: 58%; vertical-align: top;">
+            <div style="font-weight: 900; font-size: 20px; color: #1e3a8a; text-transform: uppercase; letter-spacing: 0.5px;">CÔNG TY CỔ PHẦN TÂN PHÚ VIỆT NAM</div>
+            <div style="font-size: 12px; color: #475569; margin-top: 4px; font-weight: 600;">Hệ Thống Trực Quan Hóa Quản Lý Chất Lượng 4M1E1I</div>
+            <div style="font-size: 12px; color: #1e293b; font-weight: 700; margin-top: 2px;">BP quản lý: ${STANDARDIZED_QC_DEPT}</div>
           </td>
-          <td style="width: 40%; text-align: right; vertical-align: top;">
-            <div style="font-size: 12px; font-weight: bold; color: #0f172a;">BÁO CÁO TỔNG HỢP BIẾN ĐỘNG</div>
-            <div style="font-size: 11px; color: #475569; margin-top: 4px;">Ngày lập: ${dateString}</div>
-            <div style="font-size: 11px; color: #64748b;">Mã tài liệu: RP-4M1E1I-${dateString.replace(/\//g, "")}</div>
+          <td style="width: 42%; text-align: right; vertical-align: top;">
+            <div style="font-size: 13px; font-weight: 800; color: #0f172a; text-transform: uppercase;">BÁO CÁO TỔNG HỢP BIẾN ĐỘNG</div>
+            <div style="font-size: 12px; color: #334155; margin-top: 4px; font-weight: 600;">Ngày lập: ${dateString}</div>
+            <div style="font-size: 11px; color: #64748b; font-family: monospace;">Mã tài liệu: RP-4M1E1I-${dateString.replace(/\//g, "")}</div>
           </td>
         </tr>
       </table>
     </div>
 
-    <div style="text-align: center; margin-bottom: 30px;">
-      <h1 style="font-size: 20px; color: #0f172a; margin: 0; text-transform: uppercase;">BÁO CÁO BIẾN ĐỘNG CHẤT LƯỢNG HÀNG NGÀY</h1>
-      <div style="font-size: 14px; font-weight: bold; color: #1e3a8a; margin-top: 8px; text-transform: uppercase;">BỘ PHẬN: ${factoryName}</div>
+    <div style="text-align: center; margin-bottom: 24px; width: 100%;">
+      <h1 style="font-size: 22px; font-weight: 900; color: #0f172a; margin: 0; text-transform: uppercase; letter-spacing: 0.5px;">BÁO CÁO BIẾN ĐỘNG CHẤT LƯỢNG HÀNG NGÀY</h1>
+      <div style="font-size: 15px; font-weight: 800; color: #1e3a8a; margin-top: 6px; text-transform: uppercase;">BỘ PHẬN: ${factoryName}</div>
     </div>
   `;
 
-  // Summary Metrics Widgets
+  // Summary Metrics Widgets (Full-width spanning)
   const summaryAbnormalCount = reports.filter((r) => r.reportType === "KPH" || r.isAbnormal).length;
   const summarySpotlightCount = reports.filter((r) => r.reportType === "DSA" || r.isSpotlight).length;
   const summaryStatsHtml = `
-    <div style="display: flex; gap: 15px; margin-bottom: 30px;">
-      <div style="flex: 1; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; text-align: center; background-color: #f8fafc;">
-        <div style="font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: bold;">Tổng số bản tin ghi nhận</div>
-        <div style="font-size: 22px; font-weight: bold; color: #1e3a8a; margin-top: 4px;">${reports.length}</div>
+    <div style="display: flex; gap: 16px; margin-bottom: 24px; width: 100%;">
+      <div style="flex: 1; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 14px; text-align: center; background-color: #f8fafc;">
+        <div style="font-size: 11px; color: #475569; text-transform: uppercase; font-weight: 800;">Tổng số bản tin ghi nhận</div>
+        <div style="font-size: 26px; font-weight: 900; color: #1e3a8a; margin-top: 4px;">${reports.length}</div>
       </div>
-      <div style="flex: 1; border: 1px solid #fee2e2; border-radius: 6px; padding: 12px; text-align: center; background-color: #fef2f2;">
-        <div style="font-size: 10px; color: #b91c1c; text-transform: uppercase; font-weight: bold;">Không Phù Hợp (KPH)</div>
-        <div style="font-size: 22px; font-weight: bold; color: #ef4444; margin-top: 4px;">${summaryAbnormalCount}</div>
+      <div style="flex: 1; border: 1.5px solid #fecaca; border-radius: 8px; padding: 14px; text-align: center; background-color: #fef2f2;">
+        <div style="font-size: 11px; color: #b91c1c; text-transform: uppercase; font-weight: 800;">Không Phù Hợp (KPH)</div>
+        <div style="font-size: 26px; font-weight: 900; color: #dc2626; margin-top: 4px;">${summaryAbnormalCount}</div>
       </div>
-      <div style="flex: 1; border: 1px solid #d1fae5; border-radius: 6px; padding: 12px; text-align: center; background-color: #f0fdf4;">
-        <div style="font-size: 10px; color: #065f46; text-transform: uppercase; font-weight: bold;">Điểm Sáng (DSA)</div>
-        <div style="font-size: 22px; font-weight: bold; color: #10b981; margin-top: 4px;">${summarySpotlightCount}</div>
+      <div style="flex: 1; border: 1.5px solid #a7f3d0; border-radius: 8px; padding: 14px; text-align: center; background-color: #f0fdf4;">
+        <div style="font-size: 11px; color: #047857; text-transform: uppercase; font-weight: 800;">Điểm Sáng (DSA)</div>
+        <div style="font-size: 26px; font-weight: 900; color: #059669; margin-top: 4px;">${summarySpotlightCount}</div>
       </div>
     </div>
   `;
 
-  // Build reports table
+  // Build reports table (100% full breadth)
   let tableRows = "";
   if (reports.length === 0) {
     tableRows = `
       <tr>
-        <td colspan="5" style="padding: 30px; text-align: center; color: #94a3b8; font-size: 13px;">
+        <td colspan="5" style="padding: 36px; text-align: center; color: #64748b; font-size: 14px; font-weight: 600;">
           Không ghi nhận sự thay đổi biến động nào trong ngày tại nhà máy này.
         </td>
       </tr>
@@ -97,36 +98,36 @@ export async function generateDailyReportPDF(options: PDFExportOptions): Promise
         report.category === "MÔI TRƯỜNG" ? "#0d9488" : "#475569";
 
       const statusBadge = report.reportType === "KPH" || report.isAbnormal
-        ? `<span style="background-color: #fee2e2; color: #b91c1c; padding: 3px 8px; border-radius: 4px; font-size: 9px; font-weight: bold; text-transform: uppercase;">KPH</span>`
+        ? `<span style="background-color: #fee2e2; color: #b91c1c; padding: 4px 10px; border-radius: 4px; font-size: 10px; font-weight: 800; text-transform: uppercase; border: 1px solid #fca5a5;">KPH</span>`
         : (report.reportType === "DSA" || report.isSpotlight
-          ? `<span style="background-color: #d1fae5; color: #065f46; padding: 3px 8px; border-radius: 4px; font-size: 9px; font-weight: bold; text-transform: uppercase;">DSA</span>`
-          : `<span style="background-color: #f1f5f9; color: #475569; padding: 3px 8px; border-radius: 4px; font-size: 9px; font-weight: bold; text-transform: uppercase;">THƯỜNG</span>`);
+          ? `<span style="background-color: #d1fae5; color: #065f46; padding: 4px 10px; border-radius: 4px; font-size: 10px; font-weight: 800; text-transform: uppercase; border: 1px solid #6ee7b7;">DSA</span>`
+          : `<span style="background-color: #f1f5f9; color: #475569; padding: 4px 10px; border-radius: 4px; font-size: 10px; font-weight: 800; text-transform: uppercase; border: 1px solid #cbd5e1;">THƯỜNG</span>`);
 
       tableRows += `
-        <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 12px; font-size: 11px; text-align: center; vertical-align: top; color: #64748b;">${index + 1}</td>
-          <td style="padding: 12px; font-size: 11px; vertical-align: top;">
-            <div style="font-weight: bold; color: #0f172a;">${report.factory}</div>
-            <div style="color: #64748b; font-size: 10px; margin-top: 3px;">Thời gian: ${report.timestamp}</div>
-            <div style="color: #64748b; font-size: 10px;">Bởi: ${report.uploaderName} (${report.uploaderDepartment})</div>
+        <tr style="border-bottom: 1px solid #cbd5e1; page-break-inside: avoid;">
+          <td style="padding: 12px 8px; font-size: 12px; text-align: center; vertical-align: top; color: #475569; font-weight: 700;">${index + 1}</td>
+          <td style="padding: 12px 10px; font-size: 12px; vertical-align: top;">
+            <div style="font-weight: 800; color: #0f172a; font-size: 13px;">${report.factory}</div>
+            <div style="color: #475569; font-size: 11px; margin-top: 3px; font-weight: 600;">Thời gian: ${report.timestamp}</div>
+            <div style="color: #64748b; font-size: 11px;">Bởi: <b style="color: #1e293b;">${report.uploaderName}</b> (${report.uploaderDepartment})</div>
           </td>
-          <td style="padding: 12px; vertical-align: top; text-align: center;">
-            <span style="background-color: ${categoryBadgeColor}; color: white; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; display: inline-block;">
+          <td style="padding: 12px 8px; vertical-align: top; text-align: center;">
+            <span style="background-color: ${categoryBadgeColor}; color: white; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; display: inline-block; white-space: nowrap;">
               ${report.category}
             </span>
           </td>
-          <td style="padding: 12px; font-size: 11px; vertical-align: top; line-height: 1.5; color: #334155;">
-            <div style="font-weight: 500;">${report.content}</div>
-            ${report.notes ? `<div style="font-size: 10px; color: #64748b; margin-top: 4px; font-style: italic;">Ghi chú: ${report.notes}</div>` : ""}
+          <td style="padding: 12px 10px; font-size: 12px; vertical-align: top; line-height: 1.6; color: #1e293b;">
+            <div style="font-weight: 600;">${report.content}</div>
+            ${report.notes ? `<div style="font-size: 11px; color: #64748b; margin-top: 5px; font-style: italic; background: #f8fafc; padding: 4px 8px; border-radius: 4px; border-left: 3px solid #cbd5e1;">Ghi chú: ${report.notes}</div>` : ""}
           </td>
-          <td style="padding: 12px; vertical-align: top; text-align: center;">
+          <td style="padding: 12px 8px; vertical-align: top; text-align: center;">
             <div style="margin-bottom: 6px;">${statusBadge}</div>
             ${report.imageUrl ? `
-              <div style="border: 1px solid #e2e8f0; border-radius: 4px; padding: 2px; display: inline-block; background-color: #f8fafc;">
-                <img src="${report.imageUrl}" style="width: 70px; height: auto; max-height: 55px; border-radius: 2px; object-fit: contain;" />
-                <div style="font-size: 8px; color: #94a3b8; margin-top: 1px;">Compressed (${report.compressedSizeKb}KB)</div>
+              <div style="border: 1.5px solid #cbd5e1; border-radius: 6px; padding: 3px; display: inline-block; background-color: #f8fafc;">
+                <img src="${report.imageUrl}" style="width: 80px; height: auto; max-height: 65px; border-radius: 4px; object-fit: contain;" />
+                <div style="font-size: 9px; color: #64748b; margin-top: 2px; font-weight: 600;">Compressed (${report.compressedSizeKb}KB)</div>
               </div>
-            ` : `<span style="font-size: 10px; color: #94a3b8;">Không hình ảnh</span>`}
+            ` : `<span style="font-size: 11px; color: #94a3b8; font-style: italic;">Không hình ảnh</span>`}
           </td>
         </tr>
       `;
@@ -134,14 +135,14 @@ export async function generateDailyReportPDF(options: PDFExportOptions): Promise
   }
 
   const reportsTableHtml = `
-    <table style="width: 100%; border-collapse: collapse; margin-bottom: 40px; border: 1px solid #e2e8f0;">
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px; border: 1.5px solid #94a3b8;">
       <thead>
-        <tr style="background-color: #0f172a; color: white; text-align: left; border-bottom: 2px solid #e2e8f0;">
-          <th style="padding: 12px; font-size: 11px; text-transform: uppercase; text-align: center; width: 6%;">STT</th>
-          <th style="padding: 12px; font-size: 11px; text-transform: uppercase; width: 30%;">Chi nhánh / Nhân viên</th>
-          <th style="padding: 12px; font-size: 11px; text-transform: uppercase; text-align: center; width: 18%;">Hạng mục (4M1E1I)</th>
-          <th style="padding: 12px; font-size: 11px; text-transform: uppercase; width: 30%;">Mô tả chi tiết</th>
-          <th style="padding: 12px; font-size: 11px; text-transform: uppercase; text-align: center; width: 16%;">Trạng thái / Hình ảnh</th>
+        <tr style="background-color: #0f172a; color: white; text-align: left; border-bottom: 2px solid #334155;">
+          <th style="padding: 12px 8px; font-size: 12px; text-transform: uppercase; text-align: center; width: 6%; font-weight: 800;">STT</th>
+          <th style="padding: 12px 10px; font-size: 12px; text-transform: uppercase; width: 28%; font-weight: 800;">Chi nhánh / Nhân viên</th>
+          <th style="padding: 12px 8px; font-size: 12px; text-transform: uppercase; text-align: center; width: 18%; font-weight: 800;">Hạng mục (4M1E1I)</th>
+          <th style="padding: 12px 10px; font-size: 12px; text-transform: uppercase; width: 32%; font-weight: 800;">Mô tả chi tiết</th>
+          <th style="padding: 12px 8px; font-size: 12px; text-transform: uppercase; text-align: center; width: 16%; font-weight: 800;">Trạng thái / Ảnh</th>
         </tr>
       </thead>
       <tbody>
@@ -151,17 +152,17 @@ export async function generateDailyReportPDF(options: PDFExportOptions): Promise
   `;
 
   const footerHtml = `
-    <div style="margin-top: 50px; border-top: 1px solid #cbd5e1; padding-top: 20px;">
+    <div style="margin-top: 36px; border-top: 2px solid #94a3b8; padding-top: 18px; width: 100%;">
       <table style="width: 100%; border-collapse: collapse;">
         <tr>
-          <td style="width: 50%; vertical-align: top; font-size: 11px; color: #64748b;">
-            Để tra cứu trực tuyến, hãy truy cập hệ thống Tân Phú 4M1E1I trong mạng xưởng.<br/>
-            Bản báo cáo PDF được sinh tự động và cam kết tính bất biến.
+          <td style="width: 55%; vertical-align: top; font-size: 11px; color: #475569; line-height: 1.5;">
+            Để tra cứu trực tuyến, hãy truy cập hệ thống Tân Phú 4M1E1I trong mạng nội bộ.<br/>
+            Bản báo cáo PDF được sinh tự động, cam kết tính toàn vẹn và chuẩn mực dữ liệu.
           </td>
-          <td style="width: 50%; text-align: right; vertical-align: top;">
-            <div style="font-size: 11px; font-weight: bold; color: #334155;">NGƯỜI LẬP BÁO CÁO CÔNG TÁC</div>
-            <div style="font-size: 11px; color: #64748b; margin-top: 30px; font-weight: bold; text-decoration: underline;">${authorName}</div>
-            <div style="font-size: 10px; color: #94a3b8;">Xác thư pháp danh Phòng QL Chất Lượng</div>
+          <td style="width: 45%; text-align: right; vertical-align: top;">
+            <div style="font-size: 12px; font-weight: 800; color: #0f172a; text-transform: uppercase;">NGƯỜI LẬP BÁO CÁO CÔNG TÁC</div>
+            <div style="font-size: 13px; color: #1e3a8a; margin-top: 32px; font-weight: 800; text-decoration: underline;">${authorName}</div>
+            <div style="font-size: 11px; color: #64748b; font-weight: 600;">Xác thực pháp danh Phòng QL Chất Lượng</div>
           </td>
         </tr>
       </table>
@@ -178,9 +179,9 @@ export async function generateDailyReportPDF(options: PDFExportOptions): Promise
 
   document.body.appendChild(reportContainer);
 
-  // Compile HTML element to visual Canvas representation
+  // Compile HTML element to visual Canvas representation with scale 2
   const canvasElement = await html2canvas(reportContainer, {
-    scale: 2, // Perfect crisp rendering
+    scale: 2,
     useCORS: true,
     backgroundColor: "#ffffff",
     logging: false
@@ -188,25 +189,27 @@ export async function generateDailyReportPDF(options: PDFExportOptions): Promise
 
   document.body.removeChild(reportContainer);
 
-  // Convert canvas to jsPDF document standard
-  const imgData = canvasElement.toDataURL("image/jpeg", 0.95);
+  // Convert canvas to jsPDF document standard (A4 format: 210mm x 297mm)
+  const imgData = canvasElement.toDataURL("image/jpeg", 0.96);
   const pdf = new jsPDF({
     orientation: "portrait",
     unit: "mm",
     format: "a4"
   });
 
-  const imgWidth = 210; // A4 dimension wide
-  const pageHeight = 295; // A4 dimension high
+  const pageWidth = 210; // Standard A4 width in mm
+  const pageHeight = 297; // Standard A4 height in mm
+  const imgWidth = pageWidth;
   const imgHeight = (canvasElement.height * imgWidth) / canvasElement.width;
   let heightLeft = imgHeight;
   let position = 0;
 
+  // First page
   pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
   heightLeft -= pageHeight;
 
-  // Multi-page capability loop if the table spans a lot
-  while (heightLeft >= 0) {
+  // Multi-page capability loop if table spans multiple pages
+  while (heightLeft > 0) {
     position = heightLeft - imgHeight;
     pdf.addPage();
     pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);

@@ -224,36 +224,40 @@ export const canUserProcessOrResolveReport = (
 export const formatNameCapitalized = (str: string | undefined | null): string => {
   if (!str) return "";
   
-  const isEntirelyUppercase = str === str.toUpperCase();
   const commonAbbreviations = new Set([
     "TGĐ", "BGĐ", "BĐH", "CEO", "QC", "QA", "KPH", "5S", "BBM", "BBC", "TPP", "DNP", "BNI", 
-    "LAN", "CTY", "KCS", "ISO", "DSA", "HSSE", "PCCC", "NS", "HR", "IT", "PE", "IE", "CBNV"
+    "LAN", "CTY", "KCS", "ISO", "DSA", "HSSE", "PCCC", "NS", "HR", "IT", "PE", "IE", "CBNV",
+    "R&D", "QLCL", "B&D", "BOM", "NV", "TP", "P."
   ]);
 
   return str
     .split(/\s+/)
-    .map((word) => {
-      if (!word) return "";
+    .map((rawWord) => {
+      if (!rawWord) return "";
+      
+      // Match leading brackets/symbols like "@", "(", "[", "{", etc.
+      const prefixMatch = rawWord.match(/^[@([{\s]+/);
+      const prefix = prefixMatch ? prefixMatch[0] : "";
+      
+      // Match trailing punctuation like ")", "]", "}", ",", ".", ":", ";", "!", "?"
+      const suffixMatch = rawWord.match(/[)\]},.!?:;\s]+$/);
+      const suffix = suffixMatch ? suffixMatch[0] : "";
+      
+      // Extract core word without prefix/suffix
+      const word = rawWord.slice(prefix.length, rawWord.length - (suffixMatch ? suffix.length : 0));
+      if (!word) return rawWord;
       
       const cleanWord = word.replace(/[().,;[\]{}]/g, "").toUpperCase();
       
-      // If word is in parentheses or bracketed, keep uppercase
-      if (word.startsWith("(") || word.endsWith(")")) {
-        return word.toUpperCase();
-      }
-      
       // If the word is a known abbreviation, keep it uppercase
       if (commonAbbreviations.has(cleanWord)) {
-        return word.toUpperCase();
+        return prefix + word.toUpperCase() + suffix;
       }
       
-      // If the word is originally all uppercase and <= 4 chars, and the ENTIRE string is NOT uppercase,
-      // it is likely an abbreviation (like "TGĐ" in "Ban TGĐ"). Keep it.
-      if (!isEntirelyUppercase && word === word.toUpperCase() && word.length <= 4) {
-        return word;
-      }
-      
-      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+      // Normal word: Capitalize first letter, lowercase the rest
+      const lower = word.toLowerCase();
+      const capitalized = lower.charAt(0).toUpperCase() + lower.slice(1);
+      return prefix + capitalized + suffix;
     })
     .join(" ");
 };

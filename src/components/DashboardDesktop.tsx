@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import ExcelJS from "exceljs";
 import ReactMarkdown from "react-markdown";
+import { collection, onSnapshot } from "firebase/firestore";
+import { db } from "../utils/firebase";
+import { COLLECTIONS, saveDocument, deleteDocument } from "../utils/firebaseSync";
 import {
   Users,
   Settings,
@@ -45,6 +48,7 @@ import {
   AlertTriangle,
   RotateCcw,
   ArrowLeft,
+  Crown,
   ZoomIn,
   ZoomOut,
   Globe,
@@ -55,12 +59,27 @@ import {
   Share2,
   Pin,
   Tag,
+  AtSign,
   MessageCircle,
   Filter,
   ChevronRight,
+  ChevronLeft,
   ChevronDown,
+  ChevronUp,
+  CornerUpLeft,
   User as UserIcon,
-  Award
+  Award,
+  ExternalLink,
+  ListTodo,
+  Target,
+  Copy,
+  RotateCw,
+  CheckCircle2,
+  BookOpen,
+  FlaskConical,
+  Image as ImageIcon,
+  Flame,
+  LogOut
 } from "lucide-react";
 import {
   BarChart,
@@ -103,25 +122,49 @@ import {
   ProductionRequestStatus,
   ProductionRequestItem,
   AppNotification,
+  DirectMessageItem,
   ForumTopic,
   ForumReply,
   ForumTopicCategory,
   ForumTopicStatus,
   ErrorCatalogItem,
   BadgePointConfigItem,
-  getBadgeScore
+  getBadgeScore,
+  KnowledgeDoc,
+  FestiveBannerConfig
 } from "../types";
 import { parseReportTimestamp } from "../utils/notificationHelper";
 import { STANDARDIZED_QC_DEPT } from "../data";
 import { generateDailyReportPDF } from "../utils/pdfGenerator";
 import { formatNameCapitalized, canUserManageDirective, isSameBranchOrFactory } from "../utils/branchHelpers";
 import { MentionInput, MentionTextArea } from "./MentionTextArea";
+import { RichChatInputBox, AttachedImage } from "./RichChatInputBox";
+import { renderFormattedMessage } from "../utils/formatMessage";
 import FirebaseQuotaMonitor from "./FirebaseQuotaMonitor";
 import StatisticsDashboard from "./StatisticsDashboard";
 import ProgressTrackingDashboard from "./ProgressTrackingDashboard";
 import BadgeStatisticsDashboard from "./BadgeStatisticsDashboard";
 import { compressAvatar, getCategoryFallbackImage } from "../utils/imageProcessor";
-import { findUser, resolveUploaderInfo, resolveBadgeGiverInfo, resolveEvaluatorInfo, resolveSenderInfo } from "../utils/userResolver";
+import { findUser, resolveUploaderInfo, resolveBadgeGiverInfo, resolveEvaluatorInfo, resolveSenderInfo, isCurrentUserSender, getDefaultMembersForReport, extractTaggedUserIds } from "../utils/userResolver";
+import CapaManagementHub from "./CapaManagementHub";
+import { AiKnowledgeBaseHub } from "./AiKnowledgeBaseHub";
+import { TrialTrackingHub } from "./TrialTrackingHub";
+import { TaskStructuredContent } from "./TaskStructuredContent";
+import { FestiveBannerConfigCard } from "./FestiveBannerConfigCard";
+import {
+  CompanyScope,
+  getUserCompany,
+  getReportCompany,
+  getBranchCompany,
+  isReportInScope,
+  isUserInScope,
+  isBranchInScope,
+  isKnowledgeDocInScope,
+  isTrialInScope,
+  isTopicInScope,
+  isUserAllowedToViewTopic,
+  getEffectiveCompanyScope
+} from "../utils/companyScope";
 
 
 interface DashboardDesktopProps {
@@ -191,10 +234,14 @@ interface DashboardDesktopProps {
   topics?: ForumTopic[];
   replies?: ForumReply[];
   onAddForumTopic?: (title: string, description: string, category: ForumTopicCategory, reportId?: string, invitedUserIds?: string[]) => string | void;
-  onAddForumReply?: (topicId: string, message: string) => void;
+  onAddForumReply?: (topicId: string, message: string, extraData?: Partial<ForumReply>) => void;
+  onEditForumReply?: (replyId: string, updatedData: string | Partial<ForumReply>) => void;
+  onDeleteForumReply?: (replyId: string) => void;
+  onLikeForumReply?: (replyId: string) => void;
   onUpdateForumTopicStatus?: (topicId: string, status: ForumTopicStatus) => void;
   onToggleForumTopicPin?: (topicId: string) => void;
   onEditForumTopic?: (topicId: string, title: string, description: string, category: ForumTopicCategory) => void;
+  onUpdateTopicInvitedUsers?: (topicId: string, invitedUserIds: string[]) => void;
   onDeleteForumTopic?: (topicId: string) => void;
 
   // Error Catalog properties
@@ -205,6 +252,16 @@ interface DashboardDesktopProps {
 
   isQcFeatureEnabled?: boolean;
   onToggleQcFeature?: (enabled: boolean) => void;
+
+  // Knowledge Base properties
+  knowledgeDocs?: KnowledgeDoc[];
+  onAddKnowledgeDoc?: (doc: Omit<KnowledgeDoc, "id" | "updatedAt">) => void;
+  onUpdateKnowledgeDoc?: (doc: KnowledgeDoc) => void;
+  onDeleteKnowledgeDoc?: (id: string) => void;
+
+  // Festive Banner
+  festiveBannerConfig?: FestiveBannerConfig | null;
+  onUpdateFestiveBannerConfig?: (config: FestiveBannerConfig) => Promise<void> | void;
 }
 
 interface DesktopThumbnailSliderProps {
@@ -324,25 +381,36 @@ function DesktopThumbnailSlider({ imageUrls, fallbackUrl }: DesktopThumbnailSlid
           resetZoom();
           setZoomOpen(true);
         }}
-        className="inline-block border border-slate-200 rounded p-0.5 bg-slate-50 relative group overflow-hidden focus:outline-none hover:border-blue-500"
+        className="w-full aspect-[16/9] max-h-[220px] border border-slate-200/90 rounded-xl p-1 bg-slate-100 relative group overflow-hidden focus:outline-none hover:border-blue-500 block shadow-2xs hover:shadow-md transition-all cursor-zoom-in"
+        title="Nhấp để phóng to / xem chi tiết hình ảnh"
       >
-        <div className="w-10 h-8 relative overflow-hidden">
+        <div className="w-full h-full relative overflow-hidden rounded-lg bg-slate-950">
           {list.map((url, i) => (
             <img
               key={url + i}
               src={url}
               alt="Thumb"
               referrerPolicy="no-referrer"
-              className={`absolute inset-0 w-full h-full object-cover rounded cursor-zoom-in group-hover:scale-110 transition-all duration-1000 ${
+              className={`absolute inset-0 w-full h-full object-cover rounded-lg group-hover:scale-105 transition-all duration-700 ${
                 i === index ? "opacity-100 scale-100 z-10" : "opacity-0 scale-95 z-0"
               }`}
             />
           ))}
+
+          {/* Hover Zoom Overlay */}
+          <div className="absolute inset-0 bg-slate-950/30 opacity-0 group-hover:opacity-100 transition-opacity z-20 flex items-center justify-center pointer-events-none">
+            <span className="bg-slate-900/85 text-white text-[10px] font-bold px-2.5 py-1 rounded-full backdrop-blur-xs flex items-center gap-1 shadow-lg border border-white/20">
+              <ZoomIn className="w-3.5 h-3.5" />
+              <T><span translate="no" className="notranslate">Phóng to xem ảnh</span></T>
+            </span>
+          </div>
         </div>
+
         {list.length > 1 && (
-          <span className="absolute bottom-0 right-0 bg-blue-600 text-white text-[8px] font-black px-1 rounded-tl leading-none scale-90 z-20">
-            {list.length}
-          </span>
+          <div className="absolute bottom-2.5 right-2.5 bg-slate-900/85 text-white text-[9px] font-black px-2 py-0.5 rounded-full leading-none shadow-md z-30 border border-white/20 flex items-center gap-1">
+            <ImageIcon className="w-2.5 h-2.5" />
+            <span translate="no" className="notranslate">{index + 1}/{list.length}</span>
+          </div>
         )}
       </button>
 
@@ -582,19 +650,23 @@ function DesktopDirectiveForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="mt-2 flex gap-1 items-center">
-      <MentionInput
-        users={users}
-        value={text}
-        onChange={setText}
-        placeholder="Chỉ đạo (mặc định ghi mờ bên trong ô)..."
-        className="flex-1 bg-slate-50 border border-slate-200 text-[10px] rounded px-2 py-1 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all select-text"
-      />
+    <form onSubmit={handleSubmit} className="mt-2 flex items-center gap-1.5 bg-slate-50 hover:bg-white focus-within:bg-white border border-slate-200 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 rounded-lg p-1 transition-all w-full shadow-2xs">
+      <div className="flex-1 min-w-0">
+        <MentionInput
+          users={users}
+          value={text}
+          onChange={setText}
+          placeholder="Nhập chỉ đạo (@ nhắc tên)..."
+          className="w-full bg-transparent border-none text-[10.5px] px-2 py-0.5 placeholder:text-slate-400 placeholder:italic focus:outline-none select-text"
+        />
+      </div>
       <button
         type="submit"
-        className="bg-blue-600 hover:bg-blue-700 px-3.5 py-1 text-[9px] text-white font-black rounded uppercase cursor-pointer shrink-0 flex items-center justify-center"
+        disabled={!text.trim()}
+        className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-bold text-[10px] rounded-md shadow-2xs cursor-pointer transition-all shrink-0 flex items-center gap-1.5 active:scale-95 select-none"
       >
-        <T>GỬI</T>
+        <Send className="w-3 h-3" />
+        <T><span translate="no" className="notranslate">GỬI</span></T>
       </button>
     </form>
   );
@@ -1100,6 +1172,216 @@ const safeGetItem = (key: string): string | null => {
   }
 };
 
+export const SIDEBAR_THEMES = [
+  {
+    id: "white",
+    name: "Trắng Sáng (Light)",
+    dotBg: "#FFFFFF",
+    dotBorder: "border border-slate-300 ring-1 ring-slate-200",
+    navBg: "bg-white",
+    navBorder: "border-slate-200",
+    titleColor: "text-slate-400",
+    itemText: "text-slate-600",
+    itemHover: "hover:bg-slate-100 hover:text-slate-900",
+    itemActiveBg: "bg-blue-50",
+    itemActiveText: "text-blue-700 font-bold",
+    itemActiveBorder: "border-l-4 border-blue-600 shadow-xs",
+    summaryCardBg: "bg-slate-50",
+    summaryCardBorder: "border-slate-200",
+    summarySubBg: "bg-white",
+    summarySubBorder: "border-slate-200",
+    profileCardBg: "bg-slate-50",
+    profileCardBorder: "border-slate-200",
+    profileTextColor: "text-slate-900",
+    profileSubTextColor: "text-blue-600",
+    isLight: true
+  },
+  {
+    id: "purple",
+    name: "Tím Oải Hương (Lavender)",
+    dotBg: "#E9D5FF",
+    dotBorder: "border border-purple-300",
+    navBg: "bg-[#F3E8FF]",
+    navBorder: "border-purple-200",
+    titleColor: "text-purple-700",
+    itemText: "text-purple-900",
+    itemHover: "hover:bg-purple-200/70 hover:text-purple-950",
+    itemActiveBg: "bg-white",
+    itemActiveText: "text-purple-800 font-bold",
+    itemActiveBorder: "border-l-4 border-purple-500 shadow-xs",
+    summaryCardBg: "bg-white/90",
+    summaryCardBorder: "border-purple-200",
+    summarySubBg: "bg-purple-50/80",
+    summarySubBorder: "border-purple-200/60",
+    profileCardBg: "bg-white/90",
+    profileCardBorder: "border-purple-200",
+    profileTextColor: "text-purple-950",
+    profileSubTextColor: "text-purple-600",
+    isLight: true
+  },
+  {
+    id: "sky",
+    name: "Xanh Da Trời (Sky Blue)",
+    dotBg: "#BAE6FD",
+    dotBorder: "border border-sky-300",
+    navBg: "bg-[#E0F2FE]",
+    navBorder: "border-sky-200",
+    titleColor: "text-sky-700",
+    itemText: "text-sky-900",
+    itemHover: "hover:bg-sky-200/70 hover:text-sky-950",
+    itemActiveBg: "bg-white",
+    itemActiveText: "text-sky-800 font-bold",
+    itemActiveBorder: "border-l-4 border-sky-500 shadow-xs",
+    summaryCardBg: "bg-white/90",
+    summaryCardBorder: "border-sky-200",
+    summarySubBg: "bg-sky-50/80",
+    summarySubBorder: "border-sky-200/60",
+    profileCardBg: "bg-white/90",
+    profileCardBorder: "border-sky-200",
+    profileTextColor: "text-sky-950",
+    profileSubTextColor: "text-sky-600",
+    isLight: true
+  },
+  {
+    id: "emerald",
+    name: "Xanh Ngọc Bích (Emerald)",
+    dotBg: "#A7F3D0",
+    dotBorder: "border border-emerald-300",
+    navBg: "bg-[#D1FAE5]",
+    navBorder: "border-emerald-200",
+    titleColor: "text-emerald-800",
+    itemText: "text-emerald-950",
+    itemHover: "hover:bg-emerald-200/70 hover:text-emerald-950",
+    itemActiveBg: "bg-white",
+    itemActiveText: "text-emerald-800 font-bold",
+    itemActiveBorder: "border-l-4 border-emerald-500 shadow-xs",
+    summaryCardBg: "bg-white/90",
+    summaryCardBorder: "border-emerald-200",
+    summarySubBg: "bg-emerald-50/80",
+    summarySubBorder: "border-emerald-200/60",
+    profileCardBg: "bg-white/90",
+    profileCardBorder: "border-emerald-200",
+    profileTextColor: "text-emerald-950",
+    profileSubTextColor: "text-emerald-700",
+    isLight: true
+  },
+  {
+    id: "slateLight",
+    name: "Xám Bạc Tinh Tế (Soft Slate)",
+    dotBg: "#E2E8F0",
+    dotBorder: "border border-slate-300",
+    navBg: "bg-[#F1F5F9]",
+    navBorder: "border-slate-300",
+    titleColor: "text-slate-500",
+    itemText: "text-slate-700",
+    itemHover: "hover:bg-slate-200/80 hover:text-slate-900",
+    itemActiveBg: "bg-white",
+    itemActiveText: "text-blue-700 font-bold",
+    itemActiveBorder: "border-l-4 border-blue-600 shadow-xs",
+    summaryCardBg: "bg-white",
+    summaryCardBorder: "border-slate-200",
+    summarySubBg: "bg-slate-100",
+    summarySubBorder: "border-slate-200",
+    profileCardBg: "bg-white",
+    profileCardBorder: "border-slate-200",
+    profileTextColor: "text-slate-900",
+    profileSubTextColor: "text-blue-600",
+    isLight: true
+  },
+  {
+    id: "slateDark",
+    name: "Xám Titan (Titanium Slate)",
+    dotBg: "#CBD5E1",
+    dotBorder: "border border-slate-400",
+    navBg: "bg-[#E2E8F0]",
+    navBorder: "border-slate-300",
+    titleColor: "text-slate-600",
+    itemText: "text-slate-800",
+    itemHover: "hover:bg-slate-300/70 hover:text-slate-950",
+    itemActiveBg: "bg-white",
+    itemActiveText: "text-slate-900 font-bold",
+    itemActiveBorder: "border-l-4 border-slate-500 shadow-xs",
+    summaryCardBg: "bg-white/90",
+    summaryCardBorder: "border-slate-300",
+    summarySubBg: "bg-slate-100",
+    summarySubBorder: "border-slate-200",
+    profileCardBg: "bg-white/90",
+    profileCardBorder: "border-slate-300",
+    profileTextColor: "text-slate-900",
+    profileSubTextColor: "text-slate-600",
+    isLight: true
+  },
+  {
+    id: "amber",
+    name: "Cam Hổ Phách (Warm Amber)",
+    dotBg: "#FED7AA",
+    dotBorder: "border border-amber-300",
+    navBg: "bg-[#FFEDD5]",
+    navBorder: "border-amber-200",
+    titleColor: "text-amber-800",
+    itemText: "text-amber-950",
+    itemHover: "hover:bg-amber-200/70 hover:text-amber-950",
+    itemActiveBg: "bg-white",
+    itemActiveText: "text-amber-900 font-bold",
+    itemActiveBorder: "border-l-4 border-amber-500 shadow-xs",
+    summaryCardBg: "bg-white/90",
+    summaryCardBorder: "border-amber-200",
+    summarySubBg: "bg-amber-50/80",
+    summarySubBorder: "border-amber-200/60",
+    profileCardBg: "bg-white/90",
+    profileCardBorder: "border-amber-200",
+    profileTextColor: "text-amber-950",
+    profileSubTextColor: "text-amber-700",
+    isLight: true
+  },
+  {
+    id: "navy",
+    name: "Xanh Navy Tinh Tế (Royal Navy)",
+    dotBg: "#BFDBFE",
+    dotBorder: "border border-blue-300",
+    navBg: "bg-[#DBEAFE]",
+    navBorder: "border-blue-200",
+    titleColor: "text-blue-800",
+    itemText: "text-blue-950",
+    itemHover: "hover:bg-blue-200/70 hover:text-blue-950",
+    itemActiveBg: "bg-white",
+    itemActiveText: "text-blue-800 font-bold",
+    itemActiveBorder: "border-l-4 border-blue-600 shadow-xs",
+    summaryCardBg: "bg-white/90",
+    summaryCardBorder: "border-blue-200",
+    summarySubBg: "bg-blue-50/80",
+    summarySubBorder: "border-blue-200/60",
+    profileCardBg: "bg-white/90",
+    profileCardBorder: "border-blue-200",
+    profileTextColor: "text-blue-950",
+    profileSubTextColor: "text-blue-600",
+    isLight: true
+  },
+  {
+    id: "indigo",
+    name: "Xanh Chàm (Deep Indigo)",
+    dotBg: "#C7D2FE",
+    dotBorder: "border border-indigo-300",
+    navBg: "bg-[#E0E7FF]",
+    navBorder: "border-indigo-200",
+    titleColor: "text-indigo-800",
+    itemText: "text-indigo-950",
+    itemHover: "hover:bg-indigo-200/70 hover:text-indigo-950",
+    itemActiveBg: "bg-white",
+    itemActiveText: "text-indigo-800 font-bold",
+    itemActiveBorder: "border-l-4 border-indigo-600 shadow-xs",
+    summaryCardBg: "bg-white/90",
+    summaryCardBorder: "border-indigo-200",
+    summarySubBg: "bg-indigo-50/80",
+    summarySubBorder: "border-indigo-200/60",
+    profileCardBg: "bg-white/90",
+    profileCardBorder: "border-indigo-200",
+    profileTextColor: "text-indigo-950",
+    profileSubTextColor: "text-indigo-600",
+    isLight: true
+  }
+];
+
 export default function DashboardDesktop({
   currentUser,
   users,
@@ -1161,9 +1443,13 @@ export default function DashboardDesktop({
   replies = [],
   onAddForumTopic,
   onAddForumReply,
+  onEditForumReply,
+  onDeleteForumReply,
+  onLikeForumReply,
   onUpdateForumTopicStatus,
   onToggleForumTopicPin,
   onEditForumTopic,
+  onUpdateTopicInvitedUsers,
   onDeleteForumTopic,
 
   // Error Catalog props
@@ -1173,18 +1459,66 @@ export default function DashboardDesktop({
   onDeleteErrorCatalogItem,
 
   isQcFeatureEnabled = true,
-  onToggleQcFeature
+  onToggleQcFeature,
+
+  // Knowledge Base props
+  knowledgeDocs = [],
+  onAddKnowledgeDoc,
+  onUpdateKnowledgeDoc,
+  onDeleteKnowledgeDoc,
+
+  // Festive Banner
+  festiveBannerConfig,
+  onUpdateFestiveBannerConfig
 }: DashboardDesktopProps) {
   const [activeTab, setActiveTab] = useState<
-    "PHÊ_DUYỆT" | "MÃ_HÓA" | "THỐNG_KÊ" | "DỮ_LIỆU" | "QUY_CHẾ" | "CÁ_NHÂN" | "THÔNG_BÁO" | "TRAO_ĐỔI" | "ĐỀ_XUẤT" | "QUOTA_CLOUD"
+    "PHÊ_DUYỆT" | "MÃ_HÓA" | "THỐNG_KÊ" | "DỮ_LIỆU" | "FORM_CAPA" | "THỬ_NGHIỆM" | "QUY_CHẾ" | "CÁ_NHÂN" | "THÔNG_BÁO" | "TRAO_ĐỔI" | "ĐỀ_XUẤT" | "QUOTA_CLOUD"
   >(() => {
-    if (currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER) {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("print") === "true" || urlParams.get("tab") === "capa" || urlParams.get("reportId")) {
+      return "FORM_CAPA";
+    }
+    if (currentUser?.role === UserRole.ADMIN) {
       return "PHÊ_DUYỆT";
     }
-    return "MÃ_HÓA";
+    if (currentUser?.role === UserRole.REVIEWER) {
+      return "ĐỀ_XUẤT";
+    }
+    return "FORM_CAPA";
   });
-  const [statsSubTab, setStatsSubTab] = useState<"NHAN_SU" | "CHAT_LUONG" | "TIEN_DO" | "HUY_HIEU">("NHAN_SU");
+
+  const [sidebarThemeId, setSidebarThemeId] = useState<string>(() => {
+    try {
+      return localStorage.getItem("tanphu_desktop_sidebar_theme") || "navy";
+    } catch {
+      return "navy";
+    }
+  });
+
+  const handleSelectSidebarTheme = (themeId: string) => {
+    setSidebarThemeId(themeId);
+    try {
+      localStorage.setItem("tanphu_desktop_sidebar_theme", themeId);
+    } catch (e) {
+      console.warn("Could not save sidebar theme", e);
+    }
+  };
+
+  const currentSidebarTheme = useMemo(() => {
+    return SIDEBAR_THEMES.find((t) => t.id === sidebarThemeId) || SIDEBAR_THEMES[7]; // default to navy
+  }, [sidebarThemeId]);
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("print") === "true" || urlParams.get("tab") === "capa" || urlParams.get("reportId")) {
+      setActiveTab("FORM_CAPA");
+    }
+  }, []);
+  const [statsSubTab, setStatsSubTab] = useState<"NHAN_SU" | "CHAT_LUONG" | "TIEN_DO" | "HUY_HIEU">(() => {
+    return currentUser?.role === UserRole.ADMIN ? "NHAN_SU" : "CHAT_LUONG";
+  });
   const [maHoaSubTab, setMaHoaSubTab] = useState<"SO_DO" | "MA_LOI">("SO_DO");
+  const [desktopPreviewImage, setDesktopPreviewImage] = useState<string | null>(null);
   
   // Error Catalog UI States
   const [errorCodeFilter, setErrorCodeFilter] = useState("");
@@ -1215,6 +1549,25 @@ export default function DashboardDesktop({
 
   const [showAckDetailsDesktop, setShowAckDetailsDesktop] = useState<Record<string, boolean>>({});
   const [expandedDirectiveIdsDesktop, setExpandedDirectiveIdsDesktop] = useState<Record<string, boolean>>({});
+  const [isBackupCollapsed, setIsBackupCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("tanphu_desktop_backup_collapsed") === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleBackupCollapsed = () => {
+    setIsBackupCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("tanphu_desktop_backup_collapsed", String(next));
+      } catch (e) {
+        console.warn("Could not save backup collapsed state", e);
+      }
+      return next;
+    });
+  };
 
   const handleExportExcelWithImages = async () => {
     // Helper function to fetch external image URLs and convert them to Base64
@@ -1684,14 +2037,334 @@ export default function DashboardDesktop({
   };
 
   // Forum states
-  const [selectedTopicId, setSelectedTopicId] = useState<string | null>("TOPIC-1");
+  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
   const [newTopicTitle, setNewTopicTitle] = useState("");
   const [newTopicDesc, setNewTopicDesc] = useState("");
   const [newTopicCategory, setNewTopicCategory] = useState<ForumTopicCategory>("Góp ý chức năng");
+  const [newTopicReportId, setNewTopicReportId] = useState<string>("");
+  const [newTopicInvitedUserIds, setNewTopicInvitedUserIds] = useState<string[]>([]);
   const [isCreatingTopic, setIsCreatingTopic] = useState(false);
   const [forumReplyMessage, setForumReplyMessage] = useState("");
   const [forumSearchQuery, setForumSearchQuery] = useState("");
   const [forumCategoryFilter, setForumCategoryFilter] = useState<string>("ALL");
+
+  // Emergency Discussion Modal states
+  const [emergencyDiscussionReport, setEmergencyDiscussionReport] = useState<QualityReport | null>(null);
+  const [emergencyTitle, setEmergencyTitle] = useState<string>("");
+  const [emergencyDesc, setEmergencyDesc] = useState<string>("");
+  const [emergencyCategory, setEmergencyCategory] = useState<ForumTopicCategory>("Thảo luận KPH");
+  const [emergencyInvitedUserIds, setEmergencyInvitedUserIds] = useState<string[]>([]);
+  const [invitedSearchQuery, setInvitedSearchQuery] = useState<string>("");
+
+  // 1:1 Direct Chat & Online states
+  const [forumSubTab, setForumSubTab] = useState<"TOPICS" | "INBOX">("TOPICS");
+  const [directFilterTab, setDirectFilterTab] = useState<"INBOX" | "ONLINE" | "ALL">("INBOX");
+  const [directSearchTerm, setDirectSearchTerm] = useState("");
+  const [activeDirectChatUser, setActiveDirectChatUser] = useState<User | null>(null);
+  const [directMessageInput, setDirectMessageInput] = useState("");
+  const [confirmDeletePartnerUserDesktop, setConfirmDeletePartnerUserDesktop] = useState<User | null>(null);
+  const directChatScrollRefDesktop = useRef<HTMLDivElement | null>(null);
+  const directMessageInputRefDesktop = useRef<HTMLInputElement | null>(null);
+
+  const [directMessages, setDirectMessages] = useState<DirectMessageItem[]>(() => {
+    try {
+      const saved = safeGetItem("4m1e1i_direct_messages_v1");
+      if (saved) {
+        const parsed: DirectMessageItem[] = JSON.parse(saved);
+        return parsed.filter(m => !m.id?.startsWith("dm-reply-") && !m.content?.includes("Dạ em chào anh/chị"));
+      }
+    } catch {}
+    return [
+      {
+        id: "dm-1",
+        senderId: "USR-ADMIN",
+        senderName: "BAN QUẢN TRỊ (ADMIN)",
+        receiverId: "USR-001",
+        receiverName: "MAI VY",
+        content: "Chào bạn, tiến độ kiểm tra lô hàng KPH thế nào rồi?",
+        timestamp: "25/07/26 12:08",
+        createdAt: Date.now() - 432000000
+      }
+    ];
+  });
+
+  useEffect(() => {
+    try {
+      safeSetItem("4m1e1i_direct_messages_v1", JSON.stringify(directMessages));
+    } catch {}
+  }, [directMessages]);
+
+  useEffect(() => {
+    if (!db) return;
+    try {
+      const unsubscribe = onSnapshot(
+        collection(db, COLLECTIONS.DIRECT_MESSAGES),
+        (snapshot) => {
+          const list: DirectMessageItem[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as DirectMessageItem;
+            if (data && data.id) {
+              list.push(data);
+            }
+          });
+          if (list.length > 0) {
+            setDirectMessages(list);
+          }
+        },
+        (err) => {
+          console.warn("[Firestore] Desktop direct_messages realtime sync error:", err);
+        }
+      );
+      return () => unsubscribe();
+    } catch (e) {
+      console.warn("[Firestore] Failed to subscribe direct_messages:", e);
+    }
+  }, []);
+
+  const [readDirectMsgIds, setReadDirectMsgIds] = useState<string[]>(() => {
+    try {
+      const saved = safeGetItem("4m1e1i_read_direct_msg_ids_v1");
+      if (saved) {
+        const parsed: string[] = JSON.parse(saved);
+        return parsed.filter((id) => typeof id === "string" && id.includes("::"));
+      }
+    } catch {}
+    return [];
+  });
+
+  useEffect(() => {
+    try {
+      safeSetItem("4m1e1i_read_direct_msg_ids_v1", JSON.stringify(readDirectMsgIds));
+    } catch {}
+  }, [readDirectMsgIds]);
+
+  const getUserKey = useCallback((u: User | null | undefined): string => {
+    if (!u) return "GUEST";
+    const isUserAdmin = u.role === UserRole.ADMIN || u.id === "USR-ADMIN" || u.fullName?.toUpperCase().includes("ADMIN");
+    if (isUserAdmin) return "USR-ADMIN";
+    return u.id || u.fullName || "GUEST";
+  }, []);
+
+  const isMsgReadByUser = useCallback((msgId: string, u: User | null | undefined): boolean => {
+    if (!u) return true;
+    const userKey = getUserKey(u);
+    return readDirectMsgIds.includes(`${userKey}::${msgId}`);
+  }, [readDirectMsgIds, getUserKey]);
+
+  const markMsgAsReadForUser = useCallback((msgIds: string[], u: User | null | undefined) => {
+    if (!u || msgIds.length === 0) return;
+    const userKey = getUserKey(u);
+    setReadDirectMsgIds((prev) => {
+      const newKeys = msgIds.map((id) => `${userKey}::${id}`);
+      const newSet = new Set([...prev, ...newKeys]);
+      return Array.from(newSet);
+    });
+  }, [getUserKey]);
+
+  const isMsgFromUser = useCallback((m: DirectMessageItem, u: User | null | undefined): boolean => {
+    return isCurrentUserSender(u, undefined, m.senderName, m.senderId);
+  }, []);
+
+  const isMsgToUser = useCallback((m: DirectMessageItem, u: User | null | undefined): boolean => {
+    return isCurrentUserSender(u, undefined, m.receiverName, m.receiverId);
+  }, []);
+
+  const unreadDirectMessagesCount = useMemo(() => {
+    return directMessages.filter((m) => {
+      const isToMe = isMsgToUser(m, currentUser);
+      const isFromMe = isMsgFromUser(m, currentUser);
+      return isToMe && !isFromMe && !isMsgReadByUser(m.id, currentUser);
+    }).length;
+  }, [directMessages, currentUser, isMsgToUser, isMsgFromUser, isMsgReadByUser]);
+
+  const markPartnerMessagesAsRead = useCallback((partner: User) => {
+    const partnerMsgIds = directMessages
+      .filter((m) => isMsgFromUser(m, partner) && isMsgToUser(m, currentUser))
+      .map((m) => m.id);
+    markMsgAsReadForUser(partnerMsgIds, currentUser);
+  }, [directMessages, currentUser, isMsgFromUser, isMsgToUser, markMsgAsReadForUser]);
+
+  useEffect(() => {
+    if (activeTab === "TRAO_ĐỔI" && forumSubTab === "INBOX" && activeDirectChatUser) {
+      markPartnerMessagesAsRead(activeDirectChatUser);
+    }
+  }, [activeTab, forumSubTab, activeDirectChatUser, directMessages, markPartnerMessagesAsRead]);
+
+  const handleSendDirectMessage = useCallback((msgText?: string, attachedImagesList?: AttachedImage[]) => {
+    const content = (msgText !== undefined ? msgText : directMessageInput).trim();
+    if (!activeDirectChatUser || (!content && (!attachedImagesList || attachedImagesList.length === 0)) || !currentUser) return;
+
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const year = String(now.getFullYear()).slice(-2);
+    const hours = String(now.getHours()).padStart(2, '0');
+    const mins = String(now.getMinutes()).padStart(2, '0');
+    const formattedTime = `${day}/${month}/${year} ${hours}:${mins}`;
+
+    const senderName = (currentUser.role === UserRole.ADMIN || currentUser.fullName?.toUpperCase().includes("ADMIN"))
+      ? "BAN QUẢN TRỊ (ADMIN)"
+      : currentUser.fullName;
+
+    const newMsg: DirectMessageItem = {
+      id: `dm-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      senderId: currentUser.id || "USR-ADMIN",
+      senderName: senderName,
+      senderRole: currentUser.role,
+      receiverId: activeDirectChatUser.id,
+      receiverName: activeDirectChatUser.fullName,
+      content: content,
+      timestamp: formattedTime,
+      createdAt: Date.now(),
+      attachments: attachedImagesList && attachedImagesList.length > 0 ? attachedImagesList.map(img => ({
+        type: "image",
+        url: img.url,
+        name: img.name,
+        sizeKb: img.sizeKb
+      })) : undefined
+    };
+
+    setDirectMessages(prev => [...prev, newMsg]);
+    saveDocument(COLLECTIONS.DIRECT_MESSAGES, newMsg.id, newMsg);
+    markMsgAsReadForUser([newMsg.id], currentUser);
+    setDirectMessageInput("");
+
+    setTimeout(() => {
+      if (directChatScrollRefDesktop.current) {
+        directChatScrollRefDesktop.current.scrollTop = directChatScrollRefDesktop.current.scrollHeight;
+      }
+      directMessageInputRefDesktop.current?.focus();
+    }, 50);
+  }, [activeDirectChatUser, directMessageInput, currentUser, markMsgAsReadForUser]);
+
+  const handleClearDirectMessages = useCallback(() => {
+    if (!activeDirectChatUser || !currentUser) return;
+    directMessages.forEach(m => {
+      if ((isMsgFromUser(m, currentUser) && isMsgToUser(m, activeDirectChatUser)) ||
+          (isMsgFromUser(m, activeDirectChatUser) && isMsgToUser(m, currentUser))) {
+        deleteDocument(COLLECTIONS.DIRECT_MESSAGES, m.id);
+      }
+    });
+    setDirectMessages(prev => prev.filter(m => 
+      !(
+        (isMsgFromUser(m, currentUser) && isMsgToUser(m, activeDirectChatUser)) ||
+        (isMsgFromUser(m, activeDirectChatUser) && isMsgToUser(m, currentUser))
+      )
+    ));
+  }, [activeDirectChatUser, currentUser, directMessages, isMsgFromUser, isMsgToUser]);
+
+  const handleDeleteConversation = useCallback((partner: User) => {
+    if (!currentUser) return;
+    const partnerNameClean = partner.fullName?.trim().toLowerCase();
+    
+    directMessages.forEach(m => {
+      const isFromMe = isMsgFromUser(m, currentUser);
+      const isToMe = isMsgToUser(m, currentUser);
+      const isFromPartner = isMsgFromUser(m, partner) || (partnerNameClean && m.senderName?.trim().toLowerCase() === partnerNameClean);
+      const isToPartner = isMsgToUser(m, partner) || (partnerNameClean && m.receiverName?.trim().toLowerCase() === partnerNameClean);
+
+      const isBetweenUs = (isFromMe && isToPartner) || (isFromPartner && isToMe);
+      if (isBetweenUs) {
+        deleteDocument(COLLECTIONS.DIRECT_MESSAGES, m.id);
+      }
+    });
+
+    setDirectMessages(prev => prev.filter(m => {
+      const isFromMe = isMsgFromUser(m, currentUser);
+      const isToMe = isMsgToUser(m, currentUser);
+      const isFromPartner = isMsgFromUser(m, partner) || (partnerNameClean && m.senderName?.trim().toLowerCase() === partnerNameClean);
+      const isToPartner = isMsgToUser(m, partner) || (partnerNameClean && m.receiverName?.trim().toLowerCase() === partnerNameClean);
+
+      const isBetweenUs = (isFromMe && isToPartner) || (isFromPartner && isToMe);
+      return !isBetweenUs;
+    }));
+
+    if (activeDirectChatUser && (
+      (partner.id && activeDirectChatUser.id === partner.id) ||
+      (partner.fullName && activeDirectChatUser.fullName?.toLowerCase() === partner.fullName.toLowerCase())
+    )) {
+      setActiveDirectChatUser(null);
+    }
+  }, [currentUser, activeDirectChatUser, directMessages, isMsgFromUser, isMsgToUser]);
+
+  const handleOpenDirectChatWithSender = useCallback((reply: ForumReply, resolvedSender: any) => {
+    const partnerUser = users.find(
+      (u) =>
+        (reply.senderPhone && (u.phone === reply.senderPhone || u.id === reply.senderPhone)) ||
+        (reply.senderName && u.fullName?.toLowerCase() === reply.senderName?.toLowerCase()) ||
+        (resolvedSender.phone && (u.phone === resolvedSender.phone || u.id === resolvedSender.phone)) ||
+        (resolvedSender.fullName && u.fullName?.toLowerCase() === resolvedSender.fullName?.toLowerCase())
+    );
+    if (partnerUser) {
+      setActiveDirectChatUser(partnerUser);
+    } else {
+      setActiveDirectChatUser({
+        id: reply.senderPhone || `usr-${Date.now()}`,
+        fullName: resolvedSender.fullName || reply.senderName || "Nhân viên",
+        phone: reply.senderPhone || resolvedSender.phone || "",
+        department: resolvedSender.department || "Nhà máy",
+        branch: "Tân Phú",
+        role: UserRole.STAFF,
+        status: UserStatus.ACTIVE,
+        avatar: (resolvedSender as any)?.avatar || undefined
+      });
+    }
+    setForumSubTab("INBOX");
+  }, [users]);
+
+  const handleOpenDirectChatByName = useCallback((target: string | User | { fullName: string; phone?: string; id?: string }) => {
+    if (!target) return;
+    if (typeof target === "object") {
+      const existingUser = users.find(
+        (u) =>
+          (target.id && u.id === target.id) ||
+          (target.fullName && u.fullName && u.fullName.toLowerCase() === target.fullName.toLowerCase()) ||
+          (target.phone && u.phone === target.phone)
+      );
+      if (existingUser) {
+        setActiveDirectChatUser(existingUser);
+      } else {
+        setActiveDirectChatUser({
+          id: target.id || `usr-${Date.now()}`,
+          fullName: target.fullName || "Đồng nghiệp",
+          phone: target.phone || "",
+          department: (target as any).department || "Nhà máy",
+          branch: (target as any).branch || "Tân Phú",
+          role: (target as any).role || UserRole.STAFF,
+          status: (target as any).status || UserStatus.ACTIVE
+        });
+      }
+      setForumSubTab("INBOX");
+      return;
+    }
+
+    const rawName = target;
+    const cleanName = rawName.replace(/^@/, "").trim().toLowerCase();
+    const partnerUser = users.find(
+      (u) =>
+        (u.fullName && u.fullName.toLowerCase() === cleanName) ||
+        (u.fullName && u.fullName.toLowerCase().includes(cleanName)) ||
+        (u.fullName && cleanName.includes(u.fullName.toLowerCase())) ||
+        (u.id && u.id.toLowerCase() === cleanName) ||
+        (u.phone && u.phone === cleanName)
+    );
+
+    if (partnerUser) {
+      setActiveDirectChatUser(partnerUser);
+    } else {
+      const displayName = rawName.replace(/^@/, "").trim();
+      setActiveDirectChatUser({
+        id: `usr-${Date.now()}`,
+        fullName: displayName,
+        phone: "",
+        department: "Nhà máy",
+        branch: "Tân Phú",
+        role: UserRole.STAFF,
+        status: UserStatus.ACTIVE
+      });
+    }
+    setForumSubTab("INBOX");
+  }, [users]);
 
   // Edit & Delete topic state for Desktop
   const [editingDesktopTopic, setEditingDesktopTopic] = useState<ForumTopic | null>(null);
@@ -1699,6 +2372,497 @@ export default function DashboardDesktop({
   const [editDesktopTopicDesc, setEditDesktopTopicDesc] = useState("");
   const [editDesktopTopicCategory, setEditDesktopTopicCategory] = useState<ForumTopicCategory>("Góp ý chức năng");
   const [deletingDesktopTopic, setDeletingDesktopTopic] = useState<ForumTopic | null>(null);
+
+  // Desktop Forum Chat enhancement states
+  const [isDesktopDescExpanded, setIsDesktopDescExpanded] = useState(false);
+  const [desktopReplyingTo, setDesktopReplyingTo] = useState<{ id: string; senderName: string; message: string } | null>(null);
+  const [editingDesktopReplyId, setEditingDesktopReplyId] = useState<string | null>(null);
+  const [editingDesktopReplyText, setEditingDesktopReplyText] = useState("");
+  const [activeDesktopReplyId, setActiveDesktopReplyId] = useState<string | null>(null);
+
+  // Desktop Task / Action Assignment states
+  const [desktopConvertModalReply, setDesktopConvertModalReply] = useState<ForumReply | null>(null);
+  const [desktopActionTypeChoice, setDesktopActionTypeChoice] = useState<"DIRECTIVE" | "TASK">("DIRECTIVE");
+  const [desktopTaskAssignedUser, setDesktopTaskAssignedUser] = useState<User | null>(null);
+  const [desktopTaskDeadline, setDesktopTaskDeadline] = useState("");
+  const [desktopTaskNote, setDesktopTaskNote] = useState("");
+
+  const [desktopEditingActionReply, setDesktopEditingActionReply] = useState<ForumReply | null>(null);
+  const [desktopEditActionType, setDesktopEditActionType] = useState<"DIRECTIVE" | "TASK">("DIRECTIVE");
+  const [desktopEditTaskAssignedUser, setDesktopEditTaskAssignedUser] = useState<User | null>(null);
+  const [desktopEditTaskDeadline, setDesktopEditTaskDeadline] = useState("");
+  const [desktopEditTaskNote, setDesktopEditTaskNote] = useState("");
+  const [desktopEditTaskStatus, setDesktopEditTaskStatus] = useState<"PENDING" | "COMPLETED">("PENDING");
+  const [desktopDeletingActionReplyId, setDesktopDeletingActionReplyId] = useState<string | null>(null);
+
+  // Staff picker modal state
+  const [showDesktopStaffPickerModal, setShowDesktopStaffPickerModal] = useState(false);
+  const [desktopStaffPickerSearchQuery, setDesktopStaffPickerSearchQuery] = useState("");
+  const [desktopStaffPickerTarget, setDesktopStaffPickerTarget] = useState<"CONVERT" | "EDIT">("CONVERT");
+
+  // Actions catalog modal state
+  const [showDesktopActionsCatalogModal, setShowDesktopActionsCatalogModal] = useState(false);
+  const [desktopActionsCatalogScope, setDesktopActionsCatalogScope] = useState<"CURRENT_TOPIC" | "ALL_TOPICS">("CURRENT_TOPIC");
+  const [desktopActionsCatalogTypeFilter, setDesktopActionsCatalogTypeFilter] = useState<"ALL" | "DIRECTIVE" | "TASK">("ALL");
+  const [desktopActionsCatalogStatusFilter, setDesktopActionsCatalogStatusFilter] = useState<"ALL" | "PENDING" | "COMPLETED">("ALL");
+  const [desktopActionsCatalogOnlyMine, setDesktopActionsCatalogOnlyMine] = useState(false);
+  const [desktopActionsCatalogSearchQuery, setDesktopActionsCatalogSearchQuery] = useState("");
+
+  // AI Summary modal state
+  const [showDesktopAiSummaryModal, setShowDesktopAiSummaryModal] = useState(false);
+  const [desktopIsAiSummarizing, setDesktopIsAiSummarizing] = useState(false);
+  const [desktopCopiedSummaryToast, setDesktopCopiedSummaryToast] = useState(false);
+  const [desktopLocalPinnedAiSummary, setDesktopLocalPinnedAiSummary] = useState(false);
+  const [desktopAiSummariesMap, setDesktopAiSummariesMap] = useState<
+    Record<string, { keyPoints: string[]; consensus: string; directivesAndTasks: string[]; updatedAt: string }>
+  >({});
+
+  // Topic Members modal state
+  const [showDesktopMembersModal, setShowDesktopMembersModal] = useState(false);
+  const [desktopMemberSearchQuery, setDesktopMemberSearchQuery] = useState("");
+  const [desktopMemberModalTab, setDesktopMemberModalTab] = useState<"MEMBERS" | "ADD">("MEMBERS");
+
+  // Header status dropdown
+  const [showDesktopStatusDropdown, setShowDesktopStatusDropdown] = useState(false);
+
+  // Handler: Save Convert Action (Chuyển thành Chỉ đạo / Task)
+  const handleSaveConvertActionDesktop = () => {
+    if (!desktopConvertModalReply) return;
+    const now = new Date();
+    const d = String(now.getDate()).padStart(2, "0");
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const y = String(now.getFullYear()).slice(-2);
+    const timeStr = `${d}/${m}/${y}`;
+
+    const newActionData = {
+      assignedToName: desktopActionTypeChoice === "TASK" ? (desktopTaskAssignedUser?.fullName || "") : undefined,
+      assignedToId: desktopActionTypeChoice === "TASK" ? (desktopTaskAssignedUser?.id || desktopTaskAssignedUser?.phone || "") : undefined,
+      deadline: desktopActionTypeChoice === "TASK" ? (desktopTaskDeadline.trim() || timeStr) : undefined,
+      status: (desktopActionTypeChoice === "TASK" ? "PENDING" : undefined) as "PENDING" | "COMPLETED" | undefined,
+      note: desktopTaskNote.trim() || undefined,
+      createdByName: currentUser?.fullName || currentUser?.id || "Ban Quản Trị",
+      createdAt: timeStr
+    };
+
+    onEditForumReply?.(desktopConvertModalReply.id, {
+      actionType: desktopActionTypeChoice,
+      actionData: newActionData
+    });
+
+    if (onShowToast) {
+      onShowToast(
+        desktopActionTypeChoice === "DIRECTIVE"
+          ? "Đã chuyển thành Chỉ đạo hành động thành công!"
+          : "Đã phân công Đầu việc (Task) thành công!",
+        "success"
+      );
+    }
+
+    setDesktopConvertModalReply(null);
+    setDesktopTaskAssignedUser(null);
+    setDesktopTaskDeadline("");
+    setDesktopTaskNote("");
+  };
+
+  // Handler: Save Edit Action (Cập nhật Chỉ đạo / Task)
+  const handleSaveEditActionDesktop = () => {
+    if (!desktopEditingActionReply) return;
+    const now = new Date();
+    const d = String(now.getDate()).padStart(2, "0");
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const y = String(now.getFullYear()).slice(-2);
+    const timeStr = `${d}/${m}/${y}`;
+
+    const updatedActionData = {
+      ...(desktopEditingActionReply.actionData || {}),
+      assignedToName: desktopEditActionType === "TASK" ? (desktopEditTaskAssignedUser?.fullName || "") : undefined,
+      assignedToId: desktopEditActionType === "TASK" ? (desktopEditTaskAssignedUser?.id || desktopEditTaskAssignedUser?.phone || "") : undefined,
+      deadline: desktopEditActionType === "TASK" ? (desktopEditTaskDeadline.trim() || timeStr) : undefined,
+      status: (desktopEditActionType === "TASK" ? desktopEditTaskStatus : undefined) as "PENDING" | "COMPLETED" | undefined,
+      note: desktopEditTaskNote.trim() || undefined,
+    };
+
+    onEditForumReply?.(desktopEditingActionReply.id, {
+      actionType: desktopEditActionType,
+      actionData: updatedActionData
+    });
+
+    if (onShowToast) {
+      onShowToast("Đã cập nhật Chỉ đạo / Task thành công!", "success");
+    }
+
+    setDesktopEditingActionReply(null);
+    setDesktopEditTaskAssignedUser(null);
+    setDesktopEditTaskDeadline("");
+    setDesktopEditTaskNote("");
+  };
+
+  // Handler: Remove Action (Bỏ chỉ đạo / task)
+  const handleRemoveActionDesktop = (replyId: string) => {
+    onEditForumReply?.(replyId, {
+      actionType: undefined,
+      actionData: undefined
+    });
+    if (onShowToast) {
+      onShowToast("Đã gỡ bỏ Chỉ đạo / Task khỏi tin nhắn.", "info");
+    }
+  };
+
+  // Handler: Toggle Task Status (Đang làm <-> Hoàn thành)
+  const handleToggleTaskStatusDesktop = (replyId: string) => {
+    const targetReply = replies.find(r => r.id === replyId);
+    if (!targetReply || !targetReply.actionData) return;
+    const currentStatus = targetReply.actionData.status;
+    const newStatus = currentStatus === "COMPLETED" ? "PENDING" : "COMPLETED";
+
+    onEditForumReply?.(replyId, {
+      actionData: {
+        ...targetReply.actionData,
+        status: newStatus
+      }
+    });
+
+    if (onShowToast) {
+      onShowToast(
+        newStatus === "COMPLETED"
+          ? "Đã đánh dấu Hoàn thành task! 🎉"
+          : "Đã chuyển trạng thái sang Đang thực hiện.",
+        "success"
+      );
+    }
+  };
+
+  const handleOpenEmergencyDiscussionModal = (report: QualityReport) => {
+    setEmergencyDiscussionReport(report);
+    const codePrefix = report.reportCode ? `[${report.reportCode}] ` : `[${report.reportType || "KPH"}] `;
+    let fullText = (report.content || "").replace(/\s+/g, " ").trim();
+    if (report.notes && report.notes.trim()) {
+      const notesClean = report.notes.replace(/\s+/g, " ").trim();
+      if (!fullText.toLowerCase().includes(notesClean.toLowerCase())) {
+        fullText = `${fullText} - ${notesClean}`;
+      }
+    }
+    
+    // Smart summary
+    const maxChars = 145;
+    let titleContent = fullText;
+    if (fullText.length > maxChars) {
+      const truncated = fullText.slice(0, maxChars);
+      const lastSpace = truncated.lastIndexOf(" ");
+      const wordBoundaryText = lastSpace > 30 ? truncated.slice(0, lastSpace) : truncated;
+      titleContent = `${wordBoundaryText.replace(/[,;:\-–—\.\s]+$/, "")}...`;
+    }
+
+    setEmergencyTitle(`🔥 ${codePrefix}${titleContent}`);
+    
+    const desc = `THẢO LUẬN KHẨN CẤP VỀ SỰ CỐ / KPH:
+• Mã bản tin: ${report.reportCode || report.id}
+• Phân loại: ${report.category} (${report.reportType || "KPH"})
+• Nhà máy / Bộ phận: ${report.factory} (${report.uploaderDepartment})
+• Người tạo bản tin: ${report.uploaderName}
+• Thời gian ghi nhận: ${report.timestamp}
+• Nội dung sự cố: ${report.content}
+${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
+
+    setEmergencyDesc(desc);
+    setEmergencyCategory("Thảo luận KPH");
+    
+    // Auto pre-select default participants: Topic creator, Report uploader, and Tagged people in report
+    const repDefaults = getDefaultMembersForReport(report, users, currentUser);
+    setEmergencyInvitedUserIds(repDefaults.memberIds);
+  };
+
+  const handleCreateEmergencyDiscussion = () => {
+    if (!emergencyDiscussionReport || !emergencyTitle.trim()) return;
+    
+    if (onAddForumTopic) {
+      const createdId = onAddForumTopic(
+        emergencyTitle.trim(),
+        emergencyDesc.trim() || emergencyTitle.trim(),
+        emergencyCategory,
+        emergencyDiscussionReport.id,
+        emergencyInvitedUserIds
+      );
+      
+      if (createdId) {
+        setSelectedTopicId(createdId);
+      }
+    }
+
+    setEmergencyDiscussionReport(null);
+    setEmergencyTitle("");
+    setEmergencyDesc("");
+    setEmergencyInvitedUserIds([]);
+    setActiveTab("TRAO_ĐỔI");
+    setForumSubTab("TOPICS");
+  };
+
+  // Helper: Check if user is Topic Leader (Creator of discussion group)
+  const checkIsTopicLeader = (topic?: ForumTopic | null, user?: User | null): boolean => {
+    if (!topic || !user) return false;
+    return Boolean(
+      (topic.authorPhone && (user.phone === topic.authorPhone || user.id === topic.authorPhone)) ||
+      (topic.author && user.fullName?.toLowerCase() === topic.author?.toLowerCase()) ||
+      (topic.authorId && (user.id === topic.authorId || user.phone === topic.authorId)) ||
+      (topic.creatorPhone && (user.phone === topic.creatorPhone || user.id === topic.creatorPhone)) ||
+      (topic.creatorName && user.fullName?.toLowerCase() === topic.creatorName?.toLowerCase())
+    );
+  };
+
+  // Handler: Remove user from Topic (Quyền Trưởng nhóm / Admin)
+  const handleRemoveUserFromTopicDesktop = (userToRemove: User, currentTopic: ForumTopic) => {
+    const currentInvited = currentTopic.invitedUserIds || [];
+    const uId = userToRemove.id || "";
+    const uPhone = userToRemove.phone || "";
+    const uName = userToRemove.fullName || "";
+
+    const newInvited = currentInvited.filter(id => id !== uId && id !== uPhone && id !== uName);
+    onUpdateTopicInvitedUsers?.(currentTopic.id, newInvited);
+    if (onShowToast) {
+      onShowToast(`Đã mời ${userToRemove.fullName} rời khỏi nhóm thảo luận.`, "info");
+    }
+  };
+
+  // Handler: Toggle Topic Participant Invite
+  const handleToggleUserInviteDesktop = (userToToggle: User, currentTopic: ForumTopic) => {
+    const currentInvited = currentTopic.invitedUserIds || [];
+    const userIdOrPhone = userToToggle.id || userToToggle.phone || "";
+    if (!userIdOrPhone) return;
+
+    let newInvited: string[];
+    if (currentInvited.includes(userIdOrPhone)) {
+      newInvited = currentInvited.filter(id => id !== userIdOrPhone);
+    } else {
+      newInvited = [...currentInvited, userIdOrPhone];
+    }
+
+    onUpdateTopicInvitedUsers?.(currentTopic.id, newInvited);
+  };
+
+  // Helper function to capitalize words
+  const capitalizeWords = (str: string): string => {
+    if (!str) return "";
+    return formatNameCapitalized(str);
+  };
+
+  // Helper function to render @mentions in chat bubbles
+  const renderMentionText = (text: string | undefined | null, isDarkBg: boolean = false): React.ReactNode => {
+    if (!text || typeof text !== "string" || !text.includes("@")) {
+      return text || "";
+    }
+
+    const candidatesSet = new Set<string>();
+    if (users && users.length > 0) {
+      users.forEach((u) => {
+        if (u.fullName && u.fullName.trim()) {
+          candidatesSet.add(u.fullName.trim());
+          const parts = u.fullName.trim().split(/\s+/);
+          if (parts.length >= 2) {
+            candidatesSet.add(parts.slice(-2).join(" "));
+          }
+          if (parts[parts.length - 1].length >= 2) {
+            candidatesSet.add(parts[parts.length - 1]);
+          }
+        }
+        if (u.department && u.department.trim()) {
+          candidatesSet.add(u.department.trim());
+          const cleanDept = u.department.replace(/^Phòng\s+/i, "").trim();
+          if (cleanDept.length >= 2) candidatesSet.add(cleanDept);
+        }
+        if (u.id && u.id.trim()) candidatesSet.add(u.id.trim());
+      });
+    }
+
+    candidatesSet.add("Tất cả");
+    candidatesSet.add("All");
+    candidatesSet.add("Mọi người");
+    candidatesSet.add("Ban Giám Đốc");
+    candidatesSet.add("QLCL");
+    candidatesSet.add("QC");
+    candidatesSet.add("R&D");
+
+    const candidates = Array.from(candidatesSet).sort((a, b) => b.length - a.length);
+
+    type Range = { start: number; end: number; matchText: string };
+    const ranges: Range[] = [];
+    const lowerText = text.toLowerCase();
+
+    for (const cand of candidates) {
+      if (!cand) continue;
+      const searchTarget = `@${cand.toLowerCase()}`;
+      let pos = 0;
+      while ((pos = lowerText.indexOf(searchTarget, pos)) !== -1) {
+        const end = pos + searchTarget.length;
+        const overlaps = ranges.some((r) => !(end <= r.start || pos >= r.end));
+        if (!overlaps) {
+          ranges.push({
+            start: pos,
+            end: end,
+            matchText: text.substring(pos, end),
+          });
+        }
+        pos = end;
+      }
+    }
+
+    const genericRegex = /@([\p{L}\w\-_]+(?:\s+[\p{L}\w\-_]+)*)/gu;
+    let match: RegExpExecArray | null;
+    while ((match = genericRegex.exec(text)) !== null) {
+      const namePart = match[1];
+      let cleanName = namePart.split(/[,.:;!?\n\r]/)[0].trim();
+      const stopWords = ["dạ", "nhưng", "em", "anh", "chị", "của", "với", "cho", "nhờ", "đã", "rồi", "và", "khi", "là", "được", "này", "ạ", "ơi"];
+      const words = cleanName.split(/\s+/);
+      const filteredWords: string[] = [];
+      for (const w of words) {
+        if (stopWords.includes(w.toLowerCase()) && filteredWords.length > 0) {
+          break;
+        }
+        filteredWords.push(w);
+      }
+      if (filteredWords.length > 0) {
+        cleanName = filteredWords.join(" ");
+        const finalTag = `@${cleanName}`;
+        const pos = match.index;
+        const end = pos + finalTag.length;
+        const overlaps = ranges.some((r) => !(end <= r.start || pos >= r.end));
+        if (!overlaps) {
+          ranges.push({
+            start: pos,
+            end: end,
+            matchText: text.substring(pos, end),
+          });
+        }
+      }
+    }
+
+    if (ranges.length === 0) return text;
+
+    ranges.sort((a, b) => a.start - b.start);
+
+    const elements: React.ReactNode[] = [];
+    let currentIndex = 0;
+
+    ranges.forEach((r, idx) => {
+      if (r.start > currentIndex) {
+        elements.push(text.substring(currentIndex, r.start));
+      }
+      const rawTag = r.matchText;
+      let displayTag = rawTag;
+      if (rawTag.startsWith("@")) {
+        displayTag = `@${capitalizeWords(rawTag.slice(1))}`;
+      } else {
+        displayTag = capitalizeWords(rawTag);
+      }
+
+      elements.push(
+        <button
+          key={`tag-${idx}`}
+          type="button"
+          translate="no"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleOpenDirectChatByName(displayTag);
+          }}
+          className={
+            isDarkBg
+              ? "notranslate text-sky-200 font-extrabold bg-blue-800/90 hover:bg-blue-700 px-1.5 py-0.5 rounded border border-blue-400/50 mx-0.5 inline-block text-[11px] shadow-2xs cursor-pointer transition-all hover:scale-105"
+              : "notranslate text-blue-600 font-extrabold bg-blue-50 hover:bg-pink-50 hover:text-pink-600 hover:border-pink-300 px-1.5 py-0.5 rounded border border-blue-200/80 mx-0.5 inline-block text-[11px] shadow-2xs cursor-pointer transition-all hover:scale-105"
+          }
+          title={`Bấm để mở hộp thoại chat 1:1 với ${displayTag}`}
+        >
+          {displayTag}
+        </button>
+      );
+      currentIndex = r.end;
+    });
+
+    if (currentIndex < text.length) {
+      elements.push(text.substring(currentIndex));
+    }
+
+    return <>{elements}</>;
+  };
+
+  // Helper to format topic title cleanly without mid-word cuts or redundant brackets
+  const cleanDisplayTitle = (title: string, description?: string, report?: QualityReport | null): string => {
+    if (!title) return "";
+    let cleaned = title.replace(/^🔥\s*/, "");
+    cleaned = cleaned.replace(/^\[[A-Za-z0-9_-]+\]\s*/i, "");
+    cleaned = cleaned.replace(/^Thảo luận:\s*/gi, "");
+    cleaned = cleaned.replace(/\bPHẢN H\.\.\.$/gi, "PHẢN HỒI...");
+    cleaned = cleaned.replace(/\s+[A-Za-zÀ-ỹ]{1,2}\.\.\.$/gi, "...");
+
+    if ((cleaned.endsWith("...") || cleaned.endsWith("…")) && cleaned.length < 110) {
+      const sourceText = report?.content || description || "";
+      if (sourceText) {
+        const cleanSource = sourceText.replace(/\s+/g, " ").trim();
+        const baseTitle = cleaned.replace(/[\.\s]+$/, "");
+        const pureTitleText = baseTitle.replace(/^(🔥\s*)?(\[[A-Z0-9_-]+\]\s*)?/, "").trim();
+        
+        if (pureTitleText && cleanSource.toLowerCase().includes(pureTitleText.toLowerCase().slice(0, 15))) {
+          let expandedText = cleanSource;
+          if (report?.notes && report.notes.trim()) {
+            const notesClean = report.notes.replace(/\s+/g, " ").trim();
+            if (!expandedText.toLowerCase().includes(notesClean.toLowerCase())) {
+              expandedText = `${expandedText} - ${notesClean}`;
+            }
+          }
+          
+          const maxChars = 145;
+          if (expandedText.length > maxChars) {
+            const truncated = expandedText.slice(0, maxChars);
+            const lastSpace = truncated.lastIndexOf(" ");
+            const wordBoundary = lastSpace > 30 ? truncated.slice(0, lastSpace) : truncated;
+            expandedText = `${wordBoundary.replace(/[,;:\-–—\.\s]+$/, "")}...`;
+          }
+          cleaned = expandedText;
+        }
+      }
+    }
+
+    return cleaned.trim() || title;
+  };
+
+  const getTopicReportCode = (topic: ForumTopic, report?: QualityReport): string | null => {
+    if (report?.reportCode) return report.reportCode;
+    if (topic.reportId) {
+      const match = topic.reportId.match(/B\d+/i);
+      if (match) return match[0].toUpperCase();
+      return topic.reportId;
+    }
+    const matchInTitle = topic.title.match(/\[([A-Za-z0-9_-]+)\]/);
+    if (matchInTitle) return matchInTitle[1];
+    return null;
+  };
+
+  const parseKphDescription = (desc: string) => {
+    if (!desc || !desc.includes("THẢO LUẬN KHẨN CẤP VỀ SỰ CỐ")) return null;
+    const lines = desc.split("\n").map(l => l.trim()).filter(Boolean);
+    const data: Record<string, string> = {};
+    let currentKey = "";
+    lines.forEach(line => {
+      if (line.startsWith("• ")) {
+        const colonIdx = line.indexOf(":");
+        if (colonIdx > -1) {
+          const key = line.slice(2, colonIdx).trim();
+          const val = line.slice(colonIdx + 1).trim();
+          currentKey = key;
+          data[key] = val;
+        }
+      } else if (currentKey && data[currentKey]) {
+        data[currentKey] += "\n" + line;
+      }
+    });
+    return {
+      reportCode: data["Mã bản tin"] || "",
+      category: data["Phân loại"] || "",
+      factoryDept: data["Nhà máy / Bộ phận"] || "",
+      creator: data["Người tạo bản tin"] || "",
+      timestamp: data["Thời gian ghi nhận"] || "",
+      content: data["Nội dung sự cố"] || "",
+      notes: data["Ghi chú"] || ""
+    };
+  };
 
   const [localReadNotifIds, setLocalReadNotifIds] = useState<string[]>(() => {
     try {
@@ -2004,6 +3168,7 @@ export default function DashboardDesktop({
   const [newBranchName, setNewBranchName] = useState("");
   const [newBranchId, setNewBranchId] = useState("");
   const [newDeptName, setNewDeptName] = useState("");
+  const [newDeptShortName, setNewDeptShortName] = useState("");
   const [newDeptId, setNewDeptId] = useState("");
 
   // States for hierarchical company-branch-department mapping
@@ -2019,6 +3184,7 @@ export default function DashboardDesktop({
   const [editingBranchIdInput, setEditingBranchIdInput] = useState<string>("");
   const [editingDeptId, setEditingDeptId] = useState<string | null>(null);
   const [editingDeptName, setEditingDeptName] = useState<string>("");
+  const [editingDeptShortName, setEditingDeptShortName] = useState<string>("");
   const [editingDeptIdInput, setEditingDeptIdInput] = useState<string>("");
 
   const [companyIdConfirmDlt, setCompanyIdConfirmDlt] = useState<string | null>(null);
@@ -2107,6 +3273,13 @@ export default function DashboardDesktop({
       return `${cleanUserDeptText} (${foundBranch.id})`;
     }
     return cleanUserDeptText;
+  };
+
+  const matchFactory = (factoryName?: string, filterKey?: string): boolean => {
+    if (!filterKey || filterKey === "Tất cả") return true;
+    if (!factoryName) return false;
+    if (factoryName.trim().toLowerCase() === filterKey.trim().toLowerCase()) return true;
+    return isSameBranchOrFactory(factoryName, filterKey);
   };
 
   const getFactoryDisplayName = (factoryName: string) => {
@@ -2277,6 +3450,13 @@ export default function DashboardDesktop({
   const [profileFullName, setProfileFullName] = useState(currentUser?.fullName || "");
   const [profilePhone, setProfilePhone] = useState(currentUser?.phone || "");
   const [profilePassword, setProfilePassword] = useState(currentUser?.password || "");
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("tanphu_desktop_sidebar_collapsed") === "true";
+    } catch {
+      return false;
+    }
+  });
   const [profileCompany, setProfileCompany] = useState(() => {
     const raw = currentUser?.company || "";
     const matched = companies.find((c) => c.name.toLowerCase() === raw.toLowerCase() || c.id === raw);
@@ -2434,23 +3614,434 @@ export default function DashboardDesktop({
 
   // Logs filters state
   const [logsSearch, setLogsSearch] = useState("");
-  const [logsFactory, setLogsFactory] = useState("Tất cả");
+  const [logsFactories, setLogsFactories] = useState<string[]>([]);
+  const [isLogsFactoryDropdownOpen, setIsLogsFactoryDropdownOpen] = useState(false);
+  const logsFactoryDropdownRef = useRef<HTMLDivElement>(null);
   const [logsCategory, setLogsCategory] = useState("Tất cả");
   const [logsAbnormalOnly, setLogsAbnormalOnly] = useState(false);
+  const [logsProcessStatusFilter, setLogsProcessStatusFilter] = useState<"ALL" | "UNACKNOWLEDGED" | "PROCESSING" | "RESOLVED">("ALL");
+  const [logsOnlyTransferredFilter, setLogsOnlyTransferredFilter] = useState(false);
+  const [logsOnlyTaggedFilter, setLogsOnlyTaggedFilter] = useState(false);
+  const [logsReportTypeFilter, setLogsReportTypeFilter] = useState<"ALL" | "KPH" | "RRO" | "DSA">("ALL");
 
   // Proposal filters state
   const [proposalSearch, setProposalSearch] = useState("");
-  const [proposalFactory, setProposalFactory] = useState("Tất cả");
+  const [proposalFactories, setProposalFactories] = useState<string[]>([]);
+  const [isProposalFactoryDropdownOpen, setIsProposalFactoryDropdownOpen] = useState(false);
+  const proposalFactoryDropdownRef = useRef<HTMLDivElement>(null);
   const [proposalCategory, setProposalCategory] = useState("Tất cả");
 
-  // Stats calculation
-  const totalReportsCount = reports.filter((r) => !r.isDeleted).length;
-  const abnormalReportsCount = reports.filter((r) => r.isAbnormal && !r.isDeleted).length;
-  const safeReportsCount = totalReportsCount - abnormalReportsCount;
-  const activeStaffCount = users.filter((u) => u.status === UserStatus.ACTIVE).length;
-  const pendingApprovalsCount = users.filter((u) => u.status === UserStatus.PENDING).length;
+  // Close custom branch dropdowns when clicking outside
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (logsFactoryDropdownRef.current && !logsFactoryDropdownRef.current.contains(e.target as Node)) {
+        setIsLogsFactoryDropdownOpen(false);
+      }
+      if (proposalFactoryDropdownRef.current && !proposalFactoryDropdownRef.current.contains(e.target as Node)) {
+        setIsProposalFactoryDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+    };
+  }, []);
 
-  const pendingReportsCount = reports.filter((r) => {
+  // --- COMPANY SCOPING (SINGLE SOURCE OF TRUTH) ---
+  const [adminScopePreference, setAdminScopePreference] = useState<CompanyScope>(() => {
+    const saved = safeGetItem("4m1e1i_admin_scope_preference");
+    return (saved === "TPP" || saved === "DNP" || saved === "ALL") ? (saved as CompanyScope) : "ALL";
+  });
+
+  const handleSetAdminScope = (scope: CompanyScope) => {
+    setAdminScopePreference(scope);
+    safeSetItem("4m1e1i_admin_scope_preference", scope);
+  };
+
+  const effectiveCompany = getEffectiveCompanyScope(currentUser, adminScopePreference, branches);
+  const isSuperAdmin = currentUser?.role === UserRole.ADMIN || currentUser?.id === "USR-ADMIN" || (currentUser?.role as string)?.toUpperCase().includes("ADMIN");
+
+  // Scoped collections according to effective company scope
+  const scopedReports = useMemo(() => {
+    return reports.filter((r) => isReportInScope(r, effectiveCompany, branches));
+  }, [reports, effectiveCompany, branches]);
+
+  const scopedBranches = useMemo(() => {
+    return branches.filter((b) => isBranchInScope(b, effectiveCompany));
+  }, [branches, effectiveCompany]);
+
+  const scopedUsers = useMemo(() => {
+    return users.filter((u) => isUserInScope(u, effectiveCompany, branches));
+  }, [users, effectiveCompany, branches]);
+
+  const scopedTopics = useMemo(() => {
+    return topics.filter((t) => {
+      if (!isTopicInScope(t, effectiveCompany, branches)) return false;
+      return isUserAllowedToViewTopic(t, currentUser, replies, reports);
+    });
+  }, [topics, effectiveCompany, branches, currentUser, replies, reports]);
+
+  useEffect(() => {
+    if (scopedTopics.length > 0) {
+      if (!selectedTopicId || !scopedTopics.some((t) => t.id === selectedTopicId)) {
+        setSelectedTopicId(scopedTopics[0].id);
+      }
+    } else {
+      setSelectedTopicId(null);
+    }
+  }, [scopedTopics, selectedTopicId]);
+
+  // Helper to determine company ownership & target transfer
+  const getReportCompanyOwnership = useCallback((r: QualityReport) => {
+    const isDnpFactory = !!(r.factory && (r.factory.includes("DNP") || r.factory.includes("BBM") || r.factory.includes("BBC")));
+    const isTargetDnp = r.targetCompany === "DNP" || (r.assignedCompany && r.assignedCompany.includes("DNP"));
+    const isTargetTpp = r.targetCompany === "TPP" || (r.assignedCompany && r.assignedCompany.includes("TPP"));
+    const isTargetAll = r.targetCompany === "ALL" || r.assignedCompany === "ALL";
+
+    const belongsToDnp = isDnpFactory || !!isTargetDnp || !!isTargetAll;
+    const belongsToTpp = !isDnpFactory || !!isTargetTpp || !!isTargetAll;
+    const isTransferred = !!r.targetCompany || !!r.assignedCompany || (r.transferHistory && r.transferHistory.length > 0);
+
+    return { isDnpFactory, belongsToDnp, belongsToTpp, isTransferred };
+  }, []);
+
+  const checkDirectUserTagged = useCallback((r: QualityReport, u: User): boolean => {
+    if (!u) return false;
+
+    // Direct assignment
+    if (r.assignedPersonId && r.assignedPersonId === u.id) return true;
+    if (r.assignedPersonName && u.fullName && r.assignedPersonName.toLowerCase() === u.fullName.toLowerCase()) return true;
+
+    // Helper to check text for @mention
+    const checkText = (text?: string): boolean => {
+      if (!text) return false;
+      const lower = text.toLowerCase();
+      if (!lower.includes("@")) return false;
+
+      if (u.fullName && lower.includes(`@${u.fullName.toLowerCase()}`)) return true;
+      if (u.id && lower.includes(`@${u.id.toLowerCase()}`)) return true;
+
+      if (u.fullName) {
+        const parts = u.fullName.trim().split(/\s+/);
+        if (parts.length >= 2) {
+          const shortName = parts.slice(-2).join(" ").toLowerCase();
+          if (lower.includes(`@${shortName}`)) return true;
+        }
+        const lastName = parts[parts.length - 1].toLowerCase();
+        if (lastName.length >= 2 && lower.includes(`@${lastName}`)) return true;
+      }
+
+      return false;
+    };
+
+    if (checkText(r.notes)) return true;
+    if (checkText(r.content)) return true;
+    if (r.directives && r.directives.some((d) => checkText(d.text))) return true;
+    if (r.resolutions && r.resolutions.some((res) => checkText(res.resultText) || (res.handlerName && u.fullName && res.handlerName.toLowerCase() === u.fullName.toLowerCase()))) return true;
+
+    return false;
+  }, []);
+
+  const checkUserTaskInDiscussion = useCallback((r: QualityReport, u: User | null): boolean => {
+    if (!u || !topics || topics.length === 0 || !replies || replies.length === 0) return false;
+
+    const topic = topics.find((t) => t.reportId === r.id || (r.reportCode && t.reportId === r.reportCode));
+    if (!topic) return false;
+
+    const topicReplies = replies.filter((reply) => reply.topicId === topic.id);
+    if (topicReplies.length === 0) return false;
+
+    const userId = u.id ? u.id.toLowerCase() : "";
+    const userFullName = u.fullName ? u.fullName.toLowerCase() : "";
+    const userDept = u.department ? u.department.trim().toLowerCase() : "";
+    const shortDept = userDept ? userDept.replace(/^(phòng|bộ phận|ban|xưởng|khối)\s+/i, "").trim() : "";
+
+    let shortName = "";
+    let lastName = "";
+    if (u.fullName) {
+      const parts = u.fullName.trim().split(/\s+/);
+      if (parts.length >= 2) {
+        shortName = parts.slice(-2).join(" ").toLowerCase();
+      }
+      lastName = parts[parts.length - 1].toLowerCase();
+    }
+
+    return topicReplies.some((reply) => {
+      // 1. Direct task/directive assigned to user
+      if (reply.actionData) {
+        const assignedId = reply.actionData.assignedToId ? reply.actionData.assignedToId.toLowerCase() : "";
+        const assignedName = reply.actionData.assignedToName ? reply.actionData.assignedToName.toLowerCase() : "";
+        const note = reply.actionData.note ? reply.actionData.note.toLowerCase() : "";
+
+        if (assignedId && userId && assignedId === userId) return true;
+        if (assignedName && userFullName && (assignedName.includes(userFullName) || userFullName.includes(assignedName))) return true;
+        if (assignedName && shortName && assignedName.includes(shortName)) return true;
+        if (assignedName && userDept && (assignedName.includes(userDept) || (shortDept && assignedName.includes(shortDept)))) return true;
+        
+        if (note && note.includes("@")) {
+          if (userFullName && note.includes(`@${userFullName}`)) return true;
+          if (shortName && note.includes(`@${shortName}`)) return true;
+          if (lastName && lastName.length >= 2 && note.includes(`@${lastName}`)) return true;
+          if (userDept && note.includes(`@${userDept}`)) return true;
+          if (shortDept && shortDept.length >= 2 && note.includes(`@${shortDept}`)) return true;
+        }
+      }
+
+      // 2. Check reply message for @mentions or task assignment
+      const msg = reply.message ? reply.message.toLowerCase() : "";
+      if (msg.includes("@")) {
+        if (userFullName && msg.includes(`@${userFullName}`)) return true;
+        if (userId && msg.includes(`@${userId}`)) return true;
+        if (shortName && msg.includes(`@${shortName}`)) return true;
+        if (lastName && lastName.length >= 2 && msg.includes(`@${lastName}`)) return true;
+        if (userDept && msg.includes(`@${userDept}`)) return true;
+        if (shortDept && shortDept.length >= 2 && msg.includes(`@${shortDept}`)) return true;
+      }
+
+      return false;
+    });
+  }, [topics, replies]);
+
+  const isUserTaggedInReport = useCallback((r: QualityReport, user: User | null): boolean => {
+    if (!user) return false;
+
+    if (checkDirectUserTagged(r, user)) return true;
+    if (checkUserTaskInDiscussion(r, user)) return true;
+
+    if (user.department) {
+      const deptClean = user.department.trim().toLowerCase();
+      if (deptClean) {
+        const checkDeptText = (text?: string): boolean => {
+          if (!text) return false;
+          const lower = text.toLowerCase();
+          if (!lower.includes("@")) return false;
+          if (lower.includes(`@${deptClean}`)) return true;
+          const shortDept = deptClean.replace(/^(phòng|bộ phận|ban|xưởng|khối)\s+/i, "").trim();
+          if (shortDept.length >= 2 && lower.includes(`@${shortDept}`)) return true;
+          return false;
+        };
+        if (checkDeptText(r.notes) || checkDeptText(r.content)) return true;
+        if (r.directives && r.directives.some((d) => checkDeptText(d.text))) return true;
+      }
+    }
+
+    const pos = (user.position || "").toLowerCase();
+    const role = (user.role || "").toLowerCase();
+    const isDeptHead = pos.includes("trưởng") || pos.includes("phó") || pos.includes("quản lý") || pos.includes("giám đốc") || pos.includes("gđ") || pos.includes("chủ nhiệm") || pos.includes("leader") || pos.includes("head") || role.includes("duyệt") || role.includes("admin");
+
+    if (isDeptHead && user.department && users && users.length > 0) {
+      const userDeptClean = user.department.trim().toLowerCase();
+      if (userDeptClean) {
+        const deptMembers = users.filter((u) => u.id !== user.id && u.department && u.department.trim().toLowerCase() === userDeptClean);
+        for (const member of deptMembers) {
+          if (checkDirectUserTagged(r, member)) return true;
+        }
+      }
+    }
+
+    return false;
+  }, [users, checkDirectUserTagged, checkUserTaskInDiscussion]);
+
+  // Logs Context-Filtered Reports (base search, factory, category, abnormal, reportType filters)
+  const logsContextFilteredReports = useMemo(() => {
+    return scopedReports.filter((r) => {
+      if (r.isDeleted) return false;
+      if (r.isApproved === false) return false;
+
+      if (logsSearch) {
+        const s = logsSearch.toLowerCase();
+        const matchesSearch =
+          r.uploaderName.toLowerCase().includes(s) ||
+          r.content.toLowerCase().includes(s) ||
+          r.category.toLowerCase().includes(s) ||
+          (r.reportCode && r.reportCode.toLowerCase().includes(s)) ||
+          (r.notes && r.notes.toLowerCase().includes(s));
+        if (!matchesSearch) return false;
+      }
+
+      if (logsFactories.length > 0) {
+        const matchesAnyFactory = logsFactories.some((f) => matchFactory(r.factory, f) || r.factory === f);
+        if (!matchesAnyFactory) return false;
+      }
+      if (logsCategory !== "Tất cả" && r.category !== logsCategory) return false;
+      if (logsAbnormalOnly && !r.isAbnormal) return false;
+
+      if (logsReportTypeFilter !== "ALL") {
+        const isDsa = r.reportType === "DSA" || !!r.isSpotlight;
+        const isRro = r.reportType === "RRO";
+        const isKph = !isDsa && !isRro;
+        if (logsReportTypeFilter === "DSA" && !isDsa) return false;
+        if (logsReportTypeFilter === "RRO" && !isRro) return false;
+        if (logsReportTypeFilter === "KPH" && !isKph) return false;
+      }
+
+      return true;
+    });
+  }, [scopedReports, logsSearch, logsFactories, logsCategory, logsAbnormalOnly, logsReportTypeFilter]);
+
+  // Transferred count recalculated dynamically based on active filters
+  const logsTransferredReportsCount = useMemo(() => {
+    return logsContextFilteredReports.filter((r) => {
+      const { isTransferred } = getReportCompanyOwnership(r);
+      return isTransferred;
+    }).length;
+  }, [logsContextFilteredReports, getReportCompanyOwnership]);
+
+  // Tagged count for current user
+  const logsTaggedReportsCount = useMemo(() => {
+    return logsContextFilteredReports.filter((r) => isUserTaggedInReport(r, currentUser)).length;
+  }, [logsContextFilteredReports, currentUser, isUserTaggedInReport]);
+
+  const logsTaggedCounts = useMemo(() => {
+    let unacked = 0;
+    let processing = 0;
+    let resolved = 0;
+
+    logsContextFilteredReports.forEach((r) => {
+      if (!isUserTaggedInReport(r, currentUser)) return;
+      const isDsa = r.reportType === "DSA" || !!r.isSpotlight;
+      if (isDsa) return;
+
+      const ackCount = r.sharedBy?.length || 0;
+      const resCount = r.resolutions?.length || 0;
+      const isResolved = resCount > 0 && (r.resolutions?.some((res) => res.status === "Đã xử lý" || !!res.resultText) ?? true);
+
+      if (isResolved) {
+        resolved++;
+      } else if (ackCount > 0) {
+        processing++;
+      } else {
+        unacked++;
+      }
+    });
+
+    return {
+      all: logsTaggedReportsCount,
+      unacked,
+      processing,
+      resolved,
+    };
+  }, [logsContextFilteredReports, currentUser, isUserTaggedInReport, logsTaggedReportsCount]);
+
+  const logsStatusCounts = useMemo(() => {
+    let unacked = 0;
+    let processing = 0;
+    let resolved = 0;
+
+    logsContextFilteredReports.forEach((r) => {
+      const isDsa = r.reportType === "DSA" || !!r.isSpotlight;
+      if (isDsa) return; // Skip DSA reports for status workflow counts
+
+      const ackCount = r.sharedBy?.length || 0;
+      const resCount = r.resolutions?.length || 0;
+      const isResolved = resCount > 0 && (r.resolutions?.some((res) => res.status === "Đã xử lý" || !!res.resultText) ?? true);
+
+      if (isResolved) {
+        resolved++;
+      } else if (ackCount > 0) {
+        processing++;
+      } else {
+        unacked++;
+      }
+    });
+
+    return {
+      all: logsContextFilteredReports.length,
+      unacked,
+      processing,
+      resolved,
+    };
+  }, [logsContextFilteredReports]);
+
+  // Base reports list considering the transferred-only or tagged-only filter toggle
+  const logsBaseFilteredReports = useMemo(() => {
+    if (logsOnlyTaggedFilter) {
+      return logsContextFilteredReports.filter((r) => isUserTaggedInReport(r, currentUser));
+    }
+    if (logsOnlyTransferredFilter) {
+      return logsContextFilteredReports.filter((r) => {
+        const { isTransferred } = getReportCompanyOwnership(r);
+        return isTransferred;
+      });
+    }
+    return logsContextFilteredReports;
+  }, [logsContextFilteredReports, logsOnlyTaggedFilter, logsOnlyTransferredFilter, currentUser, isUserTaggedInReport, getReportCompanyOwnership]);
+
+  // Final filtered reports considering logsProcessStatusFilter and sorted identically to mobile
+  const finalLogsFilteredReports = useMemo(() => {
+    const list = logsBaseFilteredReports.filter((r) => {
+      if (logsProcessStatusFilter === "ALL") return true;
+
+      const isDsa = r.reportType === "DSA" || !!r.isSpotlight;
+      if (isDsa) return false;
+
+      const ackCount = r.sharedBy?.length || 0;
+      const resCount = r.resolutions?.length || 0;
+      const isResolved = resCount > 0 && (r.resolutions?.some((res) => res.status === "Đã xử lý" || !!res.resultText) ?? true);
+
+      if (logsProcessStatusFilter === "UNACKNOWLEDGED") {
+        return ackCount === 0 && !isResolved;
+      }
+      if (logsProcessStatusFilter === "PROCESSING") {
+        return ackCount > 0 && !isResolved;
+      }
+      if (logsProcessStatusFilter === "RESOLVED") {
+        return isResolved;
+      }
+      return true;
+    });
+
+    // Sort reports according to the prioritized layout (identical to mobile):
+    // 1. New reports (posted <= 5 minutes ago) are at the absolute top.
+    // 2. Reports with new changes/updates (updated <= 5 minutes ago) also automatically jump to the top.
+    // 3. Normal reports are ordered by original time descending at the bottom.
+    return [...list].sort((a, b) => {
+      const now = new Date().getTime();
+      const aCreated = parseReportTimestamp(a.timestamp).getTime();
+      const bCreated = parseReportTimestamp(b.timestamp).getTime();
+      const aUpdated = a.updatedAt ? parseReportTimestamp(a.updatedAt).getTime() : 0;
+      const bUpdated = b.updatedAt ? parseReportTimestamp(b.updatedAt).getTime() : 0;
+
+      const ageA_CreatedMin = (now - aCreated) / (1000 * 60);
+      const ageB_CreatedMin = (now - bCreated) / (1000 * 60);
+
+      const ageA_UpdatedMin = a.updatedAt ? (now - aUpdated) / (1000 * 60) : Infinity;
+      const ageB_UpdatedMin = b.updatedAt ? (now - bUpdated) / (1000 * 60) : Infinity;
+
+      // A report is "New" if original post is <= 5 mins ago
+      const isA_New = ageA_CreatedMin >= 0 && ageA_CreatedMin <= 5;
+      const isB_New = ageB_CreatedMin >= 0 && ageB_CreatedMin <= 5;
+
+      // A report is "Recently Changed" if updatedAt of the post is <= 5 mins ago
+      const isA_RecentlyUpdated = ageA_UpdatedMin >= 0 && ageA_UpdatedMin <= 5;
+      const isB_RecentlyUpdated = ageB_UpdatedMin >= 0 && ageB_UpdatedMin <= 5;
+
+      // High priority group includes either New posts or recently updated/changed posts (within 5 minutes)
+      const isA_HighPriority = isA_New || isA_RecentlyUpdated;
+      const isB_HighPriority = isB_New || isB_RecentlyUpdated;
+
+      if (isA_HighPriority && !isB_HighPriority) return -1;
+      if (!isA_HighPriority && isB_HighPriority) return 1;
+      if (isA_HighPriority && isB_HighPriority) {
+        // Both are high priority -> sort by the absolute latest action of the report (creation or update) descending
+        const aLatest = Math.max(aCreated, aUpdated);
+        const bLatest = Math.max(bCreated, bUpdated);
+        return bLatest - aLatest;
+      }
+
+      // Otherwise, sort remaining older posts by their original creation time descending
+      return bCreated - aCreated;
+    });
+  }, [logsBaseFilteredReports, logsProcessStatusFilter]);
+
+  // Stats calculation
+  const totalReportsCount = scopedReports.filter((r) => !r.isDeleted).length;
+  const abnormalReportsCount = scopedReports.filter((r) => r.isAbnormal && !r.isDeleted).length;
+  const safeReportsCount = totalReportsCount - abnormalReportsCount;
+  const activeStaffCount = scopedUsers.filter((u) => u.status === UserStatus.ACTIVE).length;
+  const pendingApprovalsCount = scopedUsers.filter((u) => u.status === UserStatus.PENDING).length;
+
+  const pendingReportsCount = scopedReports.filter((r) => {
     if (r.isDeleted) return false;
     if (r.isApproved !== false) return false;
     if (currentUser?.role === UserRole.ADMIN) return true;
@@ -2480,7 +4071,7 @@ export default function DashboardDesktop({
       "MÔI TRƯỜNG": 0,
       "THÔNG TIN": 0
     };
-    reports.filter((r) => !r.isDeleted).forEach((r) => {
+    scopedReports.filter((r) => !r.isDeleted).forEach((r) => {
       if (counts[r.category] !== undefined) counts[r.category]++;
     });
     return Object.keys(counts).map((key) => ({
@@ -2491,13 +4082,13 @@ export default function DashboardDesktop({
 
   const getFactoryStats = () => {
     const map: Record<string, { total: number; abnormal: number }> = {};
-    branches.forEach((b) => {
+    scopedBranches.forEach((b) => {
       if (b.isScoring) {
         map[b.name] = { total: 0, abnormal: 0 };
       }
     });
 
-    reports.filter((r) => !r.isDeleted).forEach((r) => {
+    scopedReports.filter((r) => !r.isDeleted).forEach((r) => {
       if (map[r.factory]) {
         map[r.factory].total++;
         if (r.isAbnormal) map[r.factory].abnormal++;
@@ -2514,46 +4105,8 @@ export default function DashboardDesktop({
   // --- STATS FILTER BY BRANCH & ADVANCED STATISTICAL FUNCTIONS ---
   const [statsBranchFilter, setStatsBranchFilter] = useState("Tất cả");
 
-  const matchFactory = (factoryName: string, filterKey: string): boolean => {
-    if (!factoryName) return false;
-    const norm = factoryName.toLowerCase();
-    if (filterKey === "Tất cả") return true;
-    const filterLower = filterKey.toLowerCase();
-    if (norm === filterLower || norm.includes(filterLower) || filterLower.includes(norm)) return true;
-    const clean = (s: string) => (s || "").replace(/\s*\([^)]+\)$/, "").trim().toLowerCase();
-    if (clean(factoryName) === clean(filterKey)) return true;
-    const extractId = (s: string) => {
-      const match = s.match(/\(([^)]+)\)/);
-      return match ? match[1].trim().toUpperCase() : "";
-    };
-    const id1 = extractId(factoryName);
-    const id2 = extractId(filterKey);
-    if (id1 && id2 && id1 === id2) return true;
-    if (id1 && filterLower.includes(id1.toLowerCase())) return true;
-    if (id2 && norm.includes(id2.toLowerCase())) return true;
-    if (filterLower.includes("bắc ninh") || filterLower.includes("tpp-bni")) {
-      return norm.includes("bắc ninh") || norm.includes("tpp-bni");
-    }
-    if (filterLower.includes("long an") || filterLower.includes("tpp-lan")) {
-      return norm.includes("long an") || norm.includes("tpp-lan");
-    }
-    if (filterLower.includes("văn phòng") || filterLower.includes("tpp-cty") || filterLower.includes("vp cty")) {
-      return norm.includes("văn phòng") || norm.includes("tpp-cty") || norm.includes("vp cty");
-    }
-    if (filterLower.includes("314") || filterLower.includes("tpp-314")) {
-      return norm.includes("314") || norm.includes("tpp-314");
-    }
-    if (filterLower.includes("bbm") || filterLower.includes("dnp-bbm")) {
-      return norm.includes("bbm") || norm.includes("dnp-bbm");
-    }
-    if (filterLower.includes("bbc") || filterLower.includes("dnp-bbc")) {
-      return norm.includes("bbc") || norm.includes("dnp-bbc");
-    }
-    return false;
-  };
-
   const getFilteredStatsReports = () => {
-    const nonDeleted = reports.filter((r) => !r.isDeleted);
+    const nonDeleted = scopedReports.filter((r) => !r.isDeleted);
     if (statsBranchFilter === "Tất cả") return nonDeleted;
     return nonDeleted.filter((r) => matchFactory(r.factory, statsBranchFilter));
   };
@@ -2598,14 +4151,14 @@ export default function DashboardDesktop({
   // 2. So sánh các Chi nhánh: số lượng DSA (Điểm Sáng) vs KPH (Không Phù Hợp) vs RRO
   const getBranchComparisonData = () => {
     const map: Record<string, { kphNb: number; kphBn: number; dsa: number; rro: number }> = {};
-    branches.forEach((b) => {
+    scopedBranches.forEach((b) => {
       if (b.isScoring) {
         map[b.id] = { kphNb: 0, kphBn: 0, dsa: 0, rro: 0 };
       }
     });
 
-    reports.filter((r) => !r.isDeleted).forEach((r) => {
-      const matchedBranch = branches.find(b => b.isScoring && matchFactory(r.factory, b.id));
+    scopedReports.filter((r) => !r.isDeleted).forEach((r) => {
+      const matchedBranch = scopedBranches.find(b => b.isScoring && matchFactory(r.factory, b.id));
       if (matchedBranch && map[matchedBranch.id]) {
         if (r.reportType === "RRO") {
           map[matchedBranch.id].rro++;
@@ -2619,15 +4172,15 @@ export default function DashboardDesktop({
       }
     });
 
-    return branches.filter(b => b.isScoring).map((b) => {
+    return scopedBranches.filter(b => b.isScoring).map((b) => {
       const match = b.name.match(/\(([^)]+)\)/);
       const shortName = match ? match[1] : b.name.replace("Chi Nhánh ", "").replace("Nhà máy ", "").replace("Văn phòng ", "VP ");
       return {
         name: shortName,
-        "KPH (Nội Bộ)": map[b.id].kphNb,
-        "KPH (Bên Ngoài)": map[b.id].kphBn,
-        "Cảnh Báo (RRO)": map[b.id].rro,
-        "Điểm Sáng (DSA)": map[b.id].dsa,
+        "KPH (Nội Bộ)": map[b.id]?.kphNb || 0,
+        "KPH (Bên Ngoài)": map[b.id]?.kphBn || 0,
+        "Cảnh Báo (RRO)": map[b.id]?.rro || 0,
+        "Điểm Sáng (DSA)": map[b.id]?.dsa || 0,
         branchId: b.id,
         fullName: b.name
       };
@@ -2854,7 +4407,7 @@ export default function DashboardDesktop({
   const hasActiveTicker = !!(tickerConfig?.text && tickerConfig.text.trim() !== "");
 
   return (
-    <div className="flex-1 bg-[#F7F9FC] text-slate-800 flex flex-col min-h-0 font-sans">
+    <div className="flex-1 bg-[#F7F9FC] text-slate-800 flex flex-col min-h-0 h-full overflow-hidden font-sans">
       {/* Upper Main Broadcast Marquee Bar with specific ticker text */}
       {hasActiveTicker && (
         <div className="bg-amber-500 text-slate-950 font-bold px-4 py-2 border-b border-amber-600 flex items-center select-none overflow-hidden shrink-0">
@@ -2887,50 +4440,95 @@ export default function DashboardDesktop({
       )}
 
       {/* Main Admin Header Panel */}
-      <header className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shrink-0 shadow-sm text-slate-800">
-        <div>
-          <div className="flex items-center gap-3">
+      <header className="bg-white border-b border-slate-200 px-6 py-3 shrink-0 shadow-xs text-slate-800">
+        {/* Main Title Bar (Compact single line layout) */}
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          {/* Left: Brand Logo & Title */}
+          <div className="flex items-center gap-3.5">
             <img 
               src="/logo_meta.svg" 
               alt="META ANDON Logo" 
-              className="w-12 h-12 object-contain drop-shadow-xs rounded-xl cursor-pointer hover:scale-105 transition-transform" 
+              className="w-10 h-10 object-contain drop-shadow-xs rounded-xl cursor-pointer hover:scale-105 transition-transform shrink-0" 
             />
-            <T className="text-xs text-slate-500 font-bold tracking-wide uppercase">HỆ THỐNG KIỂM SOÁT THAY ĐỔI THEO THỜI GIAN THỰC</T>
-          </div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-900 mt-1.5 flex items-center gap-2">
-            <T>Trang Quản Trị Hệ Thống META ANDON</T>
-            <span className="text-xs font-medium text-slate-400 block">v4.1.3</span>
-          </h1>
-        </div>
-
-        {/* Corporate Header Info Credentials */}
-        <div className="flex flex-wrap items-center gap-3 bg-slate-50 border border-slate-200 p-2.5 rounded-xl">
-          <div className="text-right">
-            <div className="text-xs font-bold text-slate-800 flex items-center justify-end gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
-              <T>Quản trị tối cao: Lê Nhật Trường</T>
+            <div className="min-w-0">
+              <div className="text-[10.5px] text-slate-500 font-extrabold tracking-wider uppercase flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0" />
+                <T>HỆ THỐNG KIỂM SOÁT THAY ĐỔI THEO THỜI GIAN THỰC</T>
+              </div>
+              <h1 className="text-base md:text-lg font-black tracking-tight text-slate-900 mt-0.5 flex items-center gap-2 flex-wrap">
+                <T>Trang Quản Trị Hệ Thống META ANDON</T>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-slate-200">v4.1.3</span>
+              </h1>
             </div>
-            <T className="text-[10px] text-slate-500 block font-semibold mt-0.5">
-              Bộ phận: {STANDARDIZED_QC_DEPT}
-            </T>
           </div>
-          {currentUser.role !== UserRole.STAFF && currentUser.role !== UserRole.REVIEWER && (
-            <>
-              <div className="border-l border-slate-300 h-8 self-center" />
-              
-              {/* Nút hiển thị số người online cực đẹp */}
+
+          {/* Right: Cụm công cụ điều hành nhanh */}
+          <div className="flex items-center gap-2.5 flex-wrap ml-auto">
+            {/* Scope Switcher cho Super Admin */}
+            {isSuperAdmin && (
+              <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-250 shadow-2xs">
+                <span className="text-[9.5px] font-black uppercase text-slate-500 px-2 py-0.5 select-none font-mono">
+                  <T>NGỮ CẢNH:</T>
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleSetAdminScope("ALL")}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      adminScopePreference === "ALL"
+                        ? "bg-indigo-600 text-white shadow-xs font-black"
+                        : "text-slate-600 hover:text-slate-900 bg-transparent hover:bg-slate-200/60"
+                    }`}
+                    title="Xem toàn bộ dữ liệu TPP & DNP"
+                  >
+                    <span>🌐</span>
+                    <T>TOÀN TẬP ĐOÀN (ALL)</T>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSetAdminScope("TPP")}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      adminScopePreference === "TPP"
+                        ? "bg-blue-600 text-white shadow-xs font-black"
+                        : "text-blue-700 hover:text-blue-900 bg-transparent hover:bg-blue-50"
+                    }`}
+                    title="Chỉ xem dữ liệu khối Tân Phú (TPP)"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                    <T>KHỐI TPP</T>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSetAdminScope("DNP")}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      adminScopePreference === "DNP"
+                        ? "bg-amber-600 text-white shadow-xs font-black"
+                        : "text-amber-700 hover:text-amber-900 bg-transparent hover:bg-amber-50"
+                    }`}
+                    title="Chỉ xem dữ liệu khối Đồng Nai (DNP)"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                    <T>KHỐI DNP</T>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Nút hiển thị số người online */}
               <div className="relative">
                 <button
                   onClick={() => {
                     setDesktopOnlineSearch("");
                     setShowDesktopOnlinePopover(!showDesktopOnlinePopover);
                   }}
-                  className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 text-[10px] font-extrabold rounded-lg flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs"
+                  className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 text-xs font-extrabold rounded-lg flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-xs"
                   title="Nhấp để hiển thị danh sách người đang hoạt động trực tuyến"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse pointer-events-none" />
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse pointer-events-none" />
                   <T>ONLINE:</T>
-                  <span className="font-mono text-[11px] font-black pointer-events-none">{onlineCount}</span>
+                  <span className="font-mono text-xs font-black pointer-events-none">{onlineCount}</span>
                 </button>
 
                 {/* Popover danh sách người online (bản Desktop) */}
@@ -3019,156 +4617,288 @@ export default function DashboardDesktop({
                   </div>
                 )}
               </div>
-            </>
-          )}
 
-          <div className="border-l border-slate-300 h-8 self-center" />
-          <button
-            onClick={onToggleMobilePreview}
-            className="px-3.5 py-2 bg-blue-650 text-white rounded-lg text-xs font-sans font-black bg-blue-600 hover:bg-blue-600 active:scale-95 transition-all text-center flex items-center gap-1.5 shadow-sm cursor-pointer"
-          >
-            <Eye className="w-4 h-4" />
-            <T>XEM MOBILE LIVE</T>
-          </button>
-          <button
-            onClick={onLogout}
-            className="px-3 py-1.5 bg-red-600 text-white rounded text-[10px] font-bold uppercase tracking-wider hover:bg-red-700 active:scale-95 transition-all cursor-pointer shadow-sm"
-          >
-            <T>Đăng xuất</T>
-          </button>
+              {/* Nút Xem Mobile Live */}
+              <button
+                onClick={onToggleMobilePreview}
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-sans font-black active:scale-95 transition-all text-center flex items-center gap-1.5 shadow-sm cursor-pointer"
+              >
+                <Eye className="w-4 h-4" />
+                <T>XEM MOBILE LIVE</T>
+              </button>
+            </div>
         </div>
       </header>
 
       {/* Main Admin Workspace Container */}
-      <div className="flex-1 flex flex-col md:flex-row min-h-0">
+      <div className="flex-1 flex flex-col md:flex-row min-h-0 h-full overflow-hidden">
         {/* Navigation panel */}
-        <nav className="w-full md:w-64 bg-[#1E293B] border-r border-[#1E293B] p-4 shrink-0 overflow-y-auto select-none space-y-2 text-white">
-          <T className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest pl-3 block mb-3">PANEL ĐIỀU HÀNH</T>
-          {[
-            ...(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.REVIEWER
-              ? [
-                  { id: "PHÊ_DUYỆT", label: "Phê duyệt nhân sự", icon: UserCheck, count: pendingApprovalsCount, color: "text-amber-400" },
-                  { id: "QUOTA_CLOUD", label: "Giám sát Cloud Quota", icon: CloudLightning, color: "text-amber-300" }
-                ]
-              : []),
-            { id: "MÃ_HÓA", label: "Khai báo mã hóa", icon: Sliders, color: "text-purple-400" },
-            { id: "THỐNG_KÊ", label: "Báo cáo thống kê", icon: BarChart4, color: "text-emerald-400" },
-            ...(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.REVIEWER
-              ? [{ id: "ĐỀ_XUẤT", label: "Đề xuất chờ duyệt", icon: CheckSquare, count: pendingReportsCount, color: "text-sky-400" }]
-              : []),
-            ...(currentUser.role === UserRole.ADMIN
-              ? [{ id: "DỮ_LIỆU", label: "Nhật ký dữ liệu & PDF", icon: Database, color: "text-blue-450" }]
-              : []),
-            { id: "THÔNG_BÁO", label: "Phát sóng & Ticker", icon: Bell, count: unreadCount, color: "text-yellow-400" },
-            { id: "TRAO_ĐỔI", label: "Trao đổi diễn đàn", icon: MessageSquare, color: "text-pink-400" },
-            { id: "QUY_CHẾ", label: "Quy chế & Quy trình", icon: FileSpreadsheet, color: "text-teal-400" },
-            { id: "CÁ_NHÂN", label: "Trang cá nhân", icon: Users, color: "text-slate-300" }
-          ].map((item) => {
-            const isSel = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id as any)}
-                className={`w-full flex items-center justify-between p-3 rounded-xl text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                  isSel
-                    ? "bg-[#0F172A] text-blue-400 font-bold border-l-4 border-blue-500 shadow-inner"
-                    : "text-slate-300 hover:bg-slate-800/50 hover:text-white"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <item.icon className={`w-4 h-4 ${item.color}`} />
-                  <T>{item.label}</T>
-                </div>
-                {item.count && item.count > 0 ? (
-                  <span className="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full block animate-bounce">
-                    {item.count}
-                  </span>
-                ) : null}
-              </button>
-            );
-          })}
+        <nav className={`relative w-full ${isSidebarCollapsed ? "md:w-[76px] px-2" : "md:w-64 p-3"} ${currentSidebarTheme.navBg} border-r ${currentSidebarTheme.navBorder} shrink-0 select-none flex flex-col justify-between transition-all duration-300 ease-in-out h-full overflow-visible z-20`}>
+          {/* Floating Collapse / Expand Button on border */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsSidebarCollapsed(prev => {
+                const next = !prev;
+                try {
+                  localStorage.setItem("tanphu_desktop_sidebar_collapsed", String(next));
+                } catch (e) {
+                  // ignore
+                }
+                return next;
+              });
+            }}
+            className={`hidden md:flex absolute top-5 -right-3.5 w-7 h-7 rounded-full bg-white text-slate-700 hover:text-blue-600 border border-slate-200 shadow-md items-center justify-center transition-transform duration-200 hover:scale-110 active:scale-95 cursor-pointer z-30 ${
+              currentSidebarTheme.isLight ? "bg-white text-slate-700" : "bg-slate-800 text-slate-200 border-slate-700"
+            }`}
+            title={isSidebarCollapsed ? "Mở rộng thanh Menu" : "Thu gọn thanh Menu"}
+          >
+            {isSidebarCollapsed ? (
+              <ChevronRight className="w-4 h-4" />
+            ) : (
+              <ChevronLeft className="w-4 h-4" />
+            )}
+          </button>
 
-          <div className="pt-6 border-t border-slate-800/60">
-            <div className="bg-[#0F172A] p-3.5 rounded-xl border border-slate-800/80">
-              <T className="text-xs font-bold text-white block">Tóm tắt số liệu 4M1E1I</T>
-              <div className="grid grid-cols-2 gap-2 mt-2 select-none">
-                <div className="bg-[#1E293B] p-2 rounded border border-slate-700 text-center">
-                  <T className="text-[10px] text-slate-400 block font-bold leading-none uppercase">Đóng góp</T>
-                  <T className="text-base font-bold text-blue-400 block mt-1">{totalReportsCount}</T>
-                </div>
-                <div className="bg-[#1E293B] p-2 rounded border border-slate-700 text-center">
-                  <T className="text-[10px] text-red-400 block font-bold leading-none uppercase">Bất thường</T>
-                  <T className="text-base font-bold text-red-400 block mt-1">{abnormalReportsCount}</T>
+          <div className="space-y-1 flex-1 min-h-0 overflow-y-auto pr-1 thin-scrollbar">
+            {!isSidebarCollapsed && (
+              <T className={`text-[10px] ${currentSidebarTheme.titleColor} font-extrabold uppercase tracking-widest pl-3 block mb-2 transition-opacity duration-200`}>PANEL ĐIỀU HÀNH</T>
+            )}
+            {[
+              ...(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.REVIEWER
+                ? [
+                    { id: "PHÊ_DUYỆT", label: "Phê duyệt nhân sự", icon: UserCheck, count: pendingApprovalsCount, color: "text-amber-400" },
+                  ]
+                : []),
+              ...(currentUser.role === UserRole.ADMIN
+                ? [
+                    { id: "QUOTA_CLOUD", label: "Giám sát Cloud Quota", icon: CloudLightning, color: "text-amber-300" },
+                    { id: "MÃ_HÓA", label: "Khai báo mã hóa", icon: Sliders, color: "text-purple-400" },
+                  ]
+                : []),
+              { id: "THỐNG_KÊ", label: "Báo cáo thống kê", icon: BarChart4, color: "text-emerald-400" },
+              ...(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.REVIEWER
+                ? [{ id: "ĐỀ_XUẤT", label: "Đề xuất chờ duyệt", icon: CheckSquare, count: pendingReportsCount, color: "text-sky-400" }]
+                : []),
+              { id: "DỮ_LIỆU", label: "Sổ nhật ký biến động 4M1E1I", icon: Database, color: "text-blue-450" },
+              { id: "FORM_CAPA", label: "Trang Form CAPA (ISO)", icon: FileText, color: "text-indigo-400" },
+              { id: "THỬ_NGHIỆM", label: "Tiến trình Thử Nghiệm", icon: FlaskConical, color: "text-teal-400" },
+              { id: "THÔNG_BÁO", label: "Phát sóng & Ticker", icon: Bell, count: unreadCount, color: "text-yellow-400" },
+              { id: "TRAO_ĐỔI", label: "Trao đổi & Hộp thoại 1:1", icon: MessageSquare, count: unreadDirectMessagesCount, color: "text-pink-400" },
+              { id: "QUY_CHẾ", label: "Kho Tri thức Ai", icon: BookOpen, color: "text-teal-400" },
+              { id: "CÁ_NHÂN", label: "Trang cá nhân", icon: Users, color: currentSidebarTheme.isLight ? "text-slate-600" : "text-slate-300" }
+            ].map((item) => {
+              const isSel = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id as any)}
+                  title={isSidebarCollapsed ? item.label : undefined}
+                  className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-0 py-2.5" : "justify-between px-3 py-2"} rounded-xl text-xs font-semibold tracking-wide transition-all cursor-pointer relative group ${
+                    isSel
+                      ? `${currentSidebarTheme.itemActiveBg} ${currentSidebarTheme.itemActiveText} ${currentSidebarTheme.itemActiveBorder}`
+                      : `${currentSidebarTheme.itemText} ${currentSidebarTheme.itemHover}`
+                  }`}
+                >
+                  <div className={`flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-2.5"} min-w-0 relative`}>
+                    <item.icon className={`w-4 h-4 shrink-0 ${item.color}`} />
+                    {!isSidebarCollapsed && (
+                      <T className="truncate">{item.label}</T>
+                    )}
+                  </div>
+                  {item.count && item.count > 0 ? (
+                    isSidebarCollapsed ? (
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center animate-bounce shadow-xs">
+                        {item.count > 99 ? "99+" : item.count}
+                      </span>
+                    ) : (
+                      <span className="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full block animate-bounce shrink-0">
+                        {item.count}
+                      </span>
+                    )
+                  ) : null}
+                </button>
+              );
+            })}
+
+            {!isSidebarCollapsed && (
+              <div className="pt-2">
+                <div className={`${currentSidebarTheme.summaryCardBg} p-2.5 rounded-xl border ${currentSidebarTheme.summaryCardBorder}`}>
+                  <T className={`text-[11px] font-bold ${currentSidebarTheme.isLight ? "text-slate-800" : "text-white"} block`}>Tóm tắt số liệu 4M1E1I</T>
+                  <div className="grid grid-cols-2 gap-1.5 mt-1.5 select-none">
+                    <div className={`${currentSidebarTheme.summarySubBg} p-1.5 rounded border ${currentSidebarTheme.summarySubBorder} text-center`}>
+                      <T className={`text-[9.5px] ${currentSidebarTheme.isLight ? "text-slate-500" : "text-slate-400"} block font-bold leading-none uppercase`}>Đóng góp</T>
+                      <T className="text-sm font-bold text-blue-400 block mt-0.5">{totalReportsCount}</T>
+                    </div>
+                    <div className={`${currentSidebarTheme.summarySubBg} p-1.5 rounded border ${currentSidebarTheme.summarySubBorder} text-center`}>
+                      <T className="text-[9.5px] text-red-400 block font-bold leading-none uppercase">Bất thường</T>
+                      <T className="text-sm font-bold text-red-400 block mt-0.5">{abnormalReportsCount}</T>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
+          </div>
+
+          {/* DÃY NÚT CHỌN MÀU SLIDEBAR VÀ THẺ USER PROFILE BOTTOM */}
+          <div className="pt-2 mt-2 shrink-0 border-t border-black/5 dark:border-white/5">
+            {isSidebarCollapsed ? (
+              /* Collapsed Profile & Actions (Vertical compact layout) */
+              <div className="flex flex-col items-center gap-2.5 py-1">
+                <div
+                  className="w-9 h-9 rounded-full overflow-hidden border-2 border-blue-500 shadow-sm shrink-0 cursor-pointer"
+                  title={`${currentUser.fullName} (${currentUser.role})`}
+                  onClick={() => setActiveTab("CÁ_NHÂN")}
+                >
+                  {currentUser.avatar ? (
+                    <img src={currentUser.avatar} alt={currentUser.fullName} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-blue-600 text-white font-bold flex items-center justify-center text-xs">
+                      {currentUser.fullName?.charAt(0) || "U"}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="w-8 h-8 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-rose-600 hover:text-white text-slate-400 border border-black/10 dark:border-white/15 flex items-center justify-center transition-all cursor-pointer shrink-0 active:scale-95 shadow-xs"
+                  title="Đăng xuất"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              /* Expanded Full Profile & Theme Picker */
+              <div className={`p-2.5 rounded-2xl border ${currentSidebarTheme.profileCardBg} ${currentSidebarTheme.profileCardBorder} shadow-sm backdrop-blur-xs`}>
+                {/* Dãy nút màu tròn */}
+                <div className="flex items-center justify-between gap-1 pb-2 mb-2 border-b border-black/10 dark:border-white/10">
+                  {SIDEBAR_THEMES.map((theme) => {
+                    const isSelected = theme.id === currentSidebarTheme.id;
+                    return (
+                      <button
+                        key={theme.id}
+                        type="button"
+                        onClick={() => handleSelectSidebarTheme(theme.id)}
+                        className={`w-4 h-4 rounded-full transition-all cursor-pointer shrink-0 ${theme.dotBorder || ""} ${
+                          isSelected 
+                            ? "scale-125 ring-2 ring-blue-600 ring-offset-2 ring-offset-white shadow-md" 
+                            : "hover:scale-115 opacity-85 hover:opacity-100"
+                        }`}
+                        style={{ backgroundColor: theme.dotBg }}
+                        title={theme.name}
+                      />
+                    );
+                  })}
+                </div>
+
+                {/* Thông tin User & Nút Logout */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-7 h-7 rounded-full overflow-hidden border border-white/20 bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      {currentUser.avatar ? (
+                        <img src={currentUser.avatar} alt={currentUser.fullName} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-xs font-bold">{currentUser.fullName?.charAt(0) || "U"}</span>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className={`text-xs font-black truncate leading-tight ${currentSidebarTheme.profileTextColor}`}>
+                        <T>{currentUser.fullName}</T>
+                      </div>
+                      <div className={`text-[9.5px] font-bold uppercase tracking-wider truncate mt-0.5 ${currentSidebarTheme.profileSubTextColor}`}>
+                        <T>{currentUser.role}</T>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={onLogout}
+                    className="w-7 h-7 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-rose-600/20 text-slate-400 hover:text-rose-500 border border-black/10 dark:border-white/15 flex items-center justify-center transition-all cursor-pointer shrink-0 active:scale-95"
+                    title="Đăng xuất"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </nav>
 
         {/* Dynamic workspace container */}
-        <main className="flex-1 p-6 overflow-y-auto bg-[#F7F9FC]">
+        <main className="flex-1 p-6 overflow-y-auto bg-[#F7F9FC] h-full">
           {/* TAB 1: PHÊ DUYỆT (Personnel management) */}
           {activeTab === "PHÊ_DUYỆT" && (
             <div className="space-y-6">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                  <h2 className="text-lg font-bold text-slate-850 flex items-center gap-2">
-                    <UserCheck className="w-5 h-5 text-amber-500" />
-                    <T>Phê duyệt hoạt động Nhân viên</T>
-                  </h2>
-                  <T className="text-xs text-slate-500 mt-1 block">Quản lý duyệt cấp phép truy cập, chỉnh sửa phân quyền và kích hoạt tài khoản của nhân viên các xưởng.</T>
+              {/* Header Banner - White, bright & elegant style matching TIẾN TRÌNH THỬ NGHIỆM */}
+              <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-xs border border-slate-200/80 flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-500 text-white flex items-center justify-center shadow-md shadow-amber-500/20 shrink-0">
+                    <UserCheck className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+                      <T>PHÊ DUYỆT HOẠT ĐỘNG NHÂN VIÊN</T>
+                    </h1>
+                    <p className="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">
+                      <T>Quản lý duyệt cấp phép truy cập, chỉnh sửa phân quyền và kích hoạt tài khoản của nhân viên các xưởng.</T>
+                    </p>
+                  </div>
                 </div>
 
-                <div translate="no" className="notranslate shrink-0 self-start md:self-center">
-                  <button
-                    onClick={async () => {
-                      if (onForceSyncUsers) {
-                        try {
-                          setForceSyncUsersState("syncing");
-                          await onForceSyncUsers();
-                          setForceSyncUsersState("success");
-                          setTimeout(() => setForceSyncUsersState("idle"), 3000);
-                        } catch (err) {
-                          console.error(err);
-                          setForceSyncUsersState("error");
-                          setTimeout(() => setForceSyncUsersState("idle"), 3000);
+                {isSuperAdmin && (
+                  <div translate="no" className="notranslate flex items-center gap-2.5 ml-auto flex-wrap">
+                    <button
+                      onClick={async () => {
+                        if (onForceSyncUsers) {
+                          try {
+                            setForceSyncUsersState("syncing");
+                            await onForceSyncUsers();
+                            setForceSyncUsersState("success");
+                            setTimeout(() => setForceSyncUsersState("idle"), 3000);
+                          } catch (err) {
+                            console.error(err);
+                            setForceSyncUsersState("error");
+                            setTimeout(() => setForceSyncUsersState("idle"), 3000);
+                          }
                         }
-                      }
-                    }}
-                    disabled={forceSyncUsersState === "syncing" || offlineMode}
-                    className={`flex items-center gap-2 px-4 py-2.5 text-xs font-black rounded-xl shadow-md border transition-all cursor-pointer select-none uppercase tracking-wide shrink-0 ${
-                      forceSyncUsersState === "syncing"
-                        ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
-                        : forceSyncUsersState === "success"
-                        ? "bg-emerald-600 border-emerald-700 text-white hover:bg-emerald-700"
-                        : forceSyncUsersState === "error"
-                        ? "bg-rose-600 border-rose-700 text-white hover:bg-rose-700"
-                        : "bg-purple-600 hover:bg-purple-700 text-white border-purple-700 hover:shadow-lg transform active:scale-95"
-                    }`}
-                  >
-                    {forceSyncUsersState === "syncing" ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
-                        <span translate="no" className="notranslate">Đang đồng bộ phong tỏa...</span>
-                      </>
-                    ) : forceSyncUsersState === "success" ? (
-                      <>
-                        <CheckCircle className="w-4 h-4 text-white shrink-0" />
-                        <span translate="no" className="notranslate">Đồng bộ Đám mây OK</span>
-                      </>
-                    ) : forceSyncUsersState === "error" ? (
-                      <>
-                        <AlertTriangle className="w-4 h-4 text-white shrink-0" />
-                        <span translate="no" className="notranslate">Lỗi đồng bộ đám mây</span>
-                      </>
-                    ) : (
-                      <>
-                        <CloudLightning className="w-4 h-4 text-white shrink-0" />
-                        <span translate="no" className="notranslate">Lưu cưỡng bức lên Đám mây</span>
-                      </>
-                    )}
-                  </button>
-                </div>
+                      }}
+                      disabled={forceSyncUsersState === "syncing" || offlineMode}
+                      className={`flex items-center gap-2 px-3.5 py-2 text-xs font-black rounded-xl shadow-xs border transition-all cursor-pointer select-none uppercase tracking-wide shrink-0 ${
+                        forceSyncUsersState === "syncing"
+                          ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
+                          : forceSyncUsersState === "success"
+                          ? "bg-emerald-600 border-emerald-700 text-white hover:bg-emerald-700 shadow-emerald-500/20"
+                          : forceSyncUsersState === "error"
+                          ? "bg-rose-600 border-rose-700 text-white hover:bg-rose-700"
+                          : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-blue-700 shadow-blue-500/20 transform active:scale-95"
+                      }`}
+                    >
+                      {forceSyncUsersState === "syncing" ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
+                          <span translate="no" className="notranslate">Đang đồng bộ phong tỏa...</span>
+                        </>
+                      ) : forceSyncUsersState === "success" ? (
+                        <>
+                          <CheckCircle className="w-3.5 h-3.5 text-white shrink-0" />
+                          <span translate="no" className="notranslate">Đồng bộ Đám mây OK</span>
+                        </>
+                      ) : forceSyncUsersState === "error" ? (
+                        <>
+                          <AlertTriangle className="w-3.5 h-3.5 text-white shrink-0" />
+                          <span translate="no" className="notranslate">Lỗi đồng bộ đám mây</span>
+                        </>
+                      ) : (
+                        <>
+                          <CloudLightning className="w-3.5 h-3.5 text-white shrink-0" />
+                          <span translate="no" className="notranslate">Lưu cưỡng bức lên Đám mây</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
@@ -3181,97 +4911,103 @@ export default function DashboardDesktop({
                         <T className="notranslate">DANH SÁCH CBNV ĐĂNG KÝ HỆ THỐNG</T>
                       </h3>
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        <T>Với tư cách Admin tối cao, bạn có thể phê duyệt quyền vào sảnh học tập cho CBNV quốc gia.</T>
+                        <T>
+                          {isSuperAdmin
+                            ? "Với tư cách Admin tối cao, bạn có thể phê duyệt quyền vào sảnh học tập cho CBNV quốc gia."
+                            : "Danh sách nhân sự thuộc phạm vi chi nhánh của bạn để quản lý và phê duyệt quyền truy cập."}
+                        </T>
                       </p>
                     </div>
 
-                    {/* Right side controls matching screenshot: MOBILE, XUẤT EXCEL, NHẬP EXCEL, REFRESH */}
-                    <div className="flex items-center gap-2 self-stretch lg:self-auto justify-end flex-wrap">
-                      <button
-                        onClick={onToggleMobilePreview}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-[11px] uppercase tracking-wider rounded-lg shadow-sm transition-all border-none cursor-pointer select-none"
-                        title="Xem chế độ Mobile Live"
-                      >
-                        <Smartphone className="w-3.5 h-3.5 text-white" />
-                        <T>MOBILE</T>
-                      </button>
+                    {/* Right side controls matching screenshot: MOBILE, XUẤT EXCEL, NHẬP EXCEL, REFRESH (Chỉ Admin mới thấy) */}
+                    {isSuperAdmin && (
+                      <div className="flex items-center gap-2 self-stretch lg:self-auto justify-end flex-wrap">
+                        <button
+                          onClick={onToggleMobilePreview}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-[11px] uppercase tracking-wider rounded-lg shadow-sm transition-all border-none cursor-pointer select-none"
+                          title="Xem chế độ Mobile Live"
+                        >
+                          <Smartphone className="w-3.5 h-3.5 text-white" />
+                          <T>MOBILE</T>
+                        </button>
 
-                      <button
-                        onClick={() => {
-                          const exportUsers = [...users];
-                          const headers = [
-                            "Mã nhân sự",
-                            "Họ tên",
-                            "Số điện thoại",
-                            "Chức vụ",
-                            "Chi nhánh",
-                            "Bộ phận",
-                            "Vai trò",
-                            "Trạng thái"
-                          ];
-                          const rows = exportUsers.map(u => [
-                            u.id,
-                            u.fullName,
-                            u.phone,
-                            u.position || "Nhân Viên",
-                            u.branch,
-                            u.department,
-                            u.role,
-                            u.status
-                          ]);
-                          const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))].join("\n");
-                          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                          const url = URL.createObjectURL(blob);
-                          const link = document.createElement("a");
-                          link.setAttribute("href", url);
-                          link.setAttribute("download", `DANH_SACH_CBNV_${new Date().toLocaleDateString('vi-VN').replace(/\//g, '-')}.csv`);
-                          document.body.appendChild(link);
-                          link.click();
-                          document.body.removeChild(link);
-                          if (onShowToast) {
-                            onShowToast("Đã xuất dữ liệu CBNV ra file CSV thành công!", "success");
-                          }
-                        }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 border border-emerald-600 text-emerald-600 hover:bg-emerald-50 active:scale-95 font-extrabold text-[11px] uppercase tracking-wider rounded-lg transition-all cursor-pointer bg-white"
-                        title="Xuất file Excel/CSV"
-                      >
-                        <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                        <T>XUẤT EXCEL</T>
-                      </button>
-
-                      <button
-                        onClick={() => setShowImportModal(true)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 border border-blue-600 text-blue-600 hover:bg-blue-50 active:scale-95 font-extrabold text-[11px] uppercase tracking-wider rounded-lg transition-all cursor-pointer bg-white"
-                        title="Nhập file Excel/CSV"
-                      >
-                        <Upload className="w-3.5 h-3.5 text-blue-600" />
-                        <T>NHẬP EXCEL</T>
-                      </button>
-
-                      <button
-                        onClick={async () => {
-                          if (onForceSyncUsers) {
-                            try {
-                              setForceSyncUsersState("syncing");
-                              await onForceSyncUsers();
-                              setForceSyncUsersState("success");
-                              setTimeout(() => setForceSyncUsersState("idle"), 3000);
-                              if (onShowToast) onShowToast("Đồng bộ danh sách nhân sự thành công!", "success");
-                            } catch (err) {
-                              console.error(err);
-                              setForceSyncUsersState("error");
-                              setTimeout(() => setForceSyncUsersState("idle"), 3000);
-                              if (onShowToast) onShowToast("Lỗi đồng bộ danh sách!", "error");
+                        <button
+                          onClick={() => {
+                            const exportUsers = [...scopedUsers];
+                            const headers = [
+                              "Mã nhân sự",
+                              "Họ tên",
+                              "Số điện thoại",
+                              "Chức vụ",
+                              "Chi nhánh",
+                              "Bộ phận",
+                              "Vai trò",
+                              "Trạng thái"
+                            ];
+                            const rows = exportUsers.map(u => [
+                              u.id,
+                              u.fullName,
+                              u.phone,
+                              u.position || "Nhân Viên",
+                              u.branch,
+                              u.department,
+                              u.role,
+                              u.status
+                            ]);
+                            const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))].join("\n");
+                            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                            const url = URL.createObjectURL(blob);
+                            const link = document.createElement("a");
+                            link.setAttribute("href", url);
+                            link.setAttribute("download", `DANH_SACH_CBNV_${new Date().toLocaleDateString('vi-VN').replace(/\//g, '-')}.csv`);
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            if (onShowToast) {
+                              onShowToast("Đã xuất dữ liệu CBNV ra file CSV thành công!", "success");
                             }
-                          }
-                        }}
-                        disabled={forceSyncUsersState === "syncing" || offlineMode}
-                        className="p-1.5 border border-slate-200 hover:bg-slate-100 active:scale-95 text-slate-600 rounded-lg transition-all cursor-pointer bg-white flex items-center justify-center disabled:opacity-50"
-                        title="Đồng bộ / Làm mới"
-                      >
-                        <RefreshCw className={`w-3.5 h-3.5 ${forceSyncUsersState === "syncing" ? "animate-spin" : ""}`} />
-                      </button>
-                    </div>
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 border border-emerald-600 text-emerald-600 hover:bg-emerald-50 active:scale-95 font-extrabold text-[11px] uppercase tracking-wider rounded-lg transition-all cursor-pointer bg-white"
+                          title="Xuất file Excel/CSV"
+                        >
+                          <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                          <T>XUẤT EXCEL</T>
+                        </button>
+
+                        <button
+                          onClick={() => setShowImportModal(true)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 border border-blue-600 text-blue-600 hover:bg-blue-50 active:scale-95 font-extrabold text-[11px] uppercase tracking-wider rounded-lg transition-all cursor-pointer bg-white"
+                          title="Nhập file Excel/CSV"
+                        >
+                          <Upload className="w-3.5 h-3.5 text-blue-600" />
+                          <T>NHẬP EXCEL</T>
+                        </button>
+
+                        <button
+                          onClick={async () => {
+                            if (onForceSyncUsers) {
+                              try {
+                                setForceSyncUsersState("syncing");
+                                await onForceSyncUsers();
+                                setForceSyncUsersState("success");
+                                setTimeout(() => setForceSyncUsersState("idle"), 3000);
+                                if (onShowToast) onShowToast("Đồng bộ danh sách nhân sự thành công!", "success");
+                              } catch (err) {
+                                console.error(err);
+                                setForceSyncUsersState("error");
+                                setTimeout(() => setForceSyncUsersState("idle"), 3000);
+                                if (onShowToast) onShowToast("Lỗi đồng bộ danh sách!", "error");
+                              }
+                            }
+                          }}
+                          disabled={forceSyncUsersState === "syncing" || offlineMode}
+                          className="p-1.5 border border-slate-200 hover:bg-slate-100 active:scale-95 text-slate-600 rounded-lg transition-all cursor-pointer bg-white flex items-center justify-center disabled:opacity-50"
+                          title="Đồng bộ / Làm mới"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${forceSyncUsersState === "syncing" ? "animate-spin" : ""}`} />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Filter Row exactly matching screenshot */}
@@ -3338,7 +5074,7 @@ export default function DashboardDesktop({
                         style={{ backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236B7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E")`, backgroundPosition: 'right 0.5rem center', backgroundSize: '1.25rem', backgroundRepeat: 'no-repeat', paddingRight: '1.75rem' }}
                       >
                         <option value="all">Mọi chi nhánh</option>
-                        {Array.from(new Set(users.map(u => u.branch).filter(Boolean))).map((br) => (
+                        {Array.from(new Set(scopedUsers.map(u => u.branch).filter(Boolean))).map((br) => (
                           <option key={br} value={br}>{getFormattedUserBranch(br)}</option>
                         ))}
                       </select>
@@ -3353,7 +5089,7 @@ export default function DashboardDesktop({
                         style={{ backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236B7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E")`, backgroundPosition: 'right 0.5rem center', backgroundSize: '1.25rem', backgroundRepeat: 'no-repeat', paddingRight: '1.75rem' }}
                       >
                         <option value="all">Mọi bộ phận</option>
-                        {Array.from(new Set(users.map(u => u.department).filter(Boolean))).map((dept) => (
+                        {Array.from(new Set(scopedUsers.map(u => u.department).filter(Boolean))).map((dept) => (
                           <option key={dept} value={dept}>{dept}</option>
                         ))}
                       </select>
@@ -3374,7 +5110,7 @@ export default function DashboardDesktop({
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-700">
                       {(() => {
-                        let filteredUsers = [...users];
+                        let filteredUsers = [...scopedUsers];
                         // If current user is REVIEWER (approver/Trưởng nhóm), only show users in their branch
                         if (currentUser.role === UserRole.REVIEWER) {
                           filteredUsers = filteredUsers.filter((u) => u.branch === currentUser.branch);
@@ -4134,20 +5870,23 @@ export default function DashboardDesktop({
           {/* TAB 2: MÃ HÓA (Encoding structural registries) */}
           {activeTab === "MÃ_HÓA" && (
             <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                  <h2 className="text-lg font-bold text-slate-850 flex items-center gap-2">
-                    <Sliders className="w-5 h-5 text-purple-500" />
-                    <span translate="no" className="notranslate">Khai báo và Mã hóa Dữ liệu Đồng bộ</span>
-                  </h2>
-                  <div className="mt-2 bg-blue-50 border border-blue-100 p-3 rounded-lg text-xs text-blue-800 leading-relaxed font-medium">
-                    <span translate="no" className="notranslate">
-                      {"Cấu trúc danh mục gồm 3 Cấp (Cột 1: Công ty -> Cột 2: Chi nhánh/VPĐD -> Cột 3: Bộ phận/Đơn vị) đã được cập nhật hoàn chỉnh, đồng bộ trực tiếp lên Cloud Firestore (config/company_mappings) và bộ nhớ đệm localStorage của trình duyệt:"}
-                    </span>
+              {/* Header Banner - White, bright & elegant style */}
+              <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-xs border border-slate-200/80 flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center shadow-md shadow-purple-500/20 shrink-0">
+                    <Sliders className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+                      <T><span translate="no" className="notranslate">KHAI BÁO VÀ MÃ HÓA DỮ LIỆU ĐỒNG BỘ</span></T>
+                    </h1>
+                    <p className="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">
+                      <T><span translate="no" className="notranslate">Cấu trúc danh mục gồm 3 Cấp (Công ty → Chi nhánh/VPĐD → Bộ phận/Đơn vị) đồng bộ trực tiếp lên Cloud Firestore và bộ nhớ đệm.</span></T>
+                    </p>
                   </div>
                 </div>
 
-                <div translate="no" className="notranslate shrink-0 self-start sm:self-center">
+                <div translate="no" className="notranslate flex items-center gap-2.5 ml-auto flex-wrap">
                   <button
                     onClick={async () => {
                       if (onForceSyncMetadata) {
@@ -4164,34 +5903,34 @@ export default function DashboardDesktop({
                       }
                     }}
                     disabled={forceSyncState === "syncing" || offlineMode}
-                    className={`flex items-center gap-2 px-4 py-2.5 text-xs font-black rounded-xl shadow-md border transition-all cursor-pointer select-none uppercase tracking-wide shrink-0 ${
+                    className={`flex items-center gap-2 px-3.5 py-2 text-xs font-black rounded-xl shadow-xs border transition-all cursor-pointer select-none uppercase tracking-wide shrink-0 ${
                       forceSyncState === "syncing"
                         ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
                         : forceSyncState === "success"
-                        ? "bg-emerald-600 border-emerald-700 text-white hover:bg-emerald-700"
+                        ? "bg-emerald-600 border-emerald-700 text-white hover:bg-emerald-700 shadow-emerald-500/20"
                         : forceSyncState === "error"
                         ? "bg-rose-600 border-rose-700 text-white hover:bg-rose-700"
-                        : "bg-purple-600 hover:bg-purple-700 text-white border-purple-700 hover:shadow-lg transform active:scale-95"
+                        : "bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white border-purple-700 shadow-purple-500/20 transform active:scale-95"
                     }`}
                   >
                     {forceSyncState === "syncing" ? (
                       <>
-                        <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
                         <span translate="no" className="notranslate">Đang đồng bộ phong tỏa...</span>
                       </>
                     ) : forceSyncState === "success" ? (
                       <>
-                        <CheckCircle className="w-4 h-4 text-white shrink-0" />
+                        <CheckCircle className="w-3.5 h-3.5 text-white shrink-0" />
                         <span translate="no" className="notranslate">Đồng bộ Đám mây OK</span>
                       </>
                     ) : forceSyncState === "error" ? (
                       <>
-                        <AlertTriangle className="w-4 h-4 text-white shrink-0" />
+                        <AlertTriangle className="w-3.5 h-3.5 text-white shrink-0" />
                         <span translate="no" className="notranslate">Lỗi đồng bộ đám mây</span>
                       </>
                     ) : (
                       <>
-                        <CloudLightning className="w-4 h-4 text-white shrink-0" />
+                        <CloudLightning className="w-3.5 h-3.5 text-white shrink-0" />
                         <span translate="no" className="notranslate">Lưu cưỡng bức lên Đám mây</span>
                       </>
                     )}
@@ -4721,18 +6460,36 @@ export default function DashboardDesktop({
                           <div key={d.id} className="p-3 bg-slate-50 hover:bg-slate-100 rounded-lg flex justify-between items-center border border-slate-200">
                             {isEditing ? (
                               <div className="flex flex-col gap-2 flex-1 w-full p-2 bg-white rounded border border-amber-200" onClick={(e) => e.stopPropagation()}>
-                                <div>
-                                  <label className="text-[10px] text-amber-700 font-bold block mb-1">TÊN BỘ PHẬN / ĐƠN VỊ</label>
-                                  <input
-                                    type="text"
-                                    value={editingDeptName}
-                                    onChange={(e) => setEditingDeptName(e.target.value)}
-                                    className="bg-slate-50 border border-slate-200 rounded px-2.5 py-1 text-xs text-slate-800 w-full focus:outline-none focus:ring-1 focus:ring-amber-500 font-normal"
-                                    autoFocus
-                                  />
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="text-[10px] text-amber-700 font-bold block mb-1">
+                                      <span translate="no" className="notranslate">TÊN BỘ PHẬN / ĐƠN VỊ</span>
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={editingDeptName}
+                                      onChange={(e) => setEditingDeptName(e.target.value)}
+                                      className="bg-slate-50 border border-slate-200 rounded px-2.5 py-1 text-xs text-slate-800 w-full focus:outline-none focus:ring-1 focus:ring-amber-500 font-normal"
+                                      autoFocus
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-[10px] text-amber-700 font-bold block mb-1">
+                                      <span translate="no" className="notranslate">TÊN VIẾT TẮT (VD: QLCL, R&D)</span>
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={editingDeptShortName}
+                                      onChange={(e) => setEditingDeptShortName(e.target.value)}
+                                      placeholder="VD: QLCL, R&D..."
+                                      className="bg-slate-50 border border-slate-200 rounded px-2.5 py-1 text-xs text-slate-800 w-full focus:outline-none focus:ring-1 focus:ring-amber-500 font-normal"
+                                    />
+                                  </div>
                                 </div>
                                 <div>
-                                  <label className="text-[10px] text-amber-700 font-bold block mb-1">MÃ ID BỘ PHẬN</label>
+                                  <label className="text-[10px] text-amber-700 font-bold block mb-1">
+                                    <span translate="no" className="notranslate">MÃ ID BỘ PHẬN</span>
+                                  </label>
                                   <input
                                     type="text"
                                     value={editingDeptIdInput}
@@ -4752,7 +6509,12 @@ export default function DashboardDesktop({
                                       }
                                       const finalId = editingDeptIdInput.trim() || d.id;
                                       if (onUpdateDepartment) {
-                                        onUpdateDepartment(d.id, { ...d, id: finalId, name: cleanName });
+                                        onUpdateDepartment(d.id, { 
+                                          ...d, 
+                                          id: finalId, 
+                                          name: cleanName,
+                                          shortName: editingDeptShortName.trim() || undefined
+                                        });
                                       }
                                       setEditingDeptId(null);
                                     }}
@@ -4796,11 +6558,18 @@ export default function DashboardDesktop({
                             ) : (
                               <>
                                 <div className="min-w-0 flex-1 pr-2">
-                                  <span translate="no" className="notranslate text-xs font-bold text-slate-800 block leading-normal break-words">
-                                    {deptNameFormat === 'with-branch-id' 
-                                      ? `${d.name.replace(/\s*\([^)]+\)$/, "").trim()} (${d.branchId})` 
-                                      : d.name}
-                                  </span>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span translate="no" className="notranslate text-xs font-bold text-slate-800 leading-normal break-words">
+                                      {deptNameFormat === 'with-branch-id' 
+                                        ? `${d.name.replace(/\s*\([^)]+\)$/, "").trim()} (${d.branchId})` 
+                                        : d.name}
+                                    </span>
+                                    {d.shortName && (
+                                      <span translate="no" className="notranslate text-[9px] bg-teal-50 text-teal-800 px-1.5 py-0.5 rounded border border-teal-200 font-bold">
+                                        {d.shortName}
+                                      </span>
+                                    )}
+                                  </div>
                                   <div className="flex items-center gap-1.5 mt-1 select-none flex-wrap">
                                     <span translate="no" className="notranslate text-[9px] text-slate-400 font-mono font-medium">ID: {d.id}</span>
                                     {d.name.startsWith(STANDARDIZED_QC_DEPT) && (
@@ -4822,6 +6591,7 @@ export default function DashboardDesktop({
                                       }
                                       setEditingDeptId(d.id);
                                       setEditingDeptName(displayName);
+                                      setEditingDeptShortName(d.shortName || "");
                                       setEditingDeptIdInput(d.id);
                                     }}
                                     className="text-slate-400 hover:text-amber-650 p-1.5 rounded hover:bg-slate-200/50 transition-colors cursor-pointer"
@@ -4849,13 +6619,21 @@ export default function DashboardDesktop({
                   </div>
 
                   <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <input
                         type="text"
                         placeholder="Nhập tên Bộ phận..."
                         value={newDeptName}
                         disabled={activeBranchId === ""}
                         onChange={(e) => setNewDeptName(e.target.value)}
+                        className="bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm disabled:opacity-55"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Tên viết tắt (VD: QLCL)..."
+                        value={newDeptShortName}
+                        disabled={activeBranchId === ""}
+                        onChange={(e) => setNewDeptShortName(e.target.value)}
                         className="bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm disabled:opacity-55"
                       />
                       <input
@@ -4874,9 +6652,11 @@ export default function DashboardDesktop({
                         onAddDepartment({
                           id: finalId,
                           name: newDeptName.trim(),
+                          shortName: newDeptShortName.trim() || undefined,
                           branchId: activeBranchId
                         });
                         setNewDeptName("");
+                        setNewDeptShortName("");
                         setNewDeptId("");
                       }}
                       disabled={activeBranchId === ""}
@@ -5319,36 +7099,45 @@ export default function DashboardDesktop({
 
             return (
               <div className="space-y-6 animate-fadeIn">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-                  <div>
-                    <h2 className="text-xl font-black text-slate-850 flex items-center gap-2">
-                      <BarChart4 className="w-6 h-6 text-emerald-600" />
-                      <T><span translate="no" className="notranslate">Trung tâm Thống kê & Phân tích 4M1E1I</span></T>
-                    </h2>
-                    <T className="text-xs text-slate-500 mt-1 block">
-                      <span translate="no" className="notranslate">Hệ thống vận hành thống kê thông minh: tích hợp trạng thái nhân sự, ma trận chất lượng, và cố vấn tự động.</span>
-                    </T>
+                {/* Header Banner - White, bright & elegant style */}
+                <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-xs border border-slate-200/80 flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-md shadow-emerald-500/20 shrink-0">
+                      <BarChart4 className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+                        <T><span translate="no" className="notranslate">TRUNG TÂM THỐNG KÊ & PHÂN TÍCH 4M1E1I</span></T>
+                      </h1>
+                      <p className="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">
+                        <T><span translate="no" className="notranslate">Hệ thống vận hành thống kê thông minh: tích hợp trạng thái nhân sự, ma trận chất lượng, và cố vấn tự động.</span></T>
+                      </p>
+                    </div>
                   </div>
+                </div>
 
-                  {/* Sub-tab Switcher matching the app styling */}
-                  <div className="flex bg-slate-100 p-1 rounded-xl text-xs font-black select-none border border-slate-200 shadow-sm shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setStatsSubTab("NHAN_SU")}
-                      className={`px-4 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 border-none outline-none ${
-                        statsSubTab === "NHAN_SU"
-                          ? "bg-blue-600 text-white shadow-md font-extrabold"
-                          : "text-slate-600 hover:text-slate-800 bg-transparent"
-                      }`}
-                    >
-                      <span>👥</span>
-                      <T><span translate="no" className="notranslate">THỐNG KÊ NHÂN SỰ ONLINE</span></T>
-                    </button>
+                {/* Row 2: Sub-tab Switcher Toolbar (Dedicated line) */}
+                <div className="pb-4 border-b border-slate-100">
+                  <div className="flex flex-wrap bg-slate-100 p-1 rounded-xl text-xs font-black select-none border border-slate-200 shadow-sm w-fit gap-1">
+                    {currentUser?.role === UserRole.ADMIN && (
+                      <button
+                        type="button"
+                        onClick={() => setStatsSubTab("NHAN_SU")}
+                        className={`px-4 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 border-none outline-none ${
+                          statsSubTab === "NHAN_SU"
+                            ? "bg-blue-600 text-white shadow-md font-extrabold"
+                            : "text-slate-600 hover:text-slate-800 bg-transparent"
+                        }`}
+                      >
+                        <span>👥</span>
+                        <T><span translate="no" className="notranslate">THỐNG KÊ NHÂN SỰ ONLINE</span></T>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setStatsSubTab("CHAT_LUONG")}
                       className={`px-4 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 border-none outline-none ${
-                        statsSubTab === "CHAT_LUONG"
+                        statsSubTab === "CHAT_LUONG" || (statsSubTab === "NHAN_SU" && currentUser?.role !== UserRole.ADMIN)
                           ? "bg-blue-600 text-white shadow-md font-extrabold"
                           : "text-slate-600 hover:text-slate-800 bg-transparent"
                       }`}
@@ -5383,20 +7172,22 @@ export default function DashboardDesktop({
                   </div>
                 </div>
 
-                {statsSubTab === "NHAN_SU" ? (
+                {statsSubTab === "NHAN_SU" && currentUser?.role === UserRole.ADMIN ? (
                   <StatisticsDashboard 
-                    users={users} 
-                    branches={branches} 
+                    users={scopedUsers} 
+                    branches={scopedBranches} 
                     departments={departments} 
-                    reports={reports}
+                    reports={scopedReports}
                     chats={chats}
-                    topics={topics}
+                    topics={scopedTopics}
                     topicReplies={replies}
                   />
                 ) : statsSubTab === "TIEN_DO" ? (
                   <ProgressTrackingDashboard
-                    reports={reports}
-                    users={users}
+                    reports={scopedReports}
+                    users={scopedUsers}
+                    branches={scopedBranches}
+                    departments={departments}
                     currentUser={currentUser}
                     onUpdateReport={onUpdateReport}
                     onAddBroadcast={onAddBroadcast}
@@ -5404,9 +7195,9 @@ export default function DashboardDesktop({
                   />
                 ) : statsSubTab === "HUY_HIEU" ? (
                   <BadgeStatisticsDashboard
-                    reports={reports}
-                    users={users}
-                    branches={branches}
+                    reports={scopedReports}
+                    users={scopedUsers}
+                    branches={scopedBranches}
                     departments={departments}
                     isMobile={false}
                   />
@@ -5431,7 +7222,7 @@ export default function DashboardDesktop({
                       >
                         <span translate="no" className="notranslate">Tất cả</span>
                       </button>
-                      {branches.filter(b => b.isScoring).map((b) => (
+                      {scopedBranches.filter(b => b.isScoring).map((b) => (
                         <button
                           key={b.id}
                           onClick={() => setStatsBranchFilter(b.name)}
@@ -5447,52 +7238,52 @@ export default function DashboardDesktop({
                     </div>
                   </div>
 
-                {/* Status board relative to selected filter */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm transition-all hover:shadow-md">
-                    <span className="text-[10px] text-slate-500 block font-bold uppercase tracking-widest">
+                {/* Status board relative to selected filter - Zoom-resilient responsive grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm transition-all hover:shadow-md min-w-0">
+                    <span className="text-[10px] text-slate-500 block font-bold uppercase tracking-widest truncate">
                       <T><span translate="no" className="notranslate">TỔNG BIẾN ĐỘNG PHÁT SINH</span></T>
                     </span>
-                    <span className="text-3xl font-black block text-blue-600 mt-1.5">
+                    <span className="text-2xl sm:text-3xl font-black block text-blue-600 mt-1.5">
                       {total}
                     </span>
-                    <span className="text-[9px] text-slate-400 block mt-1">
+                    <span className="text-[9px] text-slate-400 block mt-1 truncate">
                       <T><span translate="no" className="notranslate">Toàn bộ hồ sơ nhật ký dữ liệu</span></T>
                     </span>
                   </div>
 
-                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm transition-all hover:shadow-md text-red-600">
-                    <span className="text-[10px] text-red-500 block font-bold uppercase tracking-widest">
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm transition-all hover:shadow-md text-red-600 min-w-0">
+                    <span className="text-[10px] text-red-500 block font-bold uppercase tracking-widest truncate">
                       <T><span translate="no" className="notranslate">KHÔNG PHÙ HỢP KPH</span></T>
                     </span>
-                    <span className="text-3xl font-black block mt-1.5">
+                    <span className="text-2xl sm:text-3xl font-black block mt-1.5">
                       {kph}
                     </span>
-                    <span className="text-[9px] text-red-400 block mt-1">
+                    <span className="text-[9px] text-red-400 block mt-1 truncate">
                       <T><span translate="no" className="notranslate">Sự cố khuyết tật, bất thường</span></T>
                     </span>
                   </div>
 
-                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm transition-all hover:shadow-md text-emerald-600">
-                    <span className="text-[10px] text-emerald-600 block font-bold uppercase tracking-widest">
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm transition-all hover:shadow-md text-emerald-600 min-w-0">
+                    <span className="text-[10px] text-emerald-600 block font-bold uppercase tracking-widest truncate">
                       <T><span translate="no" className="notranslate">ĐIỂM SÁNG CHẤT LƯỢNG (DSA)</span></T>
                     </span>
-                    <span className="text-3xl font-black block mt-1.5">
+                    <span className="text-2xl sm:text-3xl font-black block mt-1.5">
                       {dsa}
                     </span>
-                    <span className="text-[9px] text-emerald-400 block mt-1">
+                    <span className="text-[9px] text-emerald-400 block mt-1 truncate">
                       <T><span translate="no" className="notranslate">Sáng kiến cải tiến thực tiễn tốt</span></T>
                     </span>
                   </div>
 
-                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm transition-all hover:shadow-md text-indigo-650">
-                    <span className="text-[10px] text-indigo-600 block font-bold uppercase tracking-widest">
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm transition-all hover:shadow-md text-indigo-650 min-w-0">
+                    <span className="text-[10px] text-indigo-600 block font-bold uppercase tracking-widest truncate">
                       <T><span translate="no" className="notranslate">CHỈ SỐ AN TOÀN VẬN HÀNH</span></T>
                     </span>
-                    <span className="text-3xl font-black block text-indigo-650 mt-1.5">
+                    <span className="text-2xl sm:text-3xl font-black block text-indigo-650 mt-1.5">
                       {safeRate}%
                     </span>
-                    <span className="text-[9px] text-indigo-400 block mt-1">
+                    <span className="text-[9px] text-indigo-400 block mt-1 truncate">
                       <T><span translate="no" className="notranslate">Tỉ số không sai hỏng mục tiêu</span></T>
                     </span>
                   </div>
@@ -5673,15 +7464,20 @@ export default function DashboardDesktop({
           {/* TAB: ĐỀ XUẤT CHỜ DUYỆT */}
           {activeTab === "ĐỀ_XUẤT" && (
             <div className="space-y-6">
-              <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
-                <div>
-                  <h2 className="text-lg font-bold text-slate-850 flex items-center gap-2">
-                    <CheckSquare className="w-5 h-5 text-sky-500" />
-                    <T><span translate="no" className="notranslate">Hệ thống Đề xuất chờ phê duyệt</span></T>
-                  </h2>
-                  <T className="text-xs text-slate-500 mt-1 block">
-                    <span translate="no" className="notranslate">Xem xét, kiểm duyệt và phê duyệt các tin bài đề xuất của nhân viên trước khi phát hành lên Bản tin chính (Home).</span>
-                  </T>
+              {/* Header Banner - White, bright & elegant style */}
+              <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-xs border border-slate-200/80 flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-sky-500 to-blue-600 text-white flex items-center justify-center shadow-md shadow-sky-500/20 shrink-0">
+                    <CheckSquare className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+                      <T><span translate="no" className="notranslate">HỆ THỐNG ĐỀ XUẤT CHỜ PHÊ DUYỆT</span></T>
+                    </h1>
+                    <p className="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">
+                      <T><span translate="no" className="notranslate">Xem xét, kiểm duyệt và phê duyệt các tin bài đề xuất của nhân viên trước khi phát hành lên Bản tin chính (Home).</span></T>
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -5709,22 +7505,131 @@ export default function DashboardDesktop({
                   </div>
 
                   {/* Factory Filter */}
-                  <div className="space-y-1">
+                  <div className="space-y-1 relative select-none" ref={proposalFactoryDropdownRef}>
                     <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block">
                       <T><span translate="no" className="notranslate">Nhà máy / Xưởng:</span></T>
                     </label>
-                    <select
-                      value={proposalFactory}
-                      onChange={(e) => setProposalFactory(e.target.value)}
-                      className="w-full bg-white border border-slate-250 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 shadow-3xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    <button
+                      type="button"
+                      onClick={() => setIsProposalFactoryDropdownOpen(!isProposalFactoryDropdownOpen)}
+                      className={`w-full bg-white border rounded-lg px-3 py-2 text-xs font-bold transition-all shadow-3xs focus:outline-none flex items-center justify-between gap-1.5 cursor-pointer ${
+                        proposalFactories.length > 0
+                          ? "border-sky-500 ring-1 ring-sky-300 bg-sky-50/50 text-sky-900"
+                          : "border-slate-250 text-slate-700 hover:border-slate-350"
+                      }`}
                     >
-                      <option value="Tất cả" translate="no" className="notranslate">Tất cả chi nhánh</option>
-                      {branches.filter((b) => b.isScoring).map((b) => (
-                        <option key={b.id} value={b.name} translate="no" className="notranslate">
-                          {getFactoryDisplayName(b.name)}
-                        </option>
-                      ))}
-                    </select>
+                      <div className="flex items-center gap-1.5 min-w-0 truncate">
+                        <Building className={`w-3.5 h-3.5 shrink-0 ${proposalFactories.length > 0 ? "text-sky-600" : "text-slate-400"}`} />
+                        <span className="truncate text-left font-semibold">
+                          <T>
+                            <span translate="no" className="notranslate">
+                              {proposalFactories.length === 0
+                                ? "Tất cả chi nhánh"
+                                : proposalFactories.length === 1
+                                ? getFactoryDisplayName(proposalFactories[0])
+                                : `${proposalFactories.length} chi nhánh đã chọn`}
+                            </span>
+                          </T>
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {proposalFactories.length > 0 && (
+                          <span
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setProposalFactories([]);
+                            }}
+                            title="Xóa chọn chi nhánh"
+                            className="w-4 h-4 rounded-full bg-slate-200 hover:bg-rose-200 hover:text-rose-700 text-slate-600 flex items-center justify-center text-[10px] font-bold transition-colors cursor-pointer"
+                          >
+                            ✕
+                          </span>
+                        )}
+                        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${isProposalFactoryDropdownOpen ? "rotate-180 text-sky-600" : ""}`} />
+                      </div>
+                    </button>
+
+                    {isProposalFactoryDropdownOpen && (
+                      <div className="absolute left-0 top-full mt-1.5 w-72 bg-white rounded-xl shadow-xl border border-slate-200 z-50 p-2 space-y-1.5 text-xs animate-in fade-in zoom-in-95 duration-100">
+                        <div className="flex items-center justify-between px-1.5 py-1 border-b border-slate-100 text-[10px] font-extrabold uppercase text-slate-500">
+                          <T><span translate="no" className="notranslate">Lọc chi nhánh:</span></T>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const all = scopedBranches.filter((b) => b.isScoring).map((b) => b.name);
+                                setProposalFactories(all);
+                              }}
+                              className="text-sky-600 hover:text-sky-800 hover:underline cursor-pointer font-bold lowercase first-letter:uppercase"
+                            >
+                              <T><span translate="no" className="notranslate">Tất cả</span></T>
+                            </button>
+                            <span className="text-slate-300">|</span>
+                            <button
+                              type="button"
+                              onClick={() => setProposalFactories([])}
+                              className="text-rose-600 hover:text-rose-800 hover:underline cursor-pointer font-bold lowercase first-letter:uppercase"
+                            >
+                              <T><span translate="no" className="notranslate">Bỏ chọn</span></T>
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="max-h-56 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                          {scopedBranches.filter((b) => b.isScoring).map((b) => {
+                            const isSelected = proposalFactories.some((f) => f === b.name || f === b.id || isSameBranchOrFactory(b.name, f));
+                            return (
+                              <div
+                                key={b.id}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setProposalFactories((prev) => {
+                                    const exists = prev.some((f) => f === b.name || f === b.id || isSameBranchOrFactory(b.name, f));
+                                    if (exists) {
+                                      return prev.filter((f) => f !== b.name && f !== b.id && !isSameBranchOrFactory(b.name, f));
+                                    } else {
+                                      return [...prev, b.name];
+                                    }
+                                  });
+                                }}
+                                className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors select-none ${
+                                  isSelected
+                                    ? "bg-sky-50 text-sky-950 font-bold border border-sky-200/80"
+                                    : "hover:bg-slate-50 text-slate-700 font-medium border border-transparent"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0 pointer-events-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    readOnly
+                                    className="rounded border-slate-300 text-sky-600 focus:ring-sky-500 pointer-events-none"
+                                  />
+                                  <span className="truncate">
+                                    <T><span translate="no" className="notranslate">{getFactoryDisplayName(b.name)}</span></T>
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500 px-1 font-medium">
+                          <span>
+                            <T><span translate="no" className="notranslate">Đang chọn:</span></T>{" "}
+                            <strong className="text-sky-700">{proposalFactories.length === 0 ? "Tất cả" : `${proposalFactories.length}/${scopedBranches.filter(b => b.isScoring).length}`}</strong>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setIsProposalFactoryDropdownOpen(false)}
+                            className="px-2 py-0.5 bg-slate-800 text-white rounded text-[10px] font-bold hover:bg-slate-700 cursor-pointer"
+                          >
+                            <T><span translate="no" className="notranslate">Đóng</span></T>
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Search input */}
@@ -5752,17 +7657,19 @@ export default function DashboardDesktop({
                   <table className="w-full border-collapse text-left border border-slate-200">
                     <thead>
                       <tr className="bg-slate-50 text-[10px] text-slate-505 font-extrabold uppercase tracking-wider">
-                        <th className="p-4 w-12 text-center border border-slate-200"><T><span translate="no" className="notranslate">STT</span></T></th>
-                        <th className="p-4 min-w-[180px] border border-slate-200"><T><span translate="no" className="notranslate">Thông tin ghi nhận</span></T></th>
-                        <th className="p-4 w-[28%] border border-slate-200"><T><span translate="no" className="notranslate">Nội dung đề xuất</span></T></th>
-                        <th className="p-4 text-center border border-slate-200"><T><span translate="no" className="notranslate">Hình ảnh</span></T></th>
-                        <th className="p-4 text-center border border-slate-200"><T><span translate="no" className="notranslate">Trạng thái</span></T></th>
-                        <th className="p-4 text-center border border-slate-200"><T><span translate="no" className="notranslate">Thao tác</span></T></th>
+                        <th className="py-3 px-2 w-12 min-w-[48px] max-w-[48px] text-center border border-slate-200"><T><span translate="no" className="notranslate">STT</span></T></th>
+                        <th className="py-3 px-3 w-[210px] min-w-[190px] max-w-[230px] border border-slate-200"><T><span translate="no" className="notranslate">Thông tin ghi nhận</span></T></th>
+                        <th className="py-3 px-4 min-w-[260px] border border-slate-200"><T><span translate="no" className="notranslate">Nội dung đề xuất</span></T></th>
+                        <th className="py-2 px-1 w-[116px] min-w-[116px] max-w-[116px] text-center border border-slate-200"><T><span translate="no" className="notranslate">Hình ảnh</span></T></th>
+                        <th className="py-3 px-2 w-[95px] min-w-[90px] max-w-[105px] text-center border border-slate-200 align-middle">
+                          <T><span translate="no" className="notranslate">Trạng thái</span></T>
+                        </th>
+                        <th className="py-3 px-3 w-[150px] min-w-[140px] max-w-[160px] text-center border border-slate-200"><T><span translate="no" className="notranslate">Thao tác</span></T></th>
                       </tr>
                     </thead>
                     <tbody className="text-xs font-medium text-slate-700">
                       {(() => {
-                        const filteredProposals = reports.filter((r) => {
+                        const filteredProposals = scopedReports.filter((r) => {
                           if (r.isDeleted) return false;
                           if (r.isApproved !== false) return false;
 
@@ -5779,11 +7686,14 @@ export default function DashboardDesktop({
                             r.content.toLowerCase().includes(s) ||
                             r.category.toLowerCase().includes(s);
 
-                          const matchesFactory = proposalFactory === "Tất cả" ? true : r.factory === proposalFactory;
+                          const matchesFactory =
+                            proposalFactories.length === 0
+                              ? true
+                              : proposalFactories.some((f) => matchFactory(r.factory, f) || r.factory === f);
                           const matchesCategory = proposalCategory === "Tất cả" ? true : r.category === proposalCategory;
 
                           return matchesSearch && matchesFactory && matchesCategory;
-                        });
+                        }).sort((a, b) => parseReportTimestamp(b.timestamp).getTime() - parseReportTimestamp(a.timestamp).getTime());
 
                         if (filteredProposals.length === 0) {
                           return (
@@ -5797,8 +7707,8 @@ export default function DashboardDesktop({
 
                         return filteredProposals.map((r, index) => (
                           <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
-                            <td className="p-4 text-center font-mono text-slate-400 border border-slate-200">{index + 1}</td>
-                            <td className="p-4 space-y-1.5 min-w-[180px] border border-slate-200">
+                            <td className="py-3 px-2 text-center font-mono text-slate-400 border border-slate-200 w-12 min-w-[48px] max-w-[48px]">{index + 1}</td>
+                            <td className="p-3 space-y-1.5 w-[210px] min-w-[190px] max-w-[230px] border border-slate-200">
                               <div className="text-[10.5px] text-slate-600 leading-snug">
                                 <span className="font-extrabold text-slate-700 block">{formatNameCapitalized(resolveUploaderInfo(users, r).fullName)}</span>
                                 <span className="text-[9.5px] text-slate-400 font-mono block"><span translate="no" className="notranslate">{r.uploaderPhone}</span></span>
@@ -5818,7 +7728,7 @@ export default function DashboardDesktop({
                                 </span>
                               </div>
                             </td>
-                            <td className="p-4 leading-relaxed text-slate-900 max-w-sm font-bold border border-slate-200">
+                            <td className="p-3 leading-relaxed text-slate-900 min-w-[260px] font-bold border border-slate-200">
                               <div className="line-clamp-5">
                                 <T><span translate="no" className="notranslate">{(r.content || "").toUpperCase()}</span></T>
                               </div>
@@ -5828,20 +7738,21 @@ export default function DashboardDesktop({
                                 </div>
                               )}
                             </td>
-                            <td className="p-4 text-center border border-slate-200">
+                            <td className="p-1 text-center border border-slate-200 w-[116px] min-w-[116px] max-w-[116px]">
                               <DesktopThumbnailSlider 
                                 imageUrls={r.imageUrls && r.imageUrls.length > 0 ? r.imageUrls : [r.imageUrl || getCategoryFallbackImage(r.category)]} 
                                 fallbackUrl={r.imageUrl || getCategoryFallbackImage(r.category)} 
                               />
                             </td>
-                            <td className="p-4 text-center select-none whitespace-nowrap border border-slate-200">
-                              <span className="bg-amber-100 text-amber-800 border border-amber-200 font-extrabold text-[10px] px-2.5 py-1 rounded tracking-wider animate-pulse inline-flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 block animate-ping" />
-                                <T><span translate="no" className="notranslate">Chờ duyệt</span></T>
-                              </span>
+                            <td className="py-2 px-2 text-center select-none border border-slate-200 w-[95px] min-w-[90px] max-w-[105px] align-middle">
+                              <div className="flex items-center justify-center mx-auto">
+                                <span className="bg-amber-100 text-amber-800 border border-amber-200 font-extrabold text-[9px] px-2 py-1 rounded uppercase tracking-wider whitespace-nowrap shadow-2xs">
+                                  <T><span translate="no" className="notranslate">Chờ duyệt</span></T>
+                                </span>
+                              </div>
                             </td>
-                            <td className="p-4 text-center whitespace-nowrap border border-slate-200">
-                              <div className="flex items-center justify-center gap-2">
+                            <td className="py-3 px-2 text-center whitespace-nowrap border border-slate-200 w-[140px] min-w-[130px] max-w-[150px]">
+                              <div className="flex flex-col items-center justify-center gap-1.5 w-full max-w-[115px] mx-auto">
                                 {/* Duyệt Đăng button */}
                                 <button
                                   type="button"
@@ -5866,7 +7777,7 @@ export default function DashboardDesktop({
                                       onShowToast("Đã phê duyệt và phát hành đề xuất lên Bản tin chính! 🎉", "success");
                                     }
                                   }}
-                                  className="px-2.5 py-1.5 bg-[#DEF7EC] hover:bg-emerald-100 border border-emerald-250 text-[#03543F] font-black rounded-lg cursor-pointer transition-all text-[10px] uppercase flex items-center gap-1 shadow-3xs"
+                                  className="w-full justify-center px-2.5 py-1.5 bg-[#DEF7EC] hover:bg-emerald-100 border border-emerald-250 text-[#03543F] font-black rounded-lg cursor-pointer transition-all text-[10px] uppercase flex items-center gap-1 shadow-3xs"
                                   title="Phê duyệt bài viết"
                                 >
                                   <CheckCircle className="w-3.5 h-3.5 text-[#03543F]" />
@@ -5880,7 +7791,7 @@ export default function DashboardDesktop({
                                     onDeleteReport(r.id, false);
                                     onShowToast("Đã từ chối đề xuất bài viết thành công! ♻️", "warning");
                                   }}
-                                  className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-black rounded-lg cursor-pointer transition-all text-[10px] uppercase flex items-center gap-1 shadow-3xs"
+                                  className="w-full justify-center px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-black rounded-lg cursor-pointer transition-all text-[10px] uppercase flex items-center gap-1 shadow-3xs"
                                   title="Từ chối đề xuất"
                                 >
                                   <FileX className="w-3.5 h-3.5 text-rose-700" />
@@ -5901,324 +7812,322 @@ export default function DashboardDesktop({
           {/* TAB 4: DỮ LIỆU (Database history & PDF exports) */}
           {activeTab === "DỮ_LIỆU" && (
             <div className="space-y-6">
-              <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
-                <div>
-                  <h2 className="text-lg font-bold text-slate-850 flex items-center gap-2">
-                    <Database className="w-5 h-5 text-blue-500" />
-                    <T><span translate="no" className="notranslate">Sổ nhật ký Biến động & Trực quan PDF</span></T>
-                  </h2>
-                  <T className="text-xs text-slate-500 mt-1 block"><span translate="no" className="notranslate">Khung rà soát dữ liệu sự cố toàn cục, xuất báo cáo ngày PDF tự động lưu trữ lên thư mục Drive.</span></T>
-
-                  {/* Desktop Active vs Trash logs toggles */}
-                  <div className="flex bg-slate-200/60 p-0.5 rounded-lg items-center mt-3 w-fit border border-slate-300/40 select-none">
-                    <button
-                      onClick={() => setShowTrashLogs(false)}
-                      className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-black border-none cursor-pointer transition-all ${
-                        !showTrashLogs
-                          ? "bg-white text-blue-700 shadow-sm"
-                          : "text-slate-600 hover:text-slate-800 bg-transparent"
-                      }`}
-                    >
-                      <FileText className="w-3.5 h-3.5" />
-                      <T><span translate="no" className="notranslate">NHẬT KÝ BIẾN ĐỘNG</span></T>
-                    </button>
-                    <button
-                      onClick={() => setShowTrashLogs(true)}
-                      className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-black border-none cursor-pointer transition-all relative ${
-                        showTrashLogs
-                          ? "bg-white text-rose-700 shadow-sm"
-                          : "text-slate-600 hover:text-rose-805 bg-transparent"
-                      }`}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <T><span translate="no" className="notranslate">THÙNG RÁC TẠM THỜI</span></T>
-                      {reports.filter((r) => r.isDeleted).length > 0 && (
-                        <span className="bg-rose-600 text-[9px] text-white font-black px-1.5 py-0.5 rounded-full select-none ml-1 animate-pulse">
-                          {reports.filter((r) => r.isDeleted).length}
-                        </span>
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/* PDF compilation controls */}
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap items-center gap-3 w-full xl:w-auto">
-                  <div className="select-none">
-                    <label className="text-[9px] text-slate-550 font-bold block uppercase mb-1"><T>Chọn Nhà máy xuất PDF:</T></label>
-                    <select
-                      value={selectedReportFactory}
-                      onChange={(e) => setSelectedReportFactory(e.target.value)}
-                      className="bg-slate-50 border border-slate-200 text-slate-800 text-xs rounded p-1.5 focus:outline-none w-36 select-none shadow-sm cursor-pointer"
-                    >
-                      <option value="Tất cả nhà máy">Tất cả nhà máy</option>
-                      {branches.filter((b) => b.isScoring).map((b) => (
-                        <option key={b.id} value={b.name}>{b.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="select-none">
-                    <label className="text-[9px] text-slate-550 font-bold block uppercase mb-1"><T>Ngày báo cáo:</T></label>
-                    <input
-                      type="text"
-                      value={selectedReportDate}
-                      onChange={(e) => setSelectedReportDate(e.target.value)}
-                      className="bg-slate-50 border border-slate-200 text-slate-800 text-xs rounded p-1.5 focus:outline-none w-28 text-center font-mono shadow-sm"
-                    />
-                  </div>
-
-                  <button
-                    onClick={handleExportPDF}
-                    className="self-end px-3.5 py-2 bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-800 hover:to-indigo-800 text-white rounded text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer ml-auto xl:ml-0"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <T>XUẤT REPORT NGAY & DRIVE</T>
-                  </button>
-                </div>
-              </div>
-
-              {/* QUẢN LÝ SAO LƯU & XUẤT DỮ LIỆU */}
-              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4 animate-fadeIn">
-                <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
-                  <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-                    <Database className="w-5 h-5" />
+              {/* Header Banner - White, bright & elegant style */}
+              <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-xs border border-slate-200/80 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-md shadow-blue-500/20 shrink-0">
+                    <Database className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-wide">
-                      <span translate="no" className="notranslate">QUẢN LÝ SAO LƯU & XUẤT DỮ LIỆU</span>
-                    </h3>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      <span translate="no" className="notranslate">Trích xuất báo cáo thay đổi 4M1E1I và bản tin phát sóng dưới dạng JSON hoặc Excel (CSV) để lưu trữ ngoại tuyến.</span>
+                    <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+                      <T><span translate="no" className="notranslate">SỔ NHẬT KÝ BIẾN ĐỘNG 4M1E1I</span></T>
+                    </h1>
+                    <p className="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">
+                      <T><span translate="no" className="notranslate">Khung rà soát, tra cứu và sao lưu dữ liệu biến động toàn cục của hệ thống.</span></T>
                     </p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* CỘT 1: BÁO CÁO BIẾN ĐỘNG 4M1E1I */}
-                  <div className="p-4 bg-slate-50/60 rounded-xl border border-slate-150 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
-                        <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
-                          <span translate="no" className="notranslate">Bản tin Biến động 4M1E1I</span>
-                        </h4>
-                      </div>
-                      <p className="text-[10px] text-slate-500 leading-relaxed mb-4">
-                        <span translate="no" className="notranslate">Xuất toàn bộ danh sách {reports.filter(r => !r.isDeleted).length} báo cáo 4M1E1I (bao gồm thông tin chi tiết người viết, phân loại, ghi chú và lịch sử chỉ đạo từ cấp quản lý).</span>
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-200/40">
-                      <button
-                        onClick={onExportBackup}
-                        className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 shadow-3xs cursor-pointer active:scale-95"
-                      >
-                        <Download className="w-3.5 h-3.5 text-blue-100" />
-                        <span translate="no" className="notranslate">Sao lưu toàn bộ (Kèm ảnh)</span>
-                      </button>
-
-                      <label className="px-3 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 shadow-3xs cursor-pointer active:scale-95">
-                        <Upload className="w-3.5 h-3.5 text-slate-500" />
-                        <span translate="no" className="notranslate">Khôi phục dữ liệu (Import)</span>
-                        <input
-                          type="file"
-                          accept=".json"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            const reader = new FileReader();
-                            reader.onload = async (event) => {
-                              const content = event.target?.result as string;
-                              if (onImportBackup) {
-                                await onImportBackup(content);
-                              }
-                            };
-                            reader.readAsText(file);
-                            e.target.value = "";
-                          }}
-                        />
-                      </label>
-
-                      <button
-                        onClick={() => {
-                          const headers = [
-                            "Mã báo cáo",
-                            "Thời gian",
-                            "Chi nhánh/Nhà máy",
-                            "Yếu tố 4M1E1I",
-                            "Nội dung ghi nhận",
-                            "Ghi chú bổ sung",
-                            "Phân loại",
-                            "Người báo cáo",
-                            "Số điện thoại",
-                            "Bộ phận",
-                            "Trạng thái duyệt",
-                            "Chỉ đạo từ cấp trên"
-                          ];
-
-                          const escapeCSV = (val: any) => {
-                            if (val === undefined || val === null) return "";
-                            let str = String(val);
-                            if (str.includes(",") || str.includes("\n") || str.includes('"') || str.includes(";")) {
-                              str = '"' + str.replace(/"/g, '""') + '"';
-                            }
-                            return str;
-                          };
-
-                          const rows = reports.filter(r => !r.isDeleted).map(r => {
-                            const directiveTexts = (r.directives || []).map(d => `[${d.author}]: ${d.text}`).join("; ");
-                            const userObj = users.find(u => u.id === r.uploaderId || u.phone === r.uploaderPhone || u.fullName === r.uploaderName);
-                            const resolvedDept = userObj ? userObj.department : (r.uploaderDepartment || "");
-                            const isApproved = r.isApproved !== false;
-                            return [
-                              r.reportCode || r.id,
-                              r.timestamp,
-                              r.factory,
-                              r.category,
-                              r.content,
-                              r.notes || "",
-                              r.reportType || (r.isAbnormal ? "KPH" : "NORMAL"),
-                              userObj ? userObj.fullName : r.uploaderName,
-                              r.uploaderPhone,
-                              resolvedDept,
-                              isApproved ? "Đã duyệt" : "Chờ duyệt",
-                              directiveTexts
-                            ];
-                          });
-
-                          const csvContent = "\uFEFF" + [headers.map(escapeCSV).join(","), ...rows.map(row => row.map(escapeCSV).join(","))].join("\n");
-                          const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-                          const url = URL.createObjectURL(blob);
-                          const link = document.createElement("a");
-                          link.href = url;
-                          const today = new Date();
-                          const dd = String(today.getDate()).padStart(2, '0');
-                          const mm = String(today.getMonth() + 1).padStart(2, '0');
-                          const yy = String(today.getFullYear()).slice(-2);
-                          const dateStr = `${dd}_${mm}_${yy}`;
-                          link.download = `Bantin_4M1E1I_${dateStr}.csv`;
-                          document.body.appendChild(link);
-                          link.click();
-                          document.body.removeChild(link);
-                          URL.revokeObjectURL(url);
-                          if (onShowToast) {
-                            onShowToast("Đã xuất bản tin 4M1E1I ra file Excel (CSV) thành công! 📊", "success");
-                          }
-                        }}
-                        className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 shadow-3xs cursor-pointer active:scale-95"
-                      >
-                        <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-100" />
-                        <span translate="no" className="notranslate">Xuất Excel (CSV)</span>
-                      </button>
-
-                      <button
-                        onClick={handleExportExcelWithImages}
-                        className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 shadow-3xs cursor-pointer active:scale-95"
-                      >
-                        <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-100" />
-                        <span translate="no" className="notranslate">Xuất Excel (.xlsx Kèm Ảnh)</span>
-                      </button>
-                    </div>
+                {/* Desktop Active vs Trash logs toggles (Chỉ Admin mới có quyền truy cập Thùng rác) */}
+                {isSuperAdmin && (
+                  <div className="flex bg-slate-100 p-1 rounded-xl items-center border border-slate-200 select-none shrink-0">
+                    <button
+                      onClick={() => setShowTrashLogs(false)}
+                      className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-black border-none cursor-pointer transition-all ${
+                        !showTrashLogs
+                          ? "bg-white text-blue-700 shadow-xs border border-slate-200/80"
+                          : "text-slate-600 hover:text-slate-800 bg-transparent"
+                      }`}
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      <T><span translate="no" className="notranslate">NHẬT KÝ</span></T>
+                    </button>
+                    <button
+                      onClick={() => setShowTrashLogs(true)}
+                      className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-black border-none cursor-pointer transition-all relative ${
+                        showTrashLogs
+                          ? "bg-white text-rose-700 shadow-xs border border-slate-200/80"
+                          : "text-slate-600 hover:text-rose-800 bg-transparent"
+                      }`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <T><span translate="no" className="notranslate">THÙNG RÁC</span></T>
+                      {scopedReports.filter((r) => r.isDeleted).length > 0 && (
+                        <span className="bg-rose-600 text-[9px] text-white font-black px-1.5 py-0.5 rounded-full select-none ml-1 animate-pulse">
+                          {scopedReports.filter((r) => r.isDeleted).length}
+                        </span>
+                      )}
+                    </button>
                   </div>
-
-                  {/* CỘT 2: BẢN TIN PHÁT SÓNG & TICKER */}
-                  <div className="p-4 bg-slate-50/60 rounded-xl border border-slate-150 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <Megaphone className="w-4 h-4 text-amber-600" />
-                        <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
-                          <span translate="no" className="notranslate">Bản tin Phát sóng & Ticker</span>
-                        </h4>
-                      </div>
-                      <p className="text-[10px] text-slate-500 leading-relaxed mb-4">
-                        <span translate="no" className="notranslate">Xuất toàn bộ danh sách {broadcasts.length} bản tin phát sóng, tin đỏ và thông báo khẩn từ quản trị viên gửi đến toàn hệ thống.</span>
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-200/40">
-                      <button
-                        onClick={() => {
-                          const jsonStr = JSON.stringify(broadcasts, null, 2);
-                          const blob = new Blob([jsonStr], { type: "application/json" });
-                          const url = URL.createObjectURL(blob);
-                          const link = document.createElement("a");
-                          link.href = url;
-                          const today = new Date();
-                          const dd = String(today.getDate()).padStart(2, '0');
-                          const mm = String(today.getMonth() + 1).padStart(2, '0');
-                          const yy = String(today.getFullYear()).slice(-2);
-                          const dateStr = `${dd}_${mm}_${yy}`;
-                          link.download = `Saoluu_Bantin_Phatsong_${dateStr}.json`;
-                          document.body.appendChild(link);
-                          link.click();
-                          document.body.removeChild(link);
-                          URL.revokeObjectURL(url);
-                          if (onShowToast) {
-                            onShowToast("Đã sao lưu bản tin phát sóng ra file JSON thành công! 💾", "success");
-                          }
-                        }}
-                        className="px-3 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 shadow-3xs cursor-pointer active:scale-95"
-                      >
-                        <Download className="w-3.5 h-3.5 text-slate-500" />
-                        <span translate="no" className="notranslate">Sao lưu JSON</span>
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          const headers = [
-                            "Mã ID",
-                            "Người phát sóng",
-                            "Phân loại tin",
-                            "Nội dung thông báo",
-                            "Thời gian gửi"
-                          ];
-
-                          const escapeCSV = (val: any) => {
-                            if (val === undefined || val === null) return "";
-                            let str = String(val);
-                            if (str.includes(",") || str.includes("\n") || str.includes('"') || str.includes(";")) {
-                              str = '"' + str.replace(/"/g, '""') + '"';
-                            }
-                            return str;
-                          };
-
-                          const rows = broadcasts.map(b => [
-                            b.id,
-                            b.sender,
-                            b.type,
-                            b.content,
-                            b.timestamp
-                          ]);
-
-                          const csvContent = "\uFEFF" + [headers.map(escapeCSV).join(","), ...rows.map(row => row.map(escapeCSV).join(","))].join("\n");
-                          const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-                          const url = URL.createObjectURL(blob);
-                          const link = document.createElement("a");
-                          link.href = url;
-                          const today = new Date();
-                          const dd = String(today.getDate()).padStart(2, '0');
-                          const mm = String(today.getMonth() + 1).padStart(2, '0');
-                          const yy = String(today.getFullYear()).slice(-2);
-                          const dateStr = `${dd}_${mm}_${yy}`;
-                          link.download = `Bantin_Phatsong_${dateStr}.csv`;
-                          document.body.appendChild(link);
-                          link.click();
-                          document.body.removeChild(link);
-                          URL.revokeObjectURL(url);
-                          if (onShowToast) {
-                            onShowToast("Đã xuất bản tin phát sóng ra file Excel (CSV) thành công! 📊", "success");
-                          }
-                        }}
-                        className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 shadow-3xs cursor-pointer active:scale-95"
-                      >
-                        <FileSpreadsheet className="w-3.5 h-3.5 text-amber-100" />
-                        <span translate="no" className="notranslate">Xuất Excel (CSV)</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                )}
               </div>
+
+              {/* QUẢN LÝ SAO LƯU & XUẤT DỮ LIỆU (Chỉ Admin tối cao mới thấy) */}
+              {isSuperAdmin && (
+                <div className={`bg-white rounded-2xl border border-slate-200 shadow-sm transition-all duration-200 animate-fadeIn ${
+                  isBackupCollapsed ? "p-4 sm:p-5" : "p-5 sm:p-6 space-y-4"
+                }`}>
+                  <div className={`flex items-center justify-between gap-3 ${isBackupCollapsed ? "" : "border-b border-slate-100 pb-3"}`}>
+                    <div 
+                      onClick={toggleBackupCollapsed}
+                      className="flex items-center gap-3 cursor-pointer select-none group flex-1"
+                    >
+                      <div className="p-2 bg-blue-50 text-blue-600 rounded-lg group-hover:bg-blue-100 transition-colors">
+                        <Database className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-black text-slate-800 uppercase tracking-wide group-hover:text-blue-700 transition-colors flex items-center gap-2">
+                          <span translate="no" className="notranslate">QUẢN LÝ SAO LƯU & XUẤT DỮ LIỆU</span>
+                        </h3>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          <span translate="no" className="notranslate">Trích xuất báo cáo thay đổi 4M1E1I và bản tin phát sóng dưới dạng JSON hoặc Excel (CSV) để lưu trữ ngoại tuyến.</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={toggleBackupCollapsed}
+                      className="p-2 rounded-lg border border-slate-200 hover:border-blue-300 bg-slate-50 hover:bg-blue-50/60 text-slate-600 hover:text-blue-700 transition-all cursor-pointer shadow-3xs active:scale-95 shrink-0 flex items-center justify-center"
+                      title={isBackupCollapsed ? "Mở rộng nội dung" : "Thu gọn nội dung"}
+                    >
+                      {isBackupCollapsed ? (
+                        <ChevronDown className="w-4 h-4 text-blue-600" />
+                      ) : (
+                        <ChevronUp className="w-4 h-4 text-slate-500" />
+                      )}
+                    </button>
+                  </div>
+
+                  {!isBackupCollapsed && (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fadeIn">
+                      {/* CỘT 1: BÁO CÁO BIẾN ĐỘNG 4M1E1I */}
+                      <div className="p-4 bg-slate-50/60 rounded-xl border border-slate-150 flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
+                            <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
+                              <span translate="no" className="notranslate">Bản tin Biến động 4M1E1I</span>
+                            </h4>
+                          </div>
+                          <p className="text-[10px] text-slate-500 leading-relaxed mb-4">
+                            <span translate="no" className="notranslate">Xuất toàn bộ danh sách {reports.filter(r => !r.isDeleted).length} báo cáo 4M1E1I (bao gồm thông tin chi tiết người viết, phân loại, ghi chú và lịch sử chỉ đạo từ cấp quản lý).</span>
+                          </p>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-200/40">
+                          <button
+                            onClick={onExportBackup}
+                            className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 shadow-3xs cursor-pointer active:scale-95"
+                          >
+                            <Download className="w-3.5 h-3.5 text-blue-100" />
+                            <span translate="no" className="notranslate">Sao lưu toàn bộ (Kèm ảnh)</span>
+                          </button>
+
+                          <label className="px-3 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 shadow-3xs cursor-pointer active:scale-95">
+                            <Upload className="w-3.5 h-3.5 text-slate-500" />
+                            <span translate="no" className="notranslate">Khôi phục dữ liệu (Import)</span>
+                            <input
+                              type="file"
+                              accept=".json"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                const reader = new FileReader();
+                                reader.onload = async (event) => {
+                                  const content = event.target?.result as string;
+                                  if (onImportBackup) {
+                                    await onImportBackup(content);
+                                  }
+                                };
+                                reader.readAsText(file);
+                                e.target.value = "";
+                              }}
+                            />
+                          </label>
+
+                          <button
+                            onClick={() => {
+                              const headers = [
+                                "Mã báo cáo",
+                                "Thời gian",
+                                "Chi nhánh/Nhà máy",
+                                "Yếu tố 4M1E1I",
+                                "Nội dung ghi nhận",
+                                "Ghi chú bổ sung",
+                                "Phân loại",
+                                "Người báo cáo",
+                                "Số điện thoại",
+                                "Bộ phận",
+                                "Trạng thái duyệt",
+                                "Chỉ đạo từ cấp trên"
+                              ];
+
+                              const escapeCSV = (val: any) => {
+                                if (val === undefined || val === null) return "";
+                                let str = String(val);
+                                if (str.includes(",") || str.includes("\n") || str.includes('"') || str.includes(";")) {
+                                  str = '"' + str.replace(/"/g, '""') + '"';
+                                }
+                                return str;
+                              };
+
+                              const rows = reports.filter(r => !r.isDeleted).map(r => {
+                                const directiveTexts = (r.directives || []).map(d => `[${d.author}]: ${d.text}`).join("; ");
+                                const userObj = users.find(u => u.id === r.uploaderId || u.phone === r.uploaderPhone || u.fullName === r.uploaderName);
+                                const resolvedDept = userObj ? userObj.department : (r.uploaderDepartment || "");
+                                const isApproved = r.isApproved !== false;
+                                return [
+                                  r.reportCode || r.id,
+                                  r.timestamp,
+                                  r.factory,
+                                  r.category,
+                                  r.content,
+                                  r.notes || "",
+                                  r.reportType || (r.isAbnormal ? "KPH" : "NORMAL"),
+                                  userObj ? userObj.fullName : r.uploaderName,
+                                  r.uploaderPhone,
+                                  resolvedDept,
+                                  isApproved ? "Đã duyệt" : "Chờ duyệt",
+                                  directiveTexts
+                                ];
+                              });
+
+                              const csvContent = "\uFEFF" + [headers.map(escapeCSV).join(","), ...rows.map(row => row.map(escapeCSV).join(","))].join("\n");
+                              const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                              const url = URL.createObjectURL(blob);
+                              const link = document.createElement("a");
+                              link.href = url;
+                              const today = new Date();
+                              const dd = String(today.getDate()).padStart(2, '0');
+                              const mm = String(today.getMonth() + 1).padStart(2, '0');
+                              const yy = String(today.getFullYear()).slice(-2);
+                              const dateStr = `${dd}_${mm}_${yy}`;
+                              link.download = `Bantin_4M1E1I_${dateStr}.csv`;
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                              URL.revokeObjectURL(url);
+                              if (onShowToast) {
+                                onShowToast("Đã xuất bản tin 4M1E1I ra file Excel (CSV) thành công! 📊", "success");
+                              }
+                            }}
+                            className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 shadow-3xs cursor-pointer active:scale-95"
+                          >
+                            <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-100" />
+                            <span translate="no" className="notranslate">Xuất Excel (CSV)</span>
+                          </button>
+
+                          <button
+                            onClick={handleExportExcelWithImages}
+                            className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 shadow-3xs cursor-pointer active:scale-95"
+                          >
+                            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-100" />
+                            <span translate="no" className="notranslate">Xuất Excel (.xlsx Kèm Ảnh)</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* CỘT 2: BẢN TIN PHÁT SÓNG & TICKER */}
+                      <div className="p-4 bg-slate-50/60 rounded-xl border border-slate-150 flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <Megaphone className="w-4 h-4 text-amber-600" />
+                            <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">
+                              <span translate="no" className="notranslate">Bản tin Phát sóng & Ticker</span>
+                            </h4>
+                          </div>
+                          <p className="text-[10px] text-slate-500 leading-relaxed mb-4">
+                            <span translate="no" className="notranslate">Xuất toàn bộ danh sách {broadcasts.length} bản tin phát sóng, tin đỏ và thông báo khẩn từ quản trị viên gửi đến toàn hệ thống.</span>
+                          </p>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-200/40">
+                          <button
+                            onClick={() => {
+                              const jsonStr = JSON.stringify(broadcasts, null, 2);
+                              const blob = new Blob([jsonStr], { type: "application/json" });
+                              const url = URL.createObjectURL(blob);
+                              const link = document.createElement("a");
+                              link.href = url;
+                              const today = new Date();
+                              const dd = String(today.getDate()).padStart(2, '0');
+                              const mm = String(today.getMonth() + 1).padStart(2, '0');
+                              const yy = String(today.getFullYear()).slice(-2);
+                              const dateStr = `${dd}_${mm}_${yy}`;
+                              link.download = `Saoluu_Bantin_Phatsong_${dateStr}.json`;
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                              URL.revokeObjectURL(url);
+                              if (onShowToast) {
+                                onShowToast("Đã sao lưu bản tin phát sóng ra file JSON thành công! 💾", "success");
+                              }
+                            }}
+                            className="px-3 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 shadow-3xs cursor-pointer active:scale-95"
+                          >
+                            <Download className="w-3.5 h-3.5 text-slate-500" />
+                            <span translate="no" className="notranslate">Sao lưu JSON</span>
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              const headers = [
+                                "Mã ID",
+                                "Người phát sóng",
+                                "Phân loại tin",
+                                "Nội dung thông báo",
+                                "Thời gian gửi"
+                              ];
+
+                              const escapeCSV = (val: any) => {
+                                if (val === undefined || val === null) return "";
+                                let str = String(val);
+                                if (str.includes(",") || str.includes("\n") || str.includes('"') || str.includes(";")) {
+                                  str = '"' + str.replace(/"/g, '""') + '"';
+                                }
+                                return str;
+                              };
+
+                              const rows = broadcasts.map(b => [
+                                b.id,
+                                b.sender,
+                                b.type,
+                                b.content,
+                                b.timestamp
+                              ]);
+
+                              const csvContent = "\uFEFF" + [headers.map(escapeCSV).join(","), ...rows.map(row => row.map(escapeCSV).join(","))].join("\n");
+                              const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                              const url = URL.createObjectURL(blob);
+                              const link = document.createElement("a");
+                              link.href = url;
+                              const today = new Date();
+                              const dd = String(today.getDate()).padStart(2, '0');
+                              const mm = String(today.getMonth() + 1).padStart(2, '0');
+                              const yy = String(today.getFullYear()).slice(-2);
+                              const dateStr = `${dd}_${mm}_${yy}`;
+                              link.download = `Bantin_Phatsong_${dateStr}.csv`;
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                              URL.revokeObjectURL(url);
+                              if (onShowToast) {
+                                onShowToast("Đã xuất bản tin phát sóng ra file Excel (CSV) thành công! 📊", "success");
+                              }
+                            }}
+                            className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 shadow-3xs cursor-pointer active:scale-95"
+                          >
+                            <FileSpreadsheet className="w-3.5 h-3.5 text-amber-100" />
+                            <span translate="no" className="notranslate">Xuất Excel (CSV)</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Progress feedback for compiled reports */}
               {pdfProgress && (
@@ -6264,7 +8173,7 @@ export default function DashboardDesktop({
 
                   {/* Trash items table */}
                   <div className="bg-white rounded-xl border border-rose-100 overflow-hidden shadow-sm">
-                    {reports.filter((r) => r.isDeleted).length === 0 ? (
+                    {scopedReports.filter((r) => r.isDeleted).length === 0 ? (
                       <div className="p-16 text-center flex flex-col items-center justify-center bg-slate-50/50">
                         <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3 shadow-inner">
                           <Trash2 className="w-8 h-8" />
@@ -6284,8 +8193,9 @@ export default function DashboardDesktop({
                             </tr>
                           </thead>
                           <tbody className="text-xs font-medium text-slate-700">
-                            {reports
+                            {scopedReports
                               .filter((r) => r.isDeleted)
+                              .sort((a, b) => parseReportTimestamp(b.timestamp).getTime() - parseReportTimestamp(a.timestamp).getTime())
                               .map((r, index) => (
                                 <tr key={r.id} className="hover:bg-rose-50/20 transition-colors">
                                   <td className="p-4 text-center font-mono text-slate-400 border border-slate-200">{index + 1}</td>
@@ -6419,62 +8329,371 @@ export default function DashboardDesktop({
               ) : (
                 <div className="space-y-6">
                   {/* Filter controls panel */}
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="relative">
-                      <label className="text-[9px] text-slate-555 font-extrabold uppercase block mb-1">Từ khóa tìm kiếm:</label>
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                    {/* Top Row: Search, Factory, Category, Abnormal Only */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                       <div className="relative">
-                        <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
-                        <input
-                          type="text"
-                          placeholder="Nội dung, người ghi..."
-                          value={logsSearch}
-                          onChange={(e) => setLogsSearch(e.target.value)}
-                          className="w-full bg-slate-50 text-slate-800 border border-slate-200 rounded px-8 py-1.5 text-xs focus:outline-none"
-                        />
+                        <label className="text-[9px] text-slate-555 font-extrabold uppercase block mb-1"><T><span translate="no" className="notranslate">Từ khóa tìm kiếm:</span></T></label>
+                        <div className="relative">
+                          <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
+                          <input
+                            type="text"
+                            placeholder="Nội dung, người ghi, mã..."
+                            value={logsSearch}
+                            onChange={(e) => setLogsSearch(e.target.value)}
+                            className="w-full bg-slate-50 text-slate-800 border border-slate-200 rounded px-8 py-1.5 text-xs focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="select-none relative" ref={logsFactoryDropdownRef}>
+                        <label className="text-[9px] text-slate-555 font-extrabold uppercase block mb-1"><T><span translate="no" className="notranslate">Xưởng/Nhà máy:</span></T></label>
+                        <button
+                          type="button"
+                          onClick={() => setIsLogsFactoryDropdownOpen(!isLogsFactoryDropdownOpen)}
+                          className={`w-full bg-slate-50 border transition-all text-xs rounded px-2.5 py-1.5 text-slate-800 focus:outline-none cursor-pointer flex items-center justify-between gap-1.5 h-[30px] ${
+                            logsFactories.length > 0
+                              ? "border-sky-500 ring-1 ring-sky-300 bg-sky-50/50 font-bold text-sky-900"
+                              : "border-slate-200 hover:border-slate-300"
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0 truncate">
+                            <Building className={`w-3.5 h-3.5 shrink-0 ${logsFactories.length > 0 ? "text-sky-600" : "text-slate-400"}`} />
+                            <span className="truncate text-left text-xs font-semibold">
+                              <T>
+                                <span translate="no" className="notranslate">
+                                  {logsFactories.length === 0
+                                    ? "Tất cả chi nhánh"
+                                    : logsFactories.length === 1
+                                    ? getFactoryDisplayName(logsFactories[0])
+                                    : `${logsFactories.length} chi nhánh đã chọn`}
+                                </span>
+                              </T>
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {logsFactories.length > 0 && (
+                              <span
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setLogsFactories([]);
+                                }}
+                                title="Xóa chọn chi nhánh"
+                                className="w-4 h-4 rounded-full bg-slate-200 hover:bg-rose-200 hover:text-rose-700 text-slate-600 flex items-center justify-center text-[10px] font-bold transition-colors cursor-pointer"
+                              >
+                                ✕
+                              </span>
+                            )}
+                            <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform duration-200 ${isLogsFactoryDropdownOpen ? "rotate-180 text-sky-600" : ""}`} />
+                          </div>
+                        </button>
+
+                        {/* Dropdown Popover */}
+                        {isLogsFactoryDropdownOpen && (
+                          <div className="absolute left-0 top-full mt-1.5 w-72 bg-white rounded-xl shadow-xl border border-slate-200 z-50 p-2 space-y-1.5 text-xs animate-in fade-in zoom-in-95 duration-100">
+                            <div className="flex items-center justify-between px-1.5 py-1 border-b border-slate-100 text-[10px] font-extrabold uppercase text-slate-500">
+                              <T><span translate="no" className="notranslate">Chọn chi nhánh lọc:</span></T>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const allBranchNames = scopedBranches.filter((b) => b.isScoring).map((b) => b.name);
+                                    setLogsFactories(allBranchNames);
+                                  }}
+                                  className="text-sky-600 hover:text-sky-800 hover:underline cursor-pointer font-bold lowercase first-letter:uppercase"
+                                >
+                                  <T><span translate="no" className="notranslate">Tất cả</span></T>
+                                </button>
+                                <span className="text-slate-300">|</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setLogsFactories([])}
+                                  className="text-rose-600 hover:text-rose-800 hover:underline cursor-pointer font-bold lowercase first-letter:uppercase"
+                                >
+                                  <T><span translate="no" className="notranslate">Bỏ chọn</span></T>
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="max-h-56 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                              {scopedBranches.filter((b) => b.isScoring).map((b) => {
+                                const isSelected = logsFactories.some((f) => f === b.name || f === b.id || isSameBranchOrFactory(b.name, f));
+                                const count = scopedReports.filter((r) => !r.isDeleted && r.isApproved !== false && matchFactory(r.factory, b.name)).length;
+
+                                return (
+                                  <div
+                                    key={b.id}
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setLogsFactories((prev) => {
+                                        const exists = prev.some((f) => f === b.name || f === b.id || isSameBranchOrFactory(b.name, f));
+                                        if (exists) {
+                                          return prev.filter((f) => f !== b.name && f !== b.id && !isSameBranchOrFactory(b.name, f));
+                                        } else {
+                                          return [...prev, b.name];
+                                        }
+                                      });
+                                    }}
+                                    className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors select-none ${
+                                      isSelected
+                                        ? "bg-sky-50 text-sky-950 font-bold border border-sky-200/80"
+                                        : "hover:bg-slate-50 text-slate-700 font-medium border border-transparent"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0 pointer-events-none">
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        readOnly
+                                        className="rounded border-slate-300 text-sky-600 focus:ring-sky-500 pointer-events-none"
+                                      />
+                                      <span className="truncate">
+                                        <T><span translate="no" className="notranslate">{getFactoryDisplayName(b.name)}</span></T>
+                                      </span>
+                                    </div>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono font-bold shrink-0 ml-1 pointer-events-none ${
+                                      isSelected ? "bg-sky-200/70 text-sky-900" : "bg-slate-100 text-slate-500"
+                                    }`}>
+                                      {count}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500 px-1 font-medium">
+                              <span>
+                                <T><span translate="no" className="notranslate">Đang chọn:</span></T>{" "}
+                                <strong className="text-sky-700">{logsFactories.length === 0 ? "Tất cả" : `${logsFactories.length}/${scopedBranches.filter(b => b.isScoring).length}`}</strong>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setIsLogsFactoryDropdownOpen(false)}
+                                className="px-2 py-0.5 bg-slate-800 text-white rounded text-[10px] font-bold hover:bg-slate-700 cursor-pointer"
+                              >
+                                <T><span translate="no" className="notranslate">Đóng</span></T>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="select-none">
+                        <label className="text-[9px] text-slate-555 font-extrabold uppercase block mb-1"><T><span translate="no" className="notranslate">Yếu tố 4M1E1I:</span></T></label>
+                        <select
+                          value={logsCategory}
+                          onChange={(e) => setLogsCategory(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 text-xs rounded p-1.5 text-slate-800 focus:outline-none cursor-pointer"
+                        >
+                          <option value="Tất cả">Tất cả</option>
+                          <option value="CON NGƯỜI">CON NGƯỜI</option>
+                          <option value="MÁY MÓC">MÁY MÓC</option>
+                          <option value="NGUYÊN VẬT LIỆU">NGUYÊN VẬT LIỆU</option>
+                          <option value="PHƯƠNG PHÁP">PHƯƠNG PHÁP</option>
+                          <option value="MÔI TRƯỜNG">MÔI TRƯỜNG</option>
+                          <option value="THÔNG TIN">THÔNG TIN</option>
+                        </select>
+                      </div>
+
+                      <div className="flex items-center h-full pt-4">
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={logsAbnormalOnly}
+                            onChange={(e) => setLogsAbnormalOnly(e.target.checked)}
+                            className="rounded border-slate-300 bg-slate-50 accent-red-600 block"
+                          />
+                          <T className="text-xs font-bold text-red-600">CHỈ XEM BẤT THƯỜNG (RED)</T>
+                        </label>
                       </div>
                     </div>
 
-                    <div className="select-none">
-                      <label className="text-[9px] text-slate-555 font-extrabold uppercase block mb-1">Xưởng/Nhà máy:</label>
-                      <select
-                        value={logsFactory}
-                        onChange={(e) => setLogsFactory(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 text-xs rounded p-1.5 text-slate-800 focus:outline-none cursor-pointer"
-                      >
-                        <option value="Tất cả">Tất cả</option>
-                        {branches.filter((b) => b.isScoring).map((b) => (
-                          <option key={b.id} value={b.name}>{getFactoryDisplayName(b.name)}</option>
+                    {/* Active Selected Branches Chip Indicator */}
+                    {logsFactories.length > 0 && (
+                      <div className="flex items-center gap-1.5 flex-wrap pt-0.5 pb-1 text-[11px] select-none">
+                        <span className="text-[10px] font-extrabold text-slate-500 uppercase flex items-center gap-1">
+                          <Building className="w-3 h-3 text-sky-600" />
+                          <T><span translate="no" className="notranslate">Chi nhánh đang lọc:</span></T>
+                        </span>
+                        {logsFactories.map((fName) => (
+                          <span
+                            key={fName}
+                            className="inline-flex items-center gap-1 bg-sky-50 text-sky-800 font-bold px-2 py-0.5 rounded-lg border border-sky-200 text-xs shadow-2xs"
+                          >
+                            <T><span translate="no" className="notranslate">{getFactoryDisplayName(fName)}</span></T>
+                            <button
+                              type="button"
+                              onClick={() => setLogsFactories((prev) => prev.filter((item) => item !== fName))}
+                              className="w-3.5 h-3.5 rounded-full hover:bg-sky-200 text-sky-600 hover:text-sky-900 flex items-center justify-center cursor-pointer text-[9px] font-bold transition-colors"
+                              title="Bỏ chi nhánh này"
+                            >
+                              ✕
+                            </button>
+                          </span>
                         ))}
-                      </select>
-                    </div>
+                        <button
+                          type="button"
+                          onClick={() => setLogsFactories([])}
+                          className="text-xs text-rose-600 hover:text-rose-800 font-extrabold underline cursor-pointer ml-1"
+                        >
+                          <T><span translate="no" className="notranslate">Xóa tất cả ({logsFactories.length})</span></T>
+                        </button>
+                      </div>
+                    )}
 
-                    <div className="select-none">
-                      <label className="text-[9px] text-slate-555 font-extrabold uppercase block mb-1">Yếu tố 4M1E1I:</label>
-                      <select
-                        value={logsCategory}
-                        onChange={(e) => setLogsCategory(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 text-xs rounded p-1.5 text-slate-800 focus:outline-none cursor-pointer"
-                      >
-                        <option value="Tất cả">Tất cả</option>
-                        <option value="CON NGƯỜI">CON NGƯỜI</option>
-                        <option value="MÁY MÓC">MÁY MÓC</option>
-                        <option value="NGUYÊN VẬT LIỆU">NGUYÊN VẬT LIỆU</option>
-                        <option value="PHƯƠNG PHÁP">PHƯƠNG PHÁP</option>
-                        <option value="MÔI TRƯỜNG">MÔI TRƯỜNG</option>
-                        <option value="THÔNG TIN">THÔNG TIN</option>
-                      </select>
-                    </div>
+                    {/* Bottom Row: Status Filter Strip & Report Type Strip (Synchronized from Mobile) */}
+                    <div className="pt-2.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2.5 select-none">
+                      {/* Left: Status Filter Buttons */}
+                      <div className="flex items-center gap-1.5 flex-wrap text-[11px] font-extrabold">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLogsProcessStatusFilter("ALL");
+                            setLogsOnlyTransferredFilter(false);
+                          }}
+                          className={`h-7 px-2.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap flex items-center justify-center leading-none ${
+                            logsProcessStatusFilter === "ALL" && !logsOnlyTransferredFilter
+                              ? "bg-slate-800 text-white border-slate-800 shadow-xs font-black"
+                              : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200/70"
+                          }`}
+                        >
+                          <T><span translate="no" className="notranslate">{`TẤT CẢ (${logsOnlyTaggedFilter ? logsTaggedCounts.all : logsStatusCounts.all})`}</span></T>
+                        </button>
 
-                    <div className="flex items-center h-full pt-4">
-                      <label className="flex items-center gap-2 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={logsAbnormalOnly}
-                          onChange={(e) => setLogsAbnormalOnly(e.target.checked)}
-                          className="rounded border-slate-300 bg-slate-50 accent-red-600 block"
-                        />
-                        <T className="text-xs font-bold text-red-600">CHỈ XEM BẤT THƯỜNG (RED)</T>
-                      </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLogsProcessStatusFilter("UNACKNOWLEDGED");
+                            setLogsOnlyTransferredFilter(false);
+                          }}
+                          className={`h-7 px-2.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap flex items-center justify-center leading-none ${
+                            logsProcessStatusFilter === "UNACKNOWLEDGED" && !logsOnlyTransferredFilter
+                              ? "bg-rose-600 text-white border-rose-600 shadow-xs ring-1 ring-rose-400/50 font-black"
+                              : "bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100 font-bold"
+                          }`}
+                        >
+                          <T><span translate="no" className="notranslate">{`CHỜ XL (${logsOnlyTaggedFilter ? logsTaggedCounts.unacked : logsStatusCounts.unacked})`}</span></T>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLogsProcessStatusFilter("PROCESSING");
+                            setLogsOnlyTransferredFilter(false);
+                          }}
+                          className={`h-7 px-2.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap flex items-center justify-center leading-none ${
+                            logsProcessStatusFilter === "PROCESSING" && !logsOnlyTransferredFilter
+                              ? "bg-amber-600 text-white border-amber-600 shadow-xs ring-1 ring-amber-400/50 font-black"
+                              : "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100 font-bold"
+                          }`}
+                        >
+                          <T><span translate="no" className="notranslate">{`ĐANG XL (${logsOnlyTaggedFilter ? logsTaggedCounts.processing : logsStatusCounts.processing})`}</span></T>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLogsProcessStatusFilter("RESOLVED");
+                            setLogsOnlyTransferredFilter(false);
+                          }}
+                          className={`h-7 px-2.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap flex items-center justify-center leading-none ${
+                            logsProcessStatusFilter === "RESOLVED" && !logsOnlyTransferredFilter
+                              ? "bg-emerald-600 text-white border-emerald-600 shadow-xs ring-1 ring-emerald-400/50 font-black"
+                              : "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100 font-bold"
+                          }`}
+                        >
+                          <T><span translate="no" className="notranslate">{`XONG (${logsOnlyTaggedFilter ? logsTaggedCounts.resolved : logsStatusCounts.resolved})`}</span></T>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLogsOnlyTransferredFilter(!logsOnlyTransferredFilter);
+                            setLogsOnlyTaggedFilter(false);
+                            setLogsProcessStatusFilter("ALL");
+                          }}
+                          className={`h-7 px-2.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap flex items-center justify-center leading-none ${
+                            logsOnlyTransferredFilter
+                              ? "bg-indigo-700 text-white border-indigo-700 shadow-xs ring-1 ring-indigo-400/50 font-black"
+                              : "bg-indigo-50 text-indigo-800 border-indigo-200 hover:bg-indigo-100 font-bold"
+                          }`}
+                          title="Chỉ hiển thị các bản tin được chuyển giao xử lý liên công ty TPP ↔ DNP"
+                        >
+                          <T><span translate="no" className="notranslate">{`CHUYỂN (${logsTransferredReportsCount})`}</span></T>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLogsOnlyTaggedFilter(!logsOnlyTaggedFilter);
+                            setLogsOnlyTransferredFilter(false);
+                            setLogsProcessStatusFilter("ALL");
+                          }}
+                          className={`h-7 px-2.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-1 leading-none relative ${
+                            logsOnlyTaggedFilter
+                              ? "bg-purple-700 text-white border-purple-700 shadow-xs ring-1 ring-purple-400/50 font-black"
+                              : logsTaggedReportsCount > 0
+                              ? "bg-purple-600 text-white border-purple-600 font-extrabold shadow-sm ring-2 ring-purple-400/80 animate-pulse"
+                              : "bg-purple-50 text-purple-800 border-purple-200 hover:bg-purple-100 font-bold"
+                          }`}
+                          title="Chỉ hiển thị các bản tin có tag (@nhắc tên) hoặc task giao cho bạn"
+                        >
+                          <AtSign className={`w-3.5 h-3.5 stroke-[2.5] shrink-0 ${logsTaggedReportsCount > 0 ? "animate-bounce text-yellow-300" : ""}`} />
+                          <T><span translate="no" className="notranslate">{`(${logsTaggedReportsCount})`}</span></T>
+                        </button>
+                      </div>
+
+                      {/* Right: Quick Report Type Filter Pills (KPH, RRO, DSA) */}
+                      <div className="flex items-center gap-1.5 text-[11px] font-extrabold">
+                        <button
+                          type="button"
+                          onClick={() => setLogsReportTypeFilter("ALL")}
+                          className={`h-7 px-2.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap flex items-center justify-center leading-none ${
+                            logsReportTypeFilter === "ALL"
+                              ? "bg-slate-800 text-white border-slate-800 font-black shadow-xs"
+                              : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
+                          }`}
+                        >
+                          <T><span translate="no" className="notranslate">Tất cả loại tin</span></T>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLogsReportTypeFilter(prev => prev === "KPH" ? "ALL" : "KPH")}
+                          className={`h-7 px-2.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-1 leading-none ${
+                            logsReportTypeFilter === "KPH"
+                              ? "bg-rose-600 text-white border-rose-600 font-black shadow-xs ring-1 ring-rose-400"
+                              : "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+                          }`}
+                        >
+                          {logsReportTypeFilter === "KPH" && <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block shrink-0" />}
+                          <T><span translate="no" className="notranslate">KPH</span></T>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLogsReportTypeFilter(prev => prev === "RRO" ? "ALL" : "RRO")}
+                          className={`h-7 px-2.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-1 leading-none ${
+                            logsReportTypeFilter === "RRO"
+                              ? "bg-blue-600 text-white border-blue-600 font-black shadow-xs ring-1 ring-blue-400"
+                              : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                          }`}
+                        >
+                          {logsReportTypeFilter === "RRO" && <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block shrink-0" />}
+                          <T><span translate="no" className="notranslate">RRO</span></T>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLogsReportTypeFilter(prev => prev === "DSA" ? "ALL" : "DSA")}
+                          className={`h-7 px-2.5 rounded-lg border transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-1 leading-none ${
+                            logsReportTypeFilter === "DSA"
+                              ? "bg-emerald-600 text-white border-emerald-600 font-black shadow-xs ring-1 ring-emerald-400"
+                              : "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                          }`}
+                        >
+                          {logsReportTypeFilter === "DSA" && <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block shrink-0" />}
+                          <T><span translate="no" className="notranslate">DSA</span></T>
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -6484,37 +8703,30 @@ export default function DashboardDesktop({
                       <table className="w-full border-collapse text-left border border-slate-200">
                         <thead>
                           <tr className="bg-slate-50 text-[10px] text-slate-505 font-extrabold uppercase tracking-wider">
-                            <th className="p-4 w-12 text-center border border-slate-200"><T><span translate="no" className="notranslate">STT</span></T></th>
-                            <th className="p-4 min-w-[180px] border border-slate-200"><T><span translate="no" className="notranslate">Thông tin ghi nhận</span></T></th>
-                            <th className="p-4 w-[28%] border border-slate-200"><T><span translate="no" className="notranslate">Nội dung chi tiết</span></T></th>
-                            <th className="p-4 text-center border border-slate-200"><T><span translate="no" className="notranslate">Hình ảnh</span></T></th>
-                            <th className="p-4 text-center border border-slate-200"><T><span translate="no" className="notranslate">Phân loại</span></T></th>
-                            <th className="p-4 text-center border border-slate-200"><T><span translate="no" className="notranslate">Trạng thái</span></T></th>
-                            <th className="p-4 text-center border border-slate-200"><T><span translate="no" className="notranslate">Thích & Tiếp nhận / Nhân rộng</span></T></th>
-                            <th className="p-4 text-center border border-slate-200"><T><span translate="no" className="notranslate">Thao tác</span></T></th>
+                            <th className="py-3.5 px-2 w-12 min-w-[48px] max-w-[48px] text-center border border-slate-200"><T><span translate="no" className="notranslate">STT</span></T></th>
+                            <th className="py-3.5 px-3 w-[210px] min-w-[190px] max-w-[230px] border border-slate-200"><T><span translate="no" className="notranslate">Thông tin ghi nhận</span></T></th>
+                            <th className="py-3.5 px-3 min-w-[210px] max-w-[340px] border border-slate-200"><T><span translate="no" className="notranslate">Nội dung chi tiết</span></T></th>
+                            <th className="py-3.5 px-2 w-[105px] min-w-[100px] max-w-[115px] text-center border border-slate-200"><T><span translate="no" className="notranslate">Phân loại</span></T></th>
+                            <th className="py-3 px-2 w-[95px] min-w-[90px] max-w-[105px] text-center border border-slate-200 align-middle">
+                              <T><span translate="no" className="notranslate">Trạng thái</span></T>
+                            </th>
+                            <th className="py-3 px-2 w-[150px] min-w-[140px] max-w-[160px] text-center border border-slate-200"><T><span translate="no" className="notranslate">Thích & Tiếp nhận / Nhân rộng</span></T></th>
+                            <th className="py-3 px-2 w-[80px] min-w-[75px] max-w-[85px] text-center border border-slate-200"><T><span translate="no" className="notranslate">Thao tác</span></T></th>
                           </tr>
                         </thead>
                         <tbody className="text-xs font-medium text-slate-700">
-                          {reports
-                            .filter((r) => {
-                              if (r.isDeleted) return false;
-                              if (r.isApproved === false) return false;
-                              const s = logsSearch.toLowerCase();
-                              const matchesSearch =
-                                r.uploaderName.toLowerCase().includes(s) ||
-                                r.content.toLowerCase().includes(s) ||
-                                r.category.toLowerCase().includes(s);
-
-                              const matchesFactory = logsFactory === "Tất cả" ? true : r.factory === logsFactory;
-                              const matchesCategory = logsCategory === "Tất cả" ? true : r.category === logsCategory;
-                              const matchesAbnormal = logsAbnormalOnly ? r.isAbnormal : true;
-
-                              return matchesSearch && matchesFactory && matchesCategory && matchesAbnormal;
-                            })
+                          {finalLogsFilteredReports.length === 0 && (
+                            <tr>
+                              <td colSpan={7} className="py-12 text-center text-slate-400 text-xs italic">
+                                <T><span translate="no" className="notranslate">Không có bản tin nào phù hợp với bộ lọc hiện tại.</span></T>
+                              </td>
+                            </tr>
+                          )}
+                          {finalLogsFilteredReports
                             .map((r, index) => (
                               <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
-                                <td className="p-4 text-center font-mono text-slate-400 border border-slate-200">{index + 1}</td>
-                                <td className="p-4 space-y-1.5 min-w-[180px] border border-slate-200">
+                                <td className="py-3 px-2 text-center font-mono text-slate-400 border border-slate-200 w-12 min-w-[48px] max-w-[48px]">{index + 1}</td>
+                                <td className="p-3 space-y-1.5 w-[210px] min-w-[190px] max-w-[230px] border border-slate-200">
                                   <div className="text-[10.5px] text-slate-600 leading-snug">
                                     <span className="font-extrabold text-slate-700 block">{formatNameCapitalized(resolveUploaderInfo(users, r).fullName)}</span>
                                     <span className="text-[9.5px] text-slate-400 font-mono block"><span translate="no" className="notranslate">{r.uploaderPhone}</span></span>
@@ -6534,8 +8746,18 @@ export default function DashboardDesktop({
                                     </span>
                                   </div>
                                 </td>
-                                <td className="p-4 leading-relaxed text-slate-900 max-w-sm font-bold border border-slate-200">
-                                  <T>{(r.content || "").toUpperCase()}</T>
+                                <td className="p-3 leading-relaxed text-slate-900 min-w-[210px] max-w-[340px] border border-slate-200">
+                                  {/* Hình ảnh minh chứng đặt phía trên nội dung (tương tự giao diện điện thoại) */}
+                                  <div className="mb-2.5 w-full">
+                                    <DesktopThumbnailSlider 
+                                      imageUrls={r.imageUrls && r.imageUrls.length > 0 ? r.imageUrls : [r.imageUrl || getCategoryFallbackImage(r.category)]} 
+                                      fallbackUrl={r.imageUrl || getCategoryFallbackImage(r.category)} 
+                                    />
+                                  </div>
+
+                                  <div className="font-bold text-slate-900">
+                                    <T>{(r.content || "").toUpperCase()}</T>
+                                  </div>
                                   {r.notes && (
                                     <div className="mt-1 text-[10.5px] text-slate-800 font-medium italic block border-l-2 border-emerald-500 pl-1.5 whitespace-pre-wrap break-words max-h-[100px] overflow-y-auto thin-scrollbar">
                                       <T>Ghi chú: {r.notes}</T>
@@ -6555,7 +8777,7 @@ export default function DashboardDesktop({
                                   {(r.reportType === "KPH" || r.isAbnormal) && (
                                     <button
                                       onClick={() => handleAIAnalyze(r)}
-                                      className="mt-2.5 flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-[10px] rounded-lg shadow-sm border border-blue-500/10 cursor-pointer hover:shadow active:scale-95 transition-all select-none uppercase tracking-wide"
+                                      className="mt-2.5 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-[10px] rounded-lg shadow-sm border border-blue-500/10 cursor-pointer hover:shadow active:scale-95 transition-all select-none uppercase tracking-wide"
                                     >
                                       <Bot className="w-3.5 h-3.5 text-blue-100" />
                                       <span translate="no" className="notranslate">5-WHYs & CƠ HỘI CẢI TIẾN</span>
@@ -6565,12 +8787,80 @@ export default function DashboardDesktop({
                                   {(r.reportType === "DSA" || r.isSpotlight) && (
                                     <button
                                       onClick={() => handleAIDsaAnalyze(r)}
-                                      className="mt-2.5 flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-[10px] rounded-lg shadow-sm border border-emerald-500/10 cursor-pointer hover:shadow active:scale-95 transition-all select-none uppercase tracking-wide"
+                                      className="mt-2.5 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-[10px] rounded-lg shadow-sm border border-emerald-500/10 cursor-pointer hover:shadow active:scale-95 transition-all select-none uppercase tracking-wide"
                                     >
                                       <Bot className="w-3.5 h-3.5 text-emerald-100" />
                                       <span translate="no" className="notranslate">PHÂN TÍCH CƠ HỘI & THÁCH THỨC</span>
                                     </button>
                                   )}
+
+                                  {/* Action Button: 🔥 Thảo luận chuyên đề */}
+                                  {(() => {
+                                    const existingTopic = topics.find(t => t.reportId === r.id || (r.reportCode && t.reportId === r.reportCode));
+                                    const replyCount = existingTopic ? replies.filter(reply => reply.topicId === existingTopic.id).length : 0;
+                                    const hasUserTaskInTopic = checkUserTaskInDiscussion(r, currentUser);
+
+                                    if (existingTopic) {
+                                      const isResolved = existingTopic.status === "RESOLVED";
+
+                                      if (isResolved) {
+                                        return (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setSelectedTopicId(existingTopic.id);
+                                              setActiveTab("TRAO_ĐỔI");
+                                              setForumSubTab("TOPICS");
+                                            }}
+                                            className="mt-2 w-full py-1.5 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 hover:text-emerald-800 border border-emerald-300/80 rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95 select-none uppercase tracking-wide"
+                                            title="Chủ đề thảo luận đã được giải quyết / kết thúc"
+                                          >
+                                            <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                            <T>Đã giải quyết</T>
+                                            <span className="bg-emerald-200 text-emerald-800 px-1.5 py-0.2 rounded-full text-[9px] font-black">
+                                              {replyCount}
+                                            </span>
+                                          </button>
+                                        );
+                                      }
+
+                                      return (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setSelectedTopicId(existingTopic.id);
+                                            setActiveTab("TRAO_ĐỔI");
+                                            setForumSubTab("TOPICS");
+                                          }}
+                                          className={`mt-2 w-full py-1.5 px-3 rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95 select-none uppercase tracking-wide ${
+                                            hasUserTaskInTopic
+                                              ? "bg-gradient-to-r from-red-600 via-rose-600 to-pink-600 hover:from-red-700 hover:to-pink-700 text-white border border-red-400 shadow-sm animate-pulse"
+                                              : "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border border-amber-400/50 shadow-sm"
+                                          }`}
+                                          title={hasUserTaskInTopic ? "Bạn có đầu việc/được tag trong thảo luận này!" : "Mở phòng thảo luận chuyên đề của bản tin này"}
+                                        >
+                                          <Flame className="w-3.5 h-3.5 text-amber-100 shrink-0 animate-bounce" />
+                                          <T>{hasUserTaskInTopic ? "Cần xử lý task" : "Vào thảo luận"}</T>
+                                          <span className="bg-white/25 text-white px-1.5 py-0.2 rounded-full text-[9px] font-black">
+                                            {replyCount}
+                                          </span>
+                                        </button>
+                                      );
+                                    }
+
+                                    // Chưa có topic -> Cho phép tạo thảo luận
+                                    return (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenEmergencyDiscussionModal(r)}
+                                        className="mt-2 w-full py-1.5 px-3 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1.5 shadow-sm hover:shadow active:scale-95 transition-all cursor-pointer border border-rose-400/30 select-none uppercase tracking-wide"
+                                        title="Khởi tạo thảo luận chuyên đề cho sự cố này"
+                                      >
+                                        <Flame className="w-3.5 h-3.5 text-rose-100 shrink-0" />
+                                        <T>Thảo luận chuyên đề</T>
+                                      </button>
+                                    );
+                                  })()}
 
                                   {/* Display directives history in Nhật ký table row */}
                                   {r.directives && r.directives.length > 0 && (
@@ -6700,13 +8990,7 @@ export default function DashboardDesktop({
                                     onUpdateReport={onUpdateReport}
                                   />
                                 </td>
-                                <td className="p-4 text-center border border-slate-200">
-                                  <DesktopThumbnailSlider 
-                                    imageUrls={r.imageUrls && r.imageUrls.length > 0 ? r.imageUrls : [r.imageUrl || getCategoryFallbackImage(r.category)]} 
-                                    fallbackUrl={r.imageUrl || getCategoryFallbackImage(r.category)} 
-                                  />
-                                </td>
-                                <td className="p-4 text-center select-none whitespace-nowrap font-mono font-bold text-xs font-black border border-slate-200">
+                                <td className="p-2 text-center select-none whitespace-nowrap font-mono font-bold text-xs font-black border border-slate-200 w-[105px] min-w-[100px] max-w-[115px]">
                                   <div className="flex flex-col items-center justify-center gap-1.5">
                                     {r.reportType === "RRO" ? (
                                       <span className="bg-amber-100 text-amber-900 border border-amber-300 font-black text-[10px] px-2.5 py-1 rounded tracking-wider">
@@ -6721,7 +9005,7 @@ export default function DashboardDesktop({
                                         <T><span translate="no" className="notranslate">KPH (NB)</span></T>
                                       </span>
                                     ) : r.reportType === "DSA" || r.isSpotlight ? (
-                                      <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 font-black text-[10px] px-2.5 py-1 rounded tracking-wider">
+                                      <span className="bg-emerald-100 text-emerald-800 border-emerald-200 font-black text-[10px] px-2.5 py-1 rounded tracking-wider">
                                         <T><span translate="no" className="notranslate">DSA</span></T>
                                       </span>
                                     ) : (
@@ -6736,51 +9020,54 @@ export default function DashboardDesktop({
                                     )}
                                   </div>
                                 </td>
-                                <td className="p-4 text-center select-none whitespace-nowrap border border-slate-200">
-                                  {r.isAbnormal ? (
-                                    <T className="bg-red-50 text-red-770 border border-red-200 font-extrabold text-[9px] px-2 py-0.5 rounded uppercase block">
-                                      BẤT THƯỜNG
-                                    </T>
-                                  ) : (
-                                    <T className="bg-emerald-50 text-emerald-770 border border-emerald-200 font-bold text-[9px] px-2 py-0.5 rounded uppercase block">
-                                      BÌNH THƯỜNG
-                                    </T>
-                                  )}
+                                <td className="py-2 px-2 text-center select-none border border-slate-200 w-[95px] min-w-[90px] max-w-[105px] align-middle">
+                                  <div className="flex items-center justify-center mx-auto">
+                                    {r.isAbnormal ? (
+                                      <span className="bg-red-50 text-red-700 border border-red-200 font-extrabold text-[9px] px-2 py-1 rounded uppercase tracking-wider whitespace-nowrap shadow-2xs">
+                                        <T><span translate="no" className="notranslate">BẤT THƯỜNG</span></T>
+                                      </span>
+                                    ) : (
+                                      <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[9px] px-2 py-1 rounded uppercase tracking-wider whitespace-nowrap shadow-2xs">
+                                        <T><span translate="no" className="notranslate">BÌNH THƯỜNG</span></T>
+                                      </span>
+                                    )}
+                                  </div>
                                 </td>
-                                {/* Merged likes and shares column - placed after TRẠNG THÁI */}
-                                <td className="p-4 space-y-3 min-w-[180px] max-w-[220px] border border-slate-200">
+
+                                {/* Merged likes and shares column - reduced width by 30% */}
+                                <td className="p-2.5 space-y-2.5 w-[150px] min-w-[140px] max-w-[160px] border border-slate-200 overflow-hidden">
                                   {/* Likes Section */}
                                   <div>
-                                    <div className="text-[9px] font-extrabold text-rose-600 uppercase mb-1.5 flex items-center gap-1.5 border-b border-rose-100/50 pb-0.5">
-                                      <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />
+                                    <div className="text-[8.5px] font-extrabold text-rose-600 uppercase mb-1 flex items-center gap-1 border-b border-rose-100/50 pb-0.5">
+                                      <Heart className="w-3 h-3 text-rose-500 fill-rose-500 shrink-0" />
                                       <T><span translate="no" className="notranslate">Người Thích</span></T>
                                     </div>
                                     {r.likedBy && r.likedBy.length > 0 ? (
                                       <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto">
                                         {r.likedBy.map((name, i) => (
-                                          <span key={i} className="bg-rose-50 text-rose-700 text-[9px] px-1.5 py-0.5 rounded border border-rose-100 font-bold whitespace-nowrap">
+                                          <span key={i} className="bg-rose-50 text-rose-700 text-[8px] px-1.5 py-0.5 rounded border border-rose-100 font-bold max-w-full truncate">
                                             <T><span translate="no" className="notranslate">{name}</span></T>
                                           </span>
                                         ))}
                                       </div>
                                     ) : (
-                                      <span className="text-slate-400 text-[10px] italic"><T><span translate="no" className="notranslate">Chưa có</span></T></span>
+                                      <span className="text-slate-400 text-[9.5px] italic"><T><span translate="no" className="notranslate">Chưa có</span></T></span>
                                     )}
                                   </div>
 
                                   {/* Shares/Replications Section */}
-                                  <div className="mt-2.5">
-                                    <div className={`text-[9px] font-extrabold uppercase mb-1.5 flex items-center gap-1.5 border-b pb-0.5 ${
+                                  <div className="mt-2">
+                                    <div className={`text-[8.5px] font-extrabold uppercase mb-1 flex items-center gap-1 border-b pb-0.5 ${
                                       r.reportType === "DSA" || r.isSpotlight
                                         ? "text-emerald-700 border-emerald-100/50"
                                         : "text-blue-700 border-blue-100/50"
                                     }`}>
                                       {r.reportType === "DSA" || r.isSpotlight ? (
-                                        <Award className="w-3.5 h-3.5 text-emerald-500" />
+                                        <Award className="w-3 h-3 text-emerald-500 shrink-0" />
                                       ) : (
-                                        <Share2 className="w-3.5 h-3.5 text-blue-500" />
+                                        <Share2 className="w-3 h-3 text-blue-500 shrink-0" />
                                       )}
-                                      <span translate="no" className="notranslate">
+                                      <span translate="no" className="notranslate truncate">
                                         {r.reportType === "DSA" || r.isSpotlight ? "Biểu dương / Nhân rộng" : "Tiếp nhận / Nhân rộng"}
                                       </span>
                                     </div>
@@ -6812,13 +9099,13 @@ export default function DashboardDesktop({
                                             );
 
                                             return (
-                                              <div key={i} className="flex flex-col gap-0.5 bg-slate-50 p-1.5 rounded border border-slate-150 text-[9.5px]">
-                                                <div className="flex items-center justify-between gap-1.5">
-                                                  <span translate="no" className="notranslate font-bold text-slate-700 truncate max-w-[120px]" title={name}>
+                                              <div key={i} className="flex flex-col gap-0.5 bg-slate-50 p-1.5 rounded border border-slate-150 text-[9px]">
+                                                <div className="flex items-center justify-between gap-1">
+                                                  <span translate="no" className="notranslate font-bold text-slate-700 truncate max-w-[75px]" title={name}>
                                                     {name}
                                                   </span>
                                                   {resForDept ? (
-                                                    <span translate="no" className={`notranslate text-[8px] font-black px-1 py-0.2 rounded border uppercase scale-90 ${
+                                                    <span translate="no" className={`notranslate text-[7.5px] font-black px-1 py-0.2 rounded border uppercase shrink-0 ${
                                                       resForDept.status === "Đã xử lý"
                                                         ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                                                         : "bg-amber-50 text-amber-700 border-amber-200"
@@ -6826,13 +9113,13 @@ export default function DashboardDesktop({
                                                       {resForDept.status === "Đã xử lý" ? "✓ Xong" : "⏳ Trì"}
                                                     </span>
                                                   ) : (
-                                                    <span translate="no" className="notranslate text-[7.5px] text-slate-400 italic">
+                                                    <span translate="no" className="notranslate text-[7.5px] text-slate-400 italic shrink-0">
                                                       Chưa xử lý
                                                     </span>
                                                   )}
                                                 </div>
                                                 {resForDept && (
-                                                  <div translate="no" className="notranslate text-[8px] text-slate-500 font-medium pl-1 border-l border-slate-200 mt-0.5 max-w-[160px] truncate" title={resForDept.resultText}>
+                                                  <div translate="no" className="notranslate text-[7.5px] text-slate-500 font-medium pl-1 border-l border-slate-200 mt-0.5 max-w-[110px] truncate" title={resForDept.resultText}>
                                                     {resForDept.resultText}
                                                   </div>
                                                 )}
@@ -6841,23 +9128,23 @@ export default function DashboardDesktop({
                                           })}
                                         </div>
                                       ) : (
-                                        <span translate="no" className="notranslate text-slate-400 text-[10px] italic">Chưa tiếp nhận</span>
+                                        <span translate="no" className="notranslate text-slate-400 text-[9.5px] italic">Chưa tiếp nhận</span>
                                       )}
 
                                       {/* KPH replications list (if has replications) */}
                                       {r.replications && r.replications.length > 0 && (
                                         <div className="pt-1.5 border-t border-slate-100 space-y-1">
-                                          <div className="text-[8px] font-extrabold text-emerald-700 uppercase tracking-wider select-none">
+                                          <div className="text-[7.5px] font-extrabold text-emerald-700 uppercase tracking-wider select-none">
                                             Nhân rộng biện pháp:
                                           </div>
                                           <div className="flex flex-col gap-1 max-h-24 overflow-y-auto">
                                             {r.replications.map((rep) => (
-                                              <div key={rep.id} className="flex flex-col gap-0.5 bg-emerald-50/30 p-1.5 rounded border border-emerald-100 text-[9.5px]">
-                                                <div className="flex items-center justify-between gap-1.5">
-                                                  <span translate="no" className="notranslate font-bold text-emerald-900 truncate max-w-[120px]" title={`${rep.factoryName} - ${rep.departmentName}`}>
+                                              <div key={rep.id} className="flex flex-col gap-0.5 bg-emerald-50/30 p-1 rounded border border-emerald-100 text-[9px]">
+                                                <div className="flex items-center justify-between gap-1">
+                                                  <span translate="no" className="notranslate font-bold text-emerald-900 truncate max-w-[75px]" title={`${rep.factoryName} - ${rep.departmentName}`}>
                                                     {rep.factoryName} - {rep.departmentName}
                                                   </span>
-                                                  <span translate="no" className={`notranslate text-[8px] font-black px-1 py-0.2 rounded border uppercase scale-90 ${
+                                                  <span translate="no" className={`notranslate text-[7.5px] font-black px-1 py-0.2 rounded border uppercase shrink-0 ${
                                                     rep.status === "Đã hoàn thành"
                                                       ? "bg-emerald-100 text-emerald-800 border-emerald-300"
                                                       : rep.status === "Đang triển khai"
@@ -6867,9 +9154,9 @@ export default function DashboardDesktop({
                                                     {rep.status === "Đã hoàn thành" ? "✓ Xong" : rep.status === "Đang triển khai" ? "⏳ Chạy" : "📝 Chuẩn"}
                                                   </span>
                                                 </div>
-                                                <div className="text-[7.5px] text-slate-400 font-mono mt-0.5 flex justify-between select-none">
-                                                  <span translate="no" className="notranslate">{rep.registrantName} {rep.phoneNumber ? `(SĐT: ${rep.phoneNumber})` : ""}</span>
-                                                  <span translate="no" className="notranslate">Hạn: {rep.targetDate}</span>
+                                                <div className="text-[7px] text-slate-400 font-mono mt-0.5 flex justify-between select-none">
+                                                  <span translate="no" className="notranslate truncate max-w-[65px]">{rep.registrantName}</span>
+                                                  <span translate="no" className="notranslate shrink-0">Hạn: {rep.targetDate}</span>
                                                 </div>
                                               </div>
                                             ))}
@@ -6881,12 +9168,12 @@ export default function DashboardDesktop({
                                       r.replications && r.replications.length > 0 ? (
                                         <div className="flex flex-col gap-1 max-h-24 overflow-y-auto">
                                           {r.replications.map((rep) => (
-                                            <div key={rep.id} className="flex flex-col gap-0.5 bg-emerald-50/30 p-1.5 rounded border border-emerald-100 text-[9.5px]">
-                                              <div className="flex items-center justify-between gap-1.5">
-                                                <span translate="no" className="notranslate font-bold text-emerald-900 truncate max-w-[120px]" title={`${rep.factoryName} - ${rep.departmentName}`}>
+                                            <div key={rep.id} className="flex flex-col gap-0.5 bg-emerald-50/30 p-1 rounded border border-emerald-100 text-[9px]">
+                                              <div className="flex items-center justify-between gap-1">
+                                                <span translate="no" className="notranslate font-bold text-emerald-900 truncate max-w-[75px]" title={`${rep.factoryName} - ${rep.departmentName}`}>
                                                   {rep.factoryName} - {rep.departmentName}
                                                 </span>
-                                                <span translate="no" className={`notranslate text-[8px] font-black px-1 py-0.2 rounded border uppercase scale-90 ${
+                                                <span translate="no" className={`notranslate text-[7.5px] font-black px-1 py-0.2 rounded border uppercase shrink-0 ${
                                                   rep.status === "Đã hoàn thành"
                                                     ? "bg-emerald-100 text-emerald-800 border-emerald-300"
                                                     : rep.status === "Đang triển khai"
@@ -6897,34 +9184,34 @@ export default function DashboardDesktop({
                                                 </span>
                                               </div>
                                               {rep.currentState && (
-                                                <div translate="no" className="notranslate text-[8px] text-slate-600 font-medium pl-1 border-l border-emerald-200 mt-0.5 max-w-[160px] truncate" title={`Hiện trạng: ${rep.currentState}`}>
+                                                <div translate="no" className="notranslate text-[7.5px] text-slate-600 font-medium pl-1 border-l border-emerald-200 mt-0.5 max-w-[110px] truncate" title={`Hiện trạng: ${rep.currentState}`}>
                                                   <strong>1. HT:</strong> {rep.currentState}
                                                 </div>
                                               )}
                                               {rep.supportRequired && (
-                                                <div translate="no" className="notranslate text-[8px] text-slate-600 font-medium pl-1 border-l border-amber-300 mt-0.5 max-w-[160px] truncate" title={`Hỗ trợ: ${rep.supportRequired}`}>
+                                                <div translate="no" className="notranslate text-[7.5px] text-slate-600 font-medium pl-1 border-l border-amber-300 mt-0.5 max-w-[110px] truncate" title={`Hỗ trợ: ${rep.supportRequired}`}>
                                                   <strong>2. HTợ:</strong> {rep.supportRequired}
                                                 </div>
                                               )}
                                               {!rep.currentState && !rep.supportRequired && rep.notes && (
-                                                <div translate="no" className="notranslate text-[8px] text-slate-500 font-medium pl-1 border-l border-emerald-200 mt-0.5 max-w-[160px] truncate" title={rep.notes}>
+                                                <div translate="no" className="notranslate text-[7.5px] text-slate-500 font-medium pl-1 border-l border-emerald-200 mt-0.5 max-w-[110px] truncate" title={rep.notes}>
                                                   {rep.notes}
                                                 </div>
                                               )}
-                                              <div className="text-[7.5px] text-slate-400 font-mono mt-0.5 flex justify-between select-none">
-                                                <span translate="no" className="notranslate">{rep.registrantName} {rep.phoneNumber ? `(SĐT: ${rep.phoneNumber})` : ""}</span>
-                                                <span translate="no" className="notranslate">Hạn: {rep.targetDate}</span>
+                                              <div className="text-[7px] text-slate-400 font-mono mt-0.5 flex justify-between select-none">
+                                                <span translate="no" className="notranslate truncate max-w-[65px]">{rep.registrantName}</span>
+                                                <span translate="no" className="notranslate shrink-0">Hạn: {rep.targetDate}</span>
                                               </div>
                                             </div>
                                           ))}
                                         </div>
                                       ) : (
-                                        <span translate="no" className="notranslate text-slate-400 text-[10px] italic">Chưa có nhân rộng</span>
+                                        <span translate="no" className="notranslate text-slate-400 text-[9.5px] italic">Chưa tiếp nhận</span>
                                       )
                                     )}
                                   </div>
                                 </td>
-                                <td className="p-4 text-center select-none whitespace-nowrap border border-slate-200">
+                                <td className="py-3 px-2 text-center select-none whitespace-nowrap border border-slate-200 w-[80px] min-w-[75px] max-w-[85px]">
                                   {isDeleteReportAllowed(r) ? (
                                     <button
                                       onClick={() => {
@@ -6956,27 +9243,42 @@ export default function DashboardDesktop({
             </div>
           )}
 
-          {/* TAB 5: QUY CHẾ (Guidelines bylaws) */}
-          {activeTab === "QUY_CHẾ" && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-lg font-bold text-slate-850 flex items-center gap-2">
-                  <FileSpreadsheet className="w-5 h-5 text-teal-500" />
-                  <T>Quy chế và Quy trình Vận hành 4M1E1I</T>
-                </h2>
-                <T className="text-xs text-slate-500 mt-1 block">Tài liệu chỉ đạo nghiệp vụ chính thức từ Phòng Quản Lý Chất Lượng Tân Phú Group về quy ước quản lý biến động chất lượng xưởng.</T>
-              </div>
+          {/* TAB 4.5: FORM CAPA (ISO Management Hub) */}
+          {activeTab === "FORM_CAPA" && (
+            <CapaManagementHub
+              reports={scopedReports}
+              currentUser={currentUser}
+              users={scopedUsers}
+              branches={scopedBranches}
+              onShowToast={onShowToast}
+            />
+          )}
 
-              <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-6 leading-relaxed text-sm text-slate-700 shadow-sm">
-                <div className="space-y-4">
-                  <h3 className="font-extrabold text-slate-800 text-xs uppercase tracking-wide border-l-2 border-emerald-500 pl-2">
-                    <T>Mục Tiêu Chỉ Đạo Vận Hành</T>
-                  </h3>
-                  <T className="block text-justify text-xs text-slate-655 leading-relaxed">
-                    Để đáp ứng nghiêm ngặt các chứng chỉ chất lượng quốc tế lớn gồm BRC, ISO 9001, và ISO 22000, ban giám đốc phê chuẩn quy chế vận hành 4M1E1I làm kim chỉ nam.
-                  </T>
-                </div>
-              </div>
+          {/* TAB: TIẾN TRÌNH THỬ NGHIỆM (Shopee Stepper Hub) */}
+          {activeTab === "THỬ_NGHIỆM" && (
+            <div className="h-[calc(100vh-140px)] min-h-[600px] overflow-y-auto pr-1">
+              <TrialTrackingHub
+                currentUser={currentUser}
+                branches={scopedBranches}
+                departments={departments}
+                users={scopedUsers}
+                showToast={(msg) => onShowToast && onShowToast(msg, "info")}
+              />
+            </div>
+          )}
+
+          {/* TAB 5: KHO TRI THỨC AI (Tiêu chuẩn quốc tế & Quy trình nội bộ từng nhà máy) */}
+          {activeTab === "QUY_CHẾ" && (
+            <div className="h-[calc(100vh-140px)] min-h-[600px] overflow-y-auto pr-1">
+              <AiKnowledgeBaseHub
+                knowledgeDocs={knowledgeDocs}
+                branches={scopedBranches}
+                currentUser={currentUser}
+                onAddDoc={onAddKnowledgeDoc || (() => {})}
+                onUpdateDoc={onUpdateKnowledgeDoc || (() => {})}
+                onDeleteDoc={onDeleteKnowledgeDoc || (() => {})}
+                onShowToast={onShowToast}
+              />
             </div>
           )}
 
@@ -6989,12 +9291,21 @@ export default function DashboardDesktop({
             );
             return (
               <div className="space-y-6">
-                <div>
-                  <h2 className="text-lg font-bold text-slate-850 flex items-center gap-2">
-                    <Users className="w-5 h-5 text-slate-500" />
-                    <T>Trang cá nhân</T>
-                  </h2>
-                  <T className="text-xs text-slate-550 mt-1 block">Cập nhật thông tin đăng ký, mật khẩu bảo mật và ảnh đại diện của bạn.</T>
+                {/* Header Banner - White, bright & elegant style */}
+                <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-xs border border-slate-200/80 flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-blue-600 to-cyan-600 text-white flex items-center justify-center shadow-md shadow-blue-500/20 shrink-0">
+                      <Users className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+                        <T>TRANG CÁ NHÂN & HỒ SƠ TÀI KHOẢN</T>
+                      </h1>
+                      <p className="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">
+                        <T>Cập nhật thông tin đăng ký, mật khẩu bảo mật và ảnh đại diện của bạn.</T>
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Redesigned Horizontally-Optimized Profile Panel */}
@@ -7532,18 +9843,33 @@ export default function DashboardDesktop({
           {/* TAB 7: THÔNG BÁO (Broadcast ticker manager & bulletin board creator) */}
           {activeTab === "THÔNG_BÁO" && (
             <div className="space-y-6">
-              <div>
-                <h2 className="text-lg font-bold text-slate-850 flex items-center gap-2">
-                  <Bell className="w-5 h-5 text-amber-500 animate-pulse" />
-                  <T>Trung tâm Cấu hình & Phát sóng Bảng tin</T>
-                </h2>
-                <T className="text-xs text-slate-500 mt-1 block">Quản trị toàn quyền thông báo chữ chạy (Ticker) khẩn cấp trên đỉnh hệ thống và đăng tin tức trực tuyến tới toàn bộ cán bộ công nhân viên.</T>
+              {/* Header Banner - White, bright & elegant style */}
+              <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-xs border border-slate-200/80 flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-500 text-white flex items-center justify-center shadow-md shadow-amber-500/20 shrink-0">
+                    <Bell className="w-6 h-6 text-white animate-pulse" />
+                  </div>
+                  <div>
+                    <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+                      <T>TRUNG TÂM CẤU HÌNH & PHÁT SÓNG BẢNG TIN</T>
+                    </h1>
+                    <p className="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">
+                      <T>Quản trị toàn quyền thông báo chữ chạy (Ticker) khẩn cấp trên đỉnh hệ thống và đăng tin tức trực tuyến tới toàn bộ cán bộ công nhân viên.</T>
+                    </p>
+                  </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
                 {/* Left side configurations */}
                 {currentUser?.role === UserRole.ADMIN && (
                   <div className="xl:col-span-5 space-y-6">
+                  {/* Card 0: CẤU HÌNH BANNER LỄ HỘI & SỰ KIỆN */}
+                  <FestiveBannerConfigCard
+                    bannerConfig={festiveBannerConfig}
+                    onSaveConfig={onUpdateFestiveBannerConfig || (() => {})}
+                  />
+
                   {/* Card 1: THÔNG BÁO CHỮ CHẠY HỆ THỐNG */}
                   <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm space-y-4">
                     <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2 border-b border-slate-100 pb-3">
@@ -7637,60 +9963,7 @@ export default function DashboardDesktop({
                     )}
                   </div>
 
-                  {/* Card 1B: KHO TRI THỨC TIÊU CHUẨN AI */}
-                  <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm space-y-4">
-                    <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2 border-b border-slate-100 pb-3">
-                      <Brain className="w-5 h-5 text-[#8B5CF6] animate-pulse" />
-                      <T>🧠 KHO TRI THỨC TIÊU CHUẨN AI</T>
-                    </h3>
 
-                    <div className="bg-[#F3E8FF] border border-[#E9D5FF] rounded-xl p-4 space-y-3">
-                      <T className="text-[#6B21A8] text-[10px] font-black block uppercase tracking-wider">TRI THỨC TIÊU CHUẨN HIỆN TẠI:</T>
-                      <div className="text-xs text-slate-750 leading-relaxed font-sans font-medium whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
-                        <T>{aiKnowledgeText && aiKnowledgeText.trim() !== "" ? aiKnowledgeText : "CHƯA CUNG CẤP TRI THỨC TIÊU CHUẨN (AI SẼ DÙNG TRI THỨC CHUNG CHẤT LƯỢNG)"}</T>
-                      </div>
-                    </div>
-
-                    {isEditingKnowledge ? (
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 animate-fadeIn">
-                        <T className="text-slate-700 text-xs font-black uppercase tracking-wide block">CẬP NHẬT KHO TRI THỨC AI</T>
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] text-slate-500 block font-bold uppercase"><T>Nội dung thông tin / Tiêu chuẩn mới:</T></label>
-                          <textarea
-                            value={editKnowledgeText}
-                            onChange={(e) => setEditKnowledgeText(e.target.value)}
-                            rows={8}
-                            className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 focus:ring-2 focus:ring-[#8B5CF6] focus:outline-none"
-                            placeholder="Ví dụ:&#10;- Công ty vừa chứng nhận ISO 9001:2015, BRCGS, BSCI, SCAN.&#10;- Lỗi không nhất quán phiếu kiểm tra vi phạm điều khoản 7.5 của ISO 9001.&#10;- Mất an ninh nhà xưởng vi phạm tiêu chuẩn SCAN mục an ninh vật lý."
-                          />
-                        </div>
-                        <div className="flex gap-2 pt-2">
-                          <button
-                            onClick={handleSaveKnowledgeConfig}
-                            className="flex-1 py-2 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white font-extrabold rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                            <T>LƯU TRI THỨC</T>
-                          </button>
-                          <button
-                            onClick={() => setIsEditingKnowledge(false)}
-                            className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                            <T>HỦY</T>
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={handleStartEditKnowledge}
-                        className="w-full py-2.5 bg-[#F3E8FF] hover:bg-[#E9D5FF] border border-[#D8B4FE] text-slate-800 font-extrabold rounded-lg text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
-                      >
-                        <Pencil className="w-3.5 h-3.5 text-[#7C3AED] shrink-0" />
-                        <T>Cập Nhật Kho Tri Thức AI</T>
-                      </button>
-                    )}
-                  </div>
 
                   {/* Card 1C: CẤU HÌNH HỆ THỐNG PHÊ DUYỆT QC */}
                   <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm space-y-4">
@@ -8106,35 +10379,71 @@ export default function DashboardDesktop({
             </div>
           )}
 
-          {/* TAB 8: KÊNH TRAO ĐỔI (Forum / Diễn đàn Ban Quản Trị) */}
+          {/* TAB 8: KÊNH TRAO ĐỔI & HỘP THOẠI 1:1 (Forum & Direct Chat) */}
           {activeTab === "TRAO_ĐỔI" && (
-            <div className="h-[calc(100vh-140px)] min-h-[600px] flex flex-col space-y-4">
-              {/* Header */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-bold text-slate-850 flex items-center gap-2">
-                    <MessageSquare className="w-5 h-5 text-pink-500" />
-                    <T>Kênh Trao Đổi & Ý Kiến Cải Tiến</T>
-                  </h2>
-                  <T className="text-xs text-slate-500 mt-1 block">
-                    Nơi gửi ý kiến đóng góp, đề xuất cải tiến 4M1E1I và thảo luận trực tiếp với Ban Quản Trị.
-                  </T>
+            <div className="h-[calc(100vh-140px)] min-h-[600px] flex flex-col space-y-3">
+              {/* Header & Sub-Tabs Switcher - White, bright & elegant banner */}
+              <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-pink-500 to-rose-500 text-white flex items-center justify-center shadow-md shadow-pink-500/20 shrink-0">
+                    <MessageSquare className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+                      <T>KÊNH TRAO ĐỔI & HỘP THOẠI TIN NHẮN 1:1</T>
+                    </h1>
+                    <p className="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">
+                      <T>Nơi thảo luận chuyên đề KPH, góp ý cải tiến 4M1E1I và trao đổi trực tiếp riêng tư giữa các bộ phận.</T>
+                    </p>
+                  </div>
                 </div>
-                <button
-                  onClick={() => setIsCreatingTopic(true)}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
-                >
-                  <Plus className="w-4 h-4" />
-                  <T>TẠO CHỦ ĐỀ MỚI</T>
-                </button>
               </div>
 
-              {/* Main Forum Split Layout */}
+              {/* View 1: Topics Discussion Forum */}
+              {forumSubTab === "TOPICS" && (
               <div className="flex-1 min-h-0 grid grid-cols-12 gap-4">
                 {/* Left Pane - List of Topics (35% -> col-span-4) */}
                 <div className="col-span-4 bg-white border border-slate-200 rounded-lg flex flex-col min-h-0 shadow-sm overflow-hidden">
                   {/* Search and Filters */}
                   <div className="p-3 border-b border-slate-100 space-y-3">
+                    {/* 2 Main Sub-Tabs Switcher */}
+                    <div className="grid grid-cols-2 gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                      <div className="flex items-center justify-between bg-white text-blue-700 shadow-xs border border-slate-200/80 rounded-lg p-0.5 min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => setForumSubTab("TOPICS")}
+                          className="flex-1 py-1.5 px-1.5 text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer min-w-0"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate"><T>CHỦ ĐỀ ({scopedTopics.length})</T></span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsCreatingTopic(true);
+                          }}
+                          title="Tạo chủ đề mới"
+                          className="w-6 h-6 rounded-md bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:scale-95 text-white flex items-center justify-center transition-all cursor-pointer shrink-0 shadow-xs mr-0.5"
+                        >
+                          <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setForumSubTab("INBOX")}
+                        className="py-2 px-2 rounded-lg text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer relative text-slate-600 hover:text-slate-900 min-w-0"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate"><T>TIN NHẮN 1:1</T></span>
+                        {unreadDirectMessagesCount > 0 && (
+                          <span className="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full animate-bounce shrink-0">
+                            {unreadDirectMessagesCount}
+                          </span>
+                        )}
+                      </button>
+                    </div>
+
                     <div className="relative">
                       <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                       <input
@@ -8145,38 +10454,25 @@ export default function DashboardDesktop({
                         className="w-full bg-slate-50 text-slate-800 border border-slate-200 rounded-md pl-9 pr-3 py-1.5 text-xs focus:outline-none focus:border-blue-500"
                       />
                     </div>
-
-                    {/* Category Filter Pills */}
-                    <div className="flex flex-wrap gap-1">
-                      {["ALL", "Góp ý chức năng", "Cải tiến 4M1E", "Sự cố chất lượng", "Khác"].map((cat) => {
-                        const isSelected = forumCategoryFilter === cat;
-                        return (
-                          <button
-                            key={cat}
-                            onClick={() => setForumCategoryFilter(cat)}
-                            className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer border ${
-                              isSelected
-                                ? "bg-blue-50 border-blue-200 text-blue-700"
-                                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                            }`}
-                          >
-                            <T>{cat === "ALL" ? "TẤT CẢ" : cat}</T>
-                          </button>
-                        );
-                      })}
-                    </div>
                   </div>
 
                   {/* Topic Items List */}
                   <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
                     {(() => {
                       // Filter and sort topics
-                      const filtered = topics.filter((t) => {
+                      const filtered = scopedTopics.filter((t) => {
+                        const q = forumSearchQuery.toLowerCase();
                         const matchesQuery =
-                          t.title.toLowerCase().includes(forumSearchQuery.toLowerCase()) ||
-                          t.description.toLowerCase().includes(forumSearchQuery.toLowerCase()) ||
-                          t.creatorName.toLowerCase().includes(forumSearchQuery.toLowerCase());
-                        const matchesCat = forumCategoryFilter === "ALL" || t.category === forumCategoryFilter;
+                          !forumSearchQuery.trim() ||
+                          (t.title || "").toLowerCase().includes(q) ||
+                          (t.description || "").toLowerCase().includes(q) ||
+                          (t.creatorName || "").toLowerCase().includes(q) ||
+                          (t.topicCode || "").toLowerCase().includes(q) ||
+                          (t.reportId || "").toLowerCase().includes(q);
+                        const matchesCat =
+                          forumCategoryFilter === "ALL" ||
+                          t.category === forumCategoryFilter ||
+                          (forumCategoryFilter === "Kiến nghị khác" && ((t.category as string) === "Khác" || t.category === "Kiến nghị khác" || !t.category));
                         return matchesQuery && matchesCat;
                       });
 
@@ -8184,7 +10480,7 @@ export default function DashboardDesktop({
                       const sorted = [...filtered].sort((a, b) => {
                         if (a.isPinned && !b.isPinned) return -1;
                         if (!a.isPinned && b.isPinned) return 1;
-                        return b.timestamp.localeCompare(a.timestamp);
+                        return (b.timestamp || "").localeCompare(a.timestamp || "");
                       });
 
                       if (sorted.length === 0) {
@@ -8195,72 +10491,128 @@ export default function DashboardDesktop({
                         );
                       }
 
+                      const isAdminOrReviewer =
+                        currentUser.role === UserRole.ADMIN ||
+                        currentUser.role === UserRole.REVIEWER ||
+                        (currentUser.role as string) === "ADMIN" ||
+                        (currentUser.role as string) === "REVIEWER" ||
+                        (currentUser.role as string) === "CHỦ ADMIN" ||
+                        (currentUser.role as string) === "DUYỆT VIÊN";
+
                       return sorted.map((t) => {
                         const isSelected = selectedTopicId === t.id;
                         const replyCount = replies.filter((r) => r.topicId === t.id).length;
+                        const isKphDiscussion = t.category === "Thảo luận KPH" || Boolean(t.reportId);
+                        const matchedReport = t.reportId
+                          ? reports.find((r) => r.id === t.reportId || (r.reportCode && r.reportCode === t.reportId))
+                          : reports.find((r) => r.reportCode && t.title.includes(r.reportCode));
+                        const reportCode = getTopicReportCode(t, matchedReport);
+                        const displayTitle = cleanDisplayTitle(t.title, t.description, matchedReport);
+
+                        // Card background & border style by topic status
+                        const getStatusCardStyle = () => {
+                          if (t.status === "RESOLVED") {
+                            return isSelected
+                              ? "bg-emerald-50/90 border-l-emerald-600 border-y border-emerald-200 shadow-xs"
+                              : "bg-emerald-50/30 hover:bg-emerald-50/60 border-l-emerald-500 border-y border-emerald-100/50";
+                          }
+                          if (t.status === "PROCESSING") {
+                            return isSelected
+                              ? "bg-amber-50/90 border-l-amber-600 border-y border-amber-200 shadow-xs"
+                              : "bg-amber-50/30 hover:bg-amber-50/60 border-l-amber-500 border-y border-amber-100/50";
+                          }
+                          // OPEN (Default) -> Blue
+                          return isSelected
+                            ? "bg-blue-50/90 border-l-blue-600 border-y border-blue-200 shadow-xs"
+                            : "bg-blue-50/30 hover:bg-blue-50/60 border-l-blue-500 border-y border-blue-100/50";
+                        };
+
                         return (
                           <div
                             key={t.id}
                             onClick={() => setSelectedTopicId(t.id)}
-                            className={`p-3 text-left transition-all cursor-pointer border-l-4 ${
-                              isSelected
-                                ? "bg-blue-50/50 border-l-blue-600 border-y border-slate-100"
-                                : "border-l-transparent hover:bg-slate-50"
-                            }`}
+                            className={`p-3 text-left transition-all cursor-pointer border-l-4 ${getStatusCardStyle()}`}
                           >
-                            <div className="flex items-start justify-between gap-1 mb-1">
+                            <div className="flex items-center justify-between gap-1.5 mb-1.5 flex-wrap">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 {t.topicCode && (
-                                  <span className="px-1.5 py-0.5 rounded-md text-[9px] font-mono font-black bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
-                                    <span translate="no" className="notranslate">Mã: {t.topicCode}</span>
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-black bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
+                                    <span translate="no" className="notranslate">{t.topicCode}</span>
                                   </span>
                                 )}
-                                {/* Category Badge */}
-                                <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
-                                  <T>{t.category}</T>
+                                {reportCode && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-50 text-amber-800 border border-amber-200 shrink-0">
+                                    <span translate="no" className="notranslate">{reportCode}</span>
+                                  </span>
+                                )}
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${
+                                    isKphDiscussion
+                                      ? "bg-rose-50 text-rose-700 border-rose-200"
+                                      : "bg-white/80 text-slate-700 border-slate-200"
+                                  }`}
+                                >
+                                  <T>{t.category || "Thảo luận"}</T>
                                 </span>
                               </div>
 
-                              {/* Status Badge */}
-                              <span
-                                className={`px-1.5 py-0.5 rounded-md text-[9px] font-bold border ${
-                                  t.status === "OPEN"
-                                    ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                                    : t.status === "PROCESSING"
-                                    ? "bg-amber-50 border-amber-200 text-amber-700"
-                                    : t.status === "RESOLVED"
-                                    ? "bg-blue-50 border-blue-200 text-blue-700"
-                                    : "bg-slate-50 border-slate-200 text-slate-500"
-                                }`}
-                              >
-                                <T>
-                                  {t.status === "OPEN"
-                                    ? "Mở"
-                                    : t.status === "PROCESSING"
-                                    ? "Đang xử lý"
-                                    : t.status === "RESOLVED"
-                                    ? "Đã giải quyết"
-                                    : "Đóng"}
-                                </T>
-                              </span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                {/* Pin & Delete Action Buttons */}
+                                {isAdminOrReviewer && (
+                                  <div className="flex items-center gap-0.5">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onToggleForumTopicPin?.(t.id);
+                                      }}
+                                      className={`p-1 rounded border text-[10px] font-bold transition-all cursor-pointer flex items-center justify-center ${
+                                        t.isPinned
+                                          ? "bg-rose-50 border-rose-200 text-rose-600 shadow-2xs"
+                                          : "bg-white border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-50"
+                                      }`}
+                                      title="Ghim/Bỏ ghim chủ đề"
+                                    >
+                                      <Pin className={`w-3 h-3 ${t.isPinned ? "fill-rose-600 text-rose-600" : ""}`} />
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDeletingDesktopTopic(t);
+                                      }}
+                                      className="p-1 rounded border border-slate-200 bg-white text-slate-400 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 text-[10px] font-bold transition-all cursor-pointer flex items-center justify-center"
+                                      title="Xóa chủ đề"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                             </div>
 
                             {/* Title */}
-                            <h4 className="font-bold text-slate-800 text-xs mb-1 line-clamp-2 flex items-center gap-1">
-                              {t.isPinned && <Pin className="w-3 h-3 text-red-500 shrink-0 fill-red-500" />}
-                              <T>{t.title}</T>
+                            <h4 className="font-bold text-slate-850 text-xs mb-1.5 line-clamp-2 leading-relaxed flex items-start gap-1">
+                              {t.isPinned && <Pin className="w-3 h-3 text-red-500 shrink-0 fill-red-500 mt-0.5" />}
+                              <T>{displayTitle}</T>
                             </h4>
 
-
                             {/* Metadata */}
-                            <div className="flex items-center justify-between text-[9px] text-slate-400">
-                              <span className="flex items-center gap-1 font-medium">
-                                <UserIcon className="w-2.5 h-2.5" />
-                                <T>{t.creatorName}</T>
-                              </span>
+                            <div className="flex items-center justify-between text-[10px] text-slate-400">
+                              {(() => {
+                                const creatorUser = findUser(users, t.creatorId, t.creatorPhone, t.creatorName);
+                                return (
+                                  <span className="flex items-center gap-1.5 font-medium text-slate-600 truncate max-w-[170px]">
+                                    {creatorUser?.avatar ? (
+                                      <img src={creatorUser.avatar} alt="" className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
+                                    ) : (
+                                      <UserIcon className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                                    )}
+                                    <span className="truncate notranslate" translate="no"><T>{t.creatorName}</T></span>
+                                  </span>
+                                );
+                              })()}
                               <span className="flex items-center gap-1.5">
-                                <T>{t.timestamp.split(" ")[0]}</T>
-                                <span className="flex items-center gap-0.5 bg-slate-100 px-1 py-0.5 rounded-md text-slate-500 font-bold border border-slate-150">
+                                <T>{(t.timestamp || "").split(" ")[0]}</T>
+                                <span className="flex items-center gap-0.5 bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-bold border border-slate-200">
                                   <MessageCircle className="w-2.5 h-2.5" />
                                   {replyCount}
                                 </span>
@@ -8274,217 +10626,642 @@ export default function DashboardDesktop({
                 </div>
 
                 {/* Right Pane - Conversation Details (65% -> col-span-8) */}
-                <div className="col-span-8 bg-white border border-slate-200 rounded-lg flex flex-col min-h-0 shadow-sm overflow-hidden">
+                <div className="col-span-8 bg-white border border-slate-200 rounded-lg flex flex-col h-[calc(100vh-190px)] min-h-[620px] shadow-sm overflow-hidden">
                   {(() => {
-                    const topic = topics.find((t) => t.id === selectedTopicId);
-                    if (!topic) {
+                    const topic = scopedTopics.find((t) => t.id === selectedTopicId);
+                    if (!topic || !isUserAllowedToViewTopic(topic, currentUser, replies, reports)) {
                       return (
                         <div className="flex-1 flex flex-col items-center justify-center p-8 text-slate-400">
                           <MessageSquare className="w-12 h-12 mb-2 text-slate-300" />
-                          <T className="text-xs">Vui lòng chọn một chủ đề thảo luận từ danh sách bên trái</T>
+                          <T className="text-xs">Vui lòng chọn một chủ đề thảo luận từ danh sách bên trái hoặc bạn chưa có quyền tham gia chủ đề này.</T>
                         </div>
                       );
                     }
 
                     const topicReplies = replies.filter((r) => r.topicId === topic.id);
                     const isAdminOrReviewer =
-                      currentUser.role === "CHỦ ADMIN" || currentUser.role === "DUYỆT VIÊN";
+                      currentUser.role === UserRole.ADMIN ||
+                      currentUser.role === UserRole.REVIEWER ||
+                      (currentUser.role as string) === "ADMIN" ||
+                      (currentUser.role as string) === "REVIEWER" ||
+                      (currentUser.role as string) === "CHỦ ADMIN" ||
+                      (currentUser.role as string) === "DUYỆT VIÊN";
+
+                    const linkedReport = topic.reportId
+                      ? reports.find((r) => r.id === topic.reportId || (r.reportCode && r.reportCode === topic.reportId))
+                      : reports.find((r) => r.reportCode && topic.title.includes(r.reportCode));
+
+                    const reportCode = getTopicReportCode(topic, linkedReport);
+                    const cleanTitle = cleanDisplayTitle(topic.title, topic.description, linkedReport);
+
+                    const handleSendDesktopReply = (msgText?: string, attachedImagesList?: AttachedImage[]) => {
+                      const finalMsg = (msgText !== undefined ? msgText : forumReplyMessage).trim();
+                      if (!finalMsg && (!attachedImagesList || attachedImagesList.length === 0)) return;
+                      const extraData: Partial<ForumReply> = {};
+                      if (desktopReplyingTo) {
+                        extraData.quotedReply = {
+                          id: desktopReplyingTo.id,
+                          senderName: desktopReplyingTo.senderName,
+                          message: desktopReplyingTo.message
+                        };
+                      }
+                      if (attachedImagesList && attachedImagesList.length > 0) {
+                        extraData.attachments = attachedImagesList.map(img => ({
+                          type: "image",
+                          url: img.url,
+                          name: img.name,
+                          sizeKb: img.sizeKb
+                        }));
+                      }
+                      onAddForumReply?.(topic.id, finalMsg, extraData);
+                      setForumReplyMessage("");
+                      setDesktopReplyingTo(null);
+                    };
 
                     return (
                       <>
-                        {/* Topic Header details */}
-                        <div className="p-4 border-b border-slate-200 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                          <div className="space-y-1.5 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              {topic.topicCode && (
-                                <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-black bg-indigo-100 text-indigo-800 border border-indigo-300">
-                                  <span translate="no" className="notranslate">Mã: {topic.topicCode}</span>
-                                </span>
-                              )}
-                              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200">
-                                <T>{topic.category}</T>
-                              </span>
-                              <span
-                                className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${
-                                  topic.status === "OPEN"
-                                    ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                                    : topic.status === "PROCESSING"
-                                    ? "bg-amber-50 border-amber-200 text-amber-700"
-                                    : topic.status === "RESOLVED"
-                                    ? "bg-blue-50 border-blue-200 text-blue-700"
-                                    : "bg-slate-50 border-slate-200 text-slate-500"
-                                }`}
-                              >
-                                <T>
-                                  {topic.status === "OPEN"
-                                    ? "Mở"
-                                    : topic.status === "PROCESSING"
-                                    ? "Đang xử lý"
-                                    : topic.status === "RESOLVED"
-                                    ? "Đã giải quyết"
-                                    : "Đóng"}
-                                </T>
-                              </span>
-                              {topic.isPinned && (
-                                <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-rose-50 border border-rose-200 rounded-md text-[9px] font-bold text-rose-600">
-                                  <Pin className="w-2.5 h-2.5 fill-rose-600" />
-                                  <T>Ghim</T>
-                                </span>
-                              )}
-                            </div>
-                            <h3 className="font-bold text-slate-900 text-sm leading-snug">
-                              <T>{topic.title}</T>
-                            </h3>
-                            <div className="flex items-center gap-2 text-[10px] text-slate-500">
-                              <T className="font-medium">
-                                {topic.creatorName} ({topic.creatorRole})
-                              </T>
-                              <span>•</span>
-                              <T>{topic.timestamp}</T>
+                        {/* Polished Multi-Row Chat Header */}
+                        <div className="border-b border-slate-200 bg-white shrink-0 shadow-2xs">
+                          {/* Row 1: Topic Title & Info */}
+                          <div className="px-5 pt-3.5 pb-2.5 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              {(() => {
+                                const creatorUser = findUser(users, topic.creatorId, topic.creatorPhone, topic.creatorName);
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenDirectChatByName(topic.creatorName)}
+                                    className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 hover:from-pink-500 hover:to-rose-600 text-white font-bold flex items-center justify-center text-sm shadow-2xs shrink-0 cursor-pointer transition-all hover:scale-105 overflow-hidden"
+                                    title={`Nhắn tin 1:1 với tác giả ${topic.creatorName}`}
+                                  >
+                                    {creatorUser?.avatar ? (
+                                      <img src={creatorUser.avatar} alt="" className="w-full h-full rounded-full object-cover" />
+                                    ) : (
+                                      topic.creatorName.charAt(0)
+                                    )}
+                                  </button>
+                                );
+                              })()}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <h3 className="font-extrabold text-slate-900 text-sm md:text-[15px] leading-snug">
+                                    <T>{cleanTitle}</T>
+                                  </h3>
+                                </div>
+                                <p className="text-[11.5px] text-slate-400 font-medium flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenDirectChatByName(topic.creatorName)}
+                                    className="text-slate-700 font-semibold hover:text-pink-600 hover:underline cursor-pointer transition-colors"
+                                    title={`Bấm để mở hộp thoại chat 1:1 với ${topic.creatorName}`}
+                                  >
+                                    <T>{topic.creatorName}</T>
+                                  </button>
+                                  <span>•</span>
+                                  <span className="text-slate-500"><T>{topicReplies.length} phản hồi</T></span>
+                                  {topic.timestamp && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="font-mono text-slate-500"><T>{topic.timestamp}</T></span>
+                                    </>
+                                  )}
+                                  {linkedReport && (
+                                    <>
+                                      <span>•</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActiveTab("FORM_CAPA");
+                                          if (onShowToast) onShowToast(`Chuyển đến Báo cáo CAPA: ${reportCode}`, "info");
+                                        }}
+                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[11px] font-bold cursor-pointer transition-colors shadow-2xs"
+                                        title="Mở Báo cáo CAPA liên kết"
+                                      >
+                                        <ExternalLink className="w-3 h-3 text-blue-600" />
+                                        <span className="font-mono text-[11px] font-semibold"><T>{reportCode || "Xem CAPA"}</T></span>
+                                      </button>
+                                    </>
+                                  )}
+                                </p>
+                              </div>
                             </div>
                           </div>
 
-                          {/* Administrative controls */}
-                          {isAdminOrReviewer && (
-                            <div className="flex items-center gap-2 shrink-0 bg-white p-2 border border-slate-200 rounded-lg">
-                              {/* Toggle Pin */}
+                          {/* Row 2: Dedicated Action Toolbar (Dòng công cụ chuyên biệt) */}
+                          <div className="px-5 py-2 bg-slate-50/80 border-t border-slate-150 flex items-center justify-between gap-2.5 flex-wrap">
+                            {/* Left Group: Topic Status & Linked CAPA */}
+                            <div className="flex items-center gap-2">
+                              {/* Status selector dropdown */}
+                              <div className="relative">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowDesktopStatusDropdown(!showDesktopStatusDropdown)}
+                                  className={`px-2.5 py-1 rounded-lg text-xs font-black border flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer ${
+                                    topic.status === "RESOLVED"
+                                      ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"
+                                      : topic.status === "PROCESSING"
+                                      ? "bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100"
+                                      : "bg-blue-50 text-blue-700 border-blue-300 hover:bg-blue-100"
+                                  }`}
+                                  title="Trạng thái xử lý của chủ đề thảo luận"
+                                >
+                                  <span className={`w-2 h-2 rounded-full ${
+                                    topic.status === "RESOLVED" ? "bg-emerald-500" : topic.status === "PROCESSING" ? "bg-amber-500" : "bg-blue-500"
+                                  }`} />
+                                  <T>
+                                    {topic.status === "RESOLVED"
+                                      ? "ĐÃ XONG"
+                                      : topic.status === "PROCESSING"
+                                      ? "ĐANG XỬ LÝ"
+                                      : "ĐANG MỞ"}
+                                  </T>
+                                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                                </button>
+
+                                {showDesktopStatusDropdown && (
+                                  <div className="absolute left-0 top-full mt-1 w-48 bg-white rounded-xl shadow-xl border border-slate-200 py-1 z-30 animate-scaleUp">
+                                    <div className="px-3 py-1.5 text-[9.5px] font-bold text-slate-400 uppercase border-b border-slate-100">
+                                      <T>Đổi trạng thái chủ đề</T>
+                                    </div>
+                                    {[
+                                      { key: "OPEN", label: "ĐANG MỞ", color: "text-blue-600 hover:bg-blue-50" },
+                                      { key: "PROCESSING", label: "ĐANG XỬ LÝ", color: "text-amber-600 hover:bg-amber-50" },
+                                      { key: "RESOLVED", label: "ĐÃ XONG / ĐÃ GIẢI QUYẾT", color: "text-emerald-600 hover:bg-emerald-50" }
+                                    ].map((st) => (
+                                      <button
+                                        key={st.key}
+                                        type="button"
+                                        onClick={() => {
+                                          onUpdateForumTopicStatus?.(topic.id, st.key as ForumTopicStatus);
+                                          setShowDesktopStatusDropdown(false);
+                                          if (onShowToast) {
+                                            onShowToast(`Đã chuyển trạng thái sang "${st.label}"`, "success");
+                                          }
+                                        }}
+                                        className={`w-full text-left px-3 py-2 text-xs font-bold transition-colors cursor-pointer flex items-center justify-between ${st.color} ${
+                                          topic.status === st.key ? "bg-slate-50 font-black" : ""
+                                        }`}
+                                      >
+                                        <T>{st.label}</T>
+                                        {topic.status === st.key && <Check className="w-3.5 h-3.5 stroke-[3px]" />}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Right Group: AI-SUM, TASK Catalog, Members */}
+                            <div className="flex items-center gap-2">
+                              {/* AI-SUM Button */}
                               <button
-                                onClick={() => onToggleForumTopicPin?.(topic.id)}
-                                className={`p-1.5 rounded-md border text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                                  topic.isPinned
-                                    ? "bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100"
-                                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                                }`}
-                                title="Ghim/Bỏ ghim chủ đề"
+                                type="button"
+                                onClick={() => setShowDesktopAiSummaryModal(true)}
+                                className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-black flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs"
+                                title="Xem tóm tắt AI cho cuộc thảo luận này"
                               >
-                                <Pin className={`w-3.5 h-3.5 ${topic.isPinned ? "fill-rose-600" : ""}`} />
-                                <T>{topic.isPinned ? "Bỏ Ghim" : "Ghim"}</T>
+                                <Sparkles className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                                <T>AI-SUM</T>
                               </button>
 
-                              {/* Status Select */}
-                              <select
-                                value={topic.status}
-                                onChange={(e) => onUpdateForumTopicStatus?.(topic.id, e.target.value as any)}
-                                className="bg-slate-50 text-slate-800 border border-slate-200 rounded-md px-2 py-1.5 text-xs font-bold focus:outline-none cursor-pointer"
-                              >
-                                <option value="OPEN">🟢 Mở</option>
-                                <option value="PROCESSING">🟡 Đang xử lý</option>
-                                <option value="RESOLVED">🔵 Đã giải quyết</option>
-                                <option value="CLOSED">⚪ Đóng</option>
-                              </select>
+                              {/* TASK Button */}
+                              {(() => {
+                                const topicTasks = topicReplies.filter(r => r.actionType);
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setDesktopActionsCatalogScope("CURRENT_TOPIC");
+                                      setShowDesktopActionsCatalogModal(true);
+                                    }}
+                                    className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-lg text-xs font-black flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs"
+                                    title="Danh mục Chỉ đạo & Đầu việc (Task) trong thảo luận này"
+                                  >
+                                    <ListTodo className="w-3.5 h-3.5 text-amber-600 stroke-[2.5px]" />
+                                    <T>TASK</T>
+                                    {topicTasks.length > 0 && (
+                                      <span className="bg-amber-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black">
+                                        {topicTasks.length}
+                                      </span>
+                                    )}
+                                  </button>
+                                );
+                              })()}
 
-                              {/* Edit Button */}
+                              {/* Members Button */}
                               <button
-                                onClick={() => {
-                                  setEditingDesktopTopic(topic);
-                                  setEditDesktopTopicTitle(topic.title);
-                                  setEditDesktopTopicDesc(topic.description);
-                                  setEditDesktopTopicCategory(topic.category);
-                                }}
-                                className="p-1.5 rounded-md border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
-                                title="Sửa chủ đề"
+                                type="button"
+                                onClick={() => setShowDesktopMembersModal(true)}
+                                className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
+                                title="Mời & Xem danh sách thành viên tham gia"
                               >
-                                <Edit className="w-3.5 h-3.5" />
-                                <T>Sửa</T>
-                              </button>
-
-                              {/* Delete Button */}
-                              <button
-                                onClick={() => {
-                                  setDeletingDesktopTopic(topic);
-                                }}
-                                className="p-1.5 rounded-md border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
-                                title="Xóa chủ đề"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                <T>Xóa</T>
+                                <Users className="w-3.5 h-3.5 text-slate-600" />
+                                <span className="text-xs font-bold"><T>Thành viên ({topic.invitedUserIds?.length || 0})</T></span>
                               </button>
                             </div>
-                          )}
+                          </div>
                         </div>
 
-                        {/* Stream (First post + replies) */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                          {/* First Post (Topic Description) */}
-                          <div className="p-3 bg-slate-50 border border-slate-150 rounded-lg">
-                            <div className="flex items-start gap-2.5">
-                              <div className="w-8 h-8 bg-blue-600 text-white rounded-md font-bold flex items-center justify-center shrink-0 text-xs">
-                                {topic.creatorName.charAt(0)}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-bold text-slate-850 text-xs">
-                                    <T>{topic.creatorName}</T>
-                                  </span>
-                                  <span className="text-[9px] bg-slate-200 border border-slate-300 px-1 py-0.2 rounded-md text-slate-600 font-bold">
-                                    <T>{topic.creatorRole}</T>
-                                  </span>
-                                  <span className="text-[9px] text-slate-400">
-                                    <T>{topic.timestamp}</T>
-                                  </span>
-                                </div>
-                              </div>
+                        {/* Expandable Topic Context / Description Banner */}
+                        {topic.description && (
+                          <div className="bg-slate-50/90 border-b border-slate-200 px-5 py-2 flex items-center justify-between text-xs text-slate-700">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Info className="w-4 h-4 text-blue-600 shrink-0" />
+                              <span className={`font-medium ${isDesktopDescExpanded ? "" : "truncate"}`}>
+                                <T>{topic.description}</T>
+                              </span>
                             </div>
+                            {topic.description.length > 60 && (
+                              <button
+                                type="button"
+                                onClick={() => setIsDesktopDescExpanded(!isDesktopDescExpanded)}
+                                className="text-[11px] text-blue-600 hover:text-blue-800 font-bold shrink-0 ml-2 flex items-center gap-0.5 cursor-pointer"
+                              >
+                                <T>{isDesktopDescExpanded ? "Thu gọn" : "Xem thêm"}</T>
+                                {isDesktopDescExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                              </button>
+                            )}
                           </div>
+                        )}
 
-                          {/* Replies Divider */}
-                          <div className="relative flex py-1 items-center">
-                            <div className="flex-grow border-t border-slate-100"></div>
-                            <span className="flex-shrink mx-3 text-[9px] text-slate-400 font-bold uppercase tracking-wider">
-                              <T>Ý kiến phản hồi ({topicReplies.length})</T>
-                            </span>
-                            <div className="flex-grow border-t border-slate-100"></div>
-                          </div>
-
-                          {/* Replies List */}
+                        {/* Chat Stream (Khung Chat Gọn Gàng & Cân Đối) */}
+                        <div className="flex-1 overflow-y-auto p-5 space-y-3 bg-[#f8fafc] select-text">
                           {topicReplies.length === 0 ? (
-                            <div className="py-6 text-center text-slate-400 text-xs font-medium">
-                              <T>Chưa có ý kiến phản hồi nào. Hãy là người đầu tiên đóng góp ý kiến!</T>
+                            <div className="py-16 flex flex-col items-center justify-center text-center text-slate-400 space-y-2">
+                              <div className="w-12 h-12 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-2xs">
+                                <MessageCircle className="w-6 h-6 text-slate-400" />
+                              </div>
+                              <p className="text-xs font-semibold text-slate-600">
+                                <T>Chưa có ý kiến trao đổi nào.</T>
+                              </p>
+                              <p className="text-[11px] text-slate-400 max-w-xs">
+                                <T>Hãy là người đầu tiên đóng góp ý kiến hoặc phản hồi chuyên môn bên dưới!</T>
+                              </p>
                             </div>
                           ) : (
                             topicReplies
-                              .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
-                              .map((r) => {
+                              .sort((a, b) => (a.timestamp || "").localeCompare(b.timestamp || ""))
+                              .map((r, rIdx, arr) => {
                                 const resolvedSender = resolveSenderInfo(users, r.senderPhone, r.senderName, r.senderRole);
-                                const isBQT = r.senderRole === "CHỦ ADMIN" || r.senderPhone === "BQT" || resolvedSender.role === "ADMIN";
+                                const isMe = isCurrentUserSender(currentUser, r.senderPhone, r.senderName, (r as any).senderId, r.senderRole);
+                                const prevReply = rIdx > 0 ? arr[rIdx - 1] : null;
+                                const isConsecutive =
+                                  prevReply &&
+                                  prevReply.senderName === r.senderName &&
+                                  prevReply.senderPhone === r.senderPhone;
+                                const likesCount = r.likedBy ? r.likedBy.length : (r.likes || 0);
+                                const hasLiked = currentUser && r.likedBy?.includes(currentUser.phone || currentUser.id);
+
+                                const isTopicLeader = checkIsTopicLeader(topic, currentUser);
+                                const isSenderTopicLeader = checkIsTopicLeader(topic, resolvedSender as any);
+                                const canManageReply =
+                                  isAdminOrReviewer ||
+                                  isTopicLeader ||
+                                  isMe ||
+                                  (currentUser && (r.senderPhone === currentUser.phone || r.senderPhone === currentUser.id || r.senderName === currentUser.fullName));
+
                                 return (
                                   <div
                                     key={r.id}
-                                    className={`p-3 rounded-lg border text-left transition-all ${
-                                      isBQT
-                                        ? "bg-amber-50/40 border-amber-200 shadow-sm"
-                                        : "bg-white border-slate-150"
-                                    }`}
+                                    className={`flex flex-col w-full ${isMe ? "items-end" : "items-start"} ${isConsecutive ? "mt-1" : "mt-3"}`}
                                   >
-                                    <div className="flex items-start gap-2.5">
+                                    {/* Sender Info (Chỉ hiện khi đổi người gửi và không phải liên tiếp) */}
+                                    {!isMe && !isConsecutive && (
+                                      <div className="flex items-center gap-1.5 ml-10 mb-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenDirectChatWithSender(r, resolvedSender)}
+                                          className="font-semibold text-slate-800 text-[11px] hover:text-pink-600 hover:underline cursor-pointer transition-colors flex items-center gap-1 group/name"
+                                          title={`Bấm để mở hộp thoại chat 1:1 với ${formatNameCapitalized(resolvedSender.fullName || r.senderName)}`}
+                                        >
+                                          <T>{formatNameCapitalized(resolvedSender.fullName || r.senderName)}</T>
+                                          <MessageCircle className="w-3 h-3 text-pink-500 opacity-0 group-hover/name:opacity-100 transition-opacity" />
+                                        </button>
+                                      </div>
+                                    )}
+
+                                    {isMe && !isConsecutive && (
+                                      <div className="flex items-center justify-end gap-1.5 mr-10 mb-1">
+                                        <span className="font-semibold text-slate-800 text-[11px]">
+                                          <T>{currentUser?.fullName ? `TÔI (${formatNameCapitalized(currentUser.fullName)})` : "TÔI"}</T>
+                                        </span>
+                                      </div>
+                                    )}
+
+                                    {/* Message Bubble + Side Action Buttons + Avatar (Natural responsive width up to 80%) */}
+                                    <div className={`flex items-end gap-1.5 max-w-[80%] group ${isMe ? "flex-row-reverse" : "flex-row"}`}>
+                                      {/* Left Avatar for Others */}
+                                      {!isMe && (
+                                        <div className="w-8 h-8 shrink-0">
+                                          {!isConsecutive ? (
+                                            <button
+                                              type="button"
+                                              onClick={() => handleOpenDirectChatWithSender(r, resolvedSender)}
+                                              className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 hover:from-blue-600 hover:to-indigo-600 text-white font-bold flex items-center justify-center text-xs shadow-2xs cursor-pointer transition-all hover:scale-110 overflow-hidden"
+                                              title={`Nhắn tin 1:1 với ${resolvedSender.fullName}`}
+                                            >
+                                              {resolvedSender.avatar ? (
+                                                <img src={resolvedSender.avatar} alt="" className="w-full h-full rounded-full object-cover" />
+                                              ) : (
+                                                resolvedSender.fullName.charAt(0).toUpperCase()
+                                              )}
+                                            </button>
+                                          ) : (
+                                            <div className="w-8 h-8" />
+                                          )}
+                                        </div>
+                                      )}
+
+                                      {/* Right Avatar for Current User */}
+                                      {isMe && (
+                                        <div className="w-8 h-8 shrink-0">
+                                          {!isConsecutive ? (
+                                            <div
+                                              className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 text-white font-bold flex items-center justify-center text-xs shadow-2xs overflow-hidden"
+                                              title={currentUser?.fullName || "Tôi"}
+                                            >
+                                              {currentUser?.avatar ? (
+                                                <img src={currentUser.avatar} alt="" className="w-full h-full rounded-full object-cover" />
+                                              ) : (
+                                                (currentUser?.fullName || "T").charAt(0).toUpperCase()
+                                              )}
+                                            </div>
+                                          ) : (
+                                            <div className="w-8 h-8" />
+                                          )}
+                                        </div>
+                                      )}
+
+                                      {/* Main Chat Bubble (Fits text width dynamically and expands smoothly up to container max-width) */}
                                       <div
-                                        className={`w-7 h-7 rounded-md font-bold flex items-center justify-center shrink-0 text-xs ${
-                                          isBQT ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-700 border border-slate-200"
+                                        className={`relative px-4 py-2.5 rounded-2xl shadow-2xs text-[15px] leading-relaxed text-left transition-all break-words w-fit max-w-full ${
+                                          isMe
+                                            ? "bg-[#e9f2fd] text-slate-800 font-normal rounded-tr-xs border border-blue-200/80 shadow-2xs"
+                                            : "bg-white text-slate-850 font-normal rounded-tl-xs border border-slate-200/90"
                                         }`}
                                       >
-                                        {resolvedSender.fullName.charAt(0)}
-                                      </div>
-                                      <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                          <span className="font-bold text-slate-800 text-xs">
-                                            <T>{resolvedSender.fullName}</T>
-                                          </span>
-                                          <span
-                                            className={`text-[9px] px-1 py-0.2 rounded-md font-bold border ${
-                                              isBQT
-                                                ? "bg-amber-100 border-amber-300 text-amber-700"
-                                                : "bg-slate-100 border-slate-250 text-slate-600"
+                                        {/* Task / Directive Badge attached to bubble corner */}
+                                        {r.actionType && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setDesktopEditingActionReply(r);
+                                              setDesktopEditActionType(r.actionType || "DIRECTIVE");
+                                              setDesktopEditTaskNote(r.actionData?.note || "");
+                                              setDesktopEditTaskDeadline(r.actionData?.deadline || "");
+                                              setDesktopEditTaskStatus(r.actionData?.status || "PENDING");
+                                              const foundUser = users.find(
+                                                (u) => (r.actionData?.assignedToId && (u.id === r.actionData.assignedToId || u.phone === r.actionData.assignedToId)) ||
+                                                       (r.actionData?.assignedToName && u.fullName === r.actionData.assignedToName)
+                                              );
+                                              setDesktopEditTaskAssignedUser(foundUser || null);
+                                            }}
+                                            className={`absolute -top-2.5 ${isMe ? "-left-2.5" : "-right-2.5"} flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black shadow-md cursor-pointer border transition-transform hover:scale-105 z-10 select-none ${
+                                              r.actionType === "DIRECTIVE"
+                                                ? "bg-amber-500 text-white border-amber-300"
+                                                : r.actionData?.status === "COMPLETED"
+                                                ? "bg-emerald-600 text-white border-emerald-400"
+                                                : "bg-blue-600 text-white border-blue-400"
+                                            }`}
+                                            title="Bấm để xem/sửa chi tiết chỉ đạo hoặc đầu việc (Task)"
+                                          >
+                                            {r.actionType === "DIRECTIVE" ? (
+                                              <Zap className="w-3 h-3 fill-amber-200 text-amber-200" />
+                                            ) : (
+                                              <ListTodo className="w-3 h-3 text-white stroke-[2.5px]" />
+                                            )}
+                                            <span>
+                                              {r.actionType === "DIRECTIVE"
+                                                ? "CHỈ ĐẠO"
+                                                : r.actionData?.status === "COMPLETED"
+                                                ? "TASK ✓"
+                                                : "TASK"}
+                                            </span>
+                                          </button>
+                                        )}
+
+                                        {/* Quoted Message Box (theo phong cách Zalo mềm mại) */}
+                                        {r.quotedReply && (
+                                          <div
+                                            className={`p-2 px-2.5 rounded-r-lg rounded-l-xs mb-2 text-[13px] border-l-[3px] transition-all ${
+                                              isMe
+                                                ? "bg-[#dbe9fa] text-slate-800 border-[#0068ff]"
+                                                : "bg-slate-100 text-slate-700 border-amber-500"
                                             }`}
                                           >
-                                            <T>{resolvedSender.position || resolvedSender.role || r.senderRole}</T>
-                                          </span>
-                                          <span className="text-[9px] text-slate-400">
-                                            <T>{r.timestamp}</T>
-                                          </span>
-                                        </div>
-                                        <p className="text-slate-700 text-xs mt-1.5 leading-relaxed break-words whitespace-pre-wrap font-medium">
-                                          <T>{r.message}</T>
-                                        </p>
+                                            <div className="font-semibold text-[12px] text-slate-800">
+                                              <T>{r.quotedReply.senderName}</T>
+                                            </div>
+                                            <div className="truncate mt-0.5 text-[12.5px] text-slate-600">
+                                              <T>{r.quotedReply.message}</T>
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {/* Inline Editing Mode */}
+                                        {editingDesktopReplyId === r.id ? (
+                                          <div className="space-y-2 min-w-[240px]">
+                                            <textarea
+                                              value={editingDesktopReplyText}
+                                              onChange={(e) => setEditingDesktopReplyText(e.target.value)}
+                                              className="w-full bg-white text-slate-900 border border-slate-300 rounded p-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                              rows={3}
+                                            />
+                                            <div className="flex items-center justify-end gap-1.5">
+                                              <button
+                                                onClick={() => {
+                                                  setEditingDesktopReplyId(null);
+                                                  setEditingDesktopReplyText("");
+                                                }}
+                                                className="px-2 py-0.5 text-xs font-bold bg-slate-200 hover:bg-slate-300 text-slate-700 rounded cursor-pointer"
+                                              >
+                                                <T>Hủy</T>
+                                              </button>
+                                              <button
+                                                onClick={() => {
+                                                  if (editingDesktopReplyText.trim()) {
+                                                    onEditForumReply?.(r.id, editingDesktopReplyText.trim());
+                                                    setEditingDesktopReplyId(null);
+                                                    setEditingDesktopReplyText("");
+                                                  }
+                                                }}
+                                                className="px-2 py-0.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded cursor-pointer"
+                                              >
+                                                <T>Lưu</T>
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          <>
+                                            {/* Message Content with rich formatting & mentions styling */}
+                                            <div className="whitespace-pre-wrap break-words select-text font-normal text-[15px] leading-relaxed text-slate-900">
+                                              {renderFormattedMessage(r.message, {
+                                                isMe,
+                                                users,
+                                                onOpenDirectChat: handleOpenDirectChatByName
+                                              })}
+                                            </div>
+
+                                            {/* Attached Images */}
+                                            {r.attachments && r.attachments.length > 0 && (
+                                              <div className="mt-2.5 flex flex-wrap gap-2">
+                                                {r.attachments.map((att, attIdx) => (
+                                                  <div
+                                                    key={attIdx}
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setDesktopPreviewImage(att.url);
+                                                    }}
+                                                    className="relative group rounded-xl overflow-hidden border border-black/10 cursor-pointer shadow-2xs hover:shadow-md transition-all max-w-[240px]"
+                                                  >
+                                                    <img
+                                                      src={att.url}
+                                                      alt={att.name || "Hình ảnh"}
+                                                      className="max-h-48 w-auto object-cover rounded-xl hover:scale-102 transition-transform duration-200"
+                                                    />
+                                                    <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white font-bold text-xs gap-1">
+                                                      <Eye className="w-4 h-4" />
+                                                      <span><T>Xem ảnh</T></span>
+                                                    </div>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            )}
+
+                                            {/* Timestamp & Like count badge */}
+                                            <div className="flex items-center justify-end gap-1.5 mt-1 select-none">
+                                              {likesCount > 0 && (
+                                                <span
+                                                  className="flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.2 rounded-full bg-rose-50 text-rose-600 border border-rose-200 shadow-2xs"
+                                                >
+                                                  <Heart className="w-2.5 h-2.5 fill-rose-500 text-rose-500" />
+                                                  <span>{likesCount}</span>
+                                                </span>
+                                              )}
+                                              <span className="text-[11px] font-mono text-slate-400">
+                                                <T>{r.timestamp}</T>
+                                              </span>
+                                              {isMe && <Check className="w-3.5 h-3.5 text-blue-500 stroke-[2.5]" />}
+                                            </div>
+                                          </>
+                                        )}
+                                      </div>
+
+                                      {/* Hover Action Toolbar (Thả tim, Trả lời trích dẫn, Chuyển thành Chỉ đạo/Task, Sửa, Xóa) */}
+                                      <div
+                                        className={`opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 bg-white border border-slate-200 rounded-full px-1.5 py-0.5 shadow-xs shrink-0 ${
+                                          isMe ? "mr-1" : "ml-1"
+                                        }`}
+                                      >
+                                        <button
+                                          onClick={() => onLikeForumReply?.(r.id)}
+                                          className={`p-1 rounded-full hover:bg-slate-100 cursor-pointer ${
+                                            hasLiked ? "text-rose-600" : "text-slate-400 hover:text-rose-500"
+                                          }`}
+                                          title="Thích phản hồi"
+                                        >
+                                          <Heart className={`w-3.5 h-3.5 ${hasLiked ? "fill-rose-600" : ""}`} />
+                                        </button>
+
+                                        <button
+                                          onClick={() => {
+                                            setDesktopReplyingTo({
+                                              id: r.id,
+                                              senderName: resolvedSender.fullName,
+                                              message: r.message,
+                                            });
+                                          }}
+                                          className="p-1 rounded-full hover:bg-slate-100 text-slate-400 hover:text-blue-600 cursor-pointer"
+                                          title="Trả lời trích dẫn trong diễn đàn"
+                                        >
+                                          <CornerUpLeft className="w-3.5 h-3.5" />
+                                        </button>
+
+                                        {/* Nhắn riêng 1:1 button */}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const partnerUser = users.find(
+                                              (u) =>
+                                                (r.senderPhone && (u.phone === r.senderPhone || u.id === r.senderPhone)) ||
+                                                (r.senderName && u.fullName?.toLowerCase() === r.senderName?.toLowerCase()) ||
+                                                (resolvedSender.phone && u.phone === resolvedSender.phone)
+                                            );
+                                            if (partnerUser) {
+                                              setActiveDirectChatUser(partnerUser);
+                                            } else {
+                                              setActiveDirectChatUser({
+                                                id: r.senderPhone || `usr-${Date.now()}`,
+                                                fullName: resolvedSender.fullName,
+                                                phone: r.senderPhone || resolvedSender.phone || "",
+                                                department: resolvedSender.department || "Nhà máy",
+                                                branch: "Tân Phú",
+                                                role: UserRole.STAFF,
+                                                status: UserStatus.ACTIVE,
+                                                avatar: (resolvedSender as any)?.avatar || undefined
+                                              });
+                                            }
+                                            setForumSubTab("INBOX");
+                                            setDirectMessageInput(`[Trích đoạn KPH - ${topic.title}]: "${r.message.substring(0, 100)}..."\n`);
+                                          }}
+                                          className="p-1 rounded-full hover:bg-slate-100 text-slate-400 hover:text-pink-600 cursor-pointer"
+                                          title="Nhắn tin riêng 1:1 cho bạn này"
+                                        >
+                                          <MessageCircle className="w-3.5 h-3.5" />
+                                        </button>
+
+                                        {/* Convert to Directive / Task Button */}
+                                        <button
+                                          onClick={() => {
+                                            setDesktopConvertModalReply(r);
+                                            setDesktopActionTypeChoice(r.actionType || "DIRECTIVE");
+                                            setDesktopTaskNote(r.actionData?.note || "");
+                                            setDesktopTaskDeadline(r.actionData?.deadline || "");
+                                            const foundUser = users.find(
+                                              (u) => (r.actionData?.assignedToId && (u.id === r.actionData.assignedToId || u.phone === r.actionData.assignedToId)) ||
+                                                     (r.actionData?.assignedToName && u.fullName === r.actionData.assignedToName)
+                                            );
+                                            setDesktopTaskAssignedUser(foundUser || null);
+                                          }}
+                                          className="p-1 rounded-full hover:bg-slate-100 text-slate-400 hover:text-amber-600 cursor-pointer"
+                                          title="Chuyển thành Chỉ đạo / Phân công đầu việc (Task)"
+                                        >
+                                          <Zap className="w-3.5 h-3.5" />
+                                        </button>
+
+                                        {canManageReply && (
+                                          <>
+                                            <button
+                                              onClick={() => {
+                                                setEditingDesktopReplyId(r.id);
+                                                setEditingDesktopReplyText(r.message);
+                                              }}
+                                              className="p-1 rounded-full hover:bg-slate-100 text-slate-400 hover:text-amber-600 cursor-pointer"
+                                              title="Sửa tin nhắn"
+                                            >
+                                              <Pencil className="w-3.5 h-3.5" />
+                                            </button>
+                                            <button
+                                              onClick={() => {
+                                                if (onDeleteForumReply) {
+                                                  onDeleteForumReply(r.id);
+                                                  if (onShowToast) {
+                                                    onShowToast(
+                                                      isMe
+                                                        ? "Đã xóa tin nhắn của bạn."
+                                                        : "Đã xóa tin nhắn không phù hợp (Quyền Trưởng nhóm / Admin).",
+                                                      "info"
+                                                    );
+                                                  }
+                                                }
+                                              }}
+                                              className="p-1 rounded-full hover:bg-slate-100 text-slate-400 hover:text-rose-600 cursor-pointer"
+                                              title={isMe ? "Xóa tin nhắn của tôi" : "Xóa tin nhắn không phù hợp (Quyền Trưởng nhóm / Admin)"}
+                                            >
+                                              <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                          </>
+                                        )}
                                       </div>
                                     </div>
                                   </div>
@@ -8493,40 +11270,717 @@ export default function DashboardDesktop({
                           )}
                         </div>
 
-                        {/* Reply editor input */}
-                        <div className="p-3 border-t border-slate-200 bg-slate-50 flex gap-2">
-                          <MentionTextArea
+                        {/* Bottom Reply Area (Thân thiện, gọn gàng, liền mạch) */}
+                        <div className="p-3.5 bg-white border-t border-slate-200 shrink-0 space-y-2">
+                          {/* Active Replying Quote Banner */}
+                          {desktopReplyingTo && (
+                            <div className="bg-blue-50/90 border border-blue-200 rounded-xl px-3 py-1.5 flex items-center justify-between text-xs text-blue-900 animate-fadeIn">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <CornerUpLeft className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                                <span className="font-bold shrink-0 text-[11px]">
+                                  <T>Đang trả lời {desktopReplyingTo.senderName}:</T>
+                                </span>
+                                <span className="truncate opacity-80 italic text-[11px]">
+                                  "{desktopReplyingTo.message}"
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => setDesktopReplyingTo(null)}
+                                className="p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-blue-100 cursor-pointer shrink-0 ml-2"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Rich Chat Input Box matching Zalo-like toolbar with emojis and image uploads */}
+                          <RichChatInputBox
                             users={users}
-                            placeholder="Mời nhập phản hồi ý kiến đóng góp tại đây..."
                             value={forumReplyMessage}
                             onChange={setForumReplyMessage}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" && !e.shiftKey && forumReplyMessage.trim()) {
-                                e.preventDefault();
-                                onAddForumReply?.(topic.id, forumReplyMessage);
-                                setForumReplyMessage("");
-                              }
-                            }}
-                            className="flex-1 min-h-[40px] max-h-[100px] bg-white text-slate-800 border border-slate-200 rounded-md px-3 py-2 text-xs focus:outline-none focus:border-blue-500 shadow-sm resize-none"
-                            rows={1}
+                            onSend={(text, images) => handleSendDesktopReply(text, images)}
+                            placeholder="Nhập phản hồi trao đổi... (Gõ @ để gắn thẻ đồng nghiệp, Enter để gửi)"
+                            themeColor="blue"
                           />
-                          <button
-                            onClick={() => {
-                              if (!forumReplyMessage.trim()) return;
-                              onAddForumReply?.(topic.id, forumReplyMessage);
-                              setForumReplyMessage("");
-                            }}
-                            className="px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer shadow-sm shrink-0"
-                          >
-                            <Send className="w-3.5 h-3.5" />
-                            <T>GỬI</T>
-                          </button>
                         </div>
                       </>
                     );
                   })()}
                 </div>
               </div>
+              )}
+
+              {/* View 2: Direct 1:1 Messages & Inbox */}
+              {forumSubTab === "INBOX" && (
+                <div className="flex-1 min-h-0 grid grid-cols-12 gap-4">
+                  {/* Left Column: Direct Message Contacts & Online List (col-span-4) */}
+                  <div className="col-span-4 bg-white border border-slate-200 rounded-xl flex flex-col min-h-0 shadow-xs overflow-hidden">
+                    {/* Top Search & Sub-Filter Bar */}
+                    <div className="p-3 border-b border-slate-100 space-y-2.5 bg-slate-50/50">
+                      {/* 2 Main Sub-Tabs Switcher */}
+                      <div className="grid grid-cols-2 gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                        <div className="flex items-center justify-between text-slate-600 hover:text-slate-900 rounded-lg p-0.5 min-w-0">
+                          <button
+                            type="button"
+                            onClick={() => setForumSubTab("TOPICS")}
+                            className="flex-1 py-1.5 px-1.5 text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer min-w-0"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate"><T>CHỦ ĐỀ ({scopedTopics.length})</T></span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setForumSubTab("TOPICS");
+                              setIsCreatingTopic(true);
+                            }}
+                            title="Tạo chủ đề mới"
+                            className="w-6 h-6 rounded-md bg-slate-300 hover:bg-blue-600 hover:text-white active:scale-95 text-slate-700 flex items-center justify-center transition-all cursor-pointer shrink-0 shadow-xs mr-0.5"
+                          >
+                            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setForumSubTab("INBOX")}
+                          className="py-2 px-2 rounded-lg text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer relative bg-pink-600 text-white shadow-xs min-w-0"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate"><T>TIN NHẮN 1:1</T></span>
+                          {unreadDirectMessagesCount > 0 && (
+                            <span className="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full animate-bounce shrink-0">
+                              {unreadDirectMessagesCount}
+                            </span>
+                          )}
+                        </button>
+                      </div>
+
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder="Tìm theo tên, phòng ban..."
+                          value={directSearchTerm}
+                          onChange={(e) => setDirectSearchTerm(e.target.value)}
+                          className="w-full bg-white text-slate-800 border border-slate-200 rounded-lg pl-9 pr-3 py-1.5 text-xs focus:outline-none focus:border-pink-500 shadow-2xs"
+                        />
+                      </div>
+
+                      {/* 3 Sub-tabs: Hộp thoại | Online | Tất cả */}
+                      <div className="grid grid-cols-3 gap-1 bg-slate-200/70 p-1 rounded-lg">
+                        <button
+                          type="button"
+                          onClick={() => setDirectFilterTab("INBOX")}
+                          className={`py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                            directFilterTab === "INBOX"
+                              ? "bg-white text-pink-700 shadow-xs"
+                              : "text-slate-600 hover:text-slate-900"
+                          }`}
+                        >
+                          <MessageCircle className="w-3 h-3" />
+                          <T>Hộp thoại</T>
+                          {unreadDirectMessagesCount > 0 && (
+                            <span className="bg-red-500 text-white text-[9px] font-black px-1 rounded-full">
+                              {unreadDirectMessagesCount}
+                            </span>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDirectFilterTab("ONLINE")}
+                          className={`py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                            directFilterTab === "ONLINE"
+                              ? "bg-white text-emerald-700 shadow-xs"
+                              : "text-slate-600 hover:text-slate-900"
+                          }`}
+                        >
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                          <T>Online</T>
+                          <span className="text-[10px] opacity-75">
+                            ({scopedUsers.filter(u => u.status === UserStatus.ACTIVE && u.id !== currentUser.id && u.phone !== currentUser.phone).length})
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDirectFilterTab("ALL")}
+                          className={`py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                            directFilterTab === "ALL"
+                              ? "bg-white text-blue-700 shadow-xs"
+                              : "text-slate-600 hover:text-slate-900"
+                          }`}
+                        >
+                          <Users className="w-3 h-3" />
+                          <T>Tất cả</T>
+                          <span className="text-[10px] opacity-75">({scopedUsers.length})</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Contact List */}
+                    <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+                      {(() => {
+                        // Compute conversation partner list
+                        if (directFilterTab === "INBOX") {
+                          const partnerMap = new Map<string, { user: User; lastMsg: DirectMessageItem; unreadCount: number }>();
+                          
+                          // Sort direct messages latest first
+                          const sortedDMs = [...directMessages].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+                          
+                          sortedDMs.forEach((msg) => {
+                            const isFromMe = isMsgFromUser(msg, currentUser);
+                            const isToMe = isMsgToUser(msg, currentUser);
+                            if (!isFromMe && !isToMe) return;
+
+                            const partnerKey = isFromMe
+                              ? (msg.receiverId || msg.receiverName)
+                              : (msg.senderId || msg.senderName);
+                            if (!partnerKey) return;
+
+                            if (!partnerMap.has(partnerKey)) {
+                              let partnerUser = users.find(
+                                (u) =>
+                                  (u.id && u.id === partnerKey) ||
+                                  (u.fullName && u.fullName.toLowerCase() === partnerKey.toLowerCase()) ||
+                                  (u.phone && u.phone === partnerKey)
+                              );
+
+                              if (!partnerUser) {
+                                partnerUser = {
+                                  id: partnerKey,
+                                  fullName: isFromMe ? msg.receiverName : msg.senderName,
+                                  phone: "",
+                                  department: "Nhà máy",
+                                  branch: "Tân Phú",
+                                  role: (isFromMe ? undefined : msg.senderRole as any) || UserRole.STAFF,
+                                  status: UserStatus.ACTIVE
+                                };
+                              }
+
+                              partnerMap.set(partnerKey, {
+                                user: partnerUser,
+                                lastMsg: msg,
+                                unreadCount: 0
+                              });
+                            }
+
+                            // Count unread incoming messages
+                            if (isToMe && !isFromMe && !isMsgReadByUser(msg.id, currentUser)) {
+                              const item = partnerMap.get(partnerKey)!;
+                              item.unreadCount += 1;
+                            }
+                          });
+
+                          let list = Array.from(partnerMap.values());
+                          if (directSearchTerm.trim()) {
+                            const term = directSearchTerm.toLowerCase();
+                            list = list.filter(
+                              (item) =>
+                                item.user.fullName?.toLowerCase().includes(term) ||
+                                item.user.department?.toLowerCase().includes(term) ||
+                                item.lastMsg.content?.toLowerCase().includes(term)
+                            );
+                          }
+
+                          if (list.length === 0) {
+                            return (
+                              <div className="p-8 text-center text-slate-400 text-xs space-y-2">
+                                <MessageCircle className="w-8 h-8 mx-auto text-slate-300 stroke-[1.5]" />
+                                <p className="font-semibold text-slate-500"><T>Chưa có cuộc trò chuyện 1:1 nào</T></p>
+                                <p className="text-[11px] text-slate-400">
+                                  <T>Chuyển sang tab "Online" hoặc bấm "Nhắn riêng" trên diễn đàn để bắt đầu.</T>
+                                </p>
+                              </div>
+                            );
+                          }
+
+                          return list.map(({ user: partner, lastMsg, unreadCount }) => {
+                            const isSelected = activeDirectChatUser && (
+                              (activeDirectChatUser.id && activeDirectChatUser.id === partner.id) ||
+                              (activeDirectChatUser.fullName && activeDirectChatUser.fullName.toLowerCase() === partner.fullName.toLowerCase())
+                            );
+                            const isOnline = partner.status === UserStatus.ACTIVE;
+
+                            return (
+                              <div
+                                key={partner.id || partner.fullName}
+                                onClick={() => {
+                                  setActiveDirectChatUser(partner);
+                                  markPartnerMessagesAsRead(partner);
+                                }}
+                                className={`p-3 transition-colors cursor-pointer flex items-center justify-between group relative ${
+                                  isSelected
+                                    ? "bg-pink-50/80 border-l-4 border-pink-500"
+                                    : "hover:bg-slate-50"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                  <div className="relative shrink-0">
+                                    {partner.avatar ? (
+                                      <img src={partner.avatar} alt="" className="w-9 h-9 rounded-full object-cover border border-slate-200" />
+                                    ) : (
+                                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 text-white font-bold flex items-center justify-center text-xs shadow-2xs">
+                                        {partner.fullName.charAt(0)}
+                                      </div>
+                                    )}
+                                    {isOnline && (
+                                      <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
+                                    )}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center justify-between gap-1">
+                                      <span className={`text-xs font-bold truncate ${unreadCount > 0 ? "text-slate-900 font-extrabold" : "text-slate-700"}`}>
+                                        <T>{partner.fullName}</T>
+                                      </span>
+                                      <span className="text-[10px] text-slate-400 font-mono shrink-0">
+                                        {lastMsg.timestamp?.split(" ")[1] || lastMsg.timestamp?.split(" ")[0] || ""}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-1 mt-0.5">
+                                      <p className={`text-[11px] truncate ${unreadCount > 0 ? "text-slate-900 font-bold" : "text-slate-500"}`}>
+                                        {isMsgFromUser(lastMsg, currentUser) && <span className="text-slate-400 mr-1"><T>Bạn:</T></span>}
+                                        {lastMsg.content}
+                                      </p>
+                                      {unreadCount > 0 && (
+                                        <span className="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full shrink-0">
+                                          {unreadCount}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setConfirmDeletePartnerUserDesktop(partner);
+                                  }}
+                                  className="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-rose-600 transition-opacity ml-1 cursor-pointer"
+                                  title="Xóa hội thoại này"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            );
+                          });
+                        }
+
+                        // Online / All Users tab
+                        let userList = scopedUsers.filter((u) => u.id !== currentUser.id && u.phone !== currentUser.phone);
+                        if (directFilterTab === "ONLINE") {
+                          userList = userList.filter((u) => u.status === UserStatus.ACTIVE);
+                        }
+                        if (directSearchTerm.trim()) {
+                          const term = directSearchTerm.toLowerCase();
+                          userList = userList.filter(
+                            (u) =>
+                              u.fullName?.toLowerCase().includes(term) ||
+                              u.department?.toLowerCase().includes(term) ||
+                              u.phone?.includes(term) ||
+                              u.branch?.toLowerCase().includes(term)
+                          );
+                        }
+
+                        if (userList.length === 0) {
+                          return (
+                            <div className="p-8 text-center text-slate-400 text-xs">
+                              <T>Không tìm thấy nhân sự phù hợp</T>
+                            </div>
+                          );
+                        }
+
+                        return userList.map((partner) => {
+                          const isSelected = activeDirectChatUser && (
+                            (activeDirectChatUser.id && activeDirectChatUser.id === partner.id) ||
+                            (activeDirectChatUser.fullName && activeDirectChatUser.fullName.toLowerCase() === partner.fullName.toLowerCase())
+                          );
+                          const isOnline = partner.status === UserStatus.ACTIVE;
+
+                          return (
+                            <div
+                              key={partner.id || partner.phone || partner.fullName}
+                              onClick={() => {
+                                setActiveDirectChatUser(partner);
+                                markPartnerMessagesAsRead(partner);
+                              }}
+                              className={`p-3 transition-colors cursor-pointer flex items-center justify-between group ${
+                                isSelected
+                                  ? "bg-pink-50/80 border-l-4 border-pink-500"
+                                  : "hover:bg-slate-50"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="relative shrink-0">
+                                  {partner.avatar ? (
+                                    <img src={partner.avatar} alt="" className="w-9 h-9 rounded-full object-cover border border-slate-200" />
+                                  ) : (
+                                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold flex items-center justify-center text-xs shadow-2xs">
+                                      {partner.fullName.charAt(0)}
+                                    </div>
+                                  )}
+                                  {isOnline && (
+                                    <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white" />
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs font-bold text-slate-800 truncate">
+                                      <T>{partner.fullName}</T>
+                                    </span>
+                                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                                      <T>{partner.role || "Nhân sự"}</T>
+                                    </span>
+                                  </div>
+                                  <div className="text-[10.5px] text-slate-400 truncate mt-0.5">
+                                    <T>{partner.department} - {partner.branch || "Tân Phú"}</T>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                className="px-2.5 py-1 bg-pink-50 text-pink-700 hover:bg-pink-600 hover:text-white rounded-lg text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1 shrink-0 shadow-2xs"
+                              >
+                                <MessageCircle className="w-3 h-3" />
+                                <T>Nhắn tin</T>
+                              </button>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Right Column: Active Conversation (col-span-8) */}
+                  <div className="col-span-8 bg-white border border-slate-200 rounded-xl flex flex-col min-h-0 shadow-xs overflow-hidden">
+                    {activeDirectChatUser ? (
+                      <>
+                        {/* Direct Chat Header */}
+                        <div className="p-3.5 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
+                          <div className="flex items-center gap-3">
+                            <div className="relative shrink-0">
+                              {activeDirectChatUser.avatar ? (
+                                <img src={activeDirectChatUser.avatar} alt="" className="w-10 h-10 rounded-full object-cover border border-slate-200" />
+                              ) : (
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 text-white font-bold flex items-center justify-center text-sm shadow-2xs">
+                                  {activeDirectChatUser.fullName.charAt(0)}
+                                </div>
+                              )}
+                              {activeDirectChatUser.status === UserStatus.ACTIVE && (
+                                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-white" />
+                              )}
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                                <T>{activeDirectChatUser.fullName}</T>
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-pink-50 text-pink-700 border border-pink-200">
+                                  <T>{activeDirectChatUser.role || "Nhân sự"}</T>
+                                </span>
+                              </h3>
+                              <p className="text-xs text-slate-500 mt-0.5">
+                                <T>{activeDirectChatUser.department} • {activeDirectChatUser.branch || "Tân Phú"}</T>
+                                {activeDirectChatUser.status === UserStatus.ACTIVE ? (
+                                  <span className="text-emerald-600 font-bold ml-2">● Online (Trực tuyến)</span>
+                                ) : (
+                                  <span className="text-slate-400 ml-2">● Ngoại tuyến</span>
+                                )}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => markPartnerMessagesAsRead(activeDirectChatUser)}
+                              className="px-2.5 py-1 text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1 border border-slate-200 bg-white"
+                              title="Đánh dấu tất cả tin nhắn từ người này là đã đọc"
+                            >
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              <T>Đã đọc</T>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeletePartnerUserDesktop(activeDirectChatUser)}
+                              className="px-2.5 py-1 text-rose-600 hover:bg-rose-50 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1 border border-rose-200 bg-white"
+                              title="Xóa cuộc trò chuyện này"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <T>Xóa hội thoại</T>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Messages Stream */}
+                        <div ref={directChatScrollRefDesktop} className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#f8fafc] select-text">
+                          {(() => {
+                            const currentPartnerClean = activeDirectChatUser.fullName?.trim().toLowerCase();
+                            const conversationMessages = directMessages.filter((m) => {
+                              const isFromMe = isMsgFromUser(m, currentUser);
+                              const isToMe = isMsgToUser(m, currentUser);
+                              const isFromPartner = isMsgFromUser(m, activeDirectChatUser) || (currentPartnerClean && m.senderName?.trim().toLowerCase() === currentPartnerClean);
+                              const isToPartner = isMsgToUser(m, activeDirectChatUser) || (currentPartnerClean && m.receiverName?.trim().toLowerCase() === currentPartnerClean);
+
+                              return (isFromMe && isToPartner) || (isFromPartner && isToMe);
+                            }).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+
+                            if (conversationMessages.length === 0) {
+                              return (
+                                <div className="h-full flex flex-col items-center justify-center text-center text-slate-400 space-y-2 py-12">
+                                  <div className="w-12 h-12 rounded-full bg-pink-50 border border-pink-200 flex items-center justify-center text-pink-500">
+                                    <MessageCircle className="w-6 h-6" />
+                                  </div>
+                                  <p className="text-xs font-bold text-slate-700">
+                                    <T>Bắt đầu cuộc trò chuyện với {activeDirectChatUser.fullName}</T>
+                                  </p>
+                                  <p className="text-[11px] text-slate-400 max-w-xs">
+                                    <T>Tin nhắn được lưu trữ bảo mật và đồng bộ thời gian thực qua Cloud Firestore.</T>
+                                  </p>
+                                </div>
+                              );
+                            }
+
+                            return conversationMessages.map((msg, msgIdx, arr) => {
+                              const isMe = isMsgFromUser(msg, currentUser);
+                              const prevMsg = msgIdx > 0 ? arr[msgIdx - 1] : null;
+                              const isConsecutive =
+                                prevMsg &&
+                                isMsgFromUser(prevMsg, currentUser) === isMe &&
+                                prevMsg.senderName === msg.senderName;
+
+                              return (
+                                <div
+                                  key={msg.id}
+                                  className={`flex flex-col w-full ${isMe ? "items-end" : "items-start"} ${
+                                    isConsecutive ? "mt-1" : "mt-3"
+                                  }`}
+                                >
+                                  {/* Sender Info (Chỉ hiện khi đổi người gửi và không phải liên tiếp) */}
+                                  {!isMe && !isConsecutive && (
+                                    <div className="flex items-center gap-1.5 ml-10 mb-1">
+                                      <span className="font-semibold text-slate-800 text-[11px]">
+                                        <T>{formatNameCapitalized(msg.senderName || activeDirectChatUser.fullName)}</T>
+                                      </span>
+                                    </div>
+                                  )}
+
+                                  {isMe && !isConsecutive && (
+                                    <div className="flex items-center justify-end gap-1.5 mr-10 mb-1">
+                                      <span className="font-semibold text-slate-800 text-[11px]">
+                                        <T>{currentUser?.fullName ? `TÔI (${formatNameCapitalized(currentUser.fullName)})` : "TÔI"}</T>
+                                      </span>
+                                    </div>
+                                  )}
+
+                                  {/* Message Bubble + Avatar Row (Natural responsive width up to 80%) */}
+                                  <div
+                                    className={`flex items-end gap-1.5 max-w-[80%] group ${isMe ? "flex-row-reverse" : "flex-row"}`}
+                                  >
+                                    {/* Left Avatar for Others */}
+                                    {!isMe && (
+                                      <div className="w-8 h-8 shrink-0">
+                                        {!isConsecutive ? (
+                                          <div
+                                            className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 text-white font-bold flex items-center justify-center text-xs shadow-2xs overflow-hidden"
+                                            title={msg.senderName || activeDirectChatUser.fullName}
+                                          >
+                                            {(() => {
+                                              const senderUser = users.find(u => (msg.senderId && (u.id === msg.senderId || u.phone === msg.senderId)) || (msg.senderName && u.fullName === msg.senderName) || ((msg as any).senderPhone && u.phone === (msg as any).senderPhone)) || activeDirectChatUser;
+                                              return senderUser?.avatar ? (
+                                                <img src={senderUser.avatar} alt="" className="w-full h-full rounded-full object-cover" />
+                                              ) : (
+                                                (msg.senderName || activeDirectChatUser.fullName || "U").charAt(0).toUpperCase()
+                                              );
+                                            })()}
+                                          </div>
+                                        ) : (
+                                          <div className="w-8 h-8" />
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {/* Right Avatar for Current User */}
+                                    {isMe && (
+                                      <div className="w-8 h-8 shrink-0">
+                                        {!isConsecutive ? (
+                                          <div
+                                            className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 text-white font-bold flex items-center justify-center text-xs shadow-2xs overflow-hidden"
+                                            title={currentUser?.fullName || "Tôi"}
+                                          >
+                                            {currentUser?.avatar ? (
+                                              <img src={currentUser.avatar} alt="" className="w-full h-full rounded-full object-cover" />
+                                            ) : (
+                                              (currentUser?.fullName || "T").charAt(0).toUpperCase()
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <div className="w-8 h-8" />
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {/* Main Chat Bubble */}
+                                    <div
+                                      className={`relative px-4 py-2.5 rounded-2xl shadow-2xs text-[15px] leading-relaxed text-left transition-all break-words w-fit max-w-full ${
+                                        isMe
+                                          ? "bg-[#e9f2fd] text-slate-800 font-normal rounded-tr-xs border border-blue-200/80 shadow-2xs"
+                                          : "bg-white text-slate-850 font-normal rounded-tl-xs border border-slate-200/90"
+                                      }`}
+                                    >
+                                      {/* Optional quoted/report reference snippet (Zalo style) */}
+                                      {msg.quotedText && (
+                                        <div
+                                          className={`p-2 px-2.5 rounded-r-lg rounded-l-xs mb-2 text-[13px] border-l-[3px] transition-all ${
+                                            isMe
+                                              ? "bg-[#dbe9fa] text-slate-800 border-[#0068ff]"
+                                              : "bg-slate-100 text-slate-700 border-pink-500"
+                                          }`}
+                                        >
+                                          <T>{msg.quotedText}</T>
+                                        </div>
+                                      )}
+
+                                      {/* Message Content with rich formatting & mentions styling */}
+                                      <div className="whitespace-pre-wrap break-words select-text font-normal text-[15px] leading-relaxed text-slate-900">
+                                        {renderFormattedMessage(msg.content, {
+                                          isMe,
+                                          users
+                                        })}
+                                      </div>
+
+                                      {/* Attached Images */}
+                                      {msg.attachments && msg.attachments.length > 0 && (
+                                        <div className="mt-2.5 flex flex-wrap gap-2">
+                                          {msg.attachments.map((att, attIdx) => (
+                                            <div
+                                              key={attIdx}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setDesktopPreviewImage(att.url);
+                                              }}
+                                              className="relative group rounded-xl overflow-hidden border border-black/10 cursor-pointer shadow-2xs hover:shadow-md transition-all max-w-[240px]"
+                                            >
+                                              <img
+                                                src={att.url}
+                                                alt={att.name || "Hình ảnh"}
+                                                className="max-h-48 w-auto object-cover rounded-xl hover:scale-102 transition-transform duration-200"
+                                              />
+                                              <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white font-bold text-xs gap-1">
+                                                <Eye className="w-4 h-4" />
+                                                <span><T>Xem ảnh</T></span>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+
+                                      {/* Timestamp and Sent Status Checkmark */}
+                                      <div className="flex items-center justify-end gap-1.5 mt-1 select-none text-[11px] font-mono text-slate-400">
+                                        <T>{msg.timestamp}</T>
+                                        {isMe && <Check className="w-3.5 h-3.5 text-blue-500 stroke-[2.5]" />}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+
+                        {/* Bottom Chat Input Bar */}
+                        <div className="p-3 border-t border-slate-200 bg-white">
+                          {/* Quick attach KPH Report selector */}
+                          <div className="mb-2 flex items-center gap-2">
+                            <div className="relative group">
+                              <button
+                                type="button"
+                                className="px-2.5 py-1 text-xs text-slate-600 hover:text-pink-600 hover:bg-pink-50 bg-slate-100 rounded-lg transition-colors cursor-pointer border border-slate-200 font-semibold flex items-center gap-1.5"
+                                title="Đính kèm mã KPH vào tin nhắn"
+                              >
+                                <Tag className="w-3.5 h-3.5 text-pink-500" />
+                                <span><T>Tham chiếu KPH</T></span>
+                              </button>
+                              <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-72 bg-white border border-slate-200 rounded-xl shadow-xl p-2 z-20 max-h-56 overflow-y-auto">
+                                <div className="text-[10px] font-bold text-slate-400 uppercase px-2 py-1 border-b border-slate-100">
+                                  <T>Đính kèm sự cố KPH gần đây</T>
+                                </div>
+                                {reports.slice(0, 6).map((rep) => (
+                                  <button
+                                    key={rep.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setDirectMessageInput((prev) => `[Tham chiếu KPH #${rep.reportCode || rep.id} - ${rep.category}]: ` + prev);
+                                    }}
+                                    className="w-full text-left p-1.5 hover:bg-slate-50 rounded text-[11px] truncate block text-slate-700 cursor-pointer"
+                                  >
+                                    <span className="font-bold text-pink-600 font-mono">#{rep.reportCode || rep.id}</span> - {rep.content}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          <RichChatInputBox
+                            users={users}
+                            value={directMessageInput}
+                            onChange={setDirectMessageInput}
+                            onSend={(text, images) => handleSendDirectMessage(text, images)}
+                            placeholder={`Nhắn tin cho ${activeDirectChatUser.fullName}...`}
+                            themeColor="pink"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-3 bg-[#f8fafc]">
+                        <div className="w-16 h-16 rounded-2xl bg-white border border-slate-200 shadow-sm flex items-center justify-center text-pink-500">
+                          <MessageCircle className="w-8 h-8" />
+                        </div>
+                        <h3 className="text-sm font-bold text-slate-800">
+                          <T>Trung Tâm Tin Nhắn Trực Tiếp 1:1</T>
+                        </h3>
+                        <p className="text-xs text-slate-500 max-w-sm">
+                          <T>Vui lòng chọn một đồng nghiệp từ danh sách bên trái hoặc bấm nút "Nhắn riêng" ở các bài viết diễn đàn để mở cửa sổ trò chuyện bảo mật.</T>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Confirm Delete Direct Conversation Modal */}
+              {confirmDeletePartnerUserDesktop && (
+                <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+                  <div className="bg-white rounded-xl border border-slate-200 w-full max-w-[400px] p-5 shadow-xl flex flex-col space-y-4 animate-scaleUp">
+                    <div className="flex items-center gap-2 text-rose-600 font-bold text-sm">
+                      <Trash2 className="w-4 h-4" />
+                      <T>Xác nhận xóa cuộc trò chuyện</T>
+                    </div>
+                    <p className="text-xs text-slate-600">
+                      <T>Bạn có chắc chắn muốn xóa toàn bộ lịch sử tin nhắn với <strong>{confirmDeletePartnerUserDesktop.fullName}</strong> không? Hành động này không thể hoàn tác.</T>
+                    </p>
+                    <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeletePartnerUserDesktop(null)}
+                        className="px-3 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-650 rounded-lg text-xs font-bold cursor-pointer"
+                      >
+                        <T>HỦY BỎ</T>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleDeleteConversation(confirmDeletePartnerUserDesktop);
+                          setConfirmDeletePartnerUserDesktop(null);
+                          if (onShowToast) onShowToast("Đã xóa cuộc trò chuyện 1:1!");
+                        }}
+                        className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold cursor-pointer shadow-sm"
+                      >
+                        <T>XÓA VĨNH VIỄN</T>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Create Topic Modal */}
               {isCreatingTopic && (
@@ -8557,13 +12011,76 @@ export default function DashboardDesktop({
                         </label>
                         <select
                           value={newTopicCategory}
-                          onChange={(e) => setNewTopicCategory(e.target.value as any)}
+                          onChange={(e) => {
+                            const newCat = e.target.value as any;
+                            setNewTopicCategory(newCat);
+                            if (newCat === "Thảo luận KPH" && !newTopicReportId && scopedReports.length > 0) {
+                              const firstRep = scopedReports[0];
+                              setNewTopicReportId(firstRep.id);
+                              if (!newTopicTitle.trim()) {
+                                setNewTopicTitle(`[KPH - ${firstRep.reportCode || firstRep.category}] ${firstRep.content.slice(0, 50)}`);
+                              }
+                              if (!newTopicDesc.trim()) {
+                                setNewTopicDesc(`Thảo luận chuyên đề KPH ${firstRep.reportCode || ""}. Người đăng: ${firstRep.uploaderName}. Nội dung: ${firstRep.content}`);
+                              }
+                              const def = getDefaultMembersForReport(firstRep, users, currentUser);
+                              setNewTopicInvitedUserIds(def.memberIds);
+                            }
+                          }}
                           className="w-full bg-slate-50 text-slate-800 border border-slate-200 rounded-md px-2.5 py-1.5 text-xs font-medium focus:outline-none focus:border-blue-500"
                         >
+                          <option value="Thảo luận KPH">🔥 Thảo luận KPH</option>
                           <option value="Góp ý chức năng">💡 Góp ý chức năng</option>
                           <option value="Cải tiến 4M1E">🚀 Cải tiến 4M1E</option>
-                          <option value="Sự cố chất lượng">⚠️ Sự cố chất lượng</option>
-                          <option value="Khác">📁 Khác</option>
+                          <option value="Kiến nghị khác">📁 Kiến nghị khác</option>
+                        </select>
+                      </div>
+
+                      {/* Link to Report / Bản tin selector */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                            <Megaphone className="w-3.5 h-3.5 text-amber-500" />
+                            <T>Liên kết Bản tin KPH / Chuyên đề</T>
+                          </label>
+                          {newTopicReportId && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewTopicReportId("");
+                              }}
+                              className="text-[10px] text-slate-400 hover:text-slate-600 underline cursor-pointer"
+                            >
+                              <T>Bỏ chọn liên kết</T>
+                            </button>
+                          )}
+                        </div>
+                        <select
+                          value={newTopicReportId}
+                          onChange={(e) => {
+                            const repId = e.target.value;
+                            setNewTopicReportId(repId);
+                            if (repId) {
+                              const foundRep = reports.find((r) => r.id === repId || r.reportCode === repId);
+                              if (foundRep) {
+                                setNewTopicTitle(`[KPH - ${foundRep.reportCode || foundRep.category}] ${foundRep.content.slice(0, 50)}`);
+                                setNewTopicDesc(`Thảo luận chuyên đề KPH ${foundRep.reportCode || ""}. Người đăng: ${foundRep.uploaderName} (${foundRep.uploaderDepartment}). Nội dung: ${foundRep.content}`);
+                                const def = getDefaultMembersForReport(foundRep, users, currentUser);
+                                setNewTopicInvitedUserIds(def.memberIds);
+                              }
+                            }
+                          }}
+                          className="w-full bg-slate-50 text-slate-800 border border-slate-200 rounded-md px-2.5 py-1.5 text-xs font-medium focus:outline-none focus:border-blue-500"
+                        >
+                          <option value="">-- Không liên kết bản tin cụ thể --</option>
+                          {scopedReports
+                            .filter((r) => !r.isDeleted)
+                            .slice(0, 60)
+                            .map((r) => (
+                              <option key={r.id} value={r.id}>
+                                {r.reportCode ? `[${r.reportCode}] ` : ""}{r.category} - {r.uploaderName} ({r.timestamp?.split(" ")[0] || ""}): {r.content.substring(0, 45)}...
+                              </option>
+                            ))}
                         </select>
                       </div>
 
@@ -8580,6 +12097,137 @@ export default function DashboardDesktop({
                           className="w-full bg-slate-50 text-slate-800 border border-slate-200 rounded-md px-3 py-1.5 text-xs focus:outline-none focus:border-blue-500"
                         />
                       </div>
+
+                      {/* Description */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">
+                          <T>Nội dung chi tiết</T>
+                        </label>
+                        <textarea
+                          placeholder="Mô tả cụ thể vấn đề, đề xuất hoặc tình huống cần thảo luận..."
+                          value={newTopicDesc}
+                          onChange={(e) => setNewTopicDesc(e.target.value)}
+                          rows={3}
+                          className="w-full bg-slate-50 text-slate-800 border border-slate-200 rounded-md px-3 py-1.5 text-xs focus:outline-none focus:border-blue-500 resize-none"
+                        />
+                      </div>
+                      {/* Members / Invite List */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                            <Users className="w-3.5 h-3.5 text-blue-600" />
+                            <T>Thành viên nhóm thảo luận</T> ({newTopicInvitedUserIds.length + 1})
+                          </label>
+                          <span className="text-[10px] text-slate-400">
+                            <T>Chỉ thành viên được chọn mới thấy chủ đề này</T>
+                          </span>
+                        </div>
+
+                        {/* Summary of default members when report is linked */}
+                        {newTopicReportId && (
+                          <div className="p-2 bg-blue-50/80 border border-blue-200/80 rounded-lg text-[11px] text-blue-900 space-y-1">
+                            <div className="font-bold flex items-center gap-1 text-blue-800">
+                              <CheckCircle className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                              <T>Thành viên mặc định được chọn sẵn:</T>
+                            </div>
+                            <div className="text-[10.5px] text-slate-600 pl-4 space-y-0.5">
+                              <div>• <strong>Người tạo chủ đề:</strong> {currentUser.fullName} <span className="text-blue-600 font-bold">(Bạn)</span></div>
+                              {(() => {
+                                const linkedRep = reports.find((r) => r.id === newTopicReportId || r.reportCode === newTopicReportId);
+                                if (!linkedRep) return null;
+                                const repDefaults = getDefaultMembersForReport(linkedRep, users, currentUser);
+                                const uploaderUser = findUser(users, linkedRep.uploaderId, linkedRep.uploaderPhone, linkedRep.uploaderName);
+                                return (
+                                  <>
+                                    <div>• <strong>Người đăng bản tin:</strong> {linkedRep.uploaderName} {uploaderUser ? `(${uploaderUser.department || uploaderUser.role})` : ""}</div>
+                                    {repDefaults.memberNames.filter(n => n !== currentUser.fullName && n !== linkedRep.uploaderName).length > 0 && (
+                                      <div>• <strong>Người được tag / liên quan:</strong> {repDefaults.memberNames.filter(n => n !== currentUser.fullName && n !== linkedRep.uploaderName).join(", ")}</div>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="max-h-36 overflow-y-auto border border-slate-200 rounded-lg p-1.5 bg-slate-50 space-y-1">
+                          {/* Current User (Creator) - Always selected */}
+                          <div className="w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center justify-between bg-blue-100/60 border border-blue-300 text-blue-900 font-bold">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-5 h-5 rounded-full text-[10px] flex items-center justify-center font-bold bg-blue-600 text-white shrink-0 overflow-hidden">
+                                {currentUser.avatar ? (
+                                  <img src={currentUser.avatar} alt="" className="w-full h-full rounded-full object-cover" />
+                                ) : (
+                                  currentUser.fullName.charAt(0)
+                                )}
+                              </div>
+                              <span className="truncate notranslate" translate="no">{currentUser.fullName}</span>
+                              <span className="text-[10px] text-blue-700 font-bold">(Khởi tạo chủ đề)</span>
+                            </div>
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-600 text-white">
+                              <T>Người tạo ✓</T>
+                            </span>
+                          </div>
+
+                          {users
+                            .filter((u) => u.id !== currentUser.id && u.phone !== currentUser.phone)
+                            .map((u) => {
+                              const uKey = u.id || u.phone || u.fullName;
+                              const isSelected = newTopicInvitedUserIds.includes(uKey) || newTopicInvitedUserIds.includes(u.id || "") || (u.phone && newTopicInvitedUserIds.includes(u.phone));
+                              
+                              // Check role in linked report
+                              const linkedRep = newTopicReportId ? reports.find(r => r.id === newTopicReportId || r.reportCode === newTopicReportId) : null;
+                              const isUploader = linkedRep && (
+                                (linkedRep.uploaderId && (u.id === linkedRep.uploaderId || u.phone === linkedRep.uploaderId)) ||
+                                (linkedRep.uploaderPhone && u.phone === linkedRep.uploaderPhone) ||
+                                (linkedRep.uploaderName && u.fullName === linkedRep.uploaderName)
+                              );
+                              
+                              return (
+                                <button
+                                  key={u.id || u.phone}
+                                  type="button"
+                                  onClick={() => {
+                                    if (isSelected) {
+                                      setNewTopicInvitedUserIds(newTopicInvitedUserIds.filter(id => id !== uKey && id !== u.id && id !== u.phone));
+                                    } else {
+                                      setNewTopicInvitedUserIds([...newTopicInvitedUserIds, uKey]);
+                                    }
+                                  }}
+                                  className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center justify-between transition-colors cursor-pointer border ${
+                                    isSelected
+                                      ? "bg-blue-50 border-blue-200 text-blue-800 font-bold"
+                                      : "bg-white border-slate-100 text-slate-700 hover:bg-slate-100"
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <div className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center font-bold shrink-0 overflow-hidden ${
+                                      isSelected ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-600"
+                                    }`}>
+                                      {u.avatar ? (
+                                        <img src={u.avatar} alt="" className="w-full h-full rounded-full object-cover" />
+                                      ) : (
+                                        u.fullName.charAt(0)
+                                      )}
+                                    </div>
+                                    <span className="truncate notranslate" translate="no">{u.fullName}</span>
+                                    <span className="text-[10px] text-slate-400 truncate">({u.department || u.position || u.role})</span>
+                                    {isUploader && (
+                                      <span className="text-[9px] bg-amber-100 text-amber-800 px-1 rounded font-bold">
+                                        <T>Người đăng tin</T>
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                    isSelected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
+                                  }`}>
+                                    <T>{isSelected ? "Đã chọn ✓" : "+ Mời"}</T>
+                                  </span>
+                                </button>
+                              );
+                            })}
+                        </div>
+                      </div>
                     </div>
 
                     {/* Footer Buttons */}
@@ -8589,6 +12237,8 @@ export default function DashboardDesktop({
                           setIsCreatingTopic(false);
                           setNewTopicTitle("");
                           setNewTopicDesc("");
+                          setNewTopicReportId("");
+                          setNewTopicInvitedUserIds([]);
                         }}
                         className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-650 rounded-lg text-xs font-bold transition-all cursor-pointer"
                       >
@@ -8597,10 +12247,18 @@ export default function DashboardDesktop({
                       <button
                         onClick={() => {
                           if (!newTopicTitle.trim()) return;
-                          onAddForumTopic?.(newTopicTitle, newTopicDesc || newTopicTitle, newTopicCategory);
+                          onAddForumTopic?.(
+                            newTopicTitle,
+                            newTopicDesc || newTopicTitle,
+                            newTopicCategory,
+                            newTopicReportId || undefined,
+                            newTopicInvitedUserIds
+                          );
                           setIsCreatingTopic(false);
                           setNewTopicTitle("");
                           setNewTopicDesc("");
+                          setNewTopicReportId("");
+                          setNewTopicInvitedUserIds([]);
                         }}
                         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-sm"
                       >
@@ -8639,10 +12297,10 @@ export default function DashboardDesktop({
                           onChange={(e) => setEditDesktopTopicCategory(e.target.value as ForumTopicCategory)}
                           className="w-full bg-slate-50 text-slate-800 border border-slate-200 rounded-md px-3 py-1.5 text-xs font-bold focus:outline-none focus:border-blue-500"
                         >
-                          <option value="Thảo luận KPH">Thảo luận KPH</option>
-                          <option value="Góp ý chức năng">Góp ý chức năng</option>
-                          <option value="Cải tiến 4M1E">Cải tiến 4M1E</option>
-                          <option value="Kiến nghị khác">Kiến nghị khác</option>
+                          <option value="Thảo luận KPH">🔥 Thảo luận KPH</option>
+                          <option value="Góp ý chức năng">💡 Góp ý chức năng</option>
+                          <option value="Cải tiến 4M1E">🚀 Cải tiến 4M1E</option>
+                          <option value="Kiến nghị khác">📁 Kiến nghị khác</option>
                         </select>
                       </div>
 
@@ -8659,6 +12317,21 @@ export default function DashboardDesktop({
                           className="w-full bg-slate-50 text-slate-800 border border-slate-200 rounded-md px-3 py-1.5 text-xs focus:outline-none focus:border-blue-500"
                         />
                       </div>
+
+                      {/* Description */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">
+                          <T>Nội dung chi tiết</T>
+                        </label>
+                        <textarea
+                          placeholder="Mô tả cụ thể..."
+                          value={editDesktopTopicDesc}
+                          onChange={(e) => setEditDesktopTopicDesc(e.target.value)}
+                          rows={3}
+                          className="w-full bg-slate-50 text-slate-800 border border-slate-200 rounded-md px-3 py-1.5 text-xs focus:outline-none focus:border-blue-500 resize-none"
+                        />
+                      </div>
+                    </div>
 
                     {/* Footer Buttons */}
                     <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-100">
@@ -8686,7 +12359,6 @@ export default function DashboardDesktop({
                     </div>
                   </div>
                 </div>
-              </div>
               )}
 
               {/* Delete Topic Confirmation Modal */}
@@ -8732,6 +12404,1113 @@ export default function DashboardDesktop({
                   </div>
                 </div>
               )}
+
+              {/* Desktop Convert To Action Modal (Chuyển thành Chỉ đạo / Task) */}
+              {desktopConvertModalReply && (
+                <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+                  <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-[520px] p-5 shadow-2xl flex flex-col space-y-4 animate-scaleUp">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                        <div className="p-1.5 bg-amber-100 text-amber-700 rounded-lg">
+                          <Zap className="w-4 h-4 fill-amber-600 text-amber-600" />
+                        </div>
+                        <T>Chuyển Đổi Thành Chỉ Đạo / Phân Công Task</T>
+                      </h3>
+                      <button
+                        onClick={() => setDesktopConvertModalReply(null)}
+                        className="text-slate-400 hover:text-slate-600 p-1 rounded-md cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Original Message Preview */}
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">
+                        <T>Nội dung tin nhắn gốc:</T>
+                      </div>
+                      <p className="text-slate-700 line-clamp-3 italic">
+                        "{desktopConvertModalReply.message}"
+                      </p>
+                    </div>
+
+                    {/* Action Type Tabs */}
+                    <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
+                      <button
+                        type="button"
+                        onClick={() => setDesktopActionTypeChoice("DIRECTIVE")}
+                        className={`py-2 px-3 rounded-lg text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          desktopActionTypeChoice === "DIRECTIVE"
+                            ? "bg-amber-500 text-white shadow-xs"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        <Zap className="w-3.5 h-3.5 fill-current" />
+                        <T>⚡ CHỈ ĐẠO HÀNH ĐỘNG</T>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDesktopActionTypeChoice("TASK")}
+                        className={`py-2 px-3 rounded-lg text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          desktopActionTypeChoice === "TASK"
+                            ? "bg-blue-600 text-white shadow-xs"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        <ListTodo className="w-3.5 h-3.5 stroke-[2.5px]" />
+                        <T>🎯 ĐẦU VIỆC (TASK)</T>
+                      </button>
+                    </div>
+
+                    {/* Task Specific Fields */}
+                    {desktopActionTypeChoice === "TASK" && (
+                      <div className="space-y-3 p-3 bg-blue-50/50 border border-blue-100 rounded-xl">
+                        {/* Assignee Picker */}
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-slate-700">
+                            <T>Người chịu trách nhiệm thực hiện (Assignee) *</T>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDesktopStaffPickerTarget("CONVERT");
+                              setShowDesktopStaffPickerModal(true);
+                            }}
+                            className="w-full flex items-center justify-between px-3 py-2 bg-white border border-blue-200 rounded-lg text-xs hover:border-blue-400 transition-colors cursor-pointer text-left shadow-2xs"
+                          >
+                            {desktopTaskAssignedUser ? (
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-[10px] shrink-0 overflow-hidden">
+                                  {desktopTaskAssignedUser.avatar ? (
+                                    <img src={desktopTaskAssignedUser.avatar} alt="" className="w-full h-full rounded-full object-cover" />
+                                  ) : (
+                                    desktopTaskAssignedUser.fullName.charAt(0)
+                                  )}
+                                </div>
+                                <div className="truncate">
+                                  <span className="font-bold text-slate-900 notranslate" translate="no">
+                                    {desktopTaskAssignedUser.fullName}
+                                  </span>
+                                  <span className="text-[10px] text-slate-500 ml-1.5">
+                                    ({desktopTaskAssignedUser.position || desktopTaskAssignedUser.role})
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 italic">
+                                <T>Bấm để chọn nhân sự thực hiện...</T>
+                              </span>
+                            )}
+                            <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                          </button>
+                        </div>
+
+                        {/* Deadline */}
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-slate-700">
+                            <T>Thời hạn hoàn thành (Deadline)</T>
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="dd/mm/yy (Ví dụ: 25/08/26)"
+                            value={desktopTaskDeadline}
+                            onChange={(e) => setDesktopTaskDeadline(e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg text-xs focus:outline-none focus:border-blue-500 font-mono shadow-2xs"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Note Field */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-700">
+                        <T>Ghi chú / Yêu cầu chi tiết</T>
+                      </label>
+                      <textarea
+                        rows={2}
+                        placeholder={
+                          desktopActionTypeChoice === "DIRECTIVE"
+                            ? "Ghi chú cụ thể cho chỉ đạo này..."
+                            : "Yêu cầu kết quả đầu ra của task..."
+                        }
+                        value={desktopTaskNote}
+                        onChange={(e) => setDesktopTaskNote(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-blue-500 focus:bg-white resize-none"
+                      />
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => setDesktopConvertModalReply(null)}
+                        className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-650 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                      >
+                        <T>HỦY</T>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveConvertActionDesktop}
+                        className={`px-4 py-2 rounded-lg text-xs font-black text-white transition-all cursor-pointer shadow-sm ${
+                          desktopActionTypeChoice === "DIRECTIVE"
+                            ? "bg-amber-500 hover:bg-amber-600"
+                            : "bg-blue-600 hover:bg-blue-700"
+                        }`}
+                      >
+                        <T>{desktopActionTypeChoice === "DIRECTIVE" ? "LƯU CHỈ ĐẠO" : "PHÂN CÔNG TASK"}</T>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Desktop Edit Action Modal (Xem & Sửa Chỉ đạo / Task) */}
+              {desktopEditingActionReply && (
+                <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+                  <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-[520px] p-5 shadow-2xl flex flex-col space-y-4 animate-scaleUp">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                        <div className="p-1.5 bg-blue-100 text-blue-700 rounded-lg">
+                          <Target className="w-4 h-4 text-blue-600" />
+                        </div>
+                        <T>Chi Tiết Chỉ Đạo / Phân Công Task</T>
+                      </h3>
+                      <button
+                        onClick={() => setDesktopEditingActionReply(null)}
+                        className="text-slate-400 hover:text-slate-600 p-1 rounded-md cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Original Message Preview */}
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">
+                        <T>Nội dung tin nhắn:</T>
+                      </div>
+                      <p className="text-slate-700 line-clamp-3 italic">
+                        "{desktopEditingActionReply.message}"
+                      </p>
+                    </div>
+
+                    {/* Action Type Tabs */}
+                    <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
+                      <button
+                        type="button"
+                        onClick={() => setDesktopEditActionType("DIRECTIVE")}
+                        className={`py-2 px-3 rounded-lg text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          desktopEditActionType === "DIRECTIVE"
+                            ? "bg-amber-500 text-white shadow-xs"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        <Zap className="w-3.5 h-3.5 fill-current" />
+                        <T>⚡ CHỈ ĐẠO HÀNH ĐỘNG</T>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDesktopEditActionType("TASK")}
+                        className={`py-2 px-3 rounded-lg text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          desktopEditActionType === "TASK"
+                            ? "bg-blue-600 text-white shadow-xs"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        <ListTodo className="w-3.5 h-3.5 stroke-[2.5px]" />
+                        <T>🎯 ĐẦU VIỆC (TASK)</T>
+                      </button>
+                    </div>
+
+                    {/* Task Details */}
+                    {desktopEditActionType === "TASK" && (
+                      <div className="space-y-3 p-3 bg-blue-50/50 border border-blue-100 rounded-xl">
+                        {/* Status Toggle */}
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-slate-700">
+                            <T>Trạng thái thực hiện</T>
+                          </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setDesktopEditTaskStatus("PENDING")}
+                              className={`py-1.5 px-3 rounded-lg text-xs font-bold border flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                                desktopEditTaskStatus === "PENDING"
+                                  ? "bg-amber-500 text-white border-amber-600 shadow-2xs"
+                                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                              }`}
+                            >
+                              <span>⏳</span>
+                              <T>Đang thực hiện</T>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDesktopEditTaskStatus("COMPLETED")}
+                              className={`py-1.5 px-3 rounded-lg text-xs font-bold border flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                                desktopEditTaskStatus === "COMPLETED"
+                                  ? "bg-emerald-600 text-white border-emerald-700 shadow-2xs"
+                                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                              }`}
+                            >
+                              <span>✓</span>
+                              <T>Đã hoàn thành</T>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Assignee */}
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-slate-700">
+                            <T>Người chịu trách nhiệm thực hiện</T>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDesktopStaffPickerTarget("EDIT");
+                              setShowDesktopStaffPickerModal(true);
+                            }}
+                            className="w-full flex items-center justify-between px-3 py-2 bg-white border border-blue-200 rounded-lg text-xs hover:border-blue-400 transition-colors cursor-pointer text-left shadow-2xs"
+                          >
+                            {desktopEditTaskAssignedUser ? (
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-[10px] shrink-0 overflow-hidden">
+                                  {desktopEditTaskAssignedUser.avatar ? (
+                                    <img src={desktopEditTaskAssignedUser.avatar} alt="" className="w-full h-full rounded-full object-cover" />
+                                  ) : (
+                                    desktopEditTaskAssignedUser.fullName.charAt(0)
+                                  )}
+                                </div>
+                                <div className="truncate">
+                                  <span className="font-bold text-slate-900 notranslate" translate="no">
+                                    {desktopEditTaskAssignedUser.fullName}
+                                  </span>
+                                  <span className="text-[10px] text-slate-500 ml-1.5">
+                                    ({desktopEditTaskAssignedUser.position || desktopEditTaskAssignedUser.role})
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 italic">
+                                <T>Bấm để chọn nhân sự thực hiện...</T>
+                              </span>
+                            )}
+                            <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                          </button>
+                        </div>
+
+                        {/* Deadline */}
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-slate-700">
+                            <T>Thời hạn hoàn thành (Deadline)</T>
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="dd/mm/yy"
+                            value={desktopEditTaskDeadline}
+                            onChange={(e) => setDesktopEditTaskDeadline(e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg text-xs focus:outline-none focus:border-blue-500 font-mono shadow-2xs"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Note Field */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-700">
+                        <T>Ghi chú / Yêu cầu chi tiết</T>
+                      </label>
+                      <textarea
+                        rows={2}
+                        placeholder="Ghi chú cụ thể..."
+                        value={desktopEditTaskNote}
+                        onChange={(e) => setDesktopEditTaskNote(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-blue-500 focus:bg-white resize-none"
+                      />
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleRemoveActionDesktop(desktopEditingActionReply.id);
+                          setDesktopEditingActionReply(null);
+                        }}
+                        className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 border border-rose-200"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <T>GỠ BỎ TASK</T>
+                      </button>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDesktopEditingActionReply(null)}
+                          className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-650 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                        >
+                          <T>HỦY</T>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveEditActionDesktop}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-black transition-all cursor-pointer shadow-sm"
+                        >
+                          <T>LƯU CẬP NHẬT</T>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Desktop Staff Picker Modal (Chọn Nhân Sự) */}
+              {showDesktopStaffPickerModal && (
+                <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4 z-60 animate-fadeIn">
+                  <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-[460px] p-5 shadow-2xl flex flex-col space-y-3 animate-scaleUp max-h-[85vh]">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                      <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                        <UserIcon className="w-4 h-4 text-blue-600" />
+                        <T>Chọn Nhân Sự Thực Hiện Task</T>
+                      </h3>
+                      <button
+                        onClick={() => setShowDesktopStaffPickerModal(false)}
+                        className="text-slate-400 hover:text-slate-600 p-1 rounded-md cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Search */}
+                    <div className="relative">
+                      <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Tìm theo tên, bộ phận hoặc số điện thoại..."
+                        value={desktopStaffPickerSearchQuery}
+                        onChange={(e) => setDesktopStaffPickerSearchQuery(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-blue-500 focus:bg-white"
+                      />
+                    </div>
+
+                    {/* Staff List */}
+                    <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 max-h-[360px]">
+                      {users
+                        .filter((u) => {
+                          const q = desktopStaffPickerSearchQuery.toLowerCase();
+                          return (
+                            u.fullName.toLowerCase().includes(q) ||
+                            (u.position && u.position.toLowerCase().includes(q)) ||
+                            (u.role && u.role.toLowerCase().includes(q)) ||
+                            (u.department && u.department.toLowerCase().includes(q)) ||
+                            (u.phone && u.phone.includes(q))
+                          );
+                        })
+                        .map((u) => (
+                          <button
+                            key={u.id || u.phone}
+                            type="button"
+                            onClick={() => {
+                              if (desktopStaffPickerTarget === "CONVERT") {
+                                setDesktopTaskAssignedUser(u);
+                              } else {
+                                setDesktopEditTaskAssignedUser(u);
+                              }
+                              setShowDesktopStaffPickerModal(false);
+                              setDesktopStaffPickerSearchQuery("");
+                            }}
+                            className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-blue-50 transition-colors cursor-pointer text-left border border-transparent hover:border-blue-200 group"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold flex items-center justify-center text-xs shadow-2xs shrink-0 overflow-hidden">
+                                {u.avatar ? (
+                                  <img src={u.avatar} alt="" className="w-full h-full rounded-full object-cover" />
+                                ) : (
+                                  u.fullName.charAt(0)
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-bold text-slate-900 text-xs truncate notranslate" translate="no">
+                                  {u.fullName}
+                                </div>
+                                <div className="text-[10px] text-slate-500 truncate">
+                                  {u.position || u.role} • {u.department || u.branch || "Tân Phú"}
+                                </div>
+                              </div>
+                            </div>
+                            <Check className="w-4 h-4 text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Desktop Actions Catalog Modal (Danh mục Chỉ đạo & Đầu việc TASK) */}
+              {showDesktopActionsCatalogModal && (
+                <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+                  <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-[850px] p-6 shadow-2xl flex flex-col space-y-4 animate-scaleUp max-h-[90vh]">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="p-2 bg-amber-100 text-amber-800 rounded-xl">
+                          <ListTodo className="w-5 h-5 stroke-[2.5px]" />
+                        </div>
+                        <div>
+                          <h3 className="font-black text-slate-900 text-base">
+                            <T>Danh Mục Chỉ Đạo & Đầu Việc (Tasks)</T>
+                          </h3>
+                          <p className="text-xs text-slate-400">
+                            <T>Theo dõi, đôn đốc và hoàn thành các chỉ đạo, nhiệm vụ trong các cuộc thảo luận</T>
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setShowDesktopActionsCatalogModal(false)}
+                        className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    {/* Filter Bar */}
+                    <div className="flex flex-wrap items-center justify-between gap-2.5 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+                      {/* Scope Toggle */}
+                      <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-200">
+                        <button
+                          type="button"
+                          onClick={() => setDesktopActionsCatalogScope("CURRENT_TOPIC")}
+                          className={`px-3 py-1.5 rounded-md font-bold transition-all cursor-pointer ${
+                            desktopActionsCatalogScope === "CURRENT_TOPIC"
+                              ? "bg-blue-600 text-white shadow-2xs"
+                              : "text-slate-600 hover:text-slate-900"
+                          }`}
+                        >
+                          <T>Chủ đề hiện tại</T>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDesktopActionsCatalogScope("ALL_TOPICS")}
+                          className={`px-3 py-1.5 rounded-md font-bold transition-all cursor-pointer ${
+                            desktopActionsCatalogScope === "ALL_TOPICS"
+                              ? "bg-blue-600 text-white shadow-2xs"
+                              : "text-slate-600 hover:text-slate-900"
+                          }`}
+                        >
+                          <T>Toàn bộ chủ đề</T>
+                        </button>
+                      </div>
+
+                      {/* Type Filter */}
+                      <div className="flex items-center gap-1">
+                        {(["ALL", "TASK", "DIRECTIVE"] as const).map((tp) => (
+                          <button
+                            key={tp}
+                            type="button"
+                            onClick={() => setDesktopActionsCatalogTypeFilter(tp)}
+                            className={`px-2.5 py-1.5 rounded-lg font-bold border transition-all cursor-pointer ${
+                              desktopActionsCatalogTypeFilter === tp
+                                ? "bg-slate-800 text-white border-slate-800"
+                                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                            }`}
+                          >
+                            <T>{tp === "ALL" ? "Tất cả loại" : tp === "TASK" ? "🎯 Đầu việc (Task)" : "⚡ Chỉ đạo"}</T>
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Status Filter */}
+                      <div className="flex items-center gap-1">
+                        {(["ALL", "PENDING", "COMPLETED"] as const).map((st) => (
+                          <button
+                            key={st}
+                            type="button"
+                            onClick={() => setDesktopActionsCatalogStatusFilter(st)}
+                            className={`px-2.5 py-1.5 rounded-lg font-bold border transition-all cursor-pointer ${
+                              desktopActionsCatalogStatusFilter === st
+                                ? "bg-amber-600 text-white border-amber-600"
+                                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                            }`}
+                          >
+                            <T>{st === "ALL" ? "Tất cả trạng thái" : st === "PENDING" ? "⏳ Đang thực hiện" : "✓ Hoàn thành"}</T>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Actions List */}
+                    <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 max-h-[480px]">
+                      {(() => {
+                        const targetTopicId = selectedTopicId || (topics[0]?.id);
+                        const filteredReplies = replies.filter((r) => {
+                          if (!r.actionType) return false;
+                          if (desktopActionsCatalogScope === "CURRENT_TOPIC" && r.topicId !== targetTopicId) return false;
+                          if (desktopActionsCatalogTypeFilter !== "ALL" && r.actionType !== desktopActionsCatalogTypeFilter) return false;
+                          if (desktopActionsCatalogStatusFilter !== "ALL") {
+                            if (r.actionType === "TASK" && r.actionData?.status !== desktopActionsCatalogStatusFilter) return false;
+                          }
+                          return true;
+                        });
+
+                        if (filteredReplies.length === 0) {
+                          return (
+                            <div className="py-12 flex flex-col items-center justify-center text-center text-slate-400 space-y-2">
+                              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center">
+                                <ListTodo className="w-6 h-6 text-slate-400" />
+                              </div>
+                              <p className="text-xs font-bold text-slate-600">
+                                <T>Chưa có chỉ đạo hoặc đầu việc (Task) nào trong danh mục này.</T>
+                              </p>
+                              <p className="text-[11px] text-slate-400 max-w-sm">
+                                <T>Bạn có thể di chuột vào bất kỳ tin nhắn phản hồi nào và nhấn biểu tượng ⚡ để tạo chỉ đạo hoặc giao việc.</T>
+                              </p>
+                            </div>
+                          );
+                        }
+
+                        return filteredReplies.map((r) => {
+                          const topicOfReply = topics.find((t) => t.id === r.topicId);
+                          const isDone = r.actionData?.status === "COMPLETED";
+
+                          return (
+                            <div
+                              key={r.id}
+                              className={`p-3.5 rounded-xl border transition-all ${
+                                r.actionType === "DIRECTIVE"
+                                  ? "bg-amber-50/40 border-amber-200"
+                                  : isDone
+                                  ? "bg-emerald-50/30 border-emerald-200"
+                                  : "bg-white border-slate-200 hover:border-blue-300"
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="space-y-1.5 flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span
+                                      className={`px-2 py-0.5 rounded-full text-[10px] font-black border flex items-center gap-1 ${
+                                        r.actionType === "DIRECTIVE"
+                                          ? "bg-amber-500 text-white border-amber-400"
+                                          : isDone
+                                          ? "bg-emerald-600 text-white border-emerald-500"
+                                          : "bg-blue-600 text-white border-blue-500"
+                                      }`}
+                                    >
+                                      {r.actionType === "DIRECTIVE" ? (
+                                        <Zap className="w-3 h-3 fill-current" />
+                                      ) : (
+                                        <ListTodo className="w-3 h-3 stroke-[2.5px]" />
+                                      )}
+                                      <span>{r.actionType === "DIRECTIVE" ? "CHỈ ĐẠO" : "TASK"}</span>
+                                    </span>
+
+                                    {topicOfReply && (
+                                      <span className="text-[11px] font-bold text-slate-700 truncate max-w-xs bg-slate-100 px-2 py-0.5 rounded">
+                                        <T>{topicOfReply.title}</T>
+                                      </span>
+                                    )}
+
+                                    {r.actionType === "TASK" && r.actionData?.assignedToName && (
+                                      <span className="text-[12px] text-blue-800 font-bold bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-lg shadow-2xs">
+                                        <T>Giao cho:</T> <strong className="notranslate text-blue-900 font-black text-[12.5px]" translate="no">{r.actionData.assignedToName}</strong>
+                                      </span>
+                                    )}
+
+                                    {r.actionType === "DIRECTIVE" && r.actionData?.note && (
+                                      <span className="text-[12px] text-amber-900 font-bold bg-amber-100/90 border border-amber-300 px-2.5 py-1 rounded-lg shadow-2xs flex items-center gap-1">
+                                        <Zap className="w-3.5 h-3.5 text-amber-600 fill-amber-500 shrink-0" />
+                                        <T>Chỉ đạo:</T> <strong className="notranslate text-amber-950 font-black text-[12.5px]" translate="no">{r.actionData.note}</strong>
+                                      </span>
+                                    )}
+
+                                    {r.actionData?.deadline && (
+                                      <span className="text-[11px] font-mono text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">
+                                        <T>Hạn:</T> {r.actionData.deadline}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Structured Message Text with AI Summary Bullets */}
+                                  <TaskStructuredContent text={r.message} type={r.actionType} />
+
+                                  {/* Action Note / Yêu cầu chỉ đạo nổi bật */}
+                                  {r.actionData?.note && (
+                                    <div className="p-2.5 px-3 rounded-xl bg-amber-50/90 border-2 border-amber-300/90 text-amber-950 flex items-start gap-2 shadow-2xs mt-2">
+                                      <Zap className="w-4 h-4 text-amber-600 fill-amber-500 shrink-0 mt-0.5" />
+                                      <div className="text-[13px] leading-snug">
+                                        <span className="font-extrabold text-amber-900 text-[11.5px] uppercase tracking-wide mr-1.5 inline-block">
+                                          <T>Yêu cầu:</T>
+                                        </span>
+                                        <strong className="font-black text-slate-900 text-[13.5px] notranslate" translate="no">
+                                          "{r.actionData.note}"
+                                        </strong>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Actions on Right */}
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {r.actionType === "TASK" && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleTaskStatusDesktop(r.id)}
+                                      className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                                        isDone
+                                          ? "bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200"
+                                          : "bg-amber-100 text-amber-800 border-amber-300 hover:bg-emerald-50"
+                                      }`}
+                                    >
+                                      {isDone ? "✓ Xong" : "⏳ Đang làm"}
+                                    </button>
+                                  )}
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setDesktopEditingActionReply(r);
+                                      setDesktopEditActionType(r.actionType || "DIRECTIVE");
+                                      setDesktopEditTaskNote(r.actionData?.note || "");
+                                      setDesktopEditTaskDeadline(r.actionData?.deadline || "");
+                                      setDesktopEditTaskStatus(r.actionData?.status || "PENDING");
+                                      const foundUser = users.find(
+                                        (u) => (r.actionData?.assignedToId && (u.id === r.actionData.assignedToId || u.phone === r.actionData.assignedToId)) ||
+                                               (r.actionData?.assignedToName && u.fullName === r.actionData.assignedToName)
+                                      );
+                                      setDesktopEditTaskAssignedUser(foundUser || null);
+                                    }}
+                                    className="p-1.5 hover:bg-slate-100 text-slate-400 hover:text-blue-600 rounded-lg cursor-pointer transition-colors"
+                                    title="Sửa / Xem chi tiết"
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Desktop AI Summary Modal (Tóm Tắt AI) */}
+              {showDesktopAiSummaryModal && (() => {
+                const topic = topics.find((t) => t.id === selectedTopicId) || topics[0];
+                if (!topic) return null;
+                const topicReplies = replies.filter((r) => r.topicId === topic.id);
+                const cachedSummary = desktopAiSummariesMap[topic.id];
+
+                const summaryKeyPoints = cachedSummary?.keyPoints || [
+                  `Cuộc thảo luận đã thu hút ${topicReplies.length} ý kiến phản hồi chuyên môn từ các nhân sự tham gia.`,
+                  topic.description ? `Bối cảnh trọng tâm: ${topic.description}` : "Nội dung phản ánh được ghi nhận rõ ràng trên hệ thống.",
+                  "Các đề xuất tập trung vào việc ổn định các yếu tố 4M1E và hạn chế tối đa tái diễn lỗi chất lượng."
+                ];
+
+                const summaryConsensus = cachedSummary?.consensus || (
+                  topic.status === "RESOLVED"
+                    ? "Tất cả các bên đã thống nhất phương án xử lý và hoàn tất khắc phục triệt để."
+                    : "Đang trong tiến trình trao đổi và triển khai các bước khắc phục theo kế hoạch."
+                );
+
+                const summaryDirectives = topicReplies
+                  .filter((r) => r.actionType)
+                  .map((r) => `${r.actionType === "DIRECTIVE" ? "⚡ Chỉ đạo:" : "🎯 Task:"} ${r.message.slice(0, 70)}...`);
+
+                return (
+                  <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+                    <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-[620px] p-6 shadow-2xl flex flex-col space-y-4 animate-scaleUp max-h-[85vh]">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="p-2 bg-indigo-100 text-indigo-700 rounded-xl">
+                            <Sparkles className="w-5 h-5 text-amber-500 fill-amber-500" />
+                          </div>
+                          <div>
+                            <h3 className="font-black text-slate-900 text-base">
+                              <T>Tóm Tắt AI Cuộc Thảo Luận</T>
+                            </h3>
+                            <p className="text-xs text-slate-400 notranslate" translate="no">
+                              {topic.title}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setShowDesktopAiSummaryModal(false)}
+                          className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg cursor-pointer"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto space-y-3.5 pr-1">
+                        {/* Key Points */}
+                        <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                          <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800 uppercase">
+                            <Info className="w-3.5 h-3.5 text-blue-600" />
+                            <T>Các Điểm Thảo Luận Then Chốt</T>
+                          </div>
+                          <ul className="space-y-1.5 pl-4 list-disc text-xs text-slate-700 leading-relaxed">
+                            {summaryKeyPoints.map((pt, idx) => (
+                              <li key={idx}>
+                                <T>{pt}</T>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+
+                        {/* Consensus */}
+                        <div className="p-3.5 bg-emerald-50/60 border border-emerald-200 rounded-xl space-y-1.5">
+                          <div className="flex items-center gap-1.5 font-bold text-xs text-emerald-800 uppercase">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <T>Đồng Thuận / Kết Luận Chung</T>
+                          </div>
+                          <p className="text-xs text-emerald-950 font-medium leading-relaxed">
+                            <T>{summaryConsensus}</T>
+                          </p>
+                        </div>
+
+                        {/* Directives & Tasks in Topic */}
+                        {summaryDirectives.length > 0 && (
+                          <div className="p-3.5 bg-amber-50/60 border border-amber-200 rounded-xl space-y-2">
+                            <div className="flex items-center gap-1.5 font-bold text-xs text-amber-800 uppercase">
+                              <Zap className="w-3.5 h-3.5 text-amber-600 fill-amber-500" />
+                              <T>Chỉ Đạo & Đầu Việc Đã Giao ({summaryDirectives.length})</T>
+                            </div>
+                            <ul className="space-y-1 text-xs text-amber-950">
+                              {summaryDirectives.map((d, idx) => (
+                                <li key={idx} className="truncate">
+                                  <T>{d}</T>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Footer Actions */}
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const fullText = `TÓM TẮT THẢO LUẬN: ${topic.title}\n\n1. Các điểm then chốt:\n${summaryKeyPoints.map(p => `- ${p}`).join("\n")}\n\n2. Kết luận:\n${summaryConsensus}`;
+                            navigator.clipboard.writeText(fullText);
+                            if (onShowToast) onShowToast("Đã sao chép tóm tắt vào clipboard!", "success");
+                          }}
+                          className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          <T>Sao chép</T>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setShowDesktopAiSummaryModal(false)}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-sm"
+                        >
+                          <T>Đóng</T>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Desktop Members Modal (Thành viên tham gia & Quản lý Trưởng nhóm) */}
+              {showDesktopMembersModal && (() => {
+                const topic = topics.find((t) => t.id === selectedTopicId) || topics[0];
+                if (!topic) return null;
+                const invitedIds = topic.invitedUserIds || [];
+
+                // Check if current user is Topic Leader or Admin
+                const isCurrentUserLeader = checkIsTopicLeader(topic, currentUser) || currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER;
+
+                // Identify Leader user object
+                const leaderUser = users.find(
+                  (u) =>
+                    (topic.authorPhone && (u.phone === topic.authorPhone || u.id === topic.authorPhone)) ||
+                    (topic.author && u.fullName?.toLowerCase() === topic.author?.toLowerCase()) ||
+                    (topic.authorId && (u.id === topic.authorId || u.phone === topic.authorId)) ||
+                    (topic.creatorPhone && (u.phone === topic.creatorPhone || u.id === topic.creatorPhone)) ||
+                    (topic.creatorName && u.fullName?.toLowerCase() === topic.creatorName?.toLowerCase())
+                );
+
+                // Split into Joined Members and Available Non-members
+                const joinedMembers = users.filter((u) => {
+                  const uid = u.id || "";
+                  const uphone = u.phone || "";
+                  const uname = u.fullName || "";
+                  const isLeader = leaderUser && (u.id === leaderUser.id || (u.phone && u.phone === leaderUser.phone));
+                  return (
+                    isLeader ||
+                    invitedIds.includes(uid) ||
+                    invitedIds.includes(uphone) ||
+                    invitedIds.includes(uname)
+                  );
+                }).sort((a, b) => {
+                  // Leader always on top
+                  const aIsLeader = leaderUser && (a.id === leaderUser.id || (a.phone && a.phone === leaderUser.phone));
+                  const bIsLeader = leaderUser && (b.id === leaderUser.id || (b.phone && b.phone === leaderUser.phone));
+                  if (aIsLeader) return -1;
+                  if (bIsLeader) return 1;
+                  return a.fullName.localeCompare(b.fullName);
+                });
+
+                const nonMembers = users.filter((u) => {
+                  const uid = u.id || "";
+                  const uphone = u.phone || "";
+                  const uname = u.fullName || "";
+                  const isLeader = leaderUser && (u.id === leaderUser.id || (u.phone && u.phone === leaderUser.phone));
+                  return (
+                    !isLeader &&
+                    !invitedIds.includes(uid) &&
+                    !invitedIds.includes(uphone) &&
+                    !invitedIds.includes(uname)
+                  );
+                });
+
+                // Filter based on search query
+                const q = desktopMemberSearchQuery.toLowerCase().trim();
+                const filteredJoined = joinedMembers.filter((u) => {
+                  if (!q) return true;
+                  return (
+                    u.fullName.toLowerCase().includes(q) ||
+                    (u.position && u.position.toLowerCase().includes(q)) ||
+                    (u.role && u.role.toLowerCase().includes(q)) ||
+                    (u.department && u.department.toLowerCase().includes(q)) ||
+                    (u.phone && u.phone.includes(q))
+                  );
+                });
+
+                const filteredNonMembers = nonMembers.filter((u) => {
+                  if (!q) return true;
+                  return (
+                    u.fullName.toLowerCase().includes(q) ||
+                    (u.position && u.position.toLowerCase().includes(q)) ||
+                    (u.role && u.role.toLowerCase().includes(q)) ||
+                    (u.department && u.department.toLowerCase().includes(q)) ||
+                    (u.phone && u.phone.includes(q))
+                  );
+                });
+
+                return (
+                  <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+                    <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-[540px] p-5 shadow-2xl flex flex-col space-y-3.5 animate-scaleUp max-h-[88vh]">
+                      {/* Header */}
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                        <div>
+                          <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                            <Users className="w-4 h-4 text-blue-600" />
+                            <T>Thành Viên & Phân Quyền Nhóm Thảo Luận</T>
+                          </h3>
+                          <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1.5">
+                            <span className="font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 inline-flex items-center gap-1">
+                              <Crown className="w-3 h-3 text-amber-600 fill-amber-500" />
+                              <T>Trưởng nhóm:</T> <span translate="no" className="notranslate">{topic.author || topic.creatorName || leaderUser?.fullName || "Chưa gán"}</span>
+                            </span>
+                            {isCurrentUserLeader && (
+                              <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200 font-bold">
+                                <T>(Bạn có quyền Trưởng nhóm)</T>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setShowDesktopMembersModal(false);
+                            setDesktopMemberSearchQuery("");
+                          }}
+                          className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* 2 Tabs Switcher */}
+                      <div className="grid grid-cols-2 gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                        <button
+                          type="button"
+                          onClick={() => setDesktopMemberModalTab("MEMBERS")}
+                          className={`py-1.5 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                            desktopMemberModalTab === "MEMBERS"
+                              ? "bg-white text-blue-700 shadow-xs"
+                              : "text-slate-600 hover:text-slate-900"
+                          }`}
+                        >
+                          <UserCheck className="w-3.5 h-3.5" />
+                          <span><T>Thành viên trong nhóm</T> ({joinedMembers.length})</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDesktopMemberModalTab("ADD")}
+                          className={`py-1.5 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                            desktopMemberModalTab === "ADD"
+                              ? "bg-white text-emerald-700 shadow-xs"
+                              : "text-slate-600 hover:text-slate-900"
+                          }`}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span><T>Thêm thành viên mới</T> ({nonMembers.length})</span>
+                        </button>
+                      </div>
+
+                      {/* Search Bar */}
+                      <div className="relative">
+                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder={
+                            desktopMemberModalTab === "MEMBERS"
+                              ? "Tìm kiếm thành viên trong nhóm..."
+                              : "Tìm nhân sự để mời vào nhóm (tên, mã NV, phòng ban)..."
+                          }
+                          value={desktopMemberSearchQuery}
+                          onChange={(e) => setDesktopMemberSearchQuery(e.target.value)}
+                          className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-blue-500 focus:bg-white transition-all font-medium"
+                        />
+                        {desktopMemberSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setDesktopMemberSearchQuery("")}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Tab 1: Current Joined Members (Được đưa lên TOP ĐẦU) */}
+                      {desktopMemberModalTab === "MEMBERS" && (
+                        <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 max-h-[380px]">
+                          {filteredJoined.length === 0 ? (
+                            <div className="py-10 text-center text-slate-400 text-xs font-semibold">
+                              <T>Không tìm thấy thành viên nào phù hợp trong nhóm.</T>
+                            </div>
+                          ) : (
+                            filteredJoined.map((u) => {
+                              const isLeader = leaderUser && (u.id === leaderUser.id || (u.phone && u.phone === leaderUser.phone));
+                              const isMe = currentUser && (u.id === currentUser.id || (u.phone && u.phone === currentUser.phone));
+
+                              return (
+                                <div
+                                  key={u.id || u.phone}
+                                  className={`flex items-center justify-between p-2.5 rounded-xl border transition-all ${
+                                    isLeader
+                                      ? "bg-amber-50/70 border-amber-200/90 shadow-2xs"
+                                      : "bg-white hover:bg-slate-50/80 border-slate-100"
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <div
+                                      className={`w-8 h-8 rounded-full text-white font-bold flex items-center justify-center text-xs shadow-2xs shrink-0 ${
+                                        isLeader
+                                          ? "bg-gradient-to-tr from-amber-500 to-amber-700 ring-2 ring-amber-300"
+                                          : "bg-gradient-to-tr from-blue-600 to-indigo-600"
+                                      }`}
+                                    >
+                                      {u.avatar ? (
+                                        <img src={u.avatar} alt="" className="w-full h-full rounded-full object-cover" />
+                                      ) : (
+                                        u.fullName.charAt(0).toUpperCase()
+                                      )}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="font-bold text-slate-900 text-xs truncate notranslate" translate="no">
+                                          {u.fullName}
+                                        </span>
+                                        {isLeader && (
+                                          <span className="text-[9.5px] bg-amber-100 text-amber-900 border border-amber-300 font-extrabold px-1.5 py-0.2 rounded-md flex items-center gap-0.5">
+                                            <Crown className="w-2.5 h-2.5 text-amber-600 fill-amber-500" />
+                                            <T>Trưởng nhóm</T>
+                                          </span>
+                                        )}
+                                        {isMe && (
+                                          <span className="text-[9px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.2 rounded">
+                                            <T>Tôi</T>
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-[10px] text-slate-500 truncate">
+                                        {u.position || u.role} • {u.department || u.branch || "Tân Phú"}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    {isLeader ? (
+                                      <span className="px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300 select-none">
+                                        <T>Chủ trì</T>
+                                      </span>
+                                    ) : isCurrentUserLeader ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveUserFromTopicDesktop(u, topic)}
+                                        className="px-2.5 py-1 rounded-lg text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-600 hover:text-white border border-rose-200 hover:border-rose-600 transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
+                                        title="Mời thành viên này ra khỏi nhóm thảo luận"
+                                      >
+                                        <UserMinus className="w-3.5 h-3.5" />
+                                        <T>Mời ra khỏi nhóm</T>
+                                      </button>
+                                    ) : (
+                                      <span className="px-2.5 py-1 rounded-lg text-[10.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 select-none">
+                                        <T>Thành viên ✓</T>
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      )}
+
+                      {/* Tab 2: Add New Members */}
+                      {desktopMemberModalTab === "ADD" && (
+                        <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 max-h-[380px]">
+                          {filteredNonMembers.length === 0 ? (
+                            <div className="py-10 text-center text-slate-400 text-xs font-semibold">
+                              <T>Tất cả nhân sự phù hợp đã có trong nhóm thảo luận.</T>
+                            </div>
+                          ) : (
+                            filteredNonMembers.map((u) => {
+                              return (
+                                <div
+                                  key={u.id || u.phone}
+                                  className="flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50 transition-colors border border-slate-100"
+                                >
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-xs shadow-2xs shrink-0">
+                                      {u.avatar ? (
+                                        <img src={u.avatar} alt="" className="w-full h-full rounded-full object-cover" />
+                                      ) : (
+                                        u.fullName.charAt(0).toUpperCase()
+                                      )}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div className="font-bold text-slate-900 text-xs truncate notranslate" translate="no">
+                                        {u.fullName}
+                                      </div>
+                                      <div className="text-[10px] text-slate-500 truncate">
+                                        {u.position || u.role} • {u.department || u.branch || "Tân Phú"}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleUserInviteDesktop(u, topic)}
+                                    className="px-3 py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-600 hover:text-white flex items-center gap-1 shadow-2xs"
+                                  >
+                                    <Plus className="w-3.5 h-3.5" />
+                                    <T>+ Thêm vào nhóm</T>
+                                  </button>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -9056,6 +13835,231 @@ export default function DashboardDesktop({
           })()}
         </main>
       </div>
+
+      {/* Fullscreen Image Preview Lightbox */}
+      {desktopPreviewImage && (
+        <div
+          onClick={() => setDesktopPreviewImage(null)}
+          className="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-xs flex items-center justify-center p-4 cursor-pointer animate-fadeIn"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative max-w-4xl max-h-[90vh] bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden shadow-2xl flex flex-col items-center cursor-default"
+          >
+            <div className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-900 border-b border-slate-800 text-white">
+              <span className="text-xs font-semibold flex items-center gap-1.5 text-slate-300">
+                <ImageIcon className="w-4 h-4 text-blue-400" />
+                <T>Xem hình ảnh đính kèm</T>
+              </span>
+              <button
+                type="button"
+                onClick={() => setDesktopPreviewImage(null)}
+                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white cursor-pointer transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-3 max-h-[calc(90vh-60px)] overflow-auto flex items-center justify-center">
+              <img
+                src={desktopPreviewImage}
+                alt="Full preview"
+                className="max-h-[75vh] w-auto object-contain rounded-lg"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Khởi tạo Thảo luận Chuyên đề Khẩn cấp (Desktop) */}
+      {emergencyDiscussionReport && (
+        <div
+          data-desktop-emergency-modal="true"
+          className="fixed inset-0 z-[90] bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-fadeIn"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white border border-slate-200 rounded-2xl max-w-xl w-full p-5 shadow-2xl space-y-4 my-auto"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-rose-600 to-red-500 flex items-center justify-center text-white shadow-md">
+                  <Flame className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm text-slate-800 flex items-center gap-1.5">
+                    <T>Khởi tạo Thảo luận Chuyên đề</T>
+                    <span className="bg-rose-100 text-rose-700 text-[10px] px-1.5 py-0.5 rounded font-black">
+                      {emergencyDiscussionReport.reportType || "KPH"}
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    <T>Mở phòng trao đổi và phân công xử lý cho sự cố này</T>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEmergencyDiscussionReport(null);
+                  setEmergencyInvitedUserIds([]);
+                }}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  <T>Tiêu đề chủ đề:</T>
+                </label>
+                <input
+                  type="text"
+                  value={emergencyTitle}
+                  onChange={(e) => setEmergencyTitle(e.target.value)}
+                  placeholder="Nhập tiêu đề thảo luận..."
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-250 rounded-xl focus:bg-white focus:border-rose-500 outline-none transition-all font-semibold text-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  <T>Phân loại chủ đề:</T>
+                </label>
+                <select
+                  value={emergencyCategory}
+                  onChange={(e) => setEmergencyCategory(e.target.value as ForumTopicCategory)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-250 rounded-xl focus:bg-white focus:border-rose-500 outline-none transition-all font-medium text-slate-800 cursor-pointer"
+                >
+                  <option value="Thảo luận KPH">Thảo luận KPH (Sự cố không phù hợp)</option>
+                  <option value="Góp ý chức năng">Góp ý chức năng</option>
+                  <option value="Đổi mới sáng tạo">Đổi mới sáng tạo</option>
+                  <option value="Khác">Khác</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  <T>Tóm tắt bối cảnh sự cố:</T>
+                </label>
+                <textarea
+                  value={emergencyDesc}
+                  onChange={(e) => setEmergencyDesc(e.target.value)}
+                  rows={4}
+                  placeholder="Nội dung tóm tắt sự cố..."
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-250 rounded-xl focus:bg-white focus:border-rose-500 outline-none transition-all text-slate-700 font-mono resize-none leading-relaxed"
+                />
+              </div>
+
+              {/* Tag / Invite Members Section */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-slate-500" />
+                    <T>Thành viên tham gia thảo luận ({emergencyInvitedUserIds.length}):</T>
+                  </label>
+                  {emergencyInvitedUserIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setEmergencyInvitedUserIds([])}
+                      className="text-[10px] text-slate-400 hover:text-red-500 font-bold cursor-pointer"
+                    >
+                      <T>Xóa chọn</T>
+                    </button>
+                  )}
+                </div>
+
+                <div className="relative mb-2">
+                  <Search className="w-3 h-3 text-slate-400 absolute left-2.5 top-2.5" />
+                  <input
+                    type="text"
+                    value={invitedSearchQuery}
+                    onChange={(e) => setInvitedSearchQuery(e.target.value)}
+                    placeholder="Tìm nhân sự hoặc phòng ban để mời tham gia..."
+                    className="w-full pl-7 pr-3 py-1.5 text-[11px] bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-rose-500 outline-none transition-all"
+                  />
+                </div>
+
+                <div className="max-h-32 overflow-y-auto border border-slate-200 rounded-xl p-1.5 space-y-1 bg-slate-50/50">
+                  {users
+                    ?.filter((u) => {
+                      if (!invitedSearchQuery.trim()) return true;
+                      const q = invitedSearchQuery.toLowerCase();
+                      return (
+                        u.fullName?.toLowerCase().includes(q) ||
+                        u.department?.toLowerCase().includes(q) ||
+                        u.branch?.toLowerCase().includes(q)
+                      );
+                    })
+                    .map((u) => {
+                      const uId = u.id || u.phone || "";
+                      const isSelected = emergencyInvitedUserIds.includes(uId);
+                      return (
+                        <div
+                          key={uId || u.phone}
+                          onClick={() => {
+                            if (isSelected) {
+                              setEmergencyInvitedUserIds(prev => prev.filter(id => id !== uId));
+                            } else {
+                              setEmergencyInvitedUserIds(prev => [...prev, uId]);
+                            }
+                          }}
+                          className={`flex items-center justify-between p-1.5 rounded-lg cursor-pointer transition-colors text-[11px] ${
+                            isSelected
+                              ? "bg-rose-50 border border-rose-200 text-rose-900 font-bold"
+                              : "hover:bg-slate-100 text-slate-700"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black text-white ${
+                              isSelected ? "bg-rose-500" : "bg-slate-400"
+                            }`}>
+                              {u.fullName?.slice(0, 1) || "U"}
+                            </div>
+                            <span className="truncate">{u.fullName}</span>
+                            <span className="text-[10px] text-slate-400 font-normal truncate">
+                              ({u.department || u.branch || "Tân Phú"})
+                            </span>
+                          </div>
+                          <div className="shrink-0 ml-2">
+                            {isSelected ? (
+                              <CheckCircle className="w-3.5 h-3.5 text-rose-600" />
+                            ) : (
+                              <div className="w-3.5 h-3.5 rounded-full border border-slate-300"></div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setEmergencyDiscussionReport(null);
+                  setEmergencyInvitedUserIds([]);
+                }}
+                className="px-3.5 py-1.5 rounded-xl border border-slate-250 text-slate-600 hover:bg-slate-100 text-xs font-bold cursor-pointer transition-colors"
+              >
+                <T>Hủy</T>
+              </button>
+              <button
+                type="button"
+                disabled={!emergencyTitle.trim()}
+                onClick={handleCreateEmergencyDiscussion}
+                className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 disabled:opacity-50 text-white text-xs font-extrabold shadow-md hover:shadow-lg active:scale-95 cursor-pointer transition-all flex items-center gap-1.5 uppercase tracking-wide"
+              >
+                <Flame className="w-3.5 h-3.5" />
+                <T>Bắt đầu thảo luận</T>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

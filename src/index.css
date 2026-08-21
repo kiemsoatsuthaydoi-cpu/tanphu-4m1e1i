@@ -17,10 +17,26 @@
   }
 }
 
+@keyframes bannerTickerFromRight {
+  0% {
+    transform: translateX(100vw);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
 .animate-marquee {
   display: inline-flex;
   animation: marquee 40s linear infinite;
   white-space: nowrap;
+}
+
+.animate-banner-ticker {
+  display: inline-flex;
+  animation: bannerTickerFromRight 30s linear infinite;
+  white-space: nowrap;
+  will-change: transform;
 }
 
 @keyframes spin {
@@ -114,4 +130,195 @@ body {
 .animate-bell-shake {
   animation: bellShake 0.9s cubic-bezier(0.36, 0.07, 0.19, 0.97) infinite;
   transform-origin: top center;
+}
+
+/* =========================================================
+   CHẾ ĐỘ IN PDF CHUYÊN NGHIỆP (@media print)
+   ========================================================= */
+@page {
+  size: A4 portrait;
+  margin: 6mm 6mm 6mm 6mm;
+}
+
+@media print {
+  /* 1. Ẩn toàn bộ thanh điều hướng, sidebar, nút thao tác ngoài vùng in */
+  .print\:hidden,
+  .no-print,
+  .no-print *,
+  #sidebar-container,
+  header,
+  footer,
+  nav,
+  .toast,
+  .modal,
+  [role="dialog"],
+  [role="navigation"] {
+    display: none !important;
+  }
+
+  /* 2. Đưa toàn bộ trang về nền trắng sạch và đảm bảo container không bị khóa chiều cao hoặc overflow */
+  body, html, main, #root, .dashboard-desktop-wrapper {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    display: block !important;
+    position: static !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .no-print,
+  .no-print * {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  .print\:block {
+    display: block !important;
+    visibility: visible !important;
+  }
+
+  .print\:inline {
+    display: inline !important;
+    visibility: visible !important;
+  }
+
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* 3. VÙNG IN PHIẾU CAPA: Tối ưu diện tích in tràn viền hợp lý, không bị ép lề quá rộng */
+  #printable-capa-sheet {
+    position: relative !important;
+    left: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    display: block !important;
+    overflow: visible !important;
+    font-size: 10.5px !important;
+    line-height: 1.35 !important;
+  }
+
+  #printable-capa-sheet input,
+  #printable-capa-sheet textarea,
+  #printable-capa-sheet select {
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+    opacity: 1 !important;
+  }
+
+  #printable-capa-sheet img {
+    max-width: 100% !important;
+    max-height: 110px !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    object-fit: contain !important;
+  }
+
+  /* 4. PHÂN TRANG THÔNG MINH: */
+  table,
+  tbody,
+  tr,
+  td,
+  th,
+  .form-section,
+  .capa-section-block {
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Chống xé lẻ khối chữ ký 3 bước và header ISO */
+  .signature-block,
+  .signature-cell,
+  .capa-iso-header,
+  .capa-signature-row {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    break-inside: avoid-page !important;
+  }
+
+  /* Tiêu đề mục luôn đi liền với nội dung tiếp theo */
+  .capa-section-header,
+  .capa-part-header {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+
+  /* Tự động ngắt trang chuẩn ISO nếu kích hoạt */
+  .print-break-before {
+    page-break-before: always !important;
+    break-before: page !important;
+  }
+
+  .print-break-after {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  /* Tối ưu đệm dòng và kích thước bảng khi in */
+  #printable-capa-sheet table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    table-layout: auto !important;
+  }
+
+  #printable-capa-sheet th,
+  #printable-capa-sheet td {
+    padding: 3.5px 5px !important;
+    color: #000000 !important;
+    overflow: visible !important;
+    word-break: break-word !important;
+    white-space: normal !important;
+  }
+
+  #printable-capa-sheet .p-3 {
+    padding: 4px 6px !important;
+  }
+
+  #printable-capa-sheet .p-2 {
+    padding: 3.5px 5px !important;
+  }
+
+  #printable-capa-sheet .p-1\.5 {
+    padding: 2.5px 4px !important;
+  }
+
+  #printable-capa-sheet .mb-4 {
+    margin-bottom: 6px !important;
+  }
+
+  #printable-capa-sheet .mb-3 {
+    margin-bottom: 5px !important;
+  }
+
+  #printable-capa-sheet .mt-3 {
+    margin-top: 5px !important;
+  }
+
+  #printable-capa-sheet .min-h-\[55px\] {
+    min-height: auto !important;
+  }
+
+  /* 5. Bảo toàn màu sắc viền và nền bảng sắc nét khi in */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    box-sizing: border-box !important;
+  }
 }
