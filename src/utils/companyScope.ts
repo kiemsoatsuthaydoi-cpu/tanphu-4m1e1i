@@ -173,8 +173,38 @@ export function getBranchCompany(branch?: Partial<Branch> | string | null): "TPP
  */
 export function isReportInScope(report: QualityReport, scope: CompanyScope, branches?: Branch[]): boolean {
   if (scope === "ALL") return true;
-  // If report has targetCompany === "ALL", it is shared to all
-  if (report.targetCompany === "ALL" || report.assignedCompany === "ALL") return true;
+  if (!report) return false;
+
+  const fac = (report.factory || "").toUpperCase();
+  const isDnpFactory = !!(
+    fac.includes("DNP") || 
+    fac.includes("BBM") || 
+    fac.includes("BBC") || 
+    fac.includes("ĐỒNG NAI") || 
+    fac.includes("DONG NAI") || 
+    fac.includes("BAO BÌ MỀM") || 
+    fac.includes("BAO BI MEM") || 
+    fac.includes("BAO BÌ CỨNG") || 
+    fac.includes("BAO BI CUNG")
+  );
+
+  const isTargetDnp = report.targetCompany === "DNP" || (report.assignedCompany && report.assignedCompany.toUpperCase().includes("DNP"));
+  const isTargetTpp = report.targetCompany === "TPP" || (report.assignedCompany && report.assignedCompany.toUpperCase().includes("TPP"));
+  const isTargetAll = report.targetCompany === "ALL" || report.assignedCompany === "ALL";
+
+  const hasHistoryTpp = !!(report.transferHistory && report.transferHistory.some(th => th.toCompany === "TPP" || (th as any).targetCompany === "TPP" || th.toCompany === "ALL" || (th as any).targetCompany === "ALL"));
+  const hasHistoryDnp = !!(report.transferHistory && report.transferHistory.some(th => th.toCompany === "DNP" || (th as any).targetCompany === "DNP" || th.toCompany === "ALL" || (th as any).targetCompany === "ALL"));
+
+  const belongsToDnp = isDnpFactory || !!isTargetDnp || !!isTargetAll || hasHistoryDnp;
+  const belongsToTpp = !isDnpFactory || !!isTargetTpp || !!isTargetAll || hasHistoryTpp;
+
+  if (scope === "TPP") {
+    return belongsToTpp;
+  }
+  if (scope === "DNP") {
+    return belongsToDnp;
+  }
+
   return getReportCompany(report, branches) === scope;
 }
 

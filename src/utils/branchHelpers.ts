@@ -221,6 +221,92 @@ export const canUserProcessOrResolveReport = (
   return isSameBranchOrFactory(currentUser.branch, reportFactory);
 };
 
+export const canUserTransferDnpTpp = (
+  currentUser: any,
+  report: any
+): boolean => {
+  if (!currentUser || !report) return false;
+
+  const roleUpper = (currentUser.role || "").toString().toUpperCase();
+  const deptUpper = (currentUser.department || "").toString().toUpperCase();
+  const posUpper = (currentUser.position || "").toString().toUpperCase();
+
+  // 1. Admin / Ban TGĐ / Special permission
+  const isAdmin =
+    roleUpper === "CHỦ ADMIN" ||
+    roleUpper === "ADMIN" ||
+    roleUpper === UserRole.ADMIN ||
+    currentUser.canSpeciallyEditDelete === true ||
+    deptUpper.includes("BAN TGĐ") ||
+    deptUpper.includes("QUẢN TRỊ") ||
+    posUpper.includes("ADMIN") ||
+    posUpper.includes("TỔNG GIÁM ĐỐC") ||
+    posUpper.includes("TGĐ");
+
+  if (isAdmin) return true;
+
+  // 2. Người đăng bài (Uploader / Creator)
+  const isUploader =
+    (currentUser.id && report.uploaderId && currentUser.id === report.uploaderId) ||
+    (currentUser.fullName &&
+      report.uploaderName &&
+      currentUser.fullName.trim().toLowerCase() === report.uploaderName.trim().toLowerCase()) ||
+    (currentUser.phone &&
+      report.uploaderPhone &&
+      currentUser.phone.trim() === report.uploaderPhone.trim());
+
+  if (isUploader) return true;
+
+  // 3. Trưởng bộ phận của người đăng (Department Manager of Uploader)
+  const managerKeywords = [
+    "TRƯỞNG PHÒNG",
+    "PHÓ PHÒNG",
+    "GIÁM ĐỐC",
+    "PHÓ GIÁM ĐỐC",
+    "TRƯỞNG BAN",
+    "PHÓ BAN",
+    "TRƯỞNG BỘ PHẬN",
+    "PHÓ BỘ PHẬN",
+    "QUẢN LÝ",
+    "QUẢN ĐỐC",
+    "PHÓ QUẢN ĐỐC",
+    "CHỦ NHIỆM",
+    "DUYỆT VIÊN",
+    "CHUYÊN VIÊN CAO CẤP"
+  ];
+
+  const isManager =
+    currentUser.role === UserRole.REVIEWER ||
+    roleUpper.includes("DUYỆT VIÊN") ||
+    managerKeywords.some((kw) => posUpper.includes(kw) || deptUpper.includes(kw));
+
+  if (isManager) {
+    const uploaderDept = (report.uploaderDepartment || "").trim().toUpperCase();
+    const userDept = (currentUser.department || "").trim().toUpperCase();
+
+    const isSameDept =
+      uploaderDept &&
+      userDept &&
+      (uploaderDept === userDept ||
+        uploaderDept.includes(userDept) ||
+        userDept.includes(uploaderDept));
+
+    const userBranch = (currentUser.branch || "").trim().toUpperCase();
+    const reportFactory = (report.factory || "").trim().toUpperCase();
+
+    const isSameBranchOrFactoryCheck =
+      userBranch &&
+      reportFactory &&
+      (userBranch.includes(reportFactory) || reportFactory.includes(userBranch));
+
+    if (isSameDept || (isSameBranchOrFactoryCheck && !uploaderDept)) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 export const formatNameCapitalized = (str: string | undefined | null): string => {
   if (!str) return "";
   
