@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { 
   FlaskConical, 
   CheckCircle2, 
@@ -51,7 +51,8 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
-  ChevronLeft
+  ChevronLeft,
+  ChevronDown
 } from "lucide-react";
 import { TrialTrackingItem, TrialStepKey, TrialStepDetail, User, UserRole, Category4M1E1I, Branch, Department, QualityReportDirective, QualityReportBadge } from "../types";
 import { initialTrialTrackings } from "../data/trialTrackings";
@@ -180,6 +181,72 @@ export const checkUserStepPermission = (
   }
 
   return { allowed: false, roleName: user.department || "", isSuperAdmin: false, isBranchManager: false };
+};
+
+/**
+ * Helper to check if a user is authorized to customize (add/remove/reorder/modify) steps in a trial item.
+ * Allowed:
+ * 1. Admin / Super Admin (role === UserRole.ADMIN or canSpeciallyEditDelete)
+ * 2. Creator of the trial item (item.createdBy === user.id or item.createdByName === user.fullName)
+ * 3. Ban Quản Đốc / Ban Giám Đốc / Ban Tổng Giám Đốc
+ * 4. Phụ trách QLCL / QA / QC / Trưởng phòng QLCL / Kỹ thuật
+ */
+export const canUserCustomizeSteps = (user: User | null, item: TrialTrackingItem): boolean => {
+  if (!user) return false;
+  
+  // 1. Admin / Super Admin hoặc người có quyền chỉnh sửa/xóa đặc biệt
+  if (user.role === UserRole.ADMIN || !!user.canSpeciallyEditDelete) {
+    return true;
+  }
+
+  // 2. Người khởi tạo đợt thử nghiệm (Chủ trì thử nghiệm)
+  if (
+    (user.fullName && item.createdByName && user.fullName.trim().toLowerCase() === item.createdByName.trim().toLowerCase()) ||
+    (user.id && item.createdBy && user.id === item.createdBy)
+  ) {
+    return true;
+  }
+
+  // 3. Ban Quản lý hoặc Phụ trách QLCL / Kỹ thuật
+  const userDept = (user.department || "").trim().toLowerCase();
+  const userPosition = (user.position || "").trim().toLowerCase();
+  const userRole = (user.role || "").toString().trim().toLowerCase();
+
+  const isManagementOrQualityLeader =
+    userRole.includes("admin") ||
+    userRole.includes("duyệt") ||
+    userDept.includes("ban giám đốc") ||
+    userDept.includes("ban quản đốc") ||
+    userDept.includes("ban tổng giám đốc") ||
+    userDept.includes("quản lý chất lượng") ||
+    userDept.includes("qlcl") ||
+    userDept.includes("qa") ||
+    userDept.includes("qc") ||
+    userDept.includes("kỹ thuật") ||
+    userDept.includes("ktcn") ||
+    userDept.includes("r&d") ||
+    userPosition.includes("giám đốc") ||
+    userPosition.includes("tổng giám đốc") ||
+    userPosition.includes("quản đốc") ||
+    userPosition.includes("trưởng phòng") ||
+    userPosition.includes("phó phòng") ||
+    userPosition.includes("chủ trì") ||
+    userPosition.includes("trưởng ca") ||
+    userPosition.includes("qa") ||
+    userPosition.includes("qc") ||
+    userPosition.includes("kỹ thuật");
+
+  if (isManagementOrQualityLeader) {
+    const userBranch = (user.branch || "").trim().toLowerCase();
+    const itemFactory = (item.factory || "").trim().toLowerCase();
+    const isCorp = userBranch.includes("cty") || userDept.includes("cty") || userBranch.includes("văn phòng công ty");
+    const sameBranch = !userBranch || !itemFactory || userBranch.includes(itemFactory) || itemFactory.includes(userBranch);
+    if (isCorp || sameBranch) {
+      return true;
+    }
+  }
+
+  return false;
 };
 
 /**
@@ -409,6 +476,28 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
     setInternalTrialTypeFilter(t);
     if (onTrialTypeFilterChange) onTrialTypeFilterChange(t);
   };
+
+  // State & Refs cho 2 nút sổ ra rút gọn (Dropdown Filters)
+  const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+  const [isTrialTypeDropdownOpen, setIsTrialTypeDropdownOpen] = useState(false);
+  const statusDropdownRef = useRef<HTMLDivElement>(null);
+  const trialTypeDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Tự động đóng dropdown khi click ra ngoài
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
+        setIsStatusDropdownOpen(false);
+      }
+      if (trialTypeDropdownRef.current && !trialTypeDropdownRef.current.contains(event.target as Node)) {
+        setIsTrialTypeDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const [activeStepModal, setActiveStepModal] = useState<{
     item: TrialTrackingItem;
@@ -925,6 +1014,13 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
     const targetItem = trialItems.find((t) => t.id === itemId);
     if (!targetItem) return;
 
+    if (!canUserCustomizeSteps(currentUser, targetItem)) {
+      if (showToast) {
+        showToast("🔒 Bạn không có quyền sắp xếp lại các bước trong đợt thử nghiệm này!");
+      }
+      return;
+    }
+
     const currentOrder = getItemStepList(targetItem).map((s) => s.key);
     const sourceIdx = currentOrder.indexOf(sourceKey);
     const targetIdx = currentOrder.indexOf(targetKey);
@@ -949,6 +1045,17 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
     });
 
     saveItems(updated);
+  };
+
+  // Handler to safely open customization modal with permission check
+  const handleOpenCustomizeSteps = (item: TrialTrackingItem) => {
+    if (!canUserCustomizeSteps(currentUser, item)) {
+      if (showToast) {
+        showToast("🔒 Quyền tùy chỉnh bị giới hạn: Chỉ Admin, Ban Quản Đốc/Giám Đốc, Phụ trách QLCL hoặc Người tạo đợt thử nghiệm mới có quyền tùy chỉnh các bước!");
+      }
+      return;
+    }
+    setCustomizingItem(item);
   };
 
   // Helper to extract ordered steps for a trial item
@@ -1667,120 +1774,215 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
             </div>
           </div>
 
-          {/* Vibrant Quick Stat Cards (Fully responsive and Zoom-resilient) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {/* Card 1: Tổng đợt thử (Blue/Indigo gradient card with watermark icon) */}
-            <div 
-              onClick={() => setStatusFilter("ALL")}
-              className={`relative overflow-hidden rounded-2xl p-3.5 sm:p-4 text-white shadow-md transition-all duration-200 cursor-pointer active:scale-98 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 min-w-0 ${
-                statusFilter === "ALL" ? "ring-3 ring-blue-400 ring-offset-2 scale-[1.02]" : ""
-              }`}
-            >
-              {/* Background watermark icon */}
-              <Activity className="absolute -right-2 -bottom-2 w-20 h-20 text-white/15 pointer-events-none stroke-[1.5]" />
-              <div className="relative z-10 flex items-center justify-between gap-3 min-w-0">
-                <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                  <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0">
-                    <Activity className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-black uppercase tracking-wider text-blue-100 truncate">
-                      <span translate="no" className="notranslate">TỔNG ĐỢT THỬ</span>
-                    </div>
-                    <div className="text-[11px] text-blue-100/90 font-medium leading-tight truncate">
-                      <span translate="no" className="notranslate">Đang quản lý</span>
-                    </div>
-                  </div>
+          {/* Consolidated Status Filter Dropdown (Gộp 4 nút trạng thái thành 1 nút sổ ra) */}
+          <div ref={statusDropdownRef} className="relative select-none">
+            <div className="bg-white rounded-2xl p-3 sm:p-3.5 shadow-sm border border-slate-200 flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-700 border border-teal-200 flex items-center justify-center shrink-0 shadow-3xs">
+                  <Filter className="w-4 h-4" />
                 </div>
-                <div className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight shrink-0">
-                  {filteredItems.length}
+                <div>
+                  <div className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                    <span translate="no" className="notranslate">Lọc Theo Trạng Thái Đợt Thử:</span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 font-medium">
+                    <span translate="no" className="notranslate">Nhấp để mở menu chọn trạng thái tiến trình</span>
+                  </div>
                 </div>
               </div>
+
+              {/* Single Consolidated Dropdown Trigger Button */}
+              <button
+                type="button"
+                onClick={() => setIsStatusDropdownOpen((prev) => !prev)}
+                className={`flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer shadow-sm border ${
+                  statusFilter === "IN_PROGRESS"
+                    ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white border-amber-600 ring-2 ring-amber-300"
+                    : statusFilter === "COMPLETED_PASS"
+                    ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white border-emerald-700 ring-2 ring-emerald-300"
+                    : statusFilter === "COMPLETED_FAIL"
+                    ? "bg-gradient-to-r from-rose-600 to-red-600 text-white border-rose-700 ring-2 ring-rose-300"
+                    : "bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-blue-700 ring-2 ring-blue-300"
+                }`}
+              >
+                {statusFilter === "IN_PROGRESS" ? (
+                  <>
+                    <Shield className="w-4 h-4 text-white shrink-0" />
+                    <span translate="no" className="notranslate">ĐANG THỰC HIỆN</span>
+                    <span className="bg-white/25 text-white text-[11px] px-2 py-0.5 rounded-full font-mono font-black ml-1">
+                      {filteredItems.filter((i) => i.overallStatus === "IN_PROGRESS").length}
+                    </span>
+                  </>
+                ) : statusFilter === "COMPLETED_PASS" ? (
+                  <>
+                    <CheckCircle className="w-4 h-4 text-white shrink-0" />
+                    <span translate="no" className="notranslate">ĐÁNH GIÁ ĐẠT</span>
+                    <span className="bg-white/25 text-white text-[11px] px-2 py-0.5 rounded-full font-mono font-black ml-1">
+                      {filteredItems.filter((i) => i.overallStatus === "COMPLETED_PASS").length}
+                    </span>
+                  </>
+                ) : statusFilter === "COMPLETED_FAIL" ? (
+                  <>
+                    <Zap className="w-4 h-4 text-white shrink-0" />
+                    <span translate="no" className="notranslate">KHÔNG ĐẠT / HỦY</span>
+                    <span className="bg-white/25 text-white text-[11px] px-2 py-0.5 rounded-full font-mono font-black ml-1">
+                      {filteredItems.filter((i) => i.overallStatus === "COMPLETED_FAIL" || i.overallStatus === "CANCELLED").length}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Activity className="w-4 h-4 text-white shrink-0" />
+                    <span translate="no" className="notranslate">TỔNG ĐỢT THỬ (TẤT CẢ)</span>
+                    <span className="bg-white/25 text-white text-[11px] px-2 py-0.5 rounded-full font-mono font-black ml-1">
+                      {filteredItems.length}
+                    </span>
+                  </>
+                )}
+                <ChevronDown className={`w-4 h-4 text-white/90 transition-transform duration-200 ml-1 ${isStatusDropdownOpen ? "rotate-180" : ""}`} />
+              </button>
             </div>
 
-            {/* Card 2: Đang thực hiện (Vibrant Amber/Orange Card with watermark icon) */}
-            <div 
-              onClick={() => setStatusFilter("IN_PROGRESS")}
-              className={`relative overflow-hidden rounded-2xl p-3.5 sm:p-4 text-white shadow-md transition-all duration-200 cursor-pointer active:scale-98 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 min-w-0 ${
-                statusFilter === "IN_PROGRESS" ? "ring-3 ring-orange-400 ring-offset-2 scale-[1.02]" : ""
-              }`}
-            >
-              <Shield className="absolute -right-2 -bottom-2 w-20 h-20 text-white/15 pointer-events-none stroke-[1.5]" />
-              <div className="relative z-10 flex items-center justify-between gap-3 min-w-0">
-                <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                  <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0">
-                    <Shield className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-black uppercase tracking-wider text-amber-100 truncate">
-                      <span translate="no" className="notranslate">ĐANG THỰC HIỆN</span>
-                    </div>
-                    <div className="text-[11px] text-amber-100/90 font-medium leading-tight truncate">
-                      <span translate="no" className="notranslate">Tiến trình 4M1E</span>
-                    </div>
-                  </div>
+            {/* Dropdown Menu Sổ Ra */}
+            {isStatusDropdownOpen && (
+              <div className="absolute right-0 sm:right-4 mt-2 w-full sm:w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-30 animate-in fade-in zoom-in-95 duration-150">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1.5 border-b border-slate-100">
+                  <span translate="no" className="notranslate">Chọn trạng thái cần lọc:</span>
                 </div>
-                <div className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight shrink-0">
-                  {filteredItems.filter((i) => i.overallStatus === "IN_PROGRESS").length}
-                </div>
-              </div>
-            </div>
+                <div className="space-y-1 mt-1">
+                  {/* Option 1: TỔNG ĐỢT THỬ */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatusFilter("ALL");
+                      setIsStatusDropdownOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all cursor-pointer ${
+                      statusFilter === "ALL"
+                        ? "bg-blue-50 text-blue-900 border border-blue-200 font-black shadow-2xs"
+                        : "hover:bg-slate-50 text-slate-700"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                        statusFilter === "ALL" ? "bg-blue-600 text-white" : "bg-blue-100 text-blue-700"
+                      }`}>
+                        <Activity className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold truncate">
+                          <span translate="no" className="notranslate">TỔNG ĐỢT THỬ</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-medium truncate">
+                          <span translate="no" className="notranslate">Tất cả đợt thử nghiệm đang quản lý</span>
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-xs font-mono font-black px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 shrink-0 ml-2">
+                      {filteredItems.length}
+                    </span>
+                  </button>
 
-            {/* Card 3: Đánh giá ĐẠT (Vibrant Emerald/Green Card with watermark icon) */}
-            <div 
-              onClick={() => setStatusFilter("COMPLETED_PASS")}
-              className={`relative overflow-hidden rounded-2xl p-3.5 sm:p-4 text-white shadow-md transition-all duration-200 cursor-pointer active:scale-98 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 min-w-0 ${
-                statusFilter === "COMPLETED_PASS" ? "ring-3 ring-emerald-400 ring-offset-2 scale-[1.02]" : ""
-              }`}
-            >
-              <CheckCircle className="absolute -right-2 -bottom-2 w-20 h-20 text-white/15 pointer-events-none stroke-[1.5]" />
-              <div className="relative z-10 flex items-center justify-between gap-3 min-w-0">
-                <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                  <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0">
-                    <CheckCircle className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-black uppercase tracking-wider text-emerald-100 truncate">
-                      <span translate="no" className="notranslate">ĐÁNH GIÁ ĐẠT</span>
+                  {/* Option 2: ĐANG THỰC HIỆN */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatusFilter("IN_PROGRESS");
+                      setIsStatusDropdownOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all cursor-pointer ${
+                      statusFilter === "IN_PROGRESS"
+                        ? "bg-amber-50 text-amber-900 border border-amber-200 font-black shadow-2xs"
+                        : "hover:bg-slate-50 text-slate-700"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                        statusFilter === "IN_PROGRESS" ? "bg-amber-500 text-white" : "bg-amber-100 text-amber-700"
+                      }`}>
+                        <Shield className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold truncate">
+                          <span translate="no" className="notranslate">ĐANG THỰC HIỆN</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-medium truncate">
+                          <span translate="no" className="notranslate">Đang trong tiến trình 4M1E</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-[11px] text-emerald-100/90 font-medium leading-tight truncate">
-                      <span translate="no" className="notranslate">Đạt chuẩn ISO</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight shrink-0">
-                  {filteredItems.filter((i) => i.overallStatus === "COMPLETED_PASS").length}
-                </div>
-              </div>
-            </div>
+                    <span className="text-xs font-mono font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 shrink-0 ml-2">
+                      {filteredItems.filter((i) => i.overallStatus === "IN_PROGRESS").length}
+                    </span>
+                  </button>
 
-            {/* Card 4: Không đạt / Hủy (Vibrant Red/Crimson Card with watermark icon) */}
-            <div 
-              onClick={() => setStatusFilter("COMPLETED_FAIL")}
-              className={`relative overflow-hidden rounded-2xl p-3.5 sm:p-4 text-white shadow-md transition-all duration-200 cursor-pointer active:scale-98 bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 min-w-0 ${
-                statusFilter === "COMPLETED_FAIL" ? "ring-3 ring-rose-400 ring-offset-2 scale-[1.02]" : ""
-              }`}
-            >
-              <Zap className="absolute -right-2 -bottom-2 w-20 h-20 text-white/15 pointer-events-none stroke-[1.5]" />
-              <div className="relative z-10 flex items-center justify-between gap-3 min-w-0">
-                <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                  <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0">
-                    <Zap className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-black uppercase tracking-wider text-rose-100 truncate">
-                      <span translate="no" className="notranslate">KHÔNG ĐẠT / HỦY</span>
+                  {/* Option 3: ĐÁNH GIÁ ĐẠT */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatusFilter("COMPLETED_PASS");
+                      setIsStatusDropdownOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all cursor-pointer ${
+                      statusFilter === "COMPLETED_PASS"
+                        ? "bg-emerald-50 text-emerald-900 border border-emerald-200 font-black shadow-2xs"
+                        : "hover:bg-slate-50 text-slate-700"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                        statusFilter === "COMPLETED_PASS" ? "bg-emerald-600 text-white" : "bg-emerald-100 text-emerald-700"
+                      }`}>
+                        <CheckCircle className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold truncate">
+                          <span translate="no" className="notranslate">ĐÁNH GIÁ ĐẠT</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-medium truncate">
+                          <span translate="no" className="notranslate">Thử nghiệm hoàn thành đạt chuẩn ISO</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-[11px] text-rose-100/90 font-medium leading-tight truncate">
-                      <span translate="no" className="notranslate">Cần hiệu chỉnh</span>
+                    <span className="text-xs font-mono font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 shrink-0 ml-2">
+                      {filteredItems.filter((i) => i.overallStatus === "COMPLETED_PASS").length}
+                    </span>
+                  </button>
+
+                  {/* Option 4: KHÔNG ĐẠT / HỦY */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatusFilter("COMPLETED_FAIL");
+                      setIsStatusDropdownOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all cursor-pointer ${
+                      statusFilter === "COMPLETED_FAIL"
+                        ? "bg-rose-50 text-rose-900 border border-rose-200 font-black shadow-2xs"
+                        : "hover:bg-slate-50 text-slate-700"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                        statusFilter === "COMPLETED_FAIL" ? "bg-rose-600 text-white" : "bg-rose-100 text-rose-700"
+                      }`}>
+                        <Zap className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold truncate">
+                          <span translate="no" className="notranslate">KHÔNG ĐẠT / HỦY</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-medium truncate">
+                          <span translate="no" className="notranslate">Thử nghiệm không đạt, cần hiệu chỉnh</span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-                <div className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight shrink-0">
-                  {filteredItems.filter((i) => i.overallStatus === "COMPLETED_FAIL" || i.overallStatus === "CANCELLED").length}
+                    <span className="text-xs font-mono font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 shrink-0 ml-2">
+                      {filteredItems.filter((i) => i.overallStatus === "COMPLETED_FAIL" || i.overallStatus === "CANCELLED").length}
+                    </span>
+                  </button>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}
@@ -1876,71 +2078,53 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
 
           </div>
 
-          {/* Dedicated Segmented Pill Strip for Phân hệ Thử nghiệm (TN-B2B / TN-B2C) on Desktop */}
-          <div className="bg-white rounded-xl px-4 py-2.5 shadow-sm border border-slate-200 flex items-center justify-between gap-3 flex-wrap">
+          {/* Consolidated Segmented Dropdown for Phân hệ Thử nghiệm (TN-B2B / TN-B2C) */}
+          <div ref={trialTypeDropdownRef} className="relative bg-white rounded-xl px-4 py-2.5 shadow-sm border border-slate-200 flex items-center justify-between gap-3 flex-wrap select-none">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-black text-slate-700 uppercase tracking-wide flex items-center gap-1.5 mr-1 select-none">
                 <span className="w-2 h-2 rounded-full bg-teal-500"></span>
                 <span translate="no" className="notranslate">Phân hệ Thử Nghiệm:</span>
               </span>
 
-              <div className="inline-flex rounded-xl p-1 bg-slate-100 border border-slate-200 gap-1 select-none">
-                {/* Button ALL */}
-                <button
-                  type="button"
-                  onClick={() => setTrialTypeFilter("ALL")}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                    trialTypeFilter === "ALL"
-                      ? "bg-slate-800 text-white shadow-sm ring-1 ring-slate-700 font-extrabold"
-                      : "text-slate-600 hover:text-slate-900 hover:bg-white/60"
-                  }`}
-                >
-                  <span translate="no" className="notranslate">TẤT CẢ PHÂN HỆ</span>
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
-                    trialTypeFilter === "ALL" ? "bg-slate-700 text-slate-200" : "bg-slate-200 text-slate-700"
-                  }`}>
-                    {b2bCount + b2cCount}
-                  </span>
-                </button>
-
-                {/* Button B2B */}
-                <button
-                  type="button"
-                  onClick={() => setTrialTypeFilter("B2B")}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                    trialTypeFilter === "B2B"
-                      ? "bg-blue-600 text-white shadow-sm ring-2 ring-blue-300 font-extrabold"
-                      : "text-blue-700 hover:text-blue-900 hover:bg-blue-50/80"
-                  }`}
-                >
-                  <span>🏢</span>
-                  <span translate="no" className="notranslate">TN-B2B</span>
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-black ${
-                    trialTypeFilter === "B2B" ? "bg-blue-700 text-white" : "bg-blue-100 text-blue-800"
-                  }`}>
-                    {b2bCount}
-                  </span>
-                </button>
-
-                {/* Button B2C */}
-                <button
-                  type="button"
-                  onClick={() => setTrialTypeFilter("B2C")}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                    trialTypeFilter === "B2C"
-                      ? "bg-purple-600 text-white shadow-sm ring-2 ring-purple-300 font-extrabold"
-                      : "text-purple-700 hover:text-purple-900 hover:bg-purple-50/80"
-                  }`}
-                >
-                  <span>🛍️</span>
-                  <span translate="no" className="notranslate">TN-B2C</span>
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-black ${
-                    trialTypeFilter === "B2C" ? "bg-purple-700 text-white" : "bg-purple-100 text-purple-800"
-                  }`}>
-                    {b2cCount}
-                  </span>
-                </button>
-              </div>
+              {/* Single Consolidated Dropdown Trigger Button */}
+              <button
+                type="button"
+                onClick={() => setIsTrialTypeDropdownOpen((prev) => !prev)}
+                className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm border ${
+                  trialTypeFilter === "B2B"
+                    ? "bg-blue-600 text-white border-blue-700 ring-2 ring-blue-300 font-extrabold"
+                    : trialTypeFilter === "B2C"
+                    ? "bg-purple-600 text-white border-purple-700 ring-2 ring-purple-300 font-extrabold"
+                    : "bg-slate-800 text-white border-slate-900 ring-2 ring-slate-400 font-extrabold"
+                }`}
+              >
+                {trialTypeFilter === "B2B" ? (
+                  <>
+                    <span>🏢</span>
+                    <span translate="no" className="notranslate">TN-B2B (Khách Hàng Công Nghiệp)</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-black bg-blue-700 text-white ml-1">
+                      {b2bCount}
+                    </span>
+                  </>
+                ) : trialTypeFilter === "B2C" ? (
+                  <>
+                    <span>🛍️</span>
+                    <span translate="no" className="notranslate">TN-B2C (Người Tiêu Dùng / Bao Bì)</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-black bg-purple-700 text-white ml-1">
+                      {b2cCount}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span>🌐</span>
+                    <span translate="no" className="notranslate">TẤT CẢ PHÂN HỆ</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold bg-slate-700 text-slate-200 ml-1">
+                      {b2bCount + b2cCount}
+                    </span>
+                  </>
+                )}
+                <ChevronDown className={`w-3.5 h-3.5 text-white/90 transition-transform duration-200 ml-1 ${isTrialTypeDropdownOpen ? "rotate-180" : ""}`} />
+              </button>
             </div>
 
             {/* Quick Helper Text */}
@@ -1952,6 +2136,103 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                  "Hiển thị toàn bộ các đợt thử nghiệm B2B & B2C"}
               </span>
             </div>
+
+            {/* Dropdown Menu Sổ Ra for Phân Hệ */}
+            {isTrialTypeDropdownOpen && (
+              <div className="absolute left-4 top-full mt-1.5 w-72 sm:w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-30 animate-in fade-in zoom-in-95 duration-150">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1.5 border-b border-slate-100">
+                  <span translate="no" className="notranslate">Chọn phân hệ thử nghiệm:</span>
+                </div>
+                <div className="space-y-1 mt-1">
+                  {/* Option 1: ALL */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTrialTypeFilter("ALL");
+                      setIsTrialTypeDropdownOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all cursor-pointer ${
+                      trialTypeFilter === "ALL"
+                        ? "bg-slate-100 text-slate-900 border border-slate-300 font-black shadow-2xs"
+                        : "hover:bg-slate-50 text-slate-700"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="text-base">🌐</span>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold truncate">
+                          <span translate="no" className="notranslate">TẤT CẢ PHÂN HỆ</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-medium truncate">
+                          <span translate="no" className="notranslate">Hiển thị cả TN-B2B và TN-B2C</span>
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 shrink-0 ml-2">
+                      {b2bCount + b2cCount}
+                    </span>
+                  </button>
+
+                  {/* Option 2: TN-B2B */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTrialTypeFilter("B2B");
+                      setIsTrialTypeDropdownOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all cursor-pointer ${
+                      trialTypeFilter === "B2B"
+                        ? "bg-blue-50 text-blue-900 border border-blue-200 font-black shadow-2xs"
+                        : "hover:bg-slate-50 text-slate-700"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="text-base">🏢</span>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold truncate">
+                          <span translate="no" className="notranslate">TN-B2B (Khách Hàng B2B)</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-medium truncate">
+                          <span translate="no" className="notranslate">Khuôn, Ép/Thổi, FAI, Công Nghiệp</span>
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-xs font-mono font-black px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 shrink-0 ml-2">
+                      {b2bCount}
+                    </span>
+                  </button>
+
+                  {/* Option 3: TN-B2C */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTrialTypeFilter("B2C");
+                      setIsTrialTypeDropdownOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all cursor-pointer ${
+                      trialTypeFilter === "B2C"
+                        ? "bg-purple-50 text-purple-900 border border-purple-200 font-black shadow-2xs"
+                        : "hover:bg-slate-50 text-slate-700"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="text-base">🛍️</span>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold truncate">
+                          <span translate="no" className="notranslate">TN-B2C (Người Tiêu Dùng)</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-medium truncate">
+                          <span translate="no" className="notranslate">Bao bì, Gia dụng, Thẩm mỹ, Độ bền</span>
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-xs font-mono font-black px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 shrink-0 ml-2">
+                      {b2cCount}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2354,6 +2635,8 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                   {/* ------------------------------------------------------------- */}
                   {(() => {
                     const itemSteps = getItemStepList(item);
+                    const canCustomize = canUserCustomizeSteps(currentUser, item);
+
                     return (
                       <div className="mt-5 pt-3 sm:mt-6 sm:pt-4 border-t border-slate-100">
                         <div className="text-xs font-bold text-slate-600 mb-2.5 flex items-center justify-between gap-1 uppercase tracking-wide flex-nowrap">
@@ -2377,11 +2660,23 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                             {/* Nút Tùy chỉnh bước / Thêm / Xóa bước */}
                             <button
                               type="button"
-                              onClick={() => setCustomizingItem(item)}
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-[9px] sm:text-[10px] font-bold transition-all shadow-3xs cursor-pointer active:scale-95 uppercase whitespace-nowrap shrink-0"
-                              title="Tùy chỉnh, thêm hoặc xóa các bước của đợt thử nghiệm này"
+                              onClick={() => handleOpenCustomizeSteps(item)}
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md text-[9px] sm:text-[10px] font-bold transition-all shadow-3xs cursor-pointer active:scale-95 uppercase whitespace-nowrap shrink-0 ${
+                                canCustomize
+                                  ? "bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200"
+                                  : "bg-slate-100 hover:bg-slate-200 text-slate-500 border border-slate-300 opacity-90"
+                              }`}
+                              title={
+                                canCustomize
+                                  ? "Tùy chỉnh, thêm hoặc xóa các bước của đợt thử nghiệm này"
+                                  : "Quyền tùy chỉnh: Chỉ Admin, Quản Đốc, QLCL hoặc Người tạo đợt thử nghiệm mới có quyền"
+                              }
                             >
-                              <SlidersHorizontal className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-teal-700 shrink-0" />
+                              {canCustomize ? (
+                                <SlidersHorizontal className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-teal-700 shrink-0" />
+                              ) : (
+                                <Lock className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-slate-500 shrink-0" />
+                              )}
                               <span translate="no" className="notranslate whitespace-nowrap">TÙY CHỈNH</span>
                             </button>
                           </div>
@@ -2393,7 +2688,9 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                             <div className="mb-2 flex items-center justify-between text-[10px] text-slate-500 bg-slate-100/80 px-2 py-1 rounded-lg border border-slate-200">
                               <span className="flex items-center gap-1">
                                 <GripVertical className="w-3 h-3 text-slate-400" />
-                                <span translate="no" className="notranslate">Kéo thả icon ⋮⋮ để đảo vị trí các bước</span>
+                                <span translate="no" className="notranslate">
+                                  {canCustomize ? "Kéo thả icon ⋮⋮ để đảo vị trí các bước" : "Thứ tự tiến trình thử nghiệm"}
+                                </span>
                               </span>
                               <span className="text-[9px] text-teal-700 font-bold">
                                 <span translate="no" className="notranslate">{itemSteps.length} bước</span>
@@ -2411,14 +2708,16 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                               return (
                                 <div 
                                   key={st.key} 
-                                  draggable
+                                  draggable={canCustomize}
                                   onDragStart={(e) => {
+                                    if (!canCustomize) return;
                                     setDraggingStepKey(st.key);
                                     setDraggingItemId(item.id);
                                     e.dataTransfer.effectAllowed = "move";
                                     e.dataTransfer.setData("text/plain", st.key);
                                   }}
                                   onDragOver={(e) => {
+                                    if (!canCustomize) return;
                                     e.preventDefault();
                                     e.dataTransfer.dropEffect = "move";
                                     if (dragOverStepKey !== st.key) {
@@ -2431,6 +2730,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                                     }
                                   }}
                                   onDrop={(e) => {
+                                    if (!canCustomize) return;
                                     e.preventDefault();
                                     const sourceKey = e.dataTransfer.getData("text/plain") || draggingStepKey;
                                     if (sourceKey && sourceKey !== st.key) {
@@ -2455,8 +2755,12 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                                 >
                                   {/* Cột icon Drag Handle để nhấn im kéo */}
                                   <div 
-                                    className="flex items-center justify-center self-center cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-600 p-0.5 touch-none"
-                                    title="Nhấn im để kéo lên/xuống đảo vị trí bước này"
+                                    className={`flex items-center justify-center self-center p-0.5 touch-none ${
+                                      canCustomize 
+                                        ? "cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-700" 
+                                        : "cursor-default text-slate-300 opacity-50"
+                                    }`}
+                                    title={canCustomize ? "Nhấn im để kéo lên/xuống đảo vị trí bước này" : "Quyền tùy chỉnh thứ tự bước do Admin/Quản đốc/Chủ trì thực hiện"}
                                   >
                                     <GripVertical className="w-3.5 h-3.5" />
                                   </div>
@@ -4522,6 +4826,13 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
           departments={availableDepartments}
           onClose={() => setCustomizingItem(null)}
           onSave={(updatedItem) => {
+            if (!canUserCustomizeSteps(currentUser, updatedItem)) {
+              if (showToast) {
+                showToast("🔒 Bạn không có quyền lưu thay đổi các bước của đợt thử nghiệm này!");
+              }
+              setCustomizingItem(null);
+              return;
+            }
             const updated = trialItems.map((curr) =>
               curr.id === updatedItem.id ? updatedItem : curr
             );

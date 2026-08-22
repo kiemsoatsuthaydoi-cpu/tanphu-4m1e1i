@@ -726,6 +726,8 @@ export interface TrialTrackingItem {
   createdByName: string;
   createdByPhone: string;
   createdByRole?: string;
+  createdBy?: string;
+  creatorId?: string;
   overallStatus: "IN_PROGRESS" | "COMPLETED_PASS" | "COMPLETED_FAIL" | "CANCELLED";
   currentStepKey: string;
   steps: Record<string, TrialStepDetail>;

@@ -13,6 +13,7 @@ import {
 import { isTopicInScope, getEffectiveCompanyScope, isUserAllowedToViewTopic } from "../utils/companyScope";
 import { resolveSenderInfo, isCurrentUserSender } from "../utils/userResolver";
 import { loadImage, processImage } from "../utils/imageProcessor";
+import { DraggableFloatingButton } from "./DraggableFloatingButton";
 import { 
   Search, 
   Pin, 
@@ -1240,38 +1241,36 @@ ${currentAiSummary.directivesAndTasks.map(a => `• ${a}`).join("\n")}`;
 
       {/* Floating Action Button (FAB) to create topic - stacked above HOME button */}
       {!isCreatingTopic && !selectedTopicId && (
-        <button
+        <DraggableFloatingButton
           onClick={() => setIsCreatingTopic(true)}
-          className={`absolute bottom-[72px] right-4 w-11 h-11 rounded-full ${theme.bg} text-white flex items-center justify-center shadow-lg hover:brightness-110 active:scale-90 transition-all cursor-pointer z-20 border-none`}
-          title="Tạo chủ đề thảo luận"
+          className={`absolute bottom-[72px] right-4 w-11 h-11 rounded-full ${theme.bg} text-white flex items-center justify-center shadow-lg hover:brightness-110 active:scale-90 transition-colors cursor-pointer z-20 border-none`}
+          title="Nhấn giữ để di chuyển - Nhấp để tạo chủ đề thảo luận"
         >
           <Plus className="w-5 h-5 text-white stroke-[2.5px]" />
-        </button>
+        </DraggableFloatingButton>
       )}
 
       {/* Floating HOME Button on Forum Page - stacked at the bottom right */}
       {!isCreatingTopic && !selectedTopicId && (
-        <button
+        <DraggableFloatingButton
           id="float-home-forum"
-          type="button"
           onClick={() => onGoHome && onGoHome()}
-          className="absolute bottom-4 right-4 w-11 h-11 bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-20 cursor-pointer border-none"
-          title="Trở về Trang Home"
+          className="absolute bottom-4 right-4 w-11 h-11 bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-colors z-20 cursor-pointer border-none"
+          title="Nhấn giữ để di chuyển - Nhấp để về Trang Home"
         >
           <Home className="w-5 h-5 text-white stroke-[2.2px]" />
-        </button>
+        </DraggableFloatingButton>
       )}
 
       {/* Floating Scroll to Top Button on Forum Page - stacked above Create button when scrolled */}
       {!isCreatingTopic && !selectedTopicId && forumScrollTop > 100 && (
-        <button
-          type="button"
+        <DraggableFloatingButton
           onClick={() => forumScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
-          className="absolute bottom-[124px] right-4 w-11 h-11 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-20 cursor-pointer border-none"
-          title="Lên đầu trang"
+          className="absolute bottom-[124px] right-4 w-11 h-11 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-colors z-20 cursor-pointer border-none"
+          title="Nhấn giữ để di chuyển - Nhấp để lên đầu trang"
         >
           <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />
-        </button>
+        </DraggableFloatingButton>
       )}
 
       {/* Slide-over Detail View */}

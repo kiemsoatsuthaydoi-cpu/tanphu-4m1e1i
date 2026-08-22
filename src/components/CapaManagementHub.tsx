@@ -37,7 +37,8 @@ import {
   ExternalLink,
   Edit3,
   Cloud,
-  CloudOff
+  CloudOff,
+  ChevronDown
 } from "lucide-react";
 import { T } from "./TranslateText";
 import { QualityReport, User, Branch, CapaData, CapaVersion } from "../types";
@@ -423,6 +424,60 @@ const ddmmyyToYYYYMMDD = (val: string): string => {
   return "";
 };
 
+/**
+ * Trợ lý gợi ý tên file PDF xuất ra chuyên nghiệp chuẩn ISO, có kèm Mã số, Phiên bản CAPA, Tên sản phẩm và Ngày tháng
+ */
+export const generateSuggestedCapaPdfFileName = (
+  capaData?: CapaData | null,
+  versionTag?: string,
+  style: "STANDARD_ISO" | "CLEAN_VIETNAMESE" | "SHORT_CODE" = "STANDARD_ISO"
+): string => {
+  const rawCode = capaData?.ncNumber || capaData?.docNo || "CAPA";
+  const code = rawCode.trim().replace(/[^a-zA-Z0-9_-]/g, "") || "CAPA";
+  const rawVer = versionTag || "v1.0";
+  const ver = rawVer === "DRAFT" ? "DRAFT" : rawVer.startsWith("v") ? rawVer : `v${rawVer}`;
+  
+  // Format date YYMMDD or DDMMYY
+  let dateStr = "";
+  const rawDate = capaData?.occurDate || capaData?.sendDate || capaData?.effDate || "";
+  if (rawDate) {
+    dateStr = rawDate.replace(/[^0-9]/g, "");
+  }
+  if (!dateStr || dateStr.length < 4) {
+    const d = new Date();
+    const yy = String(d.getFullYear()).slice(-2);
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    dateStr = `${dd}${mm}${yy}`;
+  }
+
+  // Format clean product name slug
+  const rawProduct = (capaData?.productName || "").trim();
+  const cleanProduct = rawProduct
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toUpperCase()
+    .slice(0, 32);
+
+  if (style === "SHORT_CODE") {
+    return `CAPA-${code}-${ver}`;
+  }
+
+  if (style === "CLEAN_VIETNAMESE") {
+    const prodName = rawProduct ? ` - ${rawProduct.slice(0, 28)}` : "";
+    return `BÁO CÁO CAPA - ${code} (${ver})${prodName}`;
+  }
+
+  // STANDARD_ISO default
+  const prodPart = cleanProduct ? `_${cleanProduct}` : "";
+  const datePart = dateStr ? `_${dateStr}` : "";
+  return `CAPA_${code}_${ver}${prodPart}${datePart}`;
+};
+
 // Helper to convert yyyy-mm-dd to dd/mm/yy
 const yyyymmddToDDMMYY = (val: string): string => {
   if (!val) return "";
@@ -586,11 +641,33 @@ export default function CapaManagementHub({
   // Paper Config & Print Modal
   const [paperSize, setPaperSize] = useState<"A4_PORTRAIT" | "A4_LANDSCAPE" | "A3_LANDSCAPE" | "FULL_PAGE_EXPANDED">("FULL_PAGE_EXPANDED");
   const [paginationMode, setPaginationMode] = useState<"AUTO" | "ISO_2_PAGES" | "COMPACT_1_PAGE">("AUTO");
+  const [isPaperDropdownOpen, setIsPaperDropdownOpen] = useState(false);
+  const [isPaginationDropdownOpen, setIsPaginationDropdownOpen] = useState(false);
+  const paperDropdownRef = useRef<HTMLDivElement>(null);
+  const paginationDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Click outside to close Paper Size & Pagination dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (paperDropdownRef.current && !paperDropdownRef.current.contains(event.target as Node)) {
+        setIsPaperDropdownOpen(false);
+      }
+      if (paginationDropdownRef.current && !paginationDropdownRef.current.contains(event.target as Node)) {
+        setIsPaginationDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [modalPrintOrient, setModalPrintOrient] = useState<"portrait" | "landscape">("portrait");
   const [modalPrintScale, setModalPrintScale] = useState<number>(100);
   const [modalPrintVersion, setModalPrintVersion] = useState<string>("AUTO");
   const [modalPrintMargin, setModalPrintMargin] = useState<"full-bleed" | "standard" | "wide">("full-bleed");
+  const [pdfFileName, setPdfFileName] = useState<string>("");
   
   // Loading & AI states
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -1560,6 +1637,7 @@ export default function CapaManagementHub({
     if (!capaForm) return;
     const currentVer = viewingVersion || (versions.length > 0 ? versions[0].version : "DRAFT");
     setModalPrintVersion(currentVer);
+    setPdfFileName(generateSuggestedCapaPdfFileName(capaForm, currentVer));
     setShowPrintModal(true);
   };
 
@@ -1567,6 +1645,7 @@ export default function CapaManagementHub({
     if (!capaForm) return;
     const currentVer = viewingVersion || (versions.length > 0 ? versions[0].version : "DRAFT");
     setModalPrintVersion(currentVer);
+    setPdfFileName(generateSuggestedCapaPdfFileName(capaForm, currentVer));
     setShowPrintModal(true);
   };
 
@@ -1614,6 +1693,8 @@ export default function CapaManagementHub({
       }
     }
 
+    const finalFileName = (pdfFileName || "").trim() || generateSuggestedCapaPdfFileName(dataToPrint, verToPrint);
+
     // Freeze 1:1 State Snapshot across tabs
     const capaSnapshot = {
       period: selectedPeriod,
@@ -1630,6 +1711,7 @@ export default function CapaManagementHub({
       paper_size: paperSize,
       pagination_mode: paginationMode,
       show_part_4: showPart4Section,
+      pdf_filename: finalFileName,
       timestamp: Date.now()
     };
 
@@ -1664,6 +1746,7 @@ export default function CapaManagementHub({
     printUrl.searchParams.set("margin_mode", modalPrintMargin);
     printUrl.searchParams.set("paper_size", paperSize);
     printUrl.searchParams.set("pagination_mode", paginationMode);
+    printUrl.searchParams.set("filename", finalFileName);
     if (selectedPeriod && selectedPeriod !== "ALL") {
       printUrl.searchParams.set("period", selectedPeriod);
     }
@@ -1693,14 +1776,24 @@ export default function CapaManagementHub({
         if (onShowToast) {
           onShowToast("Trình duyệt đang chặn mở tab mới. Đang chuẩn bị in trực tiếp...", "info");
         }
+        const originalTitle = document.title;
+        document.title = finalFileName;
         setTimeout(() => {
           window.print();
+          setTimeout(() => {
+            document.title = originalTitle;
+          }, 3000);
         }, 300);
       }
     } catch (openErr) {
       console.warn("Could not open new window:", openErr);
+      const originalTitle = document.title;
+      document.title = finalFileName;
       setTimeout(() => {
         window.print();
+        setTimeout(() => {
+          document.title = originalTitle;
+        }, 3000);
       }, 300);
     }
 
@@ -1713,6 +1806,7 @@ export default function CapaManagementHub({
       ? modalPrintVersion
       : (viewingVersion || (versions.length > 0 ? versions[0].version : "DRAFT"));
 
+    let dataToPrint: CapaData | null = capaForm;
     if (verToPrint !== "DRAFT" && verToPrint !== viewingVersion) {
       const matchedVer = versions.find(
         (v) =>
@@ -1720,17 +1814,25 @@ export default function CapaManagementHub({
           v.version.replace(/[^0-9.]/g, "") === verToPrint.replace(/[^0-9.]/g, "")
       );
       if (matchedVer) {
+        dataToPrint = matchedVer.data;
         setCapaForm(matchedVer.data);
       }
     }
 
-    if (selectedReportId && capaForm) {
-      setCapaStorageItem("capa_form_v1", selectedReportId, JSON.stringify(capaForm), reports);
+    if (selectedReportId && dataToPrint) {
+      setCapaStorageItem("capa_form_v1", selectedReportId, JSON.stringify(dataToPrint), reports);
     }
+
+    const finalFileName = (pdfFileName || "").trim() || generateSuggestedCapaPdfFileName(dataToPrint, verToPrint);
+    const originalTitle = document.title;
+    document.title = finalFileName;
 
     setShowPrintModal(false);
     setTimeout(() => {
       window.print();
+      setTimeout(() => {
+        document.title = originalTitle;
+      }, 3000);
     }, 250);
   };
 
@@ -1863,6 +1965,16 @@ export default function CapaManagementHub({
         }
       }
 
+      // Set Document Title for Save As PDF default filename
+      const filenameParam = urlParams.get("filename");
+      if (filenameParam) {
+        document.title = filenameParam;
+      } else if (snapshot && snapshot.pdf_filename) {
+        document.title = snapshot.pdf_filename;
+      } else if (snapshot && snapshot.formData) {
+        document.title = generateSuggestedCapaPdfFileName(snapshot.formData, snapshot.version || "v1.0");
+      }
+
       if (isPrintMode) {
         let attempts = 0;
         const checkAndPrint = () => {
@@ -1967,19 +2079,45 @@ export default function CapaManagementHub({
             size: ${modalPrintOrient === "landscape" || paperSize === "A3_LANDSCAPE" || paperSize === "A4_LANDSCAPE" ? "landscape" : "portrait"};
             margin: ${modalPrintMargin === "full-bleed" ? "4mm 5mm 4mm 5mm" : modalPrintMargin === "wide" ? "10mm 10mm 10mm 10mm" : "6mm 6mm 6mm 6mm"};
           }
-          html, body, #root, main, .dashboard-desktop-wrapper {
+          html,
+          body,
+          #root,
+          #root > div,
+          main,
+          div,
+          section,
+          article,
+          .dashboard-desktop-wrapper,
+          .h-screen,
+          .max-h-screen,
+          .overflow-hidden,
+          .overflow-y-auto,
+          .overflow-x-hidden,
+          .overflow-auto,
+          .h-full,
+          [class*="overflow-"],
+          [class*="h-screen"],
+          [class*="max-h-"] {
             background: #ffffff !important;
-            color: #000000 !important;
             height: auto !important;
-            min-height: 100% !important;
+            min-height: 0 !important;
             max-height: none !important;
             overflow: visible !important;
-            display: block !important;
             position: static !important;
-            margin: 0 !important;
-            padding: 0 !important;
+            float: none !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
+          }
+          html,
+          body,
+          #root,
+          #root > div,
+          .dashboard-desktop-wrapper,
+          main {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            display: block !important;
           }
           #printable-capa-sheet {
             position: relative !important;
@@ -1987,7 +2125,8 @@ export default function CapaManagementHub({
             max-width: 100% !important;
             min-width: 100% !important;
             height: auto !important;
-            min-height: auto !important;
+            min-height: 0 !important;
+            max-height: none !important;
             margin: 0 auto !important;
             padding: 0 !important;
             border: none !important;
@@ -2022,14 +2161,28 @@ export default function CapaManagementHub({
             max-height: none !important;
             padding: ${modalPrintScale <= 90 ? '3px 4.5px' : '4px 5.5px'} !important;
           }
+          #printable-capa-sheet .text-blue-700,
+          #printable-capa-sheet .text-blue-800,
+          #printable-capa-sheet .text-blue-900,
+          #printable-capa-sheet .text-blue-600,
+          #printable-capa-sheet [class*="text-blue-"] {
+            color: #1d4ed8 !important;
+            -webkit-text-fill-color: #1d4ed8 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
           #printable-capa-sheet .signature-block,
           #printable-capa-sheet .signature-cell,
           #printable-capa-sheet .capa-iso-header,
-          #printable-capa-sheet .capa-section-block,
           #printable-capa-sheet .print-avoid-break {
             page-break-inside: avoid !important;
             break-inside: avoid !important;
             break-inside: avoid-page !important;
+          }
+          #printable-capa-sheet .capa-section-block {
+            page-break-inside: auto !important;
+            break-inside: auto !important;
+            overflow: visible !important;
           }
           #printable-capa-sheet .capa-part-header,
           #printable-capa-sheet .capa-section-header {
@@ -2332,7 +2485,7 @@ export default function CapaManagementHub({
           
           {/* Paper Config & View Selector Bar */}
           <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2.5 no-print">
-            {/* Row 1: Title on left + Firebase status on right */}
+            {/* Row 1: Title */}
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-2">
                 <Layout className="w-4 h-4 text-indigo-600" />
@@ -2340,84 +2493,120 @@ export default function CapaManagementHub({
                   <span translate="no" className="notranslate">CẤU HÌNH KHỔ GIẤY & PHÂN TRANG:</span>
                 </span>
               </div>
-
-              {/* Cloud Sync Status Indicator */}
-              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-semibold shadow-2xs">
-                {cloudSyncStatus === "synced" ? (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
-                    <span className="text-emerald-700 flex items-center gap-1 text-[11px] font-bold">
-                      <Cloud className="w-3.5 h-3.5 text-emerald-600" />
-                      <span translate="no" className="notranslate">Firebase Cloud: Đã đồng bộ {lastCloudSyncTime ? `(${lastCloudSyncTime})` : ""}</span>
-                    </span>
-                  </>
-                ) : cloudSyncStatus === "syncing" ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 text-blue-600 animate-spin shrink-0" />
-                    <span className="text-blue-700 text-[11px] font-bold">
-                      <span translate="no" className="notranslate">Đang đồng bộ Đám mây...</span>
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <CloudOff className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                    <span className="text-amber-700 text-[11px] font-bold">
-                      <span translate="no" className="notranslate">Lưu bộ nhớ tạm (Offline)</span>
-                    </span>
-                  </>
-                )}
-              </div>
             </div>
 
-            {/* Row 2: Controls neatly organized (Paper sizes + Pagination + Action buttons) */}
+            {/* Row 2: Controls neatly organized with Consolidated Dropdowns (Paper size & Pagination mode) */}
             <div className="flex items-center justify-between gap-2 flex-wrap pt-1 border-t border-slate-200/80">
-              {/* Paper Sizes */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {[
-                  { id: "FULL_PAGE_EXPANDED", label: "🌟 Mở rộng hết trang (100%)" },
-                  { id: "A4_PORTRAIT", label: "📄 A4 Dọc (Chuẩn)" },
-                  { id: "A4_LANDSCAPE", label: "📄 A4 Ngang" },
-                  { id: "A3_LANDSCAPE", label: "📋 A3 Ngang (Toàn cảnh)" }
-                ].map((p) => (
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Consolidated Paper Size Dropdown */}
+                <div ref={paperDropdownRef} className="relative select-none">
                   <button
-                    key={p.id}
-                    onClick={() => setPaperSize(p.id as any)}
-                    className={`px-2.5 py-1.5 text-xs font-extrabold rounded-lg transition-all cursor-pointer ${
-                      paperSize === p.id
-                        ? "bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-200"
-                        : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-                    }`}
+                    type="button"
+                    onClick={() => {
+                      setIsPaperDropdownOpen((prev) => !prev);
+                      setIsPaginationDropdownOpen(false);
+                    }}
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-lg shadow-xs ring-2 ring-indigo-200 flex items-center gap-1.5 transition-all cursor-pointer"
                   >
-                    <span translate="no" className="notranslate">{p.label}</span>
+                    <span translate="no" className="notranslate">
+                      {paperSize === "FULL_PAGE_EXPANDED"
+                        ? "🌟 Mở rộng hết trang (100%)"
+                        : paperSize === "A4_PORTRAIT"
+                        ? "📄 A4 Dọc (Chuẩn)"
+                        : paperSize === "A4_LANDSCAPE"
+                        ? "📄 A4 Ngang"
+                        : "📋 A3 Ngang (Toàn cảnh)"}
+                    </span>
+                    <ChevronDown className={`w-3.5 h-3.5 text-white/90 transition-transform duration-200 ${isPaperDropdownOpen ? "rotate-180" : ""}`} />
                   </button>
-                ))}
-              </div>
 
-              <div className="h-4 w-[1px] bg-slate-300 mx-0.5 hidden md:block"></div>
+                  {isPaperDropdownOpen && (
+                    <div className="absolute left-0 mt-1.5 w-64 bg-white rounded-xl shadow-xl border border-slate-200 p-1.5 z-40 animate-in fade-in zoom-in-95 duration-150">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2.5 py-1 border-b border-slate-100 mb-1">
+                        <span translate="no" className="notranslate">Chọn Khổ Giấy Hiển Thị:</span>
+                      </div>
+                      {[
+                        { id: "FULL_PAGE_EXPANDED", label: "🌟 Mở rộng hết trang (100%)", sub: "Tối ưu hiển thị vừa vặn màn hình" },
+                        { id: "A4_PORTRAIT", label: "📄 A4 Dọc (Chuẩn)", sub: "Khổ dọc tiêu chuẩn in ấn ISO" },
+                        { id: "A4_LANDSCAPE", label: "📄 A4 Ngang", sub: "Khổ ngang phù hợp bảng biểu rộng" },
+                        { id: "A3_LANDSCAPE", label: "📋 A3 Ngang (Toàn cảnh)", sub: "Khổ lớn hiển thị toàn cảnh chi tiết" }
+                      ].map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => {
+                            setPaperSize(p.id as any);
+                            setIsPaperDropdownOpen(false);
+                          }}
+                          className={`w-full text-left p-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex flex-col ${
+                            paperSize === p.id
+                              ? "bg-indigo-50 text-indigo-900 border border-indigo-200 shadow-2xs"
+                              : "hover:bg-slate-50 text-slate-700"
+                          }`}
+                        >
+                          <span translate="no" className="notranslate">{p.label}</span>
+                          <span className="text-[10px] text-slate-400 font-normal mt-0.5">
+                            <span translate="no" className="notranslate">{p.sub}</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
-              {/* Pagination Mode Selector */}
-              <div className="flex items-center gap-1 bg-slate-200/80 p-0.5 rounded-lg">
-                {[
-                  { id: "AUTO", label: "📑 Tự động nhiều trang", desc: "Tự động phân trang linh hoạt theo độ dài thực tế" },
-                  { id: "ISO_2_PAGES", label: "📄 Ngắt 2 trang ISO", desc: "Trang 1: Sự cố & Ảnh / Trang 2: Phân tích 4M & Khắc phục" },
-                  { id: "COMPACT_1_PAGE", label: "📜 Gom 1 trang", desc: "Thu gọn vừa vặn 1 trang A4" }
-                ].map((m) => (
+                {/* Consolidated Pagination Mode Dropdown */}
+                <div ref={paginationDropdownRef} className="relative select-none">
                   <button
-                    key={m.id}
-                    onClick={() => setPaginationMode(m.id as any)}
-                    title={m.desc}
-                    className={`px-2 py-1 text-xs font-black rounded-md transition-all cursor-pointer ${
-                      paginationMode === m.id
-                        ? "bg-slate-900 text-white shadow-xs"
-                        : "bg-transparent text-slate-600 hover:bg-white hover:text-slate-900"
-                    }`}
+                    type="button"
+                    onClick={() => {
+                      setIsPaginationDropdownOpen((prev) => !prev);
+                      setIsPaperDropdownOpen(false);
+                    }}
+                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-black rounded-lg shadow-xs ring-2 ring-slate-400 flex items-center gap-1.5 transition-all cursor-pointer"
                   >
-                    <span translate="no" className="notranslate">{m.label}</span>
+                    <span translate="no" className="notranslate">
+                      {paginationMode === "AUTO"
+                        ? "📑 Tự động nhiều trang"
+                        : paginationMode === "ISO_2_PAGES"
+                        ? "📄 Ngắt 2 trang ISO"
+                        : "📜 Gom 1 trang"}
+                    </span>
+                    <ChevronDown className={`w-3.5 h-3.5 text-white/90 transition-transform duration-200 ${isPaginationDropdownOpen ? "rotate-180" : ""}`} />
                   </button>
-                ))}
-              </div>
 
-              <div className="h-4 w-[1px] bg-slate-300 mx-0.5 hidden md:block"></div>
+                  {isPaginationDropdownOpen && (
+                    <div className="absolute left-0 mt-1.5 w-72 bg-white rounded-xl shadow-xl border border-slate-200 p-1.5 z-40 animate-in fade-in zoom-in-95 duration-150">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2.5 py-1 border-b border-slate-100 mb-1">
+                        <span translate="no" className="notranslate">Cấu hình phân trang in ấn:</span>
+                      </div>
+                      {[
+                        { id: "AUTO", label: "📑 Tự động nhiều trang", sub: "Tự động phân trang linh hoạt theo độ dài thực tế" },
+                        { id: "ISO_2_PAGES", label: "📄 Ngắt 2 trang ISO", sub: "Trang 1: Sự cố & Ảnh / Trang 2: Phân tích 4M & Khắc phục" },
+                        { id: "COMPACT_1_PAGE", label: "📜 Gom 1 trang", sub: "Thu gọn vừa vặn 1 trang A4" }
+                      ].map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => {
+                            setPaginationMode(m.id as any);
+                            setIsPaginationDropdownOpen(false);
+                          }}
+                          className={`w-full text-left p-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex flex-col ${
+                            paginationMode === m.id
+                              ? "bg-slate-100 text-slate-950 border border-slate-300 shadow-2xs font-black"
+                              : "hover:bg-slate-50 text-slate-700"
+                          }`}
+                        >
+                          <span translate="no" className="notranslate">{m.label}</span>
+                          <span className="text-[10px] text-slate-400 font-normal mt-0.5">
+                            <span translate="no" className="notranslate">{m.sub}</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
 
               {/* Export / Action Buttons */}
               <div className="flex items-center gap-1.5 flex-wrap">
@@ -2439,16 +2628,6 @@ export default function CapaManagementHub({
                 >
                   <Download className={`w-3.5 h-3.5 ${isExportingPdf ? "animate-bounce" : ""}`} />
                   <span translate="no" className="notranslate">{isExportingPdf ? "Xuất PDF..." : "Xuất PDF"}</span>
-                </button>
-
-                <button
-                  onClick={handleAutoFormatAllLineBreaks}
-                  disabled={!capaForm}
-                  className="px-2.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-extrabold rounded-lg shadow-2xs flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
-                  title="Tự động phân tách các ý (1., 2., 3., 4M1E1I...) xuống dòng riêng lẻ"
-                >
-                  <WrapText className="w-3.5 h-3.5 text-white" />
-                  <span translate="no" className="notranslate">⚡ Tự động xuống dòng</span>
                 </button>
               </div>
             </div>
@@ -2815,7 +2994,7 @@ export default function CapaManagementHub({
                             inputClassName="w-full text-xs font-bold text-blue-700 bg-transparent focus:bg-amber-50 focus:outline-none"
                           />
                         </div>
-                        <div className="hidden print:block text-xs font-bold text-slate-950">
+                        <div className="hidden print:block text-xs font-bold text-blue-700">
                           {capaForm.occurDate || "—"}
                         </div>
                       </td>
@@ -2830,7 +3009,7 @@ export default function CapaManagementHub({
                             inputClassName="w-full text-xs font-bold text-blue-700 bg-transparent focus:bg-amber-50 focus:outline-none"
                           />
                         </div>
-                        <div className="hidden print:block text-xs font-bold text-slate-950">
+                        <div className="hidden print:block text-xs font-bold text-blue-700">
                           {capaForm.sendDate || "—"}
                         </div>
                       </td>
@@ -2850,7 +3029,7 @@ export default function CapaManagementHub({
                             className="w-full text-xs font-bold text-blue-700 bg-transparent focus:bg-amber-50 focus:outline-none"
                           />
                         </div>
-                        <div className="hidden print:block text-xs font-bold text-slate-950">
+                        <div className="hidden print:block text-xs font-bold text-blue-700">
                           {capaForm.ncNumber || "—"}
                         </div>
                       </td>
@@ -2867,7 +3046,7 @@ export default function CapaManagementHub({
                             className="w-full text-xs font-bold text-blue-700 bg-transparent focus:bg-amber-50 focus:outline-none"
                           />
                         </div>
-                        <div className="hidden print:block text-xs font-bold text-slate-950">
+                        <div className="hidden print:block text-xs font-bold text-blue-700">
                           {capaForm.poNumber || "—"}
                         </div>
                       </td>
@@ -2893,7 +3072,7 @@ export default function CapaManagementHub({
                             className="w-full text-xs font-extrabold text-blue-700 bg-transparent focus:bg-amber-50 focus:outline-none resize-y whitespace-pre-wrap break-words leading-tight"
                           />
                         </div>
-                        <div className="hidden print:block text-xs font-extrabold text-slate-950 uppercase whitespace-pre-wrap break-words leading-tight">
+                        <div className="hidden print:block text-xs font-extrabold text-blue-700 uppercase whitespace-pre-wrap break-words leading-tight">
                           {capaForm.productName || "—"}
                         </div>
                       </td>
@@ -2919,7 +3098,7 @@ export default function CapaManagementHub({
                             className="w-full text-xs font-extrabold text-blue-700 bg-transparent focus:bg-amber-50 focus:outline-none uppercase resize-y whitespace-pre-wrap break-words leading-tight"
                           />
                         </div>
-                        <div className="hidden print:block text-xs font-extrabold text-slate-950 uppercase whitespace-pre-wrap break-words leading-tight">
+                        <div className="hidden print:block text-xs font-extrabold text-blue-700 uppercase whitespace-pre-wrap break-words leading-tight">
                           {capaForm.customerName || "—"}
                         </div>
                       </td>
@@ -2940,7 +3119,7 @@ export default function CapaManagementHub({
                             className="w-full text-xs font-bold text-blue-700 bg-transparent focus:bg-amber-50 focus:outline-none"
                           />
                         </div>
-                        <div className="hidden print:block text-xs font-bold text-slate-950">
+                        <div className="hidden print:block text-xs font-bold text-blue-700">
                           {capaForm.productCode || "—"}
                         </div>
                       </td>
@@ -2956,7 +3135,7 @@ export default function CapaManagementHub({
                             className="w-full text-xs font-bold text-blue-700 bg-transparent focus:bg-amber-50 focus:outline-none"
                           />
                         </div>
-                        <div className="hidden print:block text-xs font-bold text-slate-950">
+                        <div className="hidden print:block text-xs font-bold text-blue-700">
                           {capaForm.ncQuantity || "—"}
                         </div>
                       </td>
@@ -2978,7 +3157,7 @@ export default function CapaManagementHub({
                             className="w-full text-xs font-semibold text-blue-700 bg-transparent leading-relaxed focus:bg-amber-50 focus:outline-none resize-y border-0"
                           />
                         </div>
-                        <div className="hidden print:block text-xs font-semibold text-slate-950 leading-relaxed whitespace-pre-wrap break-words">
+                        <div className="hidden print:block text-xs font-semibold text-blue-700 leading-relaxed whitespace-pre-wrap break-words">
                           {capaForm.ncDescription || "—"}
                         </div>
                       </td>
@@ -3065,7 +3244,7 @@ export default function CapaManagementHub({
                             className="w-full bg-transparent text-blue-700 font-semibold text-xs leading-relaxed focus:bg-amber-50 focus:outline-none resize-y"
                           />
                         </div>
-                        <div className="hidden print:block text-xs font-semibold text-slate-950 leading-relaxed whitespace-pre-wrap break-words">
+                        <div className="hidden print:block text-xs font-semibold text-blue-700 leading-relaxed whitespace-pre-wrap break-words">
                           {capaForm.reason || "—"}
                         </div>
                       </td>
@@ -3087,7 +3266,7 @@ export default function CapaManagementHub({
                             className="w-full bg-transparent text-blue-700 font-semibold text-xs leading-relaxed focus:bg-amber-50 focus:outline-none resize-y"
                           />
                         </div>
-                        <div className="hidden print:block text-xs font-semibold text-slate-950 leading-relaxed whitespace-pre-wrap break-words">
+                        <div className="hidden print:block text-xs font-semibold text-blue-700 leading-relaxed whitespace-pre-wrap break-words">
                           {capaForm.correction || "—"}
                         </div>
                       </td>
@@ -3102,7 +3281,7 @@ export default function CapaManagementHub({
                             inputClassName="w-full text-xs font-extrabold text-blue-700 bg-transparent focus:bg-amber-50 focus:outline-none mt-1"
                           />
                         </div>
-                        <div className="hidden print:block text-xs font-extrabold text-slate-950 mt-1">
+                        <div className="hidden print:block text-xs font-extrabold text-blue-700 mt-1">
                           {capaForm.correctionTargetDate || "—"}
                         </div>
                       </td>
@@ -3120,7 +3299,7 @@ export default function CapaManagementHub({
                             className="w-full text-xs font-extrabold text-blue-700 bg-transparent focus:bg-amber-50 focus:outline-none mt-1 resize-y whitespace-pre-wrap break-words leading-tight"
                           />
                         </div>
-                        <div className="hidden print:block text-xs font-extrabold text-slate-950 mt-1 whitespace-pre-wrap break-words leading-tight">
+                        <div className="hidden print:block text-xs font-extrabold text-blue-700 mt-1 whitespace-pre-wrap break-words leading-tight">
                           {capaForm.correctionResponsible || "—"}
                         </div>
                       </td>
@@ -3142,7 +3321,7 @@ export default function CapaManagementHub({
                             className="w-full bg-transparent text-blue-700 font-semibold text-xs leading-relaxed focus:bg-amber-50 focus:outline-none resize-y"
                           />
                         </div>
-                        <div className="hidden print:block text-xs font-semibold text-slate-950 leading-relaxed whitespace-pre-wrap break-words">
+                        <div className="hidden print:block text-xs font-semibold text-blue-700 leading-relaxed whitespace-pre-wrap break-words">
                           {capaForm.traceability || "—"}
                         </div>
                       </td>
@@ -3157,7 +3336,7 @@ export default function CapaManagementHub({
                             inputClassName="w-full text-xs font-extrabold text-blue-700 bg-transparent focus:bg-amber-50 focus:outline-none mt-1"
                           />
                         </div>
-                        <div className="hidden print:block text-xs font-extrabold text-slate-950 mt-1">
+                        <div className="hidden print:block text-xs font-extrabold text-blue-700 mt-1">
                           {capaForm.traceabilityTargetDate || "—"}
                         </div>
                       </td>
@@ -3175,7 +3354,7 @@ export default function CapaManagementHub({
                             className="w-full text-xs font-extrabold text-blue-700 bg-transparent focus:bg-amber-50 focus:outline-none mt-1 resize-y whitespace-pre-wrap break-words leading-tight"
                           />
                         </div>
-                        <div className="hidden print:block text-xs font-extrabold text-slate-950 mt-1 whitespace-pre-wrap break-words leading-tight">
+                        <div className="hidden print:block text-xs font-extrabold text-blue-700 mt-1 whitespace-pre-wrap break-words leading-tight">
                           {capaForm.traceabilityResponsible || "—"}
                         </div>
                       </td>
@@ -3197,7 +3376,7 @@ export default function CapaManagementHub({
                             className="w-full bg-transparent text-blue-700 font-semibold text-xs leading-relaxed focus:bg-amber-50 focus:outline-none resize-y"
                           />
                         </div>
-                        <div className="hidden print:block text-xs font-semibold text-slate-950 leading-relaxed whitespace-pre-wrap break-words">
+                        <div className="hidden print:block text-xs font-semibold text-blue-700 leading-relaxed whitespace-pre-wrap break-words">
                           {capaForm.preventiveAction || "—"}
                         </div>
                       </td>
@@ -3212,7 +3391,7 @@ export default function CapaManagementHub({
                             inputClassName="w-full text-xs font-extrabold text-blue-700 bg-transparent focus:bg-amber-50 focus:outline-none mt-1"
                           />
                         </div>
-                        <div className="hidden print:block text-xs font-extrabold text-slate-950 mt-1">
+                        <div className="hidden print:block text-xs font-extrabold text-blue-700 mt-1">
                           {capaForm.preventiveTargetDate || "—"}
                         </div>
                       </td>
@@ -3230,7 +3409,7 @@ export default function CapaManagementHub({
                             className="w-full text-xs font-extrabold text-blue-700 bg-transparent focus:bg-amber-50 focus:outline-none mt-1 resize-y whitespace-pre-wrap break-words leading-tight"
                           />
                         </div>
-                        <div className="hidden print:block text-xs font-extrabold text-slate-950 mt-1 whitespace-pre-wrap break-words leading-tight">
+                        <div className="hidden print:block text-xs font-extrabold text-blue-700 mt-1 whitespace-pre-wrap break-words leading-tight">
                           {capaForm.preventiveResponsible || "—"}
                         </div>
                       </td>
@@ -3370,7 +3549,7 @@ export default function CapaManagementHub({
                                   placeholder="Nhập Họ và Tên"
                                 />
                               </div>
-                              <div className="hidden print:block text-xs font-extrabold text-slate-950 text-center">
+                              <div className="hidden print:block text-xs font-extrabold text-blue-700 text-center">
                                 {capaForm.supplierRepName || "—"}
                               </div>
 
@@ -3387,7 +3566,7 @@ export default function CapaManagementHub({
                                     inputClassName="text-center font-extrabold text-blue-700 bg-transparent focus:bg-amber-50 focus:outline-none border-b border-dashed border-blue-300 w-full py-0.5"
                                   />
                                 </div>
-                                <div className="hidden print:block font-extrabold text-slate-950">
+                                <div className="hidden print:block font-extrabold text-blue-700">
                                   {capaForm.supplierRepDate || capaForm.approvalDate || "—"}
                                 </div>
                               </div>
@@ -3482,7 +3661,7 @@ export default function CapaManagementHub({
                                   placeholder="Nhập Họ và Tên"
                                 />
                               </div>
-                              <div className="hidden print:block text-xs font-extrabold text-slate-950 text-center">
+                              <div className="hidden print:block text-xs font-extrabold text-blue-700 text-center">
                                 {capaForm.qcHeadName || "—"}
                               </div>
 
@@ -3499,7 +3678,7 @@ export default function CapaManagementHub({
                                     inputClassName="text-center font-extrabold text-blue-700 bg-transparent focus:bg-amber-50 focus:outline-none border-b border-dashed border-blue-300 w-full py-0.5"
                                   />
                                 </div>
-                                <div className="hidden print:block font-extrabold text-slate-950">
+                                <div className="hidden print:block font-extrabold text-blue-700">
                                   {capaForm.approvalDate || "—"}
                                 </div>
                               </div>
@@ -3620,7 +3799,7 @@ export default function CapaManagementHub({
                                   placeholder="Nhập Họ và Tên"
                                 />
                               </div>
-                              <div className="hidden print:block text-xs font-extrabold text-slate-950 text-center">
+                              <div className="hidden print:block text-xs font-extrabold text-blue-700 text-center">
                                 {capaForm.qcStaffName || "—"}
                               </div>
 
@@ -3637,7 +3816,7 @@ export default function CapaManagementHub({
                                     inputClassName="text-center font-extrabold text-blue-700 bg-transparent focus:bg-amber-50 focus:outline-none border-b border-dashed border-blue-300 w-full py-0.5"
                                   />
                                 </div>
-                                <div className="hidden print:block font-extrabold text-slate-950">
+                                <div className="hidden print:block font-extrabold text-blue-700">
                                   {capaForm.qcStaffDate || capaForm.occurDate || "—"}
                                 </div>
                               </div>
@@ -3726,7 +3905,7 @@ export default function CapaManagementHub({
                               placeholder="Nhập ý kiến đánh giá từ khách hàng..."
                             />
                           </div>
-                          <div className="hidden print:block text-xs font-semibold text-slate-950 mt-1.5 whitespace-pre-wrap break-words min-h-[50px] leading-relaxed p-1">
+                          <div className="hidden print:block text-xs font-semibold text-blue-700 mt-1.5 whitespace-pre-wrap break-words min-h-[50px] leading-relaxed p-1">
                             {capaForm.customerOpinion || "Đồng ý với các biện pháp khắc phục và phòng ngừa do Tân Phú đề xuất. Đề nghị tiếp tục duy trì và kiểm soát chặt chẽ trong các lô tiếp theo."}
                           </div>
                         </div>
@@ -3750,7 +3929,7 @@ export default function CapaManagementHub({
                                 className="w-full text-xs font-bold text-blue-700 bg-transparent border-b border-dashed border-blue-300 focus:bg-amber-50 focus:outline-none py-1 truncate placeholder:font-normal placeholder:italic placeholder:text-slate-400"
                               />
                             </div>
-                            <div className="hidden print:block text-xs font-extrabold text-slate-950 truncate">
+                            <div className="hidden print:block text-xs font-extrabold text-blue-700 truncate">
                               {capaForm.customerRepName || "—"}
                             </div>
                           </div>
@@ -3767,7 +3946,7 @@ export default function CapaManagementHub({
                                 inputClassName="text-center font-bold text-blue-700 bg-transparent border-b border-dashed border-blue-300 focus:bg-amber-50 focus:outline-none w-full py-1 text-xs"
                               />
                             </div>
-                            <div className="hidden print:block font-bold text-slate-950 shrink-0">
+                            <div className="hidden print:block font-bold text-blue-700 shrink-0">
                               {capaForm.customerRepDate || capaForm.approvalDate || "—"}
                             </div>
                           </div>
@@ -3815,7 +3994,7 @@ export default function CapaManagementHub({
                               placeholder="Ghi nhận kết quả kiểm tra lại sản phẩm, thử nghiệm mẫu hoặc tỷ lệ lỗi sau 30-60 ngày..."
                             />
                           </div>
-                          <div className="hidden print:block text-xs font-semibold text-slate-950 mt-1 whitespace-pre-wrap break-words min-h-[55px] leading-relaxed p-1">
+                          <div className="hidden print:block text-xs font-semibold text-blue-700 mt-1 whitespace-pre-wrap break-words min-h-[55px] leading-relaxed p-1">
                             {capaForm.verificationResult || "Sau thời gian theo dõi 30 ngày, tỷ lệ lỗi giảm về mức cho phép (0%), không phát sinh tái diễn lỗi. Các biện pháp khắc phục và phòng ngừa đạt hiệu lực."}
                           </div>
                         </td>
@@ -3837,7 +4016,7 @@ export default function CapaManagementHub({
                               <option value="need_further_action">Chưa đạt - Yêu cầu hành động bổ sung (Re-open)</option>
                             </select>
                           </div>
-                          <div className="hidden print:block text-xs font-bold text-slate-950 mt-1.5">
+                          <div className="hidden print:block text-xs font-bold text-blue-700 mt-1.5">
                             {capaForm.verificationStatus === "closed" || !capaForm.verificationStatus
                               ? "☑ Đạt hiệu lực — Đóng CAPA (Closed)"
                               : capaForm.verificationStatus === "effective"
@@ -3861,7 +4040,7 @@ export default function CapaManagementHub({
                               className="w-full text-xs font-bold text-blue-700 bg-transparent border-b border-dashed border-blue-300 focus:bg-amber-50 focus:outline-none py-1 placeholder:font-normal placeholder:italic placeholder:text-slate-400"
                             />
                           </div>
-                          <div className="hidden print:block text-xs font-bold text-slate-950 mt-1.5">
+                          <div className="hidden print:block text-xs font-bold text-blue-700 mt-1.5">
                             {capaForm.verificationBy || capaForm.qcStaffName || "—"}
                           </div>
                         </td>
@@ -3878,7 +4057,7 @@ export default function CapaManagementHub({
                               inputClassName="text-xs font-bold text-blue-700 bg-transparent border-b border-dashed border-blue-300 focus:bg-amber-50 focus:outline-none w-full py-1"
                             />
                           </div>
-                          <div className="hidden print:block text-xs font-bold text-slate-950 mt-1.5">
+                          <div className="hidden print:block text-xs font-bold text-blue-700 mt-1.5">
                             {capaForm.verificationDate || capaForm.approvalDate || formatDateDDMMYY()}
                           </div>
                         </td>
@@ -4153,7 +4332,11 @@ export default function CapaManagementHub({
               <select
                 id="modal-print-version-select"
                 value={modalPrintVersion || (versions.length > 0 ? versions[0].version : "DRAFT")}
-                onChange={(e) => setModalPrintVersion(e.target.value)}
+                onChange={(e) => {
+                  const newVer = e.target.value;
+                  setModalPrintVersion(newVer);
+                  setPdfFileName(generateSuggestedCapaPdfFileName(capaForm, newVer));
+                }}
                 className="w-full bg-slate-50 border border-slate-300 text-slate-800 text-xs font-bold rounded-xl px-3 py-2 focus:ring-2 focus:ring-rose-500 focus:bg-white focus:outline-none cursor-pointer"
               >
                 {versions.map((v, idx) => (
@@ -4274,7 +4457,7 @@ export default function CapaManagementHub({
             </div>
 
             {/* 4. Tỷ lệ co giãn (Scale gọn gàng 4 mức phổ biến) */}
-            <div className="mb-4">
+            <div className="mb-3">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">
                   <span translate="no" className="notranslate">5. TỶ LỆ CO GIÃN (SCALE):</span>
@@ -4304,6 +4487,38 @@ export default function CapaManagementHub({
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* 5. Tên file gợi ý khi xuất PDF */}
+            <div className="mb-4 bg-blue-50/70 p-2.5 rounded-xl border border-blue-200">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-black text-blue-900 uppercase tracking-wider flex items-center gap-1">
+                  <FileText className="w-3 h-3 text-blue-600" />
+                  <span translate="no" className="notranslate">6. TÊN FILE PDF GỢI Ý (KÈM MÃ NC & VERSION):</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentVer = modalPrintVersion || (versions.length > 0 ? versions[0].version : "DRAFT");
+                    setPdfFileName(generateSuggestedCapaPdfFileName(capaForm, currentVer));
+                    if (onShowToast) onShowToast("Đã cập nhật lại tên file PDF chuẩn theo mã NC!", "info");
+                  }}
+                  className="text-[9px] font-bold text-blue-700 hover:text-blue-900 underline cursor-pointer"
+                  title="Tạo lại tên file mặc định"
+                >
+                  <span translate="no" className="notranslate">Đặt lại tên gốc</span>
+                </button>
+              </div>
+              <input
+                type="text"
+                value={pdfFileName || generateSuggestedCapaPdfFileName(capaForm, modalPrintVersion || "DRAFT")}
+                onChange={(e) => setPdfFileName(e.target.value)}
+                placeholder="Tên file khi lưu PDF..."
+                className="w-full bg-white border border-blue-300 text-blue-900 font-bold text-xs rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <p className="text-[9.5px] text-blue-700/80 mt-1 italic">
+                <span translate="no" className="notranslate">💡 Tên file này sẽ tự động được chọn khi bạn chọn "Lưu dưới dạng PDF" (Save as PDF).</span>
+              </p>
             </div>
 
             {/* Actions Footer */}

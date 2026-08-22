@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { ArrowLeft, Camera, RotateCw, Check, Scissors, AlertTriangle, RefreshCw, ChevronDown, X } from "lucide-react";
+import { ArrowLeft, Camera, RotateCw, Check, Scissors, AlertTriangle, RefreshCw, ChevronDown, X, Home } from "lucide-react";
 import { T } from "./TranslateText";
 import { Category4M1E1I, QualityReport, User, Branch, UserRole, UserStatus, ErrorCatalogItem } from "../types";
 import { initialBranches, STANDARDIZED_QC_DEPT } from "../data";
 import { loadImage, processImage, CompressingResult } from "../utils/imageProcessor";
 import { formatNameCapitalized } from "../utils/branchHelpers";
 import { MentionTextArea } from "./MentionTextArea";
+import { DraggableFloatingButton } from "./DraggableFloatingButton";
 
 interface ReportFormProps {
   currentUser: User;
@@ -1239,15 +1240,14 @@ export default function ReportForm({
         </div>
       </div>
 
-      {/* Green floating BACK button */}
-      <button
-        type="button"
+      {/* Green floating HOME / BACK button */}
+      <DraggableFloatingButton
         onClick={handleCancelWithConfirm}
-        className="absolute bottom-20 right-5 w-10 h-10 bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-xl flex items-center justify-center shadow-2xl z-20 hover:shadow-emerald-300 transition-all cursor-pointer border-2 border-white"
-        title="Quay lại"
+        className="absolute bottom-20 right-5 w-10 h-10 bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-2xl z-20 hover:shadow-emerald-300 transition-colors cursor-pointer border-none"
+        title="Nhấn giữ để di chuyển - Nhấp để về Trang Home"
       >
-        <ArrowLeft className="w-5 h-5 stroke-[2.5px]" />
-      </button>
+        <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
+      </DraggableFloatingButton>
 
       {/* Primary footer buttons: HỦY BỎ & GỬI BÁO CÁO */}
       <div className="bg-white border-t border-slate-200 p-3.5 grid grid-cols-2 gap-3 shrink-0">

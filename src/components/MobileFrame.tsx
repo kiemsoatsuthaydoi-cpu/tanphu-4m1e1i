@@ -21,6 +21,7 @@ import ProgressTrackingDashboard from "./ProgressTrackingDashboard";
 import BadgeStatisticsDashboard from "./BadgeStatisticsDashboard";
 import MobileForumView from "./MobileForumView";
 import { TrialTrackingHub } from "./TrialTrackingHub";
+import { DraggableFloatingButton } from "./DraggableFloatingButton";
 import { db } from "../utils/firebase";
 import { collection, onSnapshot } from "firebase/firestore";
 import { COLLECTIONS, saveDocument, deleteDocument } from "../utils/firebaseSync";
@@ -1363,26 +1364,24 @@ function MobileApprovalView({
       </div>
 
       {/* Floating HOME Button on Approval Page */}
-      <button
+      <DraggableFloatingButton
         id="float-home-approval"
-        type="button"
         onClick={() => onGoHome && onGoHome()}
-        className="absolute bottom-20 right-5 w-10 h-10 bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-all z-20 cursor-pointer border-none"
-        title="Trở về Trang Home"
+        className="absolute bottom-20 right-5 w-10 h-10 bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-colors z-20 cursor-pointer border-none"
+        title="Nhấn giữ để di chuyển - Nhấp để về Trang Home"
       >
         <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
-      </button>
+      </DraggableFloatingButton>
 
       {/* Floating Scroll to Top Button on Approval Page */}
       {scrollTop !== undefined && scrollTop > 100 && (
-        <button
-          type="button"
+        <DraggableFloatingButton
           onClick={() => scrollRef?.current?.scrollTo({ top: 0, behavior: "smooth" })}
-          className="absolute bottom-36 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-20 cursor-pointer"
-          title="Lên đầu trang"
+          className="absolute bottom-36 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-colors z-20 cursor-pointer"
+          title="Nhấn giữ để di chuyển - Nhấp để lên đầu trang"
         >
           <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />
-        </button>
+        </DraggableFloatingButton>
       )}
     </div>
   );
@@ -3112,12 +3111,14 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
   const trashScrollRef = useRef<HTMLDivElement>(null);
   const notifScrollRef = useRef<HTMLDivElement>(null);
   const onlineScrollRef = useRef<HTMLDivElement>(null);
+  const cloudScrollRef = useRef<HTMLDivElement>(null);
 
   const [phanTichScrollTop, setPhanTichScrollTop] = useState(0);
   const [approvalScrollTop, setApprovalScrollTop] = useState(0);
   const [trashScrollTop, setTrashScrollTop] = useState(0);
   const [notifScrollTop, setNotifScrollTop] = useState(0);
   const [onlineScrollTop, setOnlineScrollTop] = useState(0);
+  const [cloudScrollTop, setCloudScrollTop] = useState(0);
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const lastTouchTimeRef = useRef(0);
@@ -5591,11 +5592,14 @@ App Link: ${window.location.origin}`;
           isRealMobile ? "rounded-none" : "rounded-t-[15px] lg:rounded-t-[28px]"
         } ${theme.bg}`}>
           <button
-            onClick={() => setShowQrCodeView(false)}
+            onClick={() => {
+              setShowQrCodeView(false);
+              setActiveBottomTab("BAO_CAO");
+            }}
             className="w-8 h-8 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shrink-0 cursor-pointer transition-all active:scale-95 shadow-2xs border-none"
-            title="Quay lại"
+            title="Trở về Trang chủ"
           >
-            <ArrowLeft className="w-4.5 h-4.5 stroke-[2.5px] text-white" />
+            <Home className="w-4.5 h-4.5 stroke-[2.5px] text-white" />
           </button>
           
           <T className="font-extrabold text-[12.5px] uppercase tracking-wider">MÃ QR TRUY CẬP</T>
@@ -5699,20 +5703,19 @@ App Link: ${window.location.origin}`;
         </div>
 
         {/* Floating HOME Button exactly styled as the screenshot (green circle with white home icon) */}
-        <button
+        <DraggableFloatingButton
           id="float-home-qr"
-          type="button"
           onClick={() => {
             setShowQrCodeView(false);
             setActiveBottomTab("BAO_CAO");
             setShowTrash(false);
             setShowNotifDrawer(false);
           }}
-          className="absolute bottom-20 right-5 w-[42px] h-[42px] bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-all z-50 cursor-pointer border-none"
-          title="Trở về Trang Home"
+          className="absolute bottom-20 right-5 w-[42px] h-[42px] bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-colors z-50 cursor-pointer border-none"
+          title="Nhấn giữ để di chuyển - Nhấp để về Trang Home"
         >
           <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
-        </button>
+        </DraggableFloatingButton>
       </div>
     );
   }
@@ -5956,7 +5959,7 @@ App Link: ${window.location.origin}`;
       </div>
 
       {/* Internal layout controls (Search inputs & Status filters) */}
-      {activeBottomTab === "BAO_CAO" && (
+      {activeBottomTab === "BAO_CAO" && !showMobileCloudQuota && !showTrash && !showQrCodeView && !showNotifDrawer && !showOnlineUsersDrawer && (
         <div className={`transition-all duration-300 overflow-hidden shrink-0 ${
           showFilters ? (mobileFeedViewMode === "TRIAL" ? "max-h-[140px] opacity-100" : "max-h-[105px] opacity-100") : "max-h-0 opacity-0 pointer-events-none"
         }`}>
@@ -6684,14 +6687,22 @@ App Link: ${window.location.origin}`;
 
       {/* Main card list scroll area */}
       {showMobileCloudQuota ? (
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 relative">
+        <div 
+          ref={cloudScrollRef}
+          onScroll={(e) => setCloudScrollTop(e.currentTarget.scrollTop)}
+          className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 relative"
+        >
           <div className="flex items-center justify-between mb-2 border-b border-slate-200 pb-3">
             <button
-              onClick={() => setShowMobileCloudQuota(false)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-black rounded-lg border-none cursor-pointer transition-all flex items-center"
+              type="button"
+              onClick={() => {
+                setShowMobileCloudQuota(false);
+                setActiveBottomTab("BAO_CAO");
+              }}
+              className="w-8 h-8 rounded-full bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white flex items-center justify-center shrink-0 cursor-pointer shadow-2xs transition-all border-none"
+              title="Trở về Trang chủ"
             >
-              <ArrowLeft className="w-3.5 h-3.5 mr-1" />
-              <T><span translate="no" className="notranslate">Quay Lại</span></T>
+              <Home className="w-4.5 h-4.5 stroke-[2.5px] text-white" />
             </button>
             <span className="bg-blue-100 text-blue-800 text-[8px] font-black px-2 py-0.5 rounded-full uppercase select-none font-mono">
               <span translate="no" className="notranslate">SAO LƯU & ĐỒNG BỘ</span>
@@ -6769,11 +6780,15 @@ App Link: ${window.location.origin}`;
           <div className="bg-slate-900 text-white rounded-xl p-3 shadow-md border-b-4 border-rose-500">
             <div className="flex items-center justify-between mb-1.5">
               <button
-                onClick={() => setShowTrash(false)}
-                className="flex items-center gap-1 text-[10px] font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-2 flex items-center py-1 rounded-lg border-none cursor-pointer transition-colors"
+                type="button"
+                onClick={() => {
+                  setShowTrash(false);
+                  setActiveBottomTab("BAO_CAO");
+                }}
+                className="w-8 h-8 rounded-full bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white flex items-center justify-center shrink-0 cursor-pointer shadow-2xs transition-all border-none"
+                title="Trở về Trang chủ"
               >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <T><span translate="no" className="notranslate">Quay Lại</span></T>
+                <Home className="w-4.5 h-4.5 stroke-[2.5px] text-white" />
               </button>
               <span className="text-[8px] bg-rose-600 px-2 py-0.5 rounded-full font-black uppercase text-white animate-pulse">
                 <T><span translate="no" className="notranslate">Thùng Rác</span></T>
@@ -7992,28 +8007,26 @@ App Link: ${window.location.origin}`;
           )}
 
           {/* Floating HOME Button on Analytics Page */}
-          <button
+          <DraggableFloatingButton
             id="float-home-analytics"
-            type="button"
             onClick={() => {
               setActiveBottomTab("BAO_CAO");
             }}
-            className="absolute bottom-20 right-5 w-10 h-10 bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-all z-20 cursor-pointer border-none"
-            title="Trở về Trang Home"
+            className="absolute bottom-20 right-5 w-10 h-10 bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-colors z-20 cursor-pointer border-none"
+            title="Nhấn giữ để di chuyển - Nhấp để về Trang Home"
           >
             <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
-          </button>
+          </DraggableFloatingButton>
 
           {/* Floating Scroll to Top Button on Analytics Page */}
           {phanTichScrollTop > 100 && (
-            <button
-              type="button"
+            <DraggableFloatingButton
               onClick={() => phanTichScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
-              className="absolute bottom-36 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-20 cursor-pointer"
-              title="Lên đầu trang"
+              className="absolute bottom-36 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-colors z-20 cursor-pointer"
+              title="Nhấn giữ để di chuyển - Nhấp để lên đầu trang"
             >
               <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />
-            </button>
+            </DraggableFloatingButton>
           )}
         </div>
       ) : activeBottomTab === "PHE_DUYET" ? (
@@ -10307,7 +10320,7 @@ App Link: ${window.location.origin}`;
       </>)}
 
       {/* Floating Action Buttons Area (Dockable to Right Edge & Draggable Up/Down) */}
-      {activeBottomTab === "BAO_CAO" && !showTrash && (
+      {activeBottomTab === "BAO_CAO" && !showTrash && !showMobileCloudQuota && !showQrCodeView && !showNotifDrawer && !showOnlineUsersDrawer && (
         isFabDocked ? (
           /* Thanh nút thu gọn nhỏ ở sát mép phải - Thao tác trực tiếp được cả Lên top, Tạo mới và Mở rộng, Khoảng hở hở rộng gấp 3 lần và Rê lên xuống được */
           <div
@@ -10475,32 +10488,59 @@ App Link: ${window.location.origin}`;
 
       {/* Green HOME Floating Action Button on Trash page exactly styled as the screenshot (green circle with white home icon) */}
       {showTrash && (
-        <button
+        <DraggableFloatingButton
           id="float-home-trash"
-          type="button"
           onClick={() => {
             setShowTrash(false);
             setActiveBottomTab("BAO_CAO");
             setShowNotifDrawer(false);
             setShowQrCodeView(false);
           }}
-          className="absolute bottom-20 right-5 w-[42px] h-[42px] bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-all z-50 cursor-pointer border-none"
-          title="Trở về Trang Home"
+          className="absolute bottom-20 right-5 w-[42px] h-[42px] bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-colors z-50 cursor-pointer border-none"
+          title="Nhấn giữ để di chuyển - Nhấp để về Trang Home"
         >
           <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
-        </button>
+        </DraggableFloatingButton>
       )}
 
       {/* Scroll to Top Floating Button on Trash page */}
       {showTrash && trashScrollTop > 100 && (
-        <button
-          type="button"
+        <DraggableFloatingButton
           onClick={() => trashScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
-          className="absolute bottom-36 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-50 cursor-pointer"
-          title="Lên đầu trang"
+          className="absolute bottom-36 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-colors z-50 cursor-pointer"
+          title="Nhấn giữ để di chuyển - Nhấp để lên đầu trang"
         >
           <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />
-        </button>
+        </DraggableFloatingButton>
+      )}
+
+      {/* Green HOME Floating Action Button on Cloud / Backup page */}
+      {showMobileCloudQuota && (
+        <DraggableFloatingButton
+          id="float-home-cloud"
+          onClick={() => {
+            setShowMobileCloudQuota(false);
+            setActiveBottomTab("BAO_CAO");
+            setShowNotifDrawer(false);
+            setShowQrCodeView(false);
+            setShowTrash(false);
+          }}
+          className="absolute bottom-20 right-5 w-[42px] h-[42px] bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-colors z-50 cursor-pointer border-none"
+          title="Nhấn giữ để di chuyển - Nhấp để về Trang Home"
+        >
+          <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
+        </DraggableFloatingButton>
+      )}
+
+      {/* Scroll to Top Floating Button on Cloud / Backup page */}
+      {showMobileCloudQuota && cloudScrollTop > 100 && (
+        <DraggableFloatingButton
+          onClick={() => cloudScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
+          className="absolute bottom-36 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-colors z-50 cursor-pointer"
+          title="Nhấn giữ để di chuyển - Nhấp để lên đầu trang"
+        >
+          <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />
+        </DraggableFloatingButton>
       )}
 
       {/* Modern bottom navigation tab bar containing Phân Tích, Đề Xuất, Bản Tin, Duyệt NS, [Họ + Tên Rút Gọn] */}
@@ -10510,6 +10550,11 @@ App Link: ${window.location.origin}`;
         <button
           type="button"
           onClick={() => {
+            setShowMobileCloudQuota(false);
+            setShowTrash(false);
+            setShowQrCodeView(false);
+            setShowNotifDrawer(false);
+            setShowOnlineUsersDrawer(false);
             if (currentUser?.role !== UserRole.ADMIN) {
               setMobileStatsSubTab("CHAT_LUONG");
             }
@@ -10533,6 +10578,11 @@ App Link: ${window.location.origin}`;
         <button
           type="button"
           onClick={() => {
+            setShowMobileCloudQuota(false);
+            setShowTrash(false);
+            setShowQrCodeView(false);
+            setShowNotifDrawer(false);
+            setShowOnlineUsersDrawer(false);
             setActiveBottomTab("BAO_CAO");
             setMobileFeedSubTab("PROPOSAL");
           }}
@@ -10572,6 +10622,11 @@ App Link: ${window.location.origin}`;
         <button
           type="button"
           onClick={() => {
+            setShowMobileCloudQuota(false);
+            setShowTrash(false);
+            setShowQrCodeView(false);
+            setShowNotifDrawer(false);
+            setShowOnlineUsersDrawer(false);
             if (activeBottomTab === "BAO_CAO" && mobileFeedSubTab === "FEED") {
               setShowNewsCompanyPopover(prev => !prev);
             } else {
@@ -10616,7 +10671,14 @@ App Link: ${window.location.origin}`;
         {(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER || isHQOrManagerUser(currentUser)) && (
           <button
             type="button"
-            onClick={() => setActiveBottomTab("PHE_DUYET")}
+            onClick={() => {
+              setShowMobileCloudQuota(false);
+              setShowTrash(false);
+              setShowQrCodeView(false);
+              setShowNotifDrawer(false);
+              setShowOnlineUsersDrawer(false);
+              setActiveBottomTab("PHE_DUYET");
+            }}
             className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors min-w-0 overflow-visible ${
               activeBottomTab === "PHE_DUYET" ? "text-amber-600 font-extrabold" : "text-slate-400 hover:text-amber-600"
             }`}
@@ -12076,11 +12138,15 @@ App Link: ${window.location.origin}`}
             <div className="flex justify-between items-center px-3.5 py-3 border-b border-slate-100 shrink-0 bg-slate-50 gap-2 whitespace-nowrap overflow-x-auto select-none">
               <div className="flex items-center gap-2 min-w-0">
                 <button
-                  onClick={() => setShowNotifDrawer(false)}
+                  type="button"
+                  onClick={() => {
+                    setShowNotifDrawer(false);
+                    setActiveBottomTab("BAO_CAO");
+                  }}
                   className="w-8 h-8 rounded-full bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white flex items-center justify-center shrink-0 cursor-pointer shadow-2xs transition-all border-none"
-                  title="Quay lại"
+                  title="Trở về Trang chủ"
                 >
-                  <ArrowLeft className="w-4.5 h-4.5 stroke-[2.5px] text-white" />
+                  <Home className="w-4.5 h-4.5 stroke-[2.5px] text-white" />
                 </button>
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className="font-extrabold text-[12px] text-slate-850 tracking-tight uppercase flex items-center gap-1">
@@ -12902,31 +12968,29 @@ App Link: ${window.location.origin}`}
             </div>
           </div>
           {/* Floating HOME Button exactly styled as the screenshot (green circle with white home icon) */}
-          <button
+          <DraggableFloatingButton
             id="float-home-notif"
-            type="button"
             onClick={() => {
               setShowNotifDrawer(false);
               setActiveBottomTab("BAO_CAO");
               setShowTrash(false);
               setShowQrCodeView(false);
             }}
-            className="absolute bottom-20 right-5 w-[42px] h-[42px] bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-all z-50 cursor-pointer border-none"
-            title="Trở về Trang Home"
+            className="absolute bottom-20 right-5 w-[42px] h-[42px] bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-colors z-50 cursor-pointer border-none"
+            title="Nhấn giữ để di chuyển - Nhấp để về Trang Home"
           >
             <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
-          </button>
+          </DraggableFloatingButton>
 
           {/* Scroll to Top Floating Button on Notifications page */}
           {notifScrollTop > 100 && (
-            <button
-              type="button"
+            <DraggableFloatingButton
               onClick={() => notifScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
-              className="absolute bottom-36 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-50 cursor-pointer"
-              title="Lên đầu trang"
+              className="absolute bottom-36 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-colors z-50 cursor-pointer"
+              title="Nhấn giữ để di chuyển - Nhấp để lên đầu trang"
             >
               <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />
-            </button>
+            </DraggableFloatingButton>
           )}
         </div>
       )}
@@ -13643,16 +13707,29 @@ App Link: ${window.location.origin}`}
             </div>
           </div>
 
+          {/* Floating HOME Button on Online Users page */}
+          <DraggableFloatingButton
+            id="float-home-online"
+            onClick={() => {
+              setShowOnlineUsersDrawer(false);
+              setActiveDirectChatUser(null);
+              setActiveBottomTab("BAO_CAO");
+            }}
+            className="absolute bottom-20 right-5 w-[42px] h-[42px] bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-colors z-50 cursor-pointer border-none"
+            title="Nhấn giữ để di chuyển - Nhấp để về Trang Home"
+          >
+            <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
+          </DraggableFloatingButton>
+
           {/* Scroll to Top Floating Button on Online Users page */}
           {onlineScrollTop > 100 && (
-            <button
-              type="button"
+            <DraggableFloatingButton
               onClick={() => onlineScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
-              className="absolute bottom-36 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-50 cursor-pointer"
-              title="Lên đầu trang"
+              className="absolute bottom-36 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-colors z-50 cursor-pointer"
+              title="Nhấn giữ để di chuyển - Nhấp để lên đầu trang"
             >
               <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />
-            </button>
+            </DraggableFloatingButton>
           )}
         </div>
       )}
@@ -13664,11 +13741,14 @@ App Link: ${window.location.origin}`}
           <div className="flex justify-between items-center px-4 py-3 border-b border-slate-200 shrink-0 bg-white">
             <button
               type="button"
-              onClick={() => setActiveDirectChatUser(null)}
-              className="flex items-center gap-1.5 text-slate-700 hover:text-slate-900 font-black text-[12.5px] cursor-pointer transition-colors active:scale-95"
+              onClick={() => {
+                setActiveDirectChatUser(null);
+                setShowOnlineUsersDrawer(false);
+              }}
+              className="w-8 h-8 rounded-full bg-emerald-100/80 hover:bg-emerald-200 text-emerald-800 flex items-center justify-center cursor-pointer transition-all active:scale-95 border-none shadow-2xs"
+              title="Trở về Trang chủ"
             >
-              <ArrowLeft className="w-4 h-4 text-slate-700 stroke-[2.5]" />
-              <T>Quay lại</T>
+              <Home className="w-4.5 h-4.5 text-emerald-800 stroke-[2.5]" />
             </button>
 
             <div className="text-center px-2">
@@ -13749,18 +13829,17 @@ App Link: ${window.location.origin}`}
             })()}
           </div>
 
-          {/* Floating Home Button matching screenshot */}
-          <button
-            type="button"
+          {/* Draggable Floating Home Button matching screenshot */}
+          <DraggableFloatingButton
             onClick={() => {
               setActiveDirectChatUser(null);
               setShowOnlineUsersDrawer(false);
             }}
-            className="absolute bottom-20 right-4 w-11 h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-10 cursor-pointer active:scale-90"
-            title="Trở về Trang Home"
+            className="absolute bottom-20 right-4 w-11 h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full flex items-center justify-center shadow-lg transition-colors z-10 active:scale-90"
+            title="Nhấn giữ để di chuyển - Nhấp để về Trang Home"
           >
             <Home className="w-5 h-5 text-white stroke-[2.2]" />
-          </button>
+          </DraggableFloatingButton>
 
           {/* Bottom Chat Input Bar with Formatting & Happy Emoji Pickers */}
           <div className="bg-white border-t border-slate-200 shrink-0 select-none">
