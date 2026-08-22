@@ -4411,6 +4411,7 @@ App Link: ${window.location.origin}`;
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTo({ top: 0, behavior: "smooth" });
     }
+    setShowFilters(true);
   };
 
   useEffect(() => {
@@ -6515,6 +6516,7 @@ App Link: ${window.location.origin}`;
                     setMobileFeedViewMode("REPORT");
                     setActiveBottomTab("BAO_CAO");
                     setMobileFeedSubTab("FEED");
+                    setShowFilters(true);
                   }}
                   className={`py-2 px-1.5 rounded-lg text-[9.5px] xs:text-[10px] font-black flex items-center justify-center gap-1 transition-all cursor-pointer border-none whitespace-nowrap flex-nowrap shrink-0 min-w-0 ${
                     mobileFeedViewMode === "REPORT"
@@ -6532,6 +6534,7 @@ App Link: ${window.location.origin}`;
                     setMobileFeedViewMode("TRIAL");
                     setActiveBottomTab("BAO_CAO");
                     setMobileFeedSubTab("FEED");
+                    setShowFilters(true);
                   }}
                   className={`py-2 px-1.5 rounded-lg text-[9.5px] xs:text-[10px] font-black flex items-center justify-center gap-1 transition-all cursor-pointer border-none whitespace-nowrap flex-nowrap shrink-0 min-w-0 ${
                     mobileFeedViewMode === "TRIAL"
@@ -8075,7 +8078,11 @@ App Link: ${window.location.origin}`;
           onOpenDirectChat={(targetUser) => setActiveDirectChatUser(targetUser)}
         />
       ) : mobileFeedViewMode === "TRIAL" ? (
-        <div className="flex-1 overflow-y-auto bg-slate-50 relative">
+        <div 
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto bg-slate-50 relative"
+        >
           <TrialTrackingHub
             currentUser={currentUser}
             selectedCompany={selectedNewsCompanyFilter}
