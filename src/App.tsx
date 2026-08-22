@@ -5013,6 +5013,7 @@ export default function App() {
             onAddChatMessage={handleAddChatMessage}
             onLogout={() => setCurrentUser(null)}
             onToggleMobilePreview={() => setShowMobilePreview((prev) => !prev)}
+            showMobilePreview={showMobilePreview}
             onUpdateUser={handleUpdateUser}
             productionRequests={productionRequests}
             setProductionRequests={setProductionRequests}
@@ -5025,6 +5026,7 @@ export default function App() {
             moldsCatalog={moldsCatalog}
             setMoldsCatalog={setMoldsCatalog}
             onUpdateReport={handleUpdateReport}
+            onEditReport={handleEditReportTrigger}
             onDeleteReport={handleDeleteReportTrigger}
             onForceSyncMetadata={handleForceSyncMetadata}
             onForceSyncUsers={handleForceSyncUsers}
@@ -5069,11 +5071,20 @@ export default function App() {
 
         {/* Floating/Docked elegant iPhone mockup frame on the right side if active */}
         {showMobilePreview && (
-          <div className="hidden lg:flex w-[465px] bg-[#F7F9FC] border-l border-slate-200 p-6 flex-col items-center shrink-0 overflow-y-auto select-none shadow-inner mobile-preview-dock">
-            <div className="w-full flex items-center justify-between mb-4 header-mobile-controls">
+          <div className="hidden lg:flex w-[465px] bg-[#F7F9FC] border-l border-slate-200 p-4 sm:p-6 flex-col items-center shrink-0 overflow-y-auto select-none shadow-inner mobile-preview-dock transition-all duration-300">
+            <div className="w-full flex items-center justify-between mb-3 header-mobile-controls">
               <T className="text-[10px] text-slate-500 font-extrabold uppercase tracking-widest block font-sans">
                 📱 Xem trước giao diện di động (Mobile Preview)
               </T>
+              <button
+                type="button"
+                onClick={() => setShowMobilePreview(false)}
+                className="text-[10px] font-bold text-slate-500 hover:text-slate-800 bg-white hover:bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md transition-all cursor-pointer shadow-3xs flex items-center gap-1 active:scale-95"
+                title="Đóng xem trước di động để mở rộng toàn màn hình Desktop"
+              >
+                <span translate="no" className="notranslate"><T>Thu gọn</T></span>
+                <span className="text-xs">✕</span>
+              </button>
             </div>
 
             {isFormOpen ? (

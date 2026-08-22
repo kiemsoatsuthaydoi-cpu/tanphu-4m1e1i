@@ -477,18 +477,13 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
     if (onTrialTypeFilterChange) onTrialTypeFilterChange(t);
   };
 
-  // State & Refs cho 2 nút sổ ra rút gọn (Dropdown Filters)
-  const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+  // State & Refs cho nút sổ ra rút gọn (Dropdown Filter Phân Hệ)
   const [isTrialTypeDropdownOpen, setIsTrialTypeDropdownOpen] = useState(false);
-  const statusDropdownRef = useRef<HTMLDivElement>(null);
   const trialTypeDropdownRef = useRef<HTMLDivElement>(null);
 
   // Tự động đóng dropdown khi click ra ngoài
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
-        setIsStatusDropdownOpen(false);
-      }
       if (trialTypeDropdownRef.current && !trialTypeDropdownRef.current.contains(event.target as Node)) {
         setIsTrialTypeDropdownOpen(false);
       }
@@ -1007,6 +1002,44 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
       return item.trialType === "B2C";
     }).length;
   }, [trialItems, effectiveCompany, branches, selectedBranch]);
+
+  // Counts by status within active company, branch & trial type scope
+  const statusCounts = useMemo(() => {
+    let all = 0;
+    let inProgress = 0;
+    let pass = 0;
+    let fail = 0;
+
+    trialItems.forEach((item) => {
+      if (!isTrialInScope(item, effectiveCompany, branches)) return;
+      if (selectedBranch !== "ALL" && item.factory !== selectedBranch) return;
+      const itemType = item.trialType || "B2B";
+      if (trialTypeFilter !== "ALL" && itemType !== trialTypeFilter) return;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchCode = item.code.toLowerCase().includes(q);
+        const matchTitle = item.title.toLowerCase().includes(q);
+        const matchProduct = item.productName.toLowerCase().includes(q);
+        const matchFactory = item.factory.toLowerCase().includes(q);
+        const matchWorkshop = (item.workshop || "").toLowerCase().includes(q);
+        const matchAuthor = item.createdByName.toLowerCase().includes(q);
+        if (!matchCode && !matchTitle && !matchProduct && !matchFactory && !matchWorkshop && !matchAuthor) {
+          return;
+        }
+      }
+
+      all++;
+      if (item.overallStatus === "IN_PROGRESS") {
+        inProgress++;
+      } else if (item.overallStatus === "COMPLETED_PASS") {
+        pass++;
+      } else if (item.overallStatus === "COMPLETED_FAIL" || item.overallStatus === "CANCELLED") {
+        fail++;
+      }
+    });
+
+    return { all, inProgress, pass, fail };
+  }, [trialItems, effectiveCompany, branches, selectedBranch, trialTypeFilter, searchQuery]);
 
   // Reorder steps when dragged and dropped
   const handleReorderSteps = (itemId: string, sourceKey: string, targetKey: string) => {
@@ -1729,7 +1762,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
               </div>
               <div>
                 <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
-                  <span translate="no" className="notranslate">TIẾN TRÌNH THỬ NGHIỆM</span>
+                  <span translate="no" className="notranslate">SỔ NHẬT KÝ THỬ NGHIỆM</span>
                 </h1>
                 <p className="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">
                   <span translate="no" className="notranslate">
@@ -1739,7 +1772,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
               </div>
             </div>
 
-            {/* Actions: Create New Trial (+) & Cloud Status Badge */}
+            {/* Actions: Create New Trial (+) */}
             <div className="flex items-center gap-2.5 flex-wrap">
               <button
                 type="button"
@@ -1750,239 +1783,146 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
               >
                 <Plus className="w-5 h-5 stroke-[2.5]" />
               </button>
-
-              <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-slate-50 text-slate-700 border border-slate-200 shadow-2xs">
-                {isSyncingCloud ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 text-amber-500 animate-spin" />
-                    <span translate="no" className="notranslate">Đang đồng bộ Cloud...</span>
-                  </>
-                ) : isCloudConnected ? (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <Cloud className="w-3.5 h-3.5 text-emerald-600" />
-                    <span translate="no" className="notranslate text-emerald-800">Firestore Cloud Active</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                    <CloudOff className="w-3.5 h-3.5 text-amber-600" />
-                    <span translate="no" className="notranslate text-amber-800">Offline Cache (30 ngày)</span>
-                  </>
-                )}
-              </span>
             </div>
           </div>
 
-          {/* Consolidated Status Filter Dropdown (Gộp 4 nút trạng thái thành 1 nút sổ ra) */}
-          <div ref={statusDropdownRef} className="relative select-none">
-            <div className="bg-white rounded-2xl p-3 sm:p-3.5 shadow-sm border border-slate-200 flex items-center justify-between gap-3 flex-wrap">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-700 border border-teal-200 flex items-center justify-center shrink-0 shadow-3xs">
-                  <Filter className="w-4 h-4" />
+          {/* 4 Status Filter Cards (Khôi phục chính xác giao diện màu sắc gradient và bố cục trực quan) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5 select-none">
+            {/* 1. TỔNG */}
+            <button
+              type="button"
+              onClick={() => setStatusFilter("ALL")}
+              className={`relative overflow-hidden p-3.5 sm:p-4 rounded-2xl text-left transition-all cursor-pointer flex items-center justify-between shadow-md ${
+                statusFilter === "ALL"
+                  ? "bg-gradient-to-r from-blue-600 via-indigo-600 to-indigo-700 border-2 border-white ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-100 shadow-blue-500/30 scale-[1.01]"
+                  : "bg-gradient-to-r from-blue-600 via-indigo-600 to-indigo-700 opacity-90 hover:opacity-100 hover:shadow-lg border-2 border-transparent"
+              }`}
+            >
+              {/* Background Watermark Icon */}
+              <Activity className="absolute -right-2 top-1/2 -translate-y-1/2 w-24 h-24 text-white/10 pointer-events-none select-none" />
+
+              <div className="flex items-center gap-3 relative z-10 min-w-0 pr-2">
+                <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0 text-white shadow-xs">
+                  <Activity className="w-5 h-5" />
                 </div>
-                <div>
-                  <div className="text-xs font-black text-slate-800 uppercase tracking-wide">
-                    <span translate="no" className="notranslate">Lọc Theo Trạng Thái Đợt Thử:</span>
+                <div className="min-w-0">
+                  <div className="text-xs font-black text-white uppercase tracking-tight truncate">
+                    <span translate="no" className="notranslate">TỔNG</span>
                   </div>
-                  <div className="text-[11px] text-slate-500 font-medium">
-                    <span translate="no" className="notranslate">Nhấp để mở menu chọn trạng thái tiến trình</span>
+                  <div className="text-[10.5px] text-white/85 font-medium truncate mt-0.5">
+                    <span translate="no" className="notranslate">Đang theo dõi</span>
                   </div>
                 </div>
               </div>
 
-              {/* Single Consolidated Dropdown Trigger Button */}
-              <button
-                type="button"
-                onClick={() => setIsStatusDropdownOpen((prev) => !prev)}
-                className={`flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer shadow-sm border ${
-                  statusFilter === "IN_PROGRESS"
-                    ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white border-amber-600 ring-2 ring-amber-300"
-                    : statusFilter === "COMPLETED_PASS"
-                    ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white border-emerald-700 ring-2 ring-emerald-300"
-                    : statusFilter === "COMPLETED_FAIL"
-                    ? "bg-gradient-to-r from-rose-600 to-red-600 text-white border-rose-700 ring-2 ring-rose-300"
-                    : "bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-blue-700 ring-2 ring-blue-300"
-                }`}
-              >
-                {statusFilter === "IN_PROGRESS" ? (
-                  <>
-                    <Shield className="w-4 h-4 text-white shrink-0" />
+              <div className="relative z-10 pl-2 shrink-0">
+                <span className="text-2.5xl sm:text-3xl font-black font-mono text-white tracking-tight drop-shadow-xs">
+                  {statusCounts.all}
+                </span>
+              </div>
+            </button>
+
+            {/* 2. ĐANG THỰC HIỆN */}
+            <button
+              type="button"
+              onClick={() => setStatusFilter("IN_PROGRESS")}
+              className={`relative overflow-hidden p-3.5 sm:p-4 rounded-2xl text-left transition-all cursor-pointer flex items-center justify-between shadow-md ${
+                statusFilter === "IN_PROGRESS"
+                  ? "bg-gradient-to-r from-amber-500 via-orange-500 to-orange-600 border-2 border-white ring-2 ring-orange-500 ring-offset-2 ring-offset-slate-100 shadow-orange-500/30 scale-[1.01]"
+                  : "bg-gradient-to-r from-amber-500 via-orange-500 to-orange-600 opacity-90 hover:opacity-100 hover:shadow-lg border-2 border-transparent"
+              }`}
+            >
+              {/* Background Watermark Icon */}
+              <Shield className="absolute -right-2 top-1/2 -translate-y-1/2 w-24 h-24 text-white/10 pointer-events-none select-none" />
+
+              <div className="flex items-center gap-3 relative z-10 min-w-0 pr-2">
+                <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0 text-white shadow-xs">
+                  <Shield className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-black text-white uppercase tracking-tight truncate">
                     <span translate="no" className="notranslate">ĐANG THỰC HIỆN</span>
-                    <span className="bg-white/25 text-white text-[11px] px-2 py-0.5 rounded-full font-mono font-black ml-1">
-                      {filteredItems.filter((i) => i.overallStatus === "IN_PROGRESS").length}
-                    </span>
-                  </>
-                ) : statusFilter === "COMPLETED_PASS" ? (
-                  <>
-                    <CheckCircle className="w-4 h-4 text-white shrink-0" />
-                    <span translate="no" className="notranslate">ĐÁNH GIÁ ĐẠT</span>
-                    <span className="bg-white/25 text-white text-[11px] px-2 py-0.5 rounded-full font-mono font-black ml-1">
-                      {filteredItems.filter((i) => i.overallStatus === "COMPLETED_PASS").length}
-                    </span>
-                  </>
-                ) : statusFilter === "COMPLETED_FAIL" ? (
-                  <>
-                    <Zap className="w-4 h-4 text-white shrink-0" />
-                    <span translate="no" className="notranslate">KHÔNG ĐẠT / HỦY</span>
-                    <span className="bg-white/25 text-white text-[11px] px-2 py-0.5 rounded-full font-mono font-black ml-1">
-                      {filteredItems.filter((i) => i.overallStatus === "COMPLETED_FAIL" || i.overallStatus === "CANCELLED").length}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <Activity className="w-4 h-4 text-white shrink-0" />
-                    <span translate="no" className="notranslate">TỔNG ĐỢT THỬ (TẤT CẢ)</span>
-                    <span className="bg-white/25 text-white text-[11px] px-2 py-0.5 rounded-full font-mono font-black ml-1">
-                      {filteredItems.length}
-                    </span>
-                  </>
-                )}
-                <ChevronDown className={`w-4 h-4 text-white/90 transition-transform duration-200 ml-1 ${isStatusDropdownOpen ? "rotate-180" : ""}`} />
-              </button>
-            </div>
-
-            {/* Dropdown Menu Sổ Ra */}
-            {isStatusDropdownOpen && (
-              <div className="absolute right-0 sm:right-4 mt-2 w-full sm:w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-30 animate-in fade-in zoom-in-95 duration-150">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1.5 border-b border-slate-100">
-                  <span translate="no" className="notranslate">Chọn trạng thái cần lọc:</span>
-                </div>
-                <div className="space-y-1 mt-1">
-                  {/* Option 1: TỔNG ĐỢT THỬ */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStatusFilter("ALL");
-                      setIsStatusDropdownOpen(false);
-                    }}
-                    className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all cursor-pointer ${
-                      statusFilter === "ALL"
-                        ? "bg-blue-50 text-blue-900 border border-blue-200 font-black shadow-2xs"
-                        : "hover:bg-slate-50 text-slate-700"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                        statusFilter === "ALL" ? "bg-blue-600 text-white" : "bg-blue-100 text-blue-700"
-                      }`}>
-                        <Activity className="w-4 h-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold truncate">
-                          <span translate="no" className="notranslate">TỔNG ĐỢT THỬ</span>
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-medium truncate">
-                          <span translate="no" className="notranslate">Tất cả đợt thử nghiệm đang quản lý</span>
-                        </div>
-                      </div>
-                    </div>
-                    <span className="text-xs font-mono font-black px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 shrink-0 ml-2">
-                      {filteredItems.length}
-                    </span>
-                  </button>
-
-                  {/* Option 2: ĐANG THỰC HIỆN */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStatusFilter("IN_PROGRESS");
-                      setIsStatusDropdownOpen(false);
-                    }}
-                    className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all cursor-pointer ${
-                      statusFilter === "IN_PROGRESS"
-                        ? "bg-amber-50 text-amber-900 border border-amber-200 font-black shadow-2xs"
-                        : "hover:bg-slate-50 text-slate-700"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                        statusFilter === "IN_PROGRESS" ? "bg-amber-500 text-white" : "bg-amber-100 text-amber-700"
-                      }`}>
-                        <Shield className="w-4 h-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold truncate">
-                          <span translate="no" className="notranslate">ĐANG THỰC HIỆN</span>
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-medium truncate">
-                          <span translate="no" className="notranslate">Đang trong tiến trình 4M1E</span>
-                        </div>
-                      </div>
-                    </div>
-                    <span className="text-xs font-mono font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 shrink-0 ml-2">
-                      {filteredItems.filter((i) => i.overallStatus === "IN_PROGRESS").length}
-                    </span>
-                  </button>
-
-                  {/* Option 3: ĐÁNH GIÁ ĐẠT */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStatusFilter("COMPLETED_PASS");
-                      setIsStatusDropdownOpen(false);
-                    }}
-                    className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all cursor-pointer ${
-                      statusFilter === "COMPLETED_PASS"
-                        ? "bg-emerald-50 text-emerald-900 border border-emerald-200 font-black shadow-2xs"
-                        : "hover:bg-slate-50 text-slate-700"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                        statusFilter === "COMPLETED_PASS" ? "bg-emerald-600 text-white" : "bg-emerald-100 text-emerald-700"
-                      }`}>
-                        <CheckCircle className="w-4 h-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold truncate">
-                          <span translate="no" className="notranslate">ĐÁNH GIÁ ĐẠT</span>
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-medium truncate">
-                          <span translate="no" className="notranslate">Thử nghiệm hoàn thành đạt chuẩn ISO</span>
-                        </div>
-                      </div>
-                    </div>
-                    <span className="text-xs font-mono font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 shrink-0 ml-2">
-                      {filteredItems.filter((i) => i.overallStatus === "COMPLETED_PASS").length}
-                    </span>
-                  </button>
-
-                  {/* Option 4: KHÔNG ĐẠT / HỦY */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStatusFilter("COMPLETED_FAIL");
-                      setIsStatusDropdownOpen(false);
-                    }}
-                    className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all cursor-pointer ${
-                      statusFilter === "COMPLETED_FAIL"
-                        ? "bg-rose-50 text-rose-900 border border-rose-200 font-black shadow-2xs"
-                        : "hover:bg-slate-50 text-slate-700"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                        statusFilter === "COMPLETED_FAIL" ? "bg-rose-600 text-white" : "bg-rose-100 text-rose-700"
-                      }`}>
-                        <Zap className="w-4 h-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold truncate">
-                          <span translate="no" className="notranslate">KHÔNG ĐẠT / HỦY</span>
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-medium truncate">
-                          <span translate="no" className="notranslate">Thử nghiệm không đạt, cần hiệu chỉnh</span>
-                        </div>
-                      </div>
-                    </div>
-                    <span className="text-xs font-mono font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 shrink-0 ml-2">
-                      {filteredItems.filter((i) => i.overallStatus === "COMPLETED_FAIL" || i.overallStatus === "CANCELLED").length}
-                    </span>
-                  </button>
+                  </div>
+                  <div className="text-[10.5px] text-white/85 font-medium truncate mt-0.5">
+                    <span translate="no" className="notranslate">Tiến trình 4M1E</span>
+                  </div>
                 </div>
               </div>
-            )}
+
+              <div className="relative z-10 pl-2 shrink-0">
+                <span className="text-2.5xl sm:text-3xl font-black font-mono text-white tracking-tight drop-shadow-xs">
+                  {statusCounts.inProgress}
+                </span>
+              </div>
+            </button>
+
+            {/* 3. ĐÁNH GIÁ ĐẠT */}
+            <button
+              type="button"
+              onClick={() => setStatusFilter("COMPLETED_PASS")}
+              className={`relative overflow-hidden p-3.5 sm:p-4 rounded-2xl text-left transition-all cursor-pointer flex items-center justify-between shadow-md ${
+                statusFilter === "COMPLETED_PASS"
+                  ? "bg-gradient-to-r from-emerald-500 via-teal-600 to-emerald-600 border-2 border-white ring-2 ring-emerald-500 ring-offset-2 ring-offset-slate-100 shadow-emerald-500/30 scale-[1.01]"
+                  : "bg-gradient-to-r from-emerald-500 via-teal-600 to-emerald-600 opacity-90 hover:opacity-100 hover:shadow-lg border-2 border-transparent"
+              }`}
+            >
+              {/* Background Watermark Icon */}
+              <CheckCircle className="absolute -right-2 top-1/2 -translate-y-1/2 w-24 h-24 text-white/10 pointer-events-none select-none" />
+
+              <div className="flex items-center gap-3 relative z-10 min-w-0 pr-2">
+                <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0 text-white shadow-xs">
+                  <CheckCircle className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-black text-white uppercase tracking-tight truncate">
+                    <span translate="no" className="notranslate">ĐÁNH GIÁ ĐẠT</span>
+                  </div>
+                  <div className="text-[10.5px] text-white/85 font-medium truncate mt-0.5">
+                    <span translate="no" className="notranslate">Đạt chuẩn ISO</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="relative z-10 pl-2 shrink-0">
+                <span className="text-2.5xl sm:text-3xl font-black font-mono text-white tracking-tight drop-shadow-xs">
+                  {statusCounts.pass}
+                </span>
+              </div>
+            </button>
+
+            {/* 4. KHÔNG ĐẠT / HỦY */}
+            <button
+              type="button"
+              onClick={() => setStatusFilter("COMPLETED_FAIL")}
+              className={`relative overflow-hidden p-3.5 sm:p-4 rounded-2xl text-left transition-all cursor-pointer flex items-center justify-between shadow-md ${
+                statusFilter === "COMPLETED_FAIL"
+                  ? "bg-gradient-to-r from-rose-500 via-red-600 to-rose-600 border-2 border-white ring-2 ring-rose-500 ring-offset-2 ring-offset-slate-100 shadow-rose-500/30 scale-[1.01]"
+                  : "bg-gradient-to-r from-rose-500 via-red-600 to-rose-600 opacity-90 hover:opacity-100 hover:shadow-lg border-2 border-transparent"
+              }`}
+            >
+              {/* Background Watermark Icon */}
+              <Zap className="absolute -right-2 top-1/2 -translate-y-1/2 w-24 h-24 text-white/10 pointer-events-none select-none" />
+
+              <div className="flex items-center gap-3 relative z-10 min-w-0 pr-2">
+                <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0 text-white shadow-xs">
+                  <Zap className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-black text-white uppercase tracking-tight truncate">
+                    <span translate="no" className="notranslate">KHÔNG ĐẠT / HỦY</span>
+                  </div>
+                  <div className="text-[10.5px] text-white/85 font-medium truncate mt-0.5">
+                    <span translate="no" className="notranslate">Cần hiệu chỉnh</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="relative z-10 pl-2 shrink-0">
+                <span className="text-2.5xl sm:text-3xl font-black font-mono text-white tracking-tight drop-shadow-xs">
+                  {statusCounts.fail}
+                </span>
+              </div>
+            </button>
           </div>
         </div>
       )}
@@ -2078,161 +2018,80 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
 
           </div>
 
-          {/* Consolidated Segmented Dropdown for Phân hệ Thử nghiệm (TN-B2B / TN-B2C) */}
-          <div ref={trialTypeDropdownRef} className="relative bg-white rounded-xl px-4 py-2.5 shadow-sm border border-slate-200 flex items-center justify-between gap-3 flex-wrap select-none">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-black text-slate-700 uppercase tracking-wide flex items-center gap-1.5 mr-1 select-none">
-                <span className="w-2 h-2 rounded-full bg-teal-500"></span>
-                <span translate="no" className="notranslate">Phân hệ Thử Nghiệm:</span>
-              </span>
-
-              {/* Single Consolidated Dropdown Trigger Button */}
-              <button
-                type="button"
-                onClick={() => setIsTrialTypeDropdownOpen((prev) => !prev)}
-                className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm border ${
-                  trialTypeFilter === "B2B"
-                    ? "bg-blue-600 text-white border-blue-700 ring-2 ring-blue-300 font-extrabold"
-                    : trialTypeFilter === "B2C"
-                    ? "bg-purple-600 text-white border-purple-700 ring-2 ring-purple-300 font-extrabold"
-                    : "bg-slate-800 text-white border-slate-900 ring-2 ring-slate-400 font-extrabold"
-                }`}
-              >
-                {trialTypeFilter === "B2B" ? (
-                  <>
-                    <span>🏢</span>
-                    <span translate="no" className="notranslate">TN-B2B (Khách Hàng Công Nghiệp)</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-black bg-blue-700 text-white ml-1">
-                      {b2bCount}
-                    </span>
-                  </>
-                ) : trialTypeFilter === "B2C" ? (
-                  <>
-                    <span>🛍️</span>
-                    <span translate="no" className="notranslate">TN-B2C (Người Tiêu Dùng / Bao Bì)</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-black bg-purple-700 text-white ml-1">
-                      {b2cCount}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span>🌐</span>
-                    <span translate="no" className="notranslate">TẤT CẢ PHÂN HỆ</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold bg-slate-700 text-slate-200 ml-1">
-                      {b2bCount + b2cCount}
-                    </span>
-                  </>
-                )}
-                <ChevronDown className={`w-3.5 h-3.5 text-white/90 transition-transform duration-200 ml-1 ${isTrialTypeDropdownOpen ? "rotate-180" : ""}`} />
-              </button>
-            </div>
-
-            {/* Quick Helper Text */}
-            <div className="text-[11px] text-slate-500 font-medium hidden md:flex items-center gap-1.5 select-none">
-              <span className="text-slate-400">💡</span>
-              <span translate="no" className="notranslate">
-                {trialTypeFilter === "B2B" ? "Đang lọc: Thử nghiệm B2B (Khuôn, Thông số Ép/Thổi, FAI, Khách hàng Công nghiệp)" :
-                 trialTypeFilter === "B2C" ? "Đang lọc: Thử nghiệm B2C (Bao bì, Thẩm mỹ, Độ bền, Người tiêu dùng)" :
-                 "Hiển thị toàn bộ các đợt thử nghiệm B2B & B2C"}
-              </span>
-            </div>
-
-            {/* Dropdown Menu Sổ Ra for Phân Hệ */}
-            {isTrialTypeDropdownOpen && (
-              <div className="absolute left-4 top-full mt-1.5 w-72 sm:w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-30 animate-in fade-in zoom-in-95 duration-150">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1.5 border-b border-slate-100">
-                  <span translate="no" className="notranslate">Chọn phân hệ thử nghiệm:</span>
-                </div>
-                <div className="space-y-1 mt-1">
-                  {/* Option 1: ALL */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTrialTypeFilter("ALL");
-                      setIsTrialTypeDropdownOpen(false);
-                    }}
-                    className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all cursor-pointer ${
-                      trialTypeFilter === "ALL"
-                        ? "bg-slate-100 text-slate-900 border border-slate-300 font-black shadow-2xs"
-                        : "hover:bg-slate-50 text-slate-700"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="text-base">🌐</span>
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold truncate">
-                          <span translate="no" className="notranslate">TẤT CẢ PHÂN HỆ</span>
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-medium truncate">
-                          <span translate="no" className="notranslate">Hiển thị cả TN-B2B và TN-B2C</span>
-                        </div>
-                      </div>
-                    </div>
-                    <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 shrink-0 ml-2">
-                      {b2bCount + b2cCount}
-                    </span>
-                  </button>
-
-                  {/* Option 2: TN-B2B */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTrialTypeFilter("B2B");
-                      setIsTrialTypeDropdownOpen(false);
-                    }}
-                    className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all cursor-pointer ${
-                      trialTypeFilter === "B2B"
-                        ? "bg-blue-50 text-blue-900 border border-blue-200 font-black shadow-2xs"
-                        : "hover:bg-slate-50 text-slate-700"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="text-base">🏢</span>
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold truncate">
-                          <span translate="no" className="notranslate">TN-B2B (Khách Hàng B2B)</span>
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-medium truncate">
-                          <span translate="no" className="notranslate">Khuôn, Ép/Thổi, FAI, Công Nghiệp</span>
-                        </div>
-                      </div>
-                    </div>
-                    <span className="text-xs font-mono font-black px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 shrink-0 ml-2">
-                      {b2bCount}
-                    </span>
-                  </button>
-
-                  {/* Option 3: TN-B2C */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTrialTypeFilter("B2C");
-                      setIsTrialTypeDropdownOpen(false);
-                    }}
-                    className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all cursor-pointer ${
-                      trialTypeFilter === "B2C"
-                        ? "bg-purple-50 text-purple-900 border border-purple-200 font-black shadow-2xs"
-                        : "hover:bg-slate-50 text-slate-700"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="text-base">🛍️</span>
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold truncate">
-                          <span translate="no" className="notranslate">TN-B2C (Người Tiêu Dùng)</span>
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-medium truncate">
-                          <span translate="no" className="notranslate">Bao bì, Gia dụng, Thẩm mỹ, Độ bền</span>
-                        </div>
-                      </div>
-                    </div>
-                    <span className="text-xs font-mono font-black px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 shrink-0 ml-2">
-                      {b2cCount}
-                    </span>
-                  </button>
-                </div>
+          {/* Phân hệ Thử nghiệm Segmented Button Bar (Khôi phục chính xác theo hình ảnh) */}
+          <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-sm border border-slate-200 select-none">
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Green Dot & Label */}
+              <div className="flex items-center gap-1.5 text-xs font-black text-teal-600 uppercase tracking-wide shrink-0">
+                <span className="w-2.5 h-2.5 rounded-full bg-teal-500 inline-block"></span>
+                <span translate="no" className="notranslate">PHÂN HỆ THỬ NGHIỆM:</span>
               </div>
-            )}
+
+              {/* Segmented Pill Buttons Container */}
+              <div className="bg-slate-100/90 p-1 rounded-2xl flex items-center gap-1 flex-wrap border border-slate-200/60 shadow-3xs">
+                {/* 1. TẤT CẢ PHÂN HỆ */}
+                <button
+                  type="button"
+                  onClick={() => setTrialTypeFilter("ALL")}
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs transition-all cursor-pointer ${
+                    trialTypeFilter === "ALL"
+                      ? "bg-slate-900 text-white font-black shadow-xs"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-white/70 font-bold"
+                  }`}
+                >
+                  <span translate="no" className="notranslate">TẤT CẢ PHÂN HỆ</span>
+                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-mono font-bold ${
+                    trialTypeFilter === "ALL"
+                      ? "bg-white/20 text-white"
+                      : "bg-slate-200/90 text-slate-700"
+                  }`}>
+                    {b2bCount + b2cCount}
+                  </span>
+                </button>
+
+                {/* 2. TN-B2B (Công nghiệp) */}
+                <button
+                  type="button"
+                  onClick={() => setTrialTypeFilter("B2B")}
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs transition-all cursor-pointer ${
+                    trialTypeFilter === "B2B"
+                      ? "bg-blue-600 text-white font-black shadow-xs"
+                      : "text-blue-600 hover:bg-white/70 font-bold"
+                  }`}
+                >
+                  <span className="text-sm">🏢</span>
+                  <span translate="no" className="notranslate">TN-B2B (Công nghiệp)</span>
+                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-mono font-bold ${
+                    trialTypeFilter === "B2B"
+                      ? "bg-white/25 text-white"
+                      : "bg-blue-100 text-blue-700"
+                  }`}>
+                    {b2bCount}
+                  </span>
+                </button>
+
+                {/* 3. TN-B2C (Gia dụng) */}
+                <button
+                  type="button"
+                  onClick={() => setTrialTypeFilter("B2C")}
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs transition-all cursor-pointer ${
+                    trialTypeFilter === "B2C"
+                      ? "bg-purple-600 text-white font-black shadow-xs"
+                      : "text-purple-600 hover:bg-white/70 font-bold"
+                  }`}
+                >
+                  <span className="text-sm">🛍️</span>
+                  <span translate="no" className="notranslate">TN-B2C (Gia dụng)</span>
+                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-mono font-bold ${
+                    trialTypeFilter === "B2C"
+                      ? "bg-white/25 text-white"
+                      : "bg-purple-100 text-purple-700"
+                  }`}>
+                    {b2cCount}
+                  </span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -2268,18 +2127,18 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                 }`}
               >
                 {/* Header card info - Đồng bộ 100% layout & màu sắc với Bản tin biến động 4M1E1I */}
-                <div className="px-3 py-2 bg-slate-50/90 border-b border-slate-200/90 flex justify-between items-center gap-2 select-none">
+                <div className="px-2.5 py-2 bg-slate-50/90 border-b border-slate-200/90 flex justify-between items-start gap-1.5 select-none">
                   <div className="flex-1 min-w-0">
-                    <span className="font-black block leading-tight truncate text-blue-900 text-xs sm:text-[13px] uppercase">
+                    <span className="font-black block leading-tight truncate text-[#1e3a8a] text-[11px] sm:text-xs uppercase">
                       <span translate="no" className="notranslate">{item.factory?.toUpperCase()}</span>
                     </span>
-                    <div className="text-[10px] text-slate-600 font-extrabold mt-0.5 flex items-center flex-wrap gap-1">
-                      <span className="text-blue-700 font-black flex items-center gap-0.5">
-                        <UserIcon className="w-3.5 h-3.5 stroke-[2.5] text-blue-600 shrink-0" />
+                    <div className="text-[10px] text-slate-600 font-extrabold mt-1 flex items-center flex-wrap gap-1">
+                      <div className="text-blue-700 font-black flex items-center gap-0.5">
+                        <UserIcon className="w-3 h-3 stroke-[2.5] text-blue-600 shrink-0" />
                         <span translate="no" className="notranslate">{item.createdByName}</span>
-                      </span>
-                      <span className="text-slate-300 mx-1 font-normal">|</span>
-                      <span className="text-[9px] text-slate-400 font-sans font-semibold">
+                      </div>
+                      <span className="text-slate-300 font-normal">|</span>
+                      <span className="text-[9px] text-slate-400 font-mono font-semibold select-none">
                         <span translate="no" className="notranslate">{item.createdAt}</span>
                       </span>
                     </div>
@@ -2287,23 +2146,23 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
 
                   <div className="shrink-0 flex flex-col items-end gap-1">
                     {isCompletedPass ? (
-                      <span className="text-[9px] font-black text-white flex items-center gap-1 bg-emerald-600 border border-emerald-700 px-2 py-1 rounded-md leading-none shadow-3xs shrink-0 select-none">
+                      <span className="text-[8.5px] font-black text-white flex items-center gap-1 bg-emerald-600 border border-emerald-700 px-1.5 py-0.5 rounded-md leading-none shadow-3xs shrink-0 select-none">
                         <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block" />
                         <span translate="no" className="notranslate">🧪 THỬ NGHIỆM ĐẠT</span>
                       </span>
                     ) : isCompletedFail ? (
-                      <span className="text-[9px] font-black text-white flex items-center gap-1 bg-rose-600 border border-rose-700 px-2 py-1 rounded-md leading-none shadow-3xs shrink-0 select-none">
+                      <span className="text-[8.5px] font-black text-white flex items-center gap-1 bg-rose-600 border border-rose-700 px-1.5 py-0.5 rounded-md leading-none shadow-3xs shrink-0 select-none">
                         <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block" />
                         <span translate="no" className="notranslate">✖ KHÔNG ĐẠT</span>
                       </span>
                     ) : (
-                      <span className="text-[9px] font-black text-white flex items-center gap-1 bg-amber-600 border border-amber-700 px-2 py-1 rounded-md leading-none shadow-3xs shrink-0 select-none">
+                      <span className="text-[8.5px] font-black text-white flex items-center gap-1 bg-amber-600 border border-amber-700 px-1.5 py-0.5 rounded-md leading-none shadow-3xs shrink-0 select-none">
                         <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block" />
                         <span translate="no" className="notranslate">⏳ ĐANG THỬ NGHIỆM</span>
                       </span>
                     )}
                     {item.code && (
-                      <span className="text-[9px] text-slate-400 font-sans font-semibold">
+                      <span className="text-[9px] text-slate-400 font-mono font-semibold select-none">
                         <span translate="no" className="notranslate">ID: {item.code}</span>
                       </span>
                     )}
@@ -2311,25 +2170,25 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                 </div>
 
                 {/* Sub-bar: Đơn vị gốc, Phân hệ TN-B2B/B2C & Chuyển DNP/TPP đồng bộ với bản tin 4M1E1I */}
-                <div className="bg-slate-100/80 border-b border-slate-200/90 px-3 py-1.5 flex items-center justify-between text-[9.5px] select-none flex-wrap gap-1">
+                <div className="border-t border-slate-150/80 bg-slate-50/60 px-2.5 py-1 flex items-center justify-between text-[8.5px] select-none flex-wrap gap-1">
                   <div className="flex items-center gap-2 min-w-0 text-slate-600 font-medium flex-wrap">
-                    <span>
+                    <span className="text-slate-500 font-bold">
                       <span translate="no" className="notranslate">Đơn vị gốc:</span>{" "}
-                      <strong className="text-slate-800 font-bold">{item.targetCompany || "TPP"}</strong>
+                      <strong className="text-slate-700 font-extrabold">{item.targetCompany || "TPP"}</strong>
                     </span>
 
                     {/* Phân hệ Thử nghiệm Pill Badge: TN-B2B hoặc TN-B2C */}
-                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black tracking-wide uppercase border flex items-center gap-1 shrink-0 shadow-3xs ${
+                    <span className={`px-1.5 py-0.2 rounded text-[8px] font-black tracking-wide uppercase border flex items-center gap-1 shrink-0 shadow-3xs ${
                       (item.trialType || "B2B") === "B2C"
                         ? "bg-purple-100/80 text-purple-800 border-purple-300"
                         : "bg-blue-100/80 text-blue-800 border-blue-300"
                     }`}>
-                      <span>{(item.trialType || "B2B") === "B2C" ? "🛍️" : "🏢"}</span>
+                      <span className="text-[9px]">{(item.trialType || "B2B") === "B2C" ? "🛍️" : "🏢"}</span>
                       <span translate="no" className="notranslate">{(item.trialType || "B2B") === "B2C" ? "TN-B2C" : "TN-B2B"}</span>
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0">
                     {isAdmin ? (
                       <button
                         type="button"
@@ -2339,14 +2198,14 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                           const updated = trialItems.map((t) => t.id === item.id ? { ...t, targetCompany: nextCo } : t);
                           saveItems(updated);
                         }}
-                        className="px-2 py-0.5 rounded bg-white hover:bg-blue-50 text-blue-700 hover:text-blue-900 border border-slate-200 text-[9px] font-bold flex items-center gap-1 cursor-pointer transition-all shadow-3xs"
+                        className="font-bold text-[8px] border px-1.5 py-0.2 rounded transition-colors shrink-0 text-slate-600 hover:text-indigo-700 bg-white hover:bg-indigo-50 border-slate-200 hover:border-indigo-300 cursor-pointer flex items-center gap-0.5 shadow-3xs"
                         title="Chuyển công ty thụ lý giữa TPP và DNP"
                       >
-                        <span className="text-xs leading-none">🔄</span>
+                        <span className="text-[9px] leading-none">🔄</span>
                         <span translate="no" className="notranslate">Chuyển DNP/TPP</span>
                       </button>
                     ) : (
-                      <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[8.5px] font-bold">
+                      <span className="px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[8px] font-bold">
                         {item.targetCompany || "TPP"}
                       </span>
                     )}
@@ -2563,21 +2422,21 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                           }`}>
                             <div className="min-w-0">
                               <div className="flex items-center justify-between gap-1.5 mb-1.5 pb-1 border-b border-black/5">
-                                <div className="flex items-center gap-1.5 font-bold uppercase text-[11px] tracking-tight min-w-0 truncate">
+                                <div className="flex items-center gap-1.5 font-bold uppercase text-[11px] tracking-tight min-w-0">
                                   {item.overallStatus === "COMPLETED_FAIL" || /KHÔNG ĐẠT/i.test(item.finalConclusion) ? (
                                     <>
-                                      <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                                      <span translate="no" className="notranslate text-rose-700 truncate">KẾT LUẬN: KHÔNG ĐẠT</span>
+                                      <XCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                                      <span translate="no" className="notranslate text-rose-700">KẾT LUẬN: KHÔNG ĐẠT</span>
                                     </>
                                   ) : /TẠM CHẤP NHẬN/i.test(item.finalConclusion) ? (
                                     <>
-                                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                                      <span translate="no" className="notranslate text-amber-700 truncate">KẾT LUẬN: TẠM CHẤP NHẬN</span>
+                                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                      <span translate="no" className="notranslate text-amber-700">KẾT LUẬN: TẠM CHẤP NHẬN</span>
                                     </>
                                   ) : (
                                     <>
-                                      <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                                      <span translate="no" className="notranslate text-emerald-700 truncate">KẾT LUẬN: ĐẠT CHUẨN</span>
+                                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                      <span translate="no" className="notranslate text-emerald-700">KẾT LUẬN: ĐẠT CHUẨN</span>
                                     </>
                                   )}
                                 </div>
@@ -2590,7 +2449,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                                   <Pencil className="w-3 h-3 text-inherit" />
                                 </button>
                               </div>
-                              <p className="text-[11px] text-slate-800 line-clamp-3 leading-relaxed break-words italic">
+                              <p className="text-[11.5px] text-slate-800 leading-relaxed break-words italic">
                                 "{item.finalConclusion}"
                               </p>
                             </div>
@@ -2612,7 +2471,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                               <div className="text-[11px] font-black text-teal-900 uppercase tracking-tight">
                                 <span translate="no" className="notranslate">KẾT LUẬN CHUNG</span>
                               </div>
-                              <p className="text-[10px] text-teal-700/80 mt-0.5 leading-snug line-clamp-2">
+                              <p className="text-[10px] text-teal-700/80 mt-0.5 leading-snug break-words">
                                 <span translate="no" className="notranslate">Chưa có kết luận tổng kết</span>
                               </p>
                             </div>
@@ -2638,11 +2497,11 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                     const canCustomize = canUserCustomizeSteps(currentUser, item);
 
                     return (
-                      <div className="mt-5 pt-3 sm:mt-6 sm:pt-4 border-t border-slate-100">
-                        <div className="text-xs font-bold text-slate-600 mb-2.5 flex items-center justify-between gap-1 uppercase tracking-wide flex-nowrap">
+                      <div className="mt-4 pt-2.5 sm:mt-5 sm:pt-3 border-t border-slate-150/80">
+                        <div className="text-xs font-bold text-slate-600 mb-2 flex items-center justify-between gap-1 uppercase tracking-wide flex-nowrap">
                           <div className="flex items-center gap-1 shrink-0 whitespace-nowrap">
-                            <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-teal-600 shrink-0" />
-                            <span translate="no" className="notranslate text-[11px] sm:text-xs">TIẾN TRÌNH</span>
+                            <Layers className="w-3 h-3 text-teal-600 shrink-0" />
+                            <span translate="no" className="notranslate text-[10.5px] sm:text-xs font-black text-slate-700">TIẾN TRÌNH</span>
                           </div>
 
                           <div className="flex items-center gap-1 shrink-0 flex-nowrap">
@@ -2650,10 +2509,10 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                             <button
                               type="button"
                               onClick={() => handleCloneTrial(item)}
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-[9px] sm:text-[10px] font-bold transition-all shadow-3xs cursor-pointer active:scale-95 uppercase whitespace-nowrap shrink-0"
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-[8.5px] sm:text-[9.5px] font-bold transition-all shadow-3xs cursor-pointer active:scale-95 uppercase whitespace-nowrap shrink-0"
                               title="Nhân bản / Sao chép đợt thử nghiệm này (Kế thừa toàn bộ các bước và thông tin)"
                             >
-                              <Copy className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-indigo-700 shrink-0" />
+                              <Copy className="w-2.5 h-2.5 text-indigo-700 shrink-0" />
                               <span translate="no" className="notranslate whitespace-nowrap">NHÂN BẢN</span>
                             </button>
 
@@ -2661,7 +2520,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                             <button
                               type="button"
                               onClick={() => handleOpenCustomizeSteps(item)}
-                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md text-[9px] sm:text-[10px] font-bold transition-all shadow-3xs cursor-pointer active:scale-95 uppercase whitespace-nowrap shrink-0 ${
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8.5px] sm:text-[9.5px] font-bold transition-all shadow-3xs cursor-pointer active:scale-95 uppercase whitespace-nowrap shrink-0 ${
                                 canCustomize
                                   ? "bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200"
                                   : "bg-slate-100 hover:bg-slate-200 text-slate-500 border border-slate-300 opacity-90"
@@ -2673,9 +2532,9 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                               }
                             >
                               {canCustomize ? (
-                                <SlidersHorizontal className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-teal-700 shrink-0" />
+                                <SlidersHorizontal className="w-2.5 h-2.5 text-teal-700 shrink-0" />
                               ) : (
-                                <Lock className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-slate-500 shrink-0" />
+                                <Lock className="w-2.5 h-2.5 text-slate-500 shrink-0" />
                               )}
                               <span translate="no" className="notranslate whitespace-nowrap">TÙY CHỈNH</span>
                             </button>
@@ -2825,7 +2684,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                                             <span translate="no" className="notranslate">({st.number}) {st.label}</span>
                                           </span>
                                         </div>
-                                        <div className="text-[9.5px] text-slate-500 font-semibold mt-0.5 truncate max-w-full" title={st.role}>
+                                        <div className="text-[9.5px] text-slate-500 font-semibold mt-0.5 leading-snug break-words" title={st.role}>
                                           <span translate="no" className="notranslate">Phụ trách: {abbreviateDepartmentName(st.role)}</span>
                                         </div>
                                         {/* Hiển thị kết quả từng công đoạn ra ngoài, nằm dưới dòng Phụ trách... */}
@@ -2899,7 +2758,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                                     {/* Thông tin người hoàn thành / Ghi chú */}
                                     {isDone && (
                                       <div className="mt-1.5 pt-1.5 border-t border-emerald-200/60 flex items-center justify-between text-[9px] text-emerald-800 font-medium">
-                                        <div className="truncate">
+                                        <div className="break-words">
                                           <span className="font-bold">✓ {stepData?.completedBy || "Đã hoàn thành"}</span>
                                           {st.key === "step1_request" || st.number === "1" || /đn|đề nghị/i.test(st.label || "") ? (
                                             (item.requestDocNo || stepData?.customCode) && (
@@ -2926,7 +2785,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                                     )}
 
                                     {isCurrent && stepData?.notes && (
-                                      <div className="mt-1 text-[9px] text-amber-800 italic">
+                                      <div className="mt-1 text-[9px] text-amber-800 italic break-words">
                                         {stepData.notes}
                                       </div>
                                     )}
@@ -2948,7 +2807,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                                     : "grid-cols-7"
                             }`}>
                               {/* Connecting Line */}
-                              <div className="absolute top-4 left-6 right-6 h-1 bg-slate-200 -z-0" />
+                              <div className="absolute top-3.5 left-6 right-6 h-0.5 bg-slate-200 -z-0" />
 
                               {itemSteps.map((st) => {
                                 const stepData: TrialStepDetail = st.stepData;
@@ -2961,25 +2820,25 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                                     <button
                                       type="button"
                                       onClick={() => handleOpenStepModal(item, st.key)}
-                                      className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs transition-all shadow-sm ${
+                                      className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-[11px] transition-all shadow-xs ${
                                         isDone 
                                           ? stepData?.resultStatus === "FAIL"
-                                            ? "bg-rose-600 text-white ring-4 ring-rose-100 hover:bg-rose-700"
+                                            ? "bg-rose-600 text-white ring-2 ring-rose-100 hover:bg-rose-700"
                                             : stepData?.resultStatus === "CONDITIONAL"
-                                            ? "bg-amber-500 text-white ring-4 ring-amber-100 hover:bg-amber-600"
-                                            : "bg-emerald-600 text-white ring-4 ring-emerald-100 hover:bg-emerald-700" 
+                                            ? "bg-amber-500 text-white ring-2 ring-amber-100 hover:bg-amber-600"
+                                            : "bg-emerald-600 text-white ring-2 ring-emerald-100 hover:bg-emerald-700" 
                                           : isCurrent 
-                                            ? "bg-amber-500 text-white ring-4 ring-amber-100 animate-bounce hover:bg-amber-600"
-                                            : "bg-white text-slate-400 border-2 border-slate-300 hover:border-slate-400"
+                                            ? "bg-amber-500 text-white ring-3 ring-amber-100 animate-bounce hover:bg-amber-600"
+                                            : "bg-white text-slate-400 border border-slate-300 hover:border-slate-400"
                                       }`}
                                     >
                                       {isDone ? (
                                         stepData?.resultStatus === "FAIL" ? (
-                                          <X className="w-4 h-4 stroke-[3]" />
+                                          <X className="w-3.5 h-3.5 stroke-[3]" />
                                         ) : stepData?.resultStatus === "CONDITIONAL" ? (
-                                          <AlertTriangle className="w-4 h-4 stroke-[2.5]" />
+                                          <AlertTriangle className="w-3.5 h-3.5 stroke-[2.5]" />
                                         ) : (
-                                          <Check className="w-4 h-4 stroke-[3]" />
+                                          <Check className="w-3.5 h-3.5 stroke-[3]" />
                                         )
                                       ) : (
                                         st.number
@@ -2987,10 +2846,10 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                                     </button>
 
                                     {/* Step Title & Subtitle */}
-                                    <div className="mt-2 text-xs font-black uppercase text-blue-950 leading-tight tracking-tight">
+                                    <div className="mt-1.5 text-[11px] font-black uppercase text-blue-950 leading-snug tracking-tight break-words text-center px-0.5">
                                       <span translate="no" className="notranslate">({st.number}) {st.label}</span>
                                     </div>
-                                    <div className="text-[10px] text-slate-500 font-medium mt-0.5 truncate max-w-full px-0.5 whitespace-nowrap" title={st.role}>
+                                    <div className="text-[9.5px] text-slate-500 font-semibold mt-0.5 leading-snug break-words max-w-full px-0.5 text-center" title={st.role}>
                                       <span translate="no" className="notranslate">{abbreviateDepartmentName(st.role, departments)}</span>
                                     </div>
 
@@ -3037,10 +2896,10 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                                         <button
                                           type="button"
                                           onClick={() => handleOpenStepModal(item, st.key)}
-                                          className="text-[10px] bg-slate-50 hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border border-slate-200 hover:border-emerald-300 rounded px-1.5 py-0.5 leading-tight transition-all cursor-pointer block w-full text-center"
+                                          className="text-[9.5px] bg-slate-50 hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border border-slate-200 hover:border-emerald-300 rounded px-1.5 py-0.5 leading-tight transition-all cursor-pointer block w-full text-center"
                                         >
-                                          <div className="font-bold truncate max-w-[100px] mx-auto">{stepData?.completedBy || "Đã xong"}</div>
-                                          <div className="text-[9px] text-slate-500">{stepData?.completedAt?.split(" ")[0]}</div>
+                                          <div className="font-bold leading-tight break-words text-center">{stepData?.completedBy || "Đã xong"}</div>
+                                          <div className="text-[8.5px] text-slate-500 font-mono mt-0.5">{stepData?.completedAt?.split(" ")[0]}</div>
                                         </button>
                                       ) : (() => {
                                         const perm = checkUserStepPermission(currentUser, item, st.key, stepData);
@@ -3048,7 +2907,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                                           <button
                                             type="button"
                                             onClick={() => handleOpenStepModal(item, st.key)}
-                                            className={`text-[10px] font-bold px-2 py-1 rounded transition-all inline-flex items-center gap-1 ${
+                                            className={`text-[9.5px] font-bold px-2 py-0.5 rounded transition-all inline-flex items-center gap-0.5 ${
                                               isCurrent
                                                 ? perm.allowed
                                                   ? "bg-amber-500 text-white hover:bg-amber-600 shadow-sm"
@@ -3057,7 +2916,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                                             }`}
                                             title={isCurrent && !perm.allowed ? `Công đoạn này do ${st.role} phụ trách` : ""}
                                           >
-                                            {isCurrent && !perm.allowed && <Lock className="w-2.5 h-2.5 text-amber-700 shrink-0" />}
+                                            {isCurrent && !perm.allowed && <Lock className="w-2 h-2 text-amber-700 shrink-0" />}
                                             <span translate="no" className="notranslate">
                                               {isCurrent ? (perm.allowed ? "✓ Xác nhận" : "Chờ Xác Nhận") : "Chưa làm"}
                                             </span>
@@ -3120,13 +2979,13 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                                         )}
                                       </button>
                                       <div className="min-w-0 flex-1">
-                                        <div className="text-xs font-black uppercase text-blue-950 tracking-tight leading-tight">
+                                        <div className="text-[11px] font-black uppercase text-blue-950 tracking-tight leading-snug break-words">
                                           <span translate="no" className="notranslate">({st.number}) {st.label}</span>
                                         </div>
-                                        <div className="text-[10px] text-slate-500 truncate max-w-full" title={st.role}>
+                                        <div className="text-[9.5px] text-slate-500 font-semibold mt-0.5 leading-snug break-words" title={st.role}>
                                           <span translate="no" className="notranslate">Phụ trách: {abbreviateDepartmentName(st.role, departments)}</span>
                                           {isDone && stepData?.completedBy && (
-                                            <span className="text-slate-700 font-semibold ml-1 shrink-0">
+                                            <span className="text-slate-700 font-bold ml-1">
                                               • {stepData.completedBy}
                                             </span>
                                           )}

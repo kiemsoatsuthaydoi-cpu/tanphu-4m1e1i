@@ -6546,7 +6546,7 @@ App Link: ${window.location.origin}`;
                   }`}
                 >
                   <span className="shrink-0 text-xs leading-none">🧪</span>
-                  <span translate="no" className="notranslate whitespace-nowrap">Tiến Trình Thử Nghiệm</span>
+                  <span translate="no" className="notranslate whitespace-nowrap">Sổ Nhật Ký Thử Nghiệm</span>
                 </button>
               </div>
             </div>
