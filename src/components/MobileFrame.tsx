@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import html2canvas from "html2canvas";
-import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, BellRing, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, CheckCircle2, AlertCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send, Award, Calendar, Clock, Lightbulb, Newspaper, AtSign, Flame, FlaskConical, Bold, Italic, Underline as UnderlineIcon, Smile, Image as ImageIcon, Highlighter, Crown, MessageCircle, Menu, BookOpen, ShieldCheck, Target, Activity, HelpCircle, EyeOff, Eye, ListTodo, FileSpreadsheet, Building2, Filter } from "lucide-react";
+import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, BellRing, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, CheckCircle2, AlertCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send, Award, Calendar, Clock, Lightbulb, Newspaper, AtSign, Flame, FlaskConical, Bold, Italic, Underline as UnderlineIcon, Smile, Image as ImageIcon, Highlighter, Crown, MessageCircle, Menu, BookOpen, ShieldCheck, Target, Activity, HelpCircle, EyeOff, Eye, ListTodo, FileSpreadsheet, Building2, Filter, Key } from "lucide-react";
 import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Department, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus, QualityReportBadge, AppNotification, ErrorCatalogItem, BadgePointConfigItem, DirectMessageItem } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
@@ -1006,6 +1006,10 @@ interface MobileApprovalViewProps {
   };
   onUpdateUserStatus?: (id: string, status: UserStatus) => void;
   onUpdateUserRole?: (id: string, role: UserRole) => void;
+  onUpdateUser?: (updatedUser: User, oldId?: string) => void;
+  branches?: Branch[];
+  departments?: Department[];
+  companies?: Company[];
   showToast: (msg: string) => void;
   scrollRef?: React.RefObject<HTMLDivElement>;
   onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
@@ -1019,6 +1023,10 @@ function MobileApprovalView({
   theme,
   onUpdateUserStatus,
   onUpdateUserRole,
+  onUpdateUser,
+  branches = [],
+  departments = [],
+  companies = [],
   showToast,
   scrollRef,
   onScroll,
@@ -1029,6 +1037,95 @@ function MobileApprovalView({
   const [subTab, setSubTab] = useState<"CHO_DUYET" | "TAT_CA">("CHO_DUYET");
   const [roleFilter, setRoleFilter] = useState<string>("TẤT CẢ");
   const [statusFilter, setStatusFilter] = useState<string>("TẤT CẢ");
+
+  // Edit user state
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editUserId, setEditUserId] = useState("");
+  const [editFullName, setEditFullName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [editCompany, setEditCompany] = useState("");
+  const [editBranch, setEditBranch] = useState("");
+  const [editDepartment, setEditDepartment] = useState("");
+  const [editPosition, setEditPosition] = useState("");
+  const [editRole, setEditRole] = useState<UserRole>(UserRole.STAFF);
+  const [editStatus, setEditStatus] = useState<UserStatus>(UserStatus.PENDING);
+  const [showPasswordInModal, setShowPasswordInModal] = useState(true);
+
+  const handleStartEditUser = (u: User) => {
+    setEditingUser(u);
+    setEditUserId(u.id);
+    setEditFullName(u.fullName || "");
+    setEditPhone(u.phone || "");
+    setEditPassword(u.password || "123456");
+    setShowPasswordInModal(true);
+
+    const userBranch = branches.find((b) => b.name === u.branch || b.id === u.branch);
+    const userCompany = userBranch ? companies.find((c) => c.id === userBranch.companyId) : null;
+    const initialCompanyVal = u.company || (userCompany ? userCompany.name : (companies[0]?.name || "TÂN PHÚ VIỆT NAM"));
+    setEditCompany(initialCompanyVal);
+
+    setEditBranch(u.branch || "");
+    setEditDepartment(u.department || "");
+    setEditPosition(u.position || "");
+    setEditRole(u.role || UserRole.STAFF);
+    setEditStatus(u.status || UserStatus.PENDING);
+  };
+
+  const handleCopyPassword = (pwd: string) => {
+    if (!pwd) return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(pwd).then(() => {
+          showToast(`Đã sao chép mật khẩu: "${pwd}" 📋`);
+        }).catch(() => {
+          showToast(`Mật khẩu: ${pwd}`);
+        });
+      } else {
+        showToast(`Mật khẩu: ${pwd}`);
+      }
+    } catch {
+      showToast(`Mật khẩu: ${pwd}`);
+    }
+  };
+
+  const handleSaveEditedUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+
+    const trimmedNewId = editUserId.trim();
+    if (!trimmedNewId || !editFullName.trim() || !editPhone.trim() || !editPassword.trim()) {
+      showToast("Vui lòng điền đầy đủ các thông tin bắt buộc!");
+      return;
+    }
+
+    if (trimmedNewId !== editingUser.id && users.some((u) => u.id === trimmedNewId)) {
+      showToast("Mã nhân sự này đã tồn tại trong hệ thống!");
+      return;
+    }
+
+    const updatedUser: User = {
+      ...editingUser,
+      id: trimmedNewId,
+      fullName: editFullName.trim(),
+      phone: editPhone.trim(),
+      password: editPassword.trim(),
+      company: editCompany,
+      branch: editBranch,
+      department: editDepartment,
+      position: editPosition.trim(),
+      role: editRole,
+      status: editStatus,
+    };
+
+    if (onUpdateUser) {
+      onUpdateUser(updatedUser, editingUser.id);
+      showToast(`Đã cập nhật thông tin và mật khẩu cho ${updatedUser.fullName}! ✅`);
+    } else {
+      showToast(`Đã lưu thay đổi cho ${updatedUser.fullName}!`);
+    }
+    setEditingUser(null);
+  };
 
   const isReviewer = currentUser?.role === UserRole.REVIEWER;
   const matchBranch = (uBranch: string) => {
@@ -1274,119 +1371,585 @@ function MobileApprovalView({
                   </div>
                 </div>
 
-                {!isMe && (
-                  <div className="flex items-center gap-2 pt-2 border-t border-slate-100 mt-0.5">
-                    {u.status === UserStatus.PENDING ? (
-                      <>
+                {/* Action Buttons Row */}
+                <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100 mt-0.5">
+                  {isMe ? (
+                    <div className="w-full flex items-center justify-end">
+                      <button
+                        type="button"
+                        onClick={() => handleStartEditUser(u)}
+                        className="flex items-center justify-center gap-1 px-3 py-1.5 text-[8.5px] font-extrabold text-blue-700 bg-blue-50 hover:bg-blue-100 active:scale-95 border border-blue-200 rounded-lg cursor-pointer transition-all shadow-3xs"
+                        title="Chỉnh sửa thông tin & Mật khẩu của tôi"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                        <Key className="w-3 h-3 text-amber-600" />
+                        <span translate="no" className="notranslate"><T>Sửa thông tin & Mật khẩu</T></span>
+                      </button>
+                    </div>
+                  ) : u.status === UserStatus.PENDING ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (onUpdateUserStatus) {
+                            onUpdateUserStatus(u.id, UserStatus.ACTIVE);
+                            showToast(`Đã phê duyệt hoạt động cho ${u.fullName}! 🎉`);
+                          }
+                        }}
+                        className="flex-1 flex items-center justify-center gap-1 text-[9px] font-extrabold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 py-1.5 rounded-lg cursor-pointer transition-colors"
+                      >
+                        <Check className="w-3.5 h-3.5 pointer-events-none" />
+                        <span translate="no" className="notranslate"><T>DUYỆT</T></span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (onUpdateUserStatus) {
+                            onUpdateUserStatus(u.id, UserStatus.REJECTED);
+                            showToast(`Đã từ chối tài khoản ${u.fullName}! ❌`);
+                          }
+                        }}
+                        className="flex-1 flex items-center justify-center gap-1 text-[9px] font-extrabold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-250 py-1.5 rounded-lg cursor-pointer transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5 pointer-events-none" />
+                        <span translate="no" className="notranslate"><T>TỪ CHỐI</T></span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleStartEditUser(u)}
+                        className="flex items-center justify-center gap-1 px-2.5 py-1.5 text-[8.5px] font-extrabold text-blue-700 bg-blue-50 hover:bg-blue-100 active:scale-95 border border-blue-200 rounded-lg cursor-pointer transition-all shadow-3xs shrink-0"
+                        title="Chỉnh sửa & Xem mật khẩu"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                        <Key className="w-3 h-3 text-amber-600" />
+                        <span translate="no" className="notranslate"><T>Sửa/MK</T></span>
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {u.status === UserStatus.ACTIVE ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onUpdateUserStatus) {
+                              onUpdateUserStatus(u.id, UserStatus.LOCKED);
+                              showToast(`Đã khóa tài khoản ${u.fullName}! 🔒`);
+                            }
+                          }}
+                          className="flex-1 flex items-center justify-center gap-1 text-[8.5px] font-bold text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 py-1.5 rounded-lg cursor-pointer transition-all"
+                        >
+                          <Lock className="w-3 h-3 pointer-events-none" />
+                          <span translate="no" className="notranslate"><T>Khóa TK</T></span>
+                        </button>
+                      ) : (
                         <button
                           type="button"
                           onClick={() => {
                             if (onUpdateUserStatus) {
                               onUpdateUserStatus(u.id, UserStatus.ACTIVE);
-                              showToast(`Đã phê duyệt hoạt động cho ${u.fullName}! 🎉`);
+                              showToast(`Đã kích hoạt lại tài khoản ${u.fullName}! ✅`);
                             }
                           }}
-                          className="flex-1 flex items-center justify-center gap-1.5 text-[9px] font-extrabold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 py-1.5 rounded-lg cursor-pointer transition-colors"
+                          className="flex-1 flex items-center justify-center gap-1 text-[8.5px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-250 py-1.5 rounded-lg cursor-pointer transition-all"
                         >
-                          <Check className="w-3.5 h-3.5 pointer-events-none" />
-                          <span translate="no" className="notranslate"><T>PHÊ DUYỆT</T></span>
+                          <Check className="w-3 h-3 pointer-events-none" />
+                          <span translate="no" className="notranslate"><T>Kích Hoạt</T></span>
                         </button>
+                      )}
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (onUpdateUserStatus) {
-                              onUpdateUserStatus(u.id, UserStatus.REJECTED);
-                              showToast(`Đã từ chối tài khoản ${u.fullName}! ❌`);
+                      <div className="flex-1 flex items-center gap-1 pl-1 bg-slate-50 border border-slate-200 rounded-lg px-1.5 cursor-pointer relative justify-between">
+                        <Shield className="w-3.5 h-3.5 text-slate-400 shrink-0 select-none pointer-events-none" />
+                        <select
+                          value={u.role}
+                          onChange={(e) => {
+                            if (onUpdateUserRole) {
+                              onUpdateUserRole(u.id, e.target.value as UserRole);
+                              showToast(`Đã cập nhật vai trò ${e.target.value} cho ${u.fullName}! 🛡️`);
                             }
                           }}
-                          className="flex-1 flex items-center justify-center gap-1.5 text-[9px] font-extrabold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-250 py-1.5 rounded-lg cursor-pointer transition-colors"
+                          className="w-full bg-transparent border-none py-1.5 focus:outline-none text-[8.5px] font-extrabold text-slate-700 cursor-pointer text-center outline-none shrink-0"
                         >
-                          <X className="w-3.5 h-3.5 pointer-events-none" />
-                          <span translate="no" className="notranslate"><T>TỪ CHỐI</T></span>
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        {u.status === UserStatus.ACTIVE ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (onUpdateUserStatus) {
-                                onUpdateUserStatus(u.id, UserStatus.LOCKED);
-                                showToast(`Đã khóa tài khoản ${u.fullName}! 🔒`);
-                              }
-                            }}
-                            className="flex-1 flex items-center justify-center gap-1 text-[8.5px] font-bold text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 py-1.5 rounded-lg cursor-pointer transition-all"
-                          >
-                            <Lock className="w-3 h-3 pointer-events-none" />
-                            <span translate="no" className="notranslate"><T>Khóa Tài Khoản</T></span>
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (onUpdateUserStatus) {
-                                onUpdateUserStatus(u.id, UserStatus.ACTIVE);
-                                showToast(`Đã kích hoạt lại tài khoản ${u.fullName}! ✅`);
-                              }
-                            }}
-                            className="flex-1 flex items-center justify-center gap-1 text-[8.5px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-250 py-1.5 rounded-lg cursor-pointer transition-all"
-                          >
-                            <Check className="w-3 h-3 pointer-events-none" />
-                            <span translate="no" className="notranslate"><T>Kích Hoạt Lại</T></span>
-                          </button>
-                        )}
+                          <option value={UserRole.ADMIN} translate="no" className="notranslate">{UserRole.ADMIN}</option>
+                          <option value={UserRole.REVIEWER} translate="no" className="notranslate">{UserRole.REVIEWER}</option>
+                          <option value={UserRole.STAFF} translate="no" className="notranslate">{UserRole.STAFF}</option>
+                        </select>
+                      </div>
 
-                        <div className="flex-1 flex items-center gap-1 pl-1 bg-slate-50 border border-slate-200 rounded-lg px-2 cursor-pointer relative justify-between">
-                          <Shield className="w-3.5 h-3.5 text-slate-400 shrink-0 select-none pointer-events-none" />
-                          <select
-                            value={u.role}
-                            onChange={(e) => {
-                              if (onUpdateUserRole) {
-                                onUpdateUserRole(u.id, e.target.value as UserRole);
-                                showToast(`Đã cập nhật vai trò ${e.target.value} cho ${u.fullName}! 🛡️`);
-                              }
-                            }}
-                            className="w-full bg-transparent border-none py-1.5 focus:outline-none text-[8.5px] font-extrabold text-slate-700 cursor-pointer text-center outline-none shrink-0"
-                          >
-                            <option value={UserRole.ADMIN} translate="no" className="notranslate">{UserRole.ADMIN}</option>
-                            <option value={UserRole.REVIEWER} translate="no" className="notranslate">{UserRole.REVIEWER}</option>
-                            <option value={UserRole.STAFF} translate="no" className="notranslate">{UserRole.STAFF}</option>
-                          </select>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
+                      <button
+                        type="button"
+                        onClick={() => handleStartEditUser(u)}
+                        className="flex items-center justify-center gap-1 px-2.5 py-1.5 text-[8.5px] font-extrabold text-blue-700 bg-blue-50 hover:bg-blue-100 active:scale-95 border border-blue-200 rounded-lg cursor-pointer transition-all shadow-3xs shrink-0"
+                        title="Chỉnh sửa & Xem mật khẩu"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                        <Key className="w-3 h-3 text-amber-600" />
+                        <span translate="no" className="notranslate"><T>Sửa/MK</T></span>
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             );
           })
         )}
       </div>
 
-      {/* Floating HOME Button on Approval Page */}
-      <button
-        id="float-home-approval"
-        type="button"
-        onClick={() => onGoHome && onGoHome()}
-        className="absolute bottom-20 right-5 w-10 h-10 bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-all z-20 cursor-pointer border-none"
-        title="Trở về Trang Home"
+      {/* Edit User & View Password Modal for Mobile */}
+      {editingUser && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 z-[999] transition-all">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 p-4 max-w-sm w-full max-h-[90dvh] flex flex-col relative animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                  <Edit className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                    <span translate="no" className="notranslate"><T>THÔNG TIN & MẬT KHẨU NHÂN SỰ</T></span>
+                  </h3>
+                  <p className="text-[8.5px] text-slate-400 font-bold">
+                    <span translate="no" className="notranslate">{editingUser.fullName}</span> ({editingUser.id})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingUser(null)}
+                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center text-xs font-bold transition-all cursor-pointer"
+                title="Đóng"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Scrollable Form Body */}
+            <form onSubmit={handleSaveEditedUser} className="overflow-y-auto py-3 space-y-3 flex-1 pr-1">
+              {/* Mật khẩu đăng nhập Highlight Box */}
+              <div className="bg-amber-50/90 border border-amber-200 rounded-xl p-3 space-y-2 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-1.5 text-[10px] font-black text-amber-900 uppercase">
+                    <Key className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span translate="no" className="notranslate"><T>MẬT KHẨU ĐĂNG NHẬP</T></span>
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleCopyPassword(editPassword)}
+                      className="flex items-center gap-1 px-2 py-1 bg-white hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-md text-[9px] font-black cursor-pointer shadow-3xs transition-all active:scale-95"
+                      title="Sao chép mật khẩu"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span translate="no" className="notranslate"><T>Sao chép</T></span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditPassword("123456");
+                        showToast("Đã đặt lại mật khẩu về mặc định: 123456 🔄");
+                      }}
+                      className="flex items-center gap-1 px-2 py-1 bg-white hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-md text-[9px] font-black cursor-pointer shadow-3xs transition-all active:scale-95"
+                      title="Đặt lại mật khẩu mặc định 123456"
+                    >
+                      <RotateCcw className="w-3 h-3 text-amber-700" />
+                      <span translate="no" className="notranslate"><T>123456</T></span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <input
+                    type={showPasswordInModal ? "text" : "password"}
+                    required
+                    value={editPassword}
+                    onChange={(e) => setEditPassword(e.target.value)}
+                    className="w-full pl-3 pr-10 py-2 border border-amber-300 rounded-lg text-xs font-mono font-black text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white transition-all tracking-wider shadow-inner"
+                    placeholder="Nhập mật khẩu cho nhân viên..."
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswordInModal(!showPasswordInModal)}
+                    className="absolute right-2 top-2 p-1 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                    title={showPasswordInModal ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                  >
+                    {showPasswordInModal ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+                <p className="text-[8.5px] text-amber-800 font-medium leading-tight">
+                  <span translate="no" className="notranslate"><T>💡 Xem mật khẩu trực tiếp, sao chép gửi cho nhân viên hoặc sửa / đặt lại mật khẩu mới.</T></span>
+                </p>
+              </div>
+
+              {/* Họ và Tên */}
+              <div>
+                <label className="block text-[9.5px] font-black text-slate-500 uppercase mb-1">
+                  <span translate="no" className="notranslate"><T>Họ và Tên</T></span> *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editFullName}
+                  onChange={(e) => setEditFullName(e.target.value)}
+                  className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all"
+                />
+              </div>
+
+              {/* Số Điện Thoại & Mã Nhân Sự */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[9.5px] font-black text-slate-500 uppercase mb-1">
+                    <span translate="no" className="notranslate"><T>Số Điện Thoại</T></span> *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[9.5px] font-black text-slate-500 uppercase mb-1">
+                    <span translate="no" className="notranslate"><T>Mã Nhân Sự</T></span> *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editUserId}
+                    onChange={(e) => setEditUserId(e.target.value.trim())}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Công Ty Thành Viên */}
+              <div>
+                <label className="block text-[9.5px] font-black text-slate-500 uppercase mb-1">
+                  <span translate="no" className="notranslate"><T>Công Ty Thành Viên</T></span>
+                </label>
+                <select
+                  value={editCompany}
+                  onChange={(e) => setEditCompany(e.target.value)}
+                  className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all cursor-pointer"
+                >
+                  {companies.map((c) => (
+                    <option key={c.id} value={c.name}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Chi Nhánh / Văn Phòng */}
+              <div>
+                <label className="block text-[9.5px] font-black text-slate-500 uppercase mb-1">
+                  <span translate="no" className="notranslate"><T>Chi Nhánh / Nhà Máy</T></span>
+                </label>
+                <select
+                  value={editBranch}
+                  onChange={(e) => setEditBranch(e.target.value)}
+                  className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all cursor-pointer"
+                >
+                  {(() => {
+                    const selectedC = companies.find((c) => c.name === editCompany);
+                    const companyBranches = selectedC
+                      ? branches.filter((b) => b.companyId === selectedC.id)
+                      : branches;
+                    if (companyBranches.length === 0) {
+                      return <option value="">Chưa có chi nhánh</option>;
+                    }
+                    return companyBranches.map((br) => {
+                      const nameWithSuffix = br.name.includes("(") 
+                        ? br.name 
+                        : `${br.name.replace(/\s*\([^)]+\)$/, "").trim()} (${br.companyId || br.id})`;
+                      return (
+                        <option key={br.id} value={nameWithSuffix}>
+                          {nameWithSuffix}
+                        </option>
+                      );
+                    });
+                  })()}
+                </select>
+              </div>
+
+              {/* Phòng Ban & Chức Vụ */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[9.5px] font-black text-slate-500 uppercase mb-1">
+                    <span translate="no" className="notranslate"><T>Phòng Ban</T></span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editDepartment}
+                    onChange={(e) => setEditDepartment(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[9.5px] font-black text-slate-500 uppercase mb-1">
+                    <span translate="no" className="notranslate"><T>Chức Vụ</T></span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editPosition}
+                    onChange={(e) => setEditPosition(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all"
+                    placeholder="VD: Kỹ sư, Trưởng ca..."
+                  />
+                </div>
+              </div>
+
+              {/* Vai Trò & Trạng Thái */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[9.5px] font-black text-slate-500 uppercase mb-1">
+                    <span translate="no" className="notranslate"><T>Vai Trò Hệ Thống</T></span>
+                  </label>
+                  <select
+                    value={editRole}
+                    onChange={(e) => setEditRole(e.target.value as UserRole)}
+                    className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all cursor-pointer"
+                  >
+                    <option value={UserRole.ADMIN} translate="no" className="notranslate">{UserRole.ADMIN}</option>
+                    <option value={UserRole.REVIEWER} translate="no" className="notranslate">{UserRole.REVIEWER}</option>
+                    <option value={UserRole.STAFF} translate="no" className="notranslate">{UserRole.STAFF}</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[9.5px] font-black text-slate-500 uppercase mb-1">
+                    <span translate="no" className="notranslate"><T>Trạng Thái</T></span>
+                  </label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value as UserStatus)}
+                    className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white transition-all cursor-pointer"
+                  >
+                    <option value={UserStatus.ACTIVE} translate="no" className="notranslate">{UserStatus.ACTIVE}</option>
+                    <option value={UserStatus.PENDING} translate="no" className="notranslate">{UserStatus.PENDING}</option>
+                    <option value={UserStatus.LOCKED} translate="no" className="notranslate">{UserStatus.LOCKED}</option>
+                    <option value={UserStatus.REJECTED} translate="no" className="notranslate">{UserStatus.REJECTED}</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Form Action Buttons */}
+              <div className="flex items-center gap-2 pt-3 border-t border-slate-100 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="flex-1 py-2 text-xs font-extrabold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all cursor-pointer text-center"
+                >
+                  <span translate="no" className="notranslate"><T>Hủy</T></span>
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 text-xs font-extrabold text-white bg-blue-600 hover:bg-blue-700 active:scale-98 rounded-xl transition-all shadow-md cursor-pointer text-center"
+                >
+                  <span translate="no" className="notranslate"><T>Lưu Thay Đổi</T></span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface DraggableFloatingNavProps {
+  containerRef: React.RefObject<HTMLDivElement>;
+  onGoHome: () => void;
+  onScrollToTop: () => void;
+}
+
+function DraggableFloatingNav({
+  containerRef,
+  onGoHome,
+  onScrollToTop,
+}: DraggableFloatingNavProps) {
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const isDraggingRef = useRef(false);
+  const hasMovedRef = useRef(false);
+  const dragStartRef = useRef<{
+    clientX: number;
+    clientY: number;
+    posX: number;
+    posY: number;
+    time: number;
+  }>({
+    clientX: 0,
+    clientY: 0,
+    posX: 0,
+    posY: 0,
+    time: 0,
+  });
+
+  // Calculate default position near bottom right on mount / container resize
+  useEffect(() => {
+    if (!position && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const defaultX = Math.max(10, rect.width - 58);
+      const defaultY = Math.max(80, rect.height - 180);
+      setPosition({ x: defaultX, y: defaultY });
+    }
+  }, [containerRef, position]);
+
+  const getBoundedPosition = (x: number, y: number) => {
+    if (!containerRef.current) return { x, y };
+    const rect = containerRef.current.getBoundingClientRect();
+    const minX = 6;
+    const maxX = Math.max(minX, rect.width - 54);
+    const minY = 50;
+    const maxY = Math.max(minY, rect.height - 120);
+    return {
+      x: Math.min(Math.max(minX, x), maxX),
+      y: Math.min(Math.max(minY, y), maxY),
+    };
+  };
+
+  const startDrag = (clientX: number, clientY: number) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const currX = position ? position.x : Math.max(10, rect.width - 58);
+    const currY = position ? position.y : Math.max(80, rect.height - 180);
+
+    dragStartRef.current = {
+      clientX,
+      clientY,
+      posX: currX,
+      posY: currY,
+      time: Date.now(),
+    };
+    hasMovedRef.current = false;
+    isDraggingRef.current = true;
+  };
+
+  const moveDrag = (clientX: number, clientY: number) => {
+    if (!isDraggingRef.current) return;
+    const dx = clientX - dragStartRef.current.clientX;
+    const dy = clientY - dragStartRef.current.clientY;
+
+    if (Math.hypot(dx, dy) > 6) {
+      hasMovedRef.current = true;
+      setIsDragging(true);
+      const newPos = getBoundedPosition(
+        dragStartRef.current.posX + dx,
+        dragStartRef.current.posY + dy
+      );
+      setPosition(newPos);
+    }
+  };
+
+  const endDrag = () => {
+    isDraggingRef.current = false;
+    setTimeout(() => {
+      setIsDragging(false);
+      hasMovedRef.current = false;
+    }, 120);
+  };
+
+  // Window mouse move / up handlers for flawless dragging anywhere on screen
+  useEffect(() => {
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      if (isDraggingRef.current) {
+        moveDrag(e.clientX, e.clientY);
+      }
+    };
+    const handleWindowMouseUp = () => {
+      if (isDraggingRef.current) {
+        endDrag();
+      }
+    };
+
+    window.addEventListener("mousemove", handleWindowMouseMove, { passive: true });
+    window.addEventListener("mouseup", handleWindowMouseUp, { passive: true });
+    return () => {
+      window.removeEventListener("mousemove", handleWindowMouseMove);
+      window.removeEventListener("mouseup", handleWindowMouseUp);
+    };
+  }, [position]);
+
+  const handleScrollTopAction = (e: React.MouseEvent | React.TouchEvent) => {
+    if (hasMovedRef.current) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onScrollToTop();
+  };
+
+  const handleHomeAction = (e: React.MouseEvent | React.TouchEvent) => {
+    if (hasMovedRef.current) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onGoHome();
+  };
+
+  return (
+    <div
+      onMouseDown={(e) => startDrag(e.clientX, e.clientY)}
+      onTouchStart={(e) => {
+        if (e.touches.length > 0) {
+          startDrag(e.touches[0].clientX, e.touches[0].clientY);
+        }
+      }}
+      onTouchMove={(e) => {
+        if (e.touches.length > 0) {
+          moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+        }
+      }}
+      onTouchEnd={endDrag}
+      onTouchCancel={endDrag}
+      style={{
+        position: "absolute",
+        left: position ? `${position.x}px` : "auto",
+        right: position ? "auto" : "16px",
+        top: position ? `${position.y}px` : "auto",
+        bottom: position ? "auto" : "80px",
+        touchAction: "none",
+        zIndex: 60,
+      }}
+      className={`flex flex-col items-center gap-2 select-none ${
+        isDragging ? "scale-105 opacity-90 cursor-grabbing" : "cursor-grab"
+      } transition-transform duration-75 drop-shadow-xl`}
+    >
+      {/* Drag grip indicator */}
+      <div 
+        className="w-7 h-2 bg-slate-400/80 hover:bg-slate-500 rounded-full flex items-center justify-center cursor-grab active:cursor-grabbing shadow-2xs transition-colors"
+        title="Giữ để kéo di chuyển vị trí"
       >
-        <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
+        <div className="w-3.5 h-0.5 bg-white/90 rounded-full" />
+      </div>
+
+      {/* Nút Lên đầu trang (Blue) */}
+      <button
+        id="btn-floating-scroll-top"
+        type="button"
+        onClick={handleScrollTopAction}
+        className="w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 active:bg-blue-800 text-white rounded-full flex items-center justify-center shadow-lg transition-all cursor-pointer border-2 border-white pointer-events-auto"
+        title="Lên đầu trang"
+      >
+        <ArrowUp className="w-5 h-5 text-white stroke-[2.5px] pointer-events-none" />
       </button>
 
-      {/* Floating Scroll to Top Button on Approval Page */}
-      {scrollTop !== undefined && scrollTop > 100 && (
-        <button
-          type="button"
-          onClick={() => scrollRef?.current?.scrollTo({ top: 0, behavior: "smooth" })}
-          className="absolute bottom-36 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-20 cursor-pointer"
-          title="Lên đầu trang"
-        >
-          <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />
-        </button>
-      )}
+      {/* Nút Home (Green) */}
+      <button
+        id="btn-floating-home"
+        type="button"
+        onClick={handleHomeAction}
+        className="w-10 h-10 bg-emerald-600 hover:bg-emerald-700 active:scale-90 active:bg-emerald-800 text-white rounded-full flex items-center justify-center shadow-xl transition-all cursor-pointer border-2 border-white pointer-events-auto"
+        title="Trở về Trang Home"
+      >
+        <Home className="w-[18px] h-[18px] text-white stroke-[2.2px] pointer-events-none" />
+      </button>
     </div>
   );
 }
@@ -5807,6 +6370,84 @@ App Link: ${window.location.origin}`;
     setReadNotifIds(allIds);
   };
 
+  const handleScrollCurrentViewToTop = () => {
+    // 1. Specific ref targets
+    if (showTrash && trashScrollRef.current) {
+      trashScrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    if (showNotifDrawer && notifScrollRef.current) {
+      notifScrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    if (showOnlineUsersDrawer && onlineScrollRef.current) {
+      onlineScrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    if (approvalScrollRef.current) {
+      approvalScrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    if (phanTichScrollRef.current) {
+      phanTichScrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    // 2. Direct chat container
+    const directChatMsgContainer = document.getElementById("direct-chat-messages-container");
+    if (directChatMsgContainer) {
+      directChatMsgContainer.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    // 3. Any scrollable container currently in viewport
+    if (viewportRef.current) {
+      const scrollables = viewportRef.current.querySelectorAll('.overflow-y-auto, [class*="overflow-y"], .overflow-auto');
+      scrollables.forEach((el) => {
+        if (el instanceof HTMLElement) {
+          el.scrollTo({ top: 0, behavior: "smooth" });
+        }
+      });
+    }
+
+    // 4. Window scroll fallback
+    try {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleFloatingGoHome = () => {
+    setShowTrash(false);
+    setShowNotifDrawer(false);
+    setShowQrCodeView(false);
+    setShowOnlineUsersDrawer(false);
+    setActiveDirectChatUser(null);
+    setActiveForumTopicId(null);
+    setActiveBottomTab("BAO_CAO");
+    setMobileFeedSubTab("FEED");
+    setMobileFeedViewMode("REPORT");
+    setSearchTerm("");
+    setSelectedCategory(null);
+    setSelectedFactoryFilters([]);
+    setSelectedReportTypeFilter(null);
+    setMobileBranchFilter("Tất cả");
+    setMobileCategoryFilter("Tất cả");
+
+    setTimeout(() => {
+      handleScrollCurrentViewToTop();
+    }, 60);
+  };
+
+  // Check if current view is Main 4M1E1I Feed or Trial Tracking Hub (both have their own FAB)
+  const isFeedMainPage = (
+    !showTrash && 
+    !showQrCodeView && 
+    !showNotifDrawer && 
+    !showOnlineUsersDrawer && 
+    !activeDirectChatUser &&
+    activeBottomTab === "BAO_CAO" && 
+    mobileFeedSubTab === "FEED"
+  );
+
   // Category Icon Resolver
   const getCategoryIcon = (cat: Category4M1E1I) => {
     switch (cat) {
@@ -5994,21 +6635,12 @@ App Link: ${window.location.origin}`;
           </div>
         </div>
 
-        {/* Floating HOME Button exactly styled as the screenshot (green circle with white home icon) */}
-        <button
-          id="float-home-qr"
-          type="button"
-          onClick={() => {
-            setShowQrCodeView(false);
-            setActiveBottomTab("BAO_CAO");
-            setShowTrash(false);
-            setShowNotifDrawer(false);
-          }}
-          className="absolute bottom-20 right-5 w-[42px] h-[42px] bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-all z-50 cursor-pointer border-none"
-          title="Trở về Trang Home"
-        >
-          <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
-        </button>
+        {/* Draggable Floating HOME and Scroll To Top buttons */}
+        <DraggableFloatingNav
+          containerRef={viewportRef}
+          onGoHome={handleFloatingGoHome}
+          onScrollToTop={handleScrollCurrentViewToTop}
+        />
       </div>
     );
   }
@@ -7189,14 +7821,6 @@ App Link: ${window.location.origin}`;
                   <T><span translate="no" className="notranslate">Báo Cáo Thống Kê & Phân Tích</span></T>
                 </h2>
               </div>
-              <button
-                type="button"
-                onClick={() => setActiveBottomTab("BAO_CAO")}
-                className="px-2 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold flex items-center gap-1 border border-slate-200 transition-all cursor-pointer shadow-xs active:scale-95 shrink-0"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <T><span translate="no" className="notranslate">Quay lại Bản Tin</span></T>
-              </button>
             </div>
             <p className="text-[10px] text-slate-500 leading-normal">
               {currentUser?.role === UserRole.ADMIN ? (
@@ -8294,31 +8918,6 @@ App Link: ${window.location.origin}`;
           })()}
             </>
           )}
-
-          {/* Floating HOME Button on Analytics Page */}
-          <button
-            id="float-home-analytics"
-            type="button"
-            onClick={() => {
-              setActiveBottomTab("BAO_CAO");
-            }}
-            className="absolute bottom-20 right-5 w-10 h-10 bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-all z-20 cursor-pointer border-none"
-            title="Trở về Trang Home"
-          >
-            <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
-          </button>
-
-          {/* Floating Scroll to Top Button on Analytics Page */}
-          {phanTichScrollTop > 100 && (
-            <button
-              type="button"
-              onClick={() => phanTichScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
-              className="absolute bottom-36 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-20 cursor-pointer"
-              title="Lên đầu trang"
-            >
-              <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />
-            </button>
-          )}
         </div>
       ) : activeBottomTab === "PHE_DUYET" ? (
         <MobileApprovalView
@@ -8327,6 +8926,10 @@ App Link: ${window.location.origin}`;
           theme={theme}
           onUpdateUserStatus={onUpdateUserStatus}
           onUpdateUserRole={onUpdateUserRole}
+          onUpdateUser={onUpdateUser}
+          branches={branches}
+          departments={departments}
+          companies={companies}
           showToast={showToast}
           scrollRef={approvalScrollRef}
           onScroll={(e) => setApprovalScrollTop(e.currentTarget.scrollTop)}
@@ -8385,77 +8988,88 @@ App Link: ${window.location.origin}`;
         <div className="flex-1 overflow-y-auto bg-slate-50 relative p-3.5 space-y-3.5 pb-24">
           {/* Header Card */}
           <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-2.5">
-                <div className={`w-9 h-9 rounded-xl text-white ${theme.bg} flex items-center justify-center shadow-xs font-bold shrink-0`}>
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => setMobilePersonalTab(mobilePersonalTab === "PROFILE" ? "CONTRIBUTION" : "PROFILE")}
+                className={`w-10 h-10 rounded-xl ${
+                  mobilePersonalTab === "PROFILE"
+                    ? "ring-2 ring-blue-600 ring-offset-2 scale-105"
+                    : currentUser?.avatar
+                    ? "bg-slate-100 ring-2 ring-blue-500/20 hover:scale-105"
+                    : theme.bg
+                } flex items-center justify-center shadow-xs font-bold shrink-0 overflow-hidden border border-slate-200 cursor-pointer transition-all active:scale-95 relative group`}
+                title={mobilePersonalTab === "PROFILE" ? "Đóng hồ sơ cá nhân" : "Mở hồ sơ cá nhân & tài khoản"}
+              >
+                {currentUser?.avatar ? (
+                  <img
+                    src={currentUser.avatar}
+                    alt={currentUser.fullName || "Avatar"}
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
                   <UserIcon className="w-5 h-5 text-white" />
-                </div>
-                <div>
+                )}
+                {mobilePersonalTab === "PROFILE" && (
+                  <div className="absolute inset-0 bg-black/30 flex items-center justify-center text-white">
+                    <X className="w-4 h-4" />
+                  </div>
+                )}
+              </button>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-1">
                   <h2 className={`text-xs font-black tracking-tight ${theme.text}`}>
                     <T><span translate="no" className="notranslate">Trang Cá Nhân & Thành Tích</span></T>
                   </h2>
-                  <p className="text-[10px] text-slate-500 line-clamp-1">
-                    <T><span translate="no" className="notranslate">{currentUser?.fullName || "Người dùng"} • {currentUser?.branch || "Chi nhánh"} • {currentUser?.department || "Bộ phận"}</span></T>
-                  </p>
+                  {mobilePersonalTab === "PROFILE" && (
+                    <button
+                      type="button"
+                      onClick={() => setMobilePersonalTab("CONTRIBUTION")}
+                      className="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-bold flex items-center gap-1 border border-slate-200/80 cursor-pointer transition-all active:scale-95"
+                    >
+                      <X className="w-3 h-3" />
+                      <T><span translate="no" className="notranslate">Đóng hồ sơ</span></T>
+                    </button>
+                  )}
                 </div>
+                <p className="text-[10px] text-slate-500 line-clamp-1">
+                  <T><span translate="no" className="notranslate">{currentUser?.fullName || "Người dùng"} • {currentUser?.branch || "Chi nhánh"} • {currentUser?.department || "Bộ phận"}</span></T>
+                </p>
               </div>
-
-              {/* Quick switch to system-wide Analytics */}
-              <button
-                type="button"
-                onClick={() => setActiveBottomTab("PHAN_TICH")}
-                className="px-2.5 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-[10px] font-bold flex items-center gap-1.5 border border-purple-200/80 transition-all cursor-pointer shadow-xs active:scale-95 shrink-0"
-                title="Xem Báo cáo Thống kê & Phân tích toàn hệ thống"
-              >
-                <BarChart2 className="w-3.5 h-3.5 text-purple-600" />
-                <T><span translate="no" className="notranslate">Xem Báo cáo Phân tích</span></T>
-              </button>
             </div>
 
-            {/* Sub-tab Navigation (3 tabs) */}
-            <div className="flex bg-slate-100 p-1 rounded-xl text-[10px] font-black select-none border border-slate-200 gap-1 overflow-x-auto">
+            {/* Sub-tab Navigation (2 tabs: Đóng Góp & Việc Của Tôi) */}
+            <div className="grid grid-cols-2 gap-1.5 bg-slate-100 p-1.5 rounded-xl text-xs font-black select-none border border-slate-200">
               <button
                 type="button"
                 onClick={() => setMobilePersonalTab("CONTRIBUTION")}
-                className={`flex-1 min-w-0 py-2 px-1.5 rounded-lg transition-all cursor-pointer text-center flex items-center justify-center gap-1 border-none whitespace-nowrap overflow-hidden ${
+                className={`py-2 px-3 rounded-lg transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 border-none ${
                   mobilePersonalTab === "CONTRIBUTION"
                     ? "bg-[#1d4ed8] text-white shadow-xs font-extrabold"
-                    : "text-slate-600 hover:text-slate-800 bg-transparent"
+                    : "text-slate-600 hover:text-slate-800 bg-white/80 hover:bg-white border border-slate-200/80 shadow-3xs"
                 }`}
               >
-                <Award className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate whitespace-nowrap"><T><span translate="no" className="notranslate">Đóng Góp</span></T></span>
+                <Award className="w-4 h-4 shrink-0" />
+                <span className="whitespace-nowrap"><T><span translate="no" className="notranslate">Đóng Góp</span></T></span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setMobilePersonalTab("TASKS")}
-                className={`flex-1 min-w-0 py-2 px-1.5 rounded-lg transition-all cursor-pointer text-center flex items-center justify-center gap-1 border-none relative whitespace-nowrap overflow-hidden ${
+                className={`py-2 px-3 rounded-lg transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 border-none relative ${
                   mobilePersonalTab === "TASKS"
                     ? "bg-[#1d4ed8] text-white shadow-xs font-extrabold"
-                    : "text-slate-600 hover:text-slate-800 bg-transparent"
+                    : "text-slate-600 hover:text-slate-800 bg-white/80 hover:bg-white border border-slate-200/80 shadow-3xs"
                 }`}
               >
-                <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate whitespace-nowrap"><T><span translate="no" className="notranslate">Việc Của Tôi</span></T></span>
-                <span className={`px-1.5 py-0.2 rounded-full text-[8.5px] font-black shrink-0 ${
-                  mobilePersonalTab === "TASKS" ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"
+                <FileSpreadsheet className="w-4 h-4 shrink-0" />
+                <span className="whitespace-nowrap"><T><span translate="no" className="notranslate">Việc Của Tôi</span></T></span>
+                <span className={`px-1.5 py-0.5 rounded-full text-[9.5px] font-black shrink-0 ${
+                  mobilePersonalTab === "TASKS" ? "bg-white/25 text-white" : "bg-blue-100 text-blue-800 border border-blue-200/60"
                 }`}>
                   {myAllTasks.length}
                 </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setMobilePersonalTab("PROFILE")}
-                className={`flex-1 min-w-0 py-2 px-1.5 rounded-lg transition-all cursor-pointer text-center flex items-center justify-center gap-1 border-none whitespace-nowrap overflow-hidden ${
-                  mobilePersonalTab === "PROFILE"
-                    ? "bg-[#1d4ed8] text-white shadow-xs font-extrabold"
-                    : "text-slate-600 hover:text-slate-800 bg-transparent"
-                }`}
-              >
-                <Settings className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate whitespace-nowrap"><T><span translate="no" className="notranslate">Hồ Sơ</span></T></span>
               </button>
             </div>
           </div>
@@ -8709,12 +9323,22 @@ App Link: ${window.location.origin}`;
 
           {/* TAB 3: HỒ SƠ CÁ NHÂN (Profile edit & sync) */}
           {mobilePersonalTab === "PROFILE" && currentUser && (
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-4">
-              <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
-                <Settings className="w-4 h-4 text-blue-600" />
-                <h3 className="text-xs font-black text-slate-800">
-                  <T><span translate="no" className="notranslate">Hồ Sơ Cá Nhân & Thông Tin Tài Khoản</span></T>
-                </h3>
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-4 animate-in fade-in duration-200">
+              <div className="flex items-center justify-between gap-2 pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <Settings className="w-4 h-4 text-blue-600" />
+                  <h3 className="text-xs font-black text-slate-800">
+                    <T><span translate="no" className="notranslate">Hồ Sơ Cá Nhân & Thông Tin Tài Khoản</span></T>
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMobilePersonalTab("CONTRIBUTION")}
+                  className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-800 transition-all cursor-pointer border-none"
+                  title="Thu gọn hồ sơ"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
 
               {/* Avatar Upload */}
@@ -8768,46 +9392,46 @@ App Link: ${window.location.origin}`;
               <div className="space-y-3">
                 {/* ID (Read-only) */}
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                  <label className="text-[11px] font-bold text-slate-500 block mb-1">
                     <T><span translate="no" className="notranslate">Mã định danh (ID)</span></T>
                   </label>
-                  <div className="flex items-center gap-2 p-2 bg-slate-100 rounded-xl border border-slate-200 text-[10px] text-slate-500 font-semibold">
-                    <Lock className="w-3.5 h-3.5 text-slate-400" />
-                    <span>{currentUser.id}</span>
+                  <div className="flex items-center gap-2.5 p-2.5 bg-slate-100/90 rounded-xl border border-slate-200 text-xs text-slate-800 font-semibold select-none">
+                    <Lock className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span className="leading-tight">{currentUser.id}</span>
                   </div>
                 </div>
 
                 {/* Full Name */}
                 <div>
-                  <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
                     <T><span translate="no" className="notranslate">Họ và tên đầy đủ *</span></T>
                   </label>
                   <input
                     type="text"
                     value={mobileProfileFullName}
                     onChange={(e) => setMobileProfileFullName(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-500 focus:outline-hidden"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-500 focus:outline-hidden text-slate-800"
                     placeholder="Nhập họ và tên..."
                   />
                 </div>
 
                 {/* Phone */}
                 <div>
-                  <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
                     <T><span translate="no" className="notranslate">Số điện thoại đăng ký</span></T>
                   </label>
                   <input
                     type="tel"
                     value={mobileProfilePhone}
                     onChange={(e) => setMobileProfilePhone(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-500 focus:outline-hidden"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-500 focus:outline-hidden text-slate-800"
                     placeholder="Nhập số điện thoại..."
                   />
                 </div>
 
                 {/* Password Change */}
                 <div>
-                  <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
                     <T><span translate="no" className="notranslate">Mật khẩu tài khoản</span></T>
                   </label>
                   <div className="relative">
@@ -8815,7 +9439,7 @@ App Link: ${window.location.origin}`;
                       type={mobileProfileShowPassword ? "text" : "password"}
                       value={mobileProfilePassword}
                       onChange={(e) => setMobileProfilePassword(e.target.value)}
-                      className="w-full p-2.5 pr-9 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-500 focus:outline-hidden"
+                      className="w-full p-2.5 pr-9 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-500 focus:outline-hidden text-slate-800"
                       placeholder="Nhập mật khẩu mới..."
                     />
                     <button
@@ -8830,27 +9454,27 @@ App Link: ${window.location.origin}`;
 
                 {/* Position / Title */}
                 <div>
-                  <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
                     <T><span translate="no" className="notranslate">Chức danh / Vị trí</span></T>
                   </label>
                   <input
                     type="text"
                     value={mobileProfilePosition}
                     onChange={(e) => setMobileProfilePosition(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-500 focus:outline-hidden"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-500 focus:outline-hidden text-slate-800"
                     placeholder="Ví dụ: Kỹ sư QC, Trưởng ca..."
                   />
                 </div>
 
                 {/* Company Selector */}
                 <div>
-                  <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
                     <T><span translate="no" className="notranslate">Tập đoàn / Doanh nghiệp</span></T>
                   </label>
                   <select
                     value={mobileProfileCompany}
                     onChange={(e) => setMobileProfileCompany(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-500 focus:outline-hidden"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-500 focus:outline-hidden text-slate-800"
                   >
                     <option value="">-- Chọn doanh nghiệp --</option>
                     {(companies || []).map((c) => (
@@ -8863,13 +9487,13 @@ App Link: ${window.location.origin}`;
 
                 {/* Branch Selector */}
                 <div>
-                  <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
                     <T><span translate="no" className="notranslate">Chi nhánh trực thuộc</span></T>
                   </label>
                   <select
                     value={mobileProfileBranch}
                     onChange={(e) => setMobileProfileBranch(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-500 focus:outline-hidden"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-500 focus:outline-hidden text-slate-800"
                   >
                     <option value="">-- Chọn chi nhánh --</option>
                     {(branches || []).map((b) => (
@@ -8882,13 +9506,13 @@ App Link: ${window.location.origin}`;
 
                 {/* Department Selector */}
                 <div>
-                  <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
                     <T><span translate="no" className="notranslate">Bộ phận / Phòng ban</span></T>
                   </label>
                   <select
                     value={mobileProfileDept}
                     onChange={(e) => setMobileProfileDept(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-500 focus:outline-hidden"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-500 focus:outline-hidden text-slate-800"
                   >
                     <option value="">-- Chọn bộ phận --</option>
                     {(departments || []).map((d) => (
@@ -8899,12 +9523,20 @@ App Link: ${window.location.origin}`;
                   </select>
                 </div>
 
-                {/* Save Button */}
-                <div className="pt-2">
+                {/* Action Buttons */}
+                <div className="pt-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMobilePersonalTab("CONTRIBUTION")}
+                    className="py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border-none"
+                  >
+                    <X className="w-4 h-4" />
+                    <T><span translate="no" className="notranslate">ĐÓNG</span></T>
+                  </button>
                   <button
                     type="button"
                     onClick={handleSaveMobileProfile}
-                    className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs flex items-center justify-center gap-2 shadow-md shadow-blue-600/20 active:scale-95 transition-all cursor-pointer border-none"
+                    className="flex-1 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs flex items-center justify-center gap-2 shadow-md shadow-blue-600/20 active:scale-95 transition-all cursor-pointer border-none"
                   >
                     <CheckCircle className="w-4 h-4 text-white" />
                     <T><span translate="no" className="notranslate">LƯU THAY ĐỔI & ĐỒNG BỘ</span></T>
@@ -11272,34 +11904,13 @@ App Link: ${window.location.origin}`;
         )
       )}
 
-      {/* Green HOME Floating Action Button on Trash page exactly styled as the screenshot (green circle with white home icon) */}
-      {showTrash && (
-        <button
-          id="float-home-trash"
-          type="button"
-          onClick={() => {
-            setShowTrash(false);
-            setActiveBottomTab("BAO_CAO");
-            setShowNotifDrawer(false);
-            setShowQrCodeView(false);
-          }}
-          className="absolute bottom-20 right-5 w-[42px] h-[42px] bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-all z-50 cursor-pointer border-none"
-          title="Trở về Trang Home"
-        >
-          <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
-        </button>
-      )}
-
-      {/* Scroll to Top Floating Button on Trash page */}
-      {showTrash && trashScrollTop > 100 && (
-        <button
-          type="button"
-          onClick={() => trashScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
-          className="absolute bottom-36 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-50 cursor-pointer"
-          title="Lên đầu trang"
-        >
-          <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />
-        </button>
+      {/* Draggable Floating Home and Scroll To Top buttons on all non-feed pages */}
+      {!isFeedMainPage && !(activeBottomTab === "TRAO_ĐỔI" && activeForumTopicId) && (
+        <DraggableFloatingNav
+          containerRef={viewportRef}
+          onGoHome={handleFloatingGoHome}
+          onScrollToTop={handleScrollCurrentViewToTop}
+        />
       )}
 
       {/* Modern bottom navigation tab bar containing Phân Tích, Đề Xuất, Bản Tin, Duyệt NS, [Họ + Tên Rút Gọn] */}
@@ -13715,33 +14326,12 @@ App Link: ${window.location.origin}`}
               )}
             </div>
           </div>
-          {/* Floating HOME Button exactly styled as the screenshot (green circle with white home icon) */}
-          <button
-            id="float-home-notif"
-            type="button"
-            onClick={() => {
-              setShowNotifDrawer(false);
-              setActiveBottomTab("BAO_CAO");
-              setShowTrash(false);
-              setShowQrCodeView(false);
-            }}
-            className="absolute bottom-20 right-5 w-[42px] h-[42px] bg-emerald-600 hover:bg-emerald-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-xl transition-all z-50 cursor-pointer border-none"
-            title="Trở về Trang Home"
-          >
-            <Home className="w-[18px] h-[18px] text-white stroke-[2.2px]" />
-          </button>
-
-          {/* Scroll to Top Floating Button on Notifications page */}
-          {notifScrollTop > 100 && (
-            <button
-              type="button"
-              onClick={() => notifScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
-              className="absolute bottom-36 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-50 cursor-pointer"
-              title="Lên đầu trang"
-            >
-              <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />
-            </button>
-          )}
+          {/* Draggable Floating HOME and Scroll To Top buttons */}
+          <DraggableFloatingNav
+            containerRef={viewportRef}
+            onGoHome={handleFloatingGoHome}
+            onScrollToTop={handleScrollCurrentViewToTop}
+          />
         </div>
       )}
 
@@ -14563,18 +15153,15 @@ App Link: ${window.location.origin}`}
             })()}
           </div>
 
-          {/* Floating Home Button matching screenshot */}
-          <button
-            type="button"
-            onClick={() => {
-              setActiveDirectChatUser(null);
-              setShowOnlineUsersDrawer(false);
+          {/* Draggable Floating Home and Scroll To Top buttons */}
+          <DraggableFloatingNav
+            containerRef={viewportRef}
+            onGoHome={handleFloatingGoHome}
+            onScrollToTop={() => {
+              const msgContainer = document.getElementById("direct-chat-messages-container");
+              if (msgContainer) msgContainer.scrollTo({ top: 0, behavior: "smooth" });
             }}
-            className="absolute bottom-20 right-4 w-11 h-11 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-10 cursor-pointer active:scale-90"
-            title="Trở về Trang Home"
-          >
-            <Home className="w-5 h-5 text-white stroke-[2.2]" />
-          </button>
+          />
 
           {/* Bottom Chat Input Bar with Formatting & Happy Emoji Pickers */}
           <div className="bg-white border-t border-slate-200 shrink-0 select-none">

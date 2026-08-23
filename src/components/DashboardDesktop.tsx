@@ -5256,15 +5256,13 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
               alt="META ANDON Logo" 
               className="w-10 h-10 object-contain drop-shadow-xs rounded-xl cursor-pointer hover:scale-105 transition-transform shrink-0" 
             />
-            <div className="min-w-0">
-              <div className="text-[10.5px] text-slate-500 font-extrabold tracking-wider uppercase flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0" />
-                <T>HỆ THỐNG KIỂM SOÁT THAY ĐỔI THEO THỜI GIAN THỰC</T>
-              </div>
-              <h1 className="text-base md:text-lg font-black tracking-tight text-slate-900 mt-0.5 flex items-center gap-2 flex-wrap">
-                <T>Trang Quản Trị Hệ Thống META ANDON</T>
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-slate-200">v4.1.3</span>
-              </h1>
+            <div className="flex flex-col justify-center select-none min-w-0">
+              <T className="font-black text-xl tracking-wider whitespace-nowrap leading-none block text-left text-slate-900 font-['Orbitron',sans-serif]">
+                META ANDON
+              </T>
+              <T className="text-xs font-bold tracking-[-0.015em] text-slate-500 whitespace-nowrap block text-left leading-none mt-1.5">
+                Mỗi Nhân Viên Là Một QC
+              </T>
             </div>
           </div>
 
@@ -12007,12 +12005,34 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                 <div className={currentUser?.role === UserRole.ADMIN ? "xl:col-span-7" : "xl:col-span-12"}>
                   <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm flex flex-col h-[650px] xl:h-[1200px]">
                     <div className="flex justify-between items-center border-b border-slate-100 pb-3 mb-4 shrink-0">
-                      <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                        <Globe className="w-5 h-5 text-emerald-500" />
-                        <span translate="no" className="notranslate"><T>THÔNG BÁO</T></span>
-                      </h3>
-                      <div className="bg-slate-100 px-3 py-1 rounded-full text-slate-600 font-mono text-[10.5px] font-black">
-                        <span translate="no" className="notranslate">{combinedBroadcastsAndNotifications.length} <T>thông báo</T></span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                          <Globe className="w-5 h-5 text-emerald-500" />
+                          <span translate="no" className="notranslate"><T>THÔNG BÁO</T></span>
+                        </h3>
+                        {unreadCount > 0 && (
+                          <span className="bg-rose-100 text-rose-700 text-[10px] font-black px-2 py-0.5 rounded-full shrink-0">
+                            <T>MỚI</T> <span translate="no" className="font-mono">{unreadCount}</span>
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {unreadCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const allIds = Array.isArray(systemNotifications) ? systemNotifications.map((n) => n.id) : [];
+                              setReadNotifIds(allIds);
+                              if (onShowToast) onShowToast("Đã đánh dấu đọc tất cả thông báo!", "info");
+                            }}
+                            className="text-blue-600 hover:text-blue-800 text-[11px] font-black transition-colors cursor-pointer px-2 py-1 rounded-lg hover:bg-blue-50 border-none bg-transparent"
+                          >
+                            <T><span translate="no" className="notranslate">ĐỌC TẤT CẢ</span></T>
+                          </button>
+                        )}
+                        <div className="bg-slate-100 px-3 py-1 rounded-full text-slate-600 font-mono text-[10.5px] font-black">
+                          <span translate="no" className="notranslate">{combinedBroadcastsAndNotifications.length} <T>thông báo</T></span>
+                        </div>
                       </div>
                     </div>
 

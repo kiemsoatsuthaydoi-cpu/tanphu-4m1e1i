@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   Award,
   Sparkles,
@@ -134,25 +134,61 @@ export const PersonalContributionTab: React.FC<PersonalContributionTabProps> = (
 
   // --- Achievement Photos (Album Khoảnh Khắc Vinh Danh) ---
   const storageKey = useMemo(() => {
-    const uid = currentUser?.id || currentUser?.phone || "default_user";
+    const uid = currentUser?.id || currentUser?.phone || currentUser?.fullName || "default_user";
     return `tanphu_4m1e1i_achievement_photos_${uid}`;
-  }, [currentUser]);
+  }, [currentUser?.id, currentUser?.phone, currentUser?.fullName]);
 
-  const [photos, setPhotos] = useState<AchievementPhoto[]>(() => {
+  // Load photos helper with fallback migration from legacy keys
+  const loadPhotosFromStorage = useCallback((key: string): AchievementPhoto[] => {
     try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) return JSON.parse(saved);
-    } catch {
-      // ignore
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      // Check legacy/fallback keys if current key is empty
+      const legacyKeys = [
+        "tanphu_4m1e1i_achievement_photos_default_user",
+        "tanphu_4m1e1i_achievement_photos_all",
+        "tanphu_4m1e1i_achievement_photos"
+      ];
+      for (const legacyKey of legacyKeys) {
+        if (legacyKey !== key) {
+          const legacySaved = localStorage.getItem(legacyKey);
+          if (legacySaved) {
+            const parsed = JSON.parse(legacySaved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              // Copy to current user key
+              localStorage.setItem(key, JSON.stringify(parsed));
+              return parsed;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Could not load photos from storage", e);
     }
     return [];
-  });
+  }, []);
 
+  const [photos, setPhotos] = useState<AchievementPhoto[]>(() => loadPhotosFromStorage(storageKey));
+
+  // Reload photos whenever storageKey (e.g. logged-in user) changes
+  useEffect(() => {
+    const loaded = loadPhotosFromStorage(storageKey);
+    setPhotos(loaded);
+  }, [storageKey, loadPhotosFromStorage]);
+
+  // Save photos to storage whenever photos change
   useEffect(() => {
     try {
       localStorage.setItem(storageKey, JSON.stringify(photos));
-    } catch {
-      // ignore
+      // Also sync to global backup key to prevent accidental loss
+      if (photos.length > 0) {
+        localStorage.setItem("tanphu_4m1e1i_achievement_photos_backup", JSON.stringify(photos));
+      }
+    } catch (e) {
+      console.warn("Could not save photos to storage (quota might be full)", e);
     }
   }, [photos, storageKey]);
 
@@ -184,7 +220,7 @@ export const PersonalContributionTab: React.FC<PersonalContributionTabProps> = (
         const img = new window.Image();
         img.onload = () => {
           const canvas = document.createElement("canvas");
-          const MAX_DIM = 1200;
+          const MAX_DIM = 900; // Optimal size for crisp mobile display & fast storage
           let w = img.width;
           let h = img.height;
           if (w > h && w > MAX_DIM) {
@@ -199,7 +235,7 @@ export const PersonalContributionTab: React.FC<PersonalContributionTabProps> = (
           const ctx = canvas.getContext("2d");
           if (ctx) {
             ctx.drawImage(img, 0, 0, w, h);
-            const base64 = canvas.toDataURL("image/jpeg", 0.82);
+            const base64 = canvas.toDataURL("image/jpeg", 0.78);
             setNewPhotoUrl(base64);
           } else {
             setNewPhotoUrl(event.target?.result as string);
@@ -234,7 +270,15 @@ export const PersonalContributionTab: React.FC<PersonalContributionTabProps> = (
       uploadedAt: Date.now()
     };
 
-    setPhotos((prev) => [item, ...prev]);
+    setPhotos((prev) => {
+      const next = [item, ...prev];
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(next));
+      } catch (e) {
+        console.warn("Storage save error:", e);
+      }
+      return next;
+    });
     setIsAddPhotoOpen(false);
     setNewPhotoUrl("");
     setNewPhotoTitle("");
@@ -616,30 +660,30 @@ export const PersonalContributionTab: React.FC<PersonalContributionTabProps> = (
           </div>
 
           {/* Quick Summary Badges - Hàng riêng biệt bên dưới */}
-          <div className="grid grid-cols-4 gap-1.5 sm:gap-2.5 pt-1.5 sm:pt-2.5 border-t border-white/15">
-            <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-xl py-1 px-0.5 sm:py-2 sm:px-1.5 text-center shadow-xs hover:bg-white/15 transition-all">
-              <span className="text-[7px] sm:text-[8.5px] text-slate-300 uppercase font-extrabold block mb-0.5 tracking-tight truncate whitespace-nowrap">
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2.5 pt-2 sm:pt-3 border-t border-white/15">
+            <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-xl py-1.5 px-1 sm:py-2.5 sm:px-2 text-center shadow-xs hover:bg-white/15 transition-all">
+              <span className="text-[10.5px] sm:text-[12px] text-slate-300 uppercase font-extrabold block mb-1 tracking-tight truncate whitespace-nowrap">
                 <T><span translate="no" className="notranslate">Bản tin</span></T>
               </span>
-              <span className="text-[11px] sm:text-sm md:text-base font-black text-white leading-none">{myCreatedReports.length}</span>
+              <span className="text-base sm:text-lg md:text-xl font-black text-white leading-none">{myCreatedReports.length}</span>
             </div>
-            <div className="bg-rose-500/20 backdrop-blur-md border border-rose-500/30 rounded-xl py-1 px-0.5 sm:py-2 sm:px-1.5 text-center shadow-xs hover:bg-rose-500/30 transition-all">
-              <span className="text-[7px] sm:text-[8.5px] text-rose-200 uppercase font-extrabold block mb-0.5 tracking-tight truncate whitespace-nowrap">
+            <div className="bg-rose-500/20 backdrop-blur-md border border-rose-500/30 rounded-xl py-1.5 px-1 sm:py-2.5 sm:px-2 text-center shadow-xs hover:bg-rose-500/30 transition-all">
+              <span className="text-[10.5px] sm:text-[12px] text-rose-200 uppercase font-extrabold block mb-1 tracking-tight truncate whitespace-nowrap">
                 <T><span translate="no" className="notranslate">KPH</span></T>
               </span>
-              <span className="text-[11px] sm:text-sm md:text-base font-black text-rose-300 leading-none">{myKphReports.length}</span>
+              <span className="text-base sm:text-lg md:text-xl font-black text-rose-300 leading-none">{myKphReports.length}</span>
             </div>
-            <div className="bg-emerald-500/20 backdrop-blur-md border border-emerald-500/30 rounded-xl py-1 px-0.5 sm:py-2 sm:px-1.5 text-center shadow-xs hover:bg-emerald-500/30 transition-all">
-              <span className="text-[7px] sm:text-[8.5px] text-emerald-200 uppercase font-extrabold block mb-0.5 tracking-tight truncate whitespace-nowrap">
+            <div className="bg-emerald-500/20 backdrop-blur-md border border-emerald-500/30 rounded-xl py-1.5 px-1 sm:py-2.5 sm:px-2 text-center shadow-xs hover:bg-emerald-500/30 transition-all">
+              <span className="text-[10.5px] sm:text-[12px] text-emerald-200 uppercase font-extrabold block mb-1 tracking-tight truncate whitespace-nowrap">
                 <T><span translate="no" className="notranslate">DSA</span></T>
               </span>
-              <span className="text-[11px] sm:text-sm md:text-base font-black text-emerald-300 leading-none">{myDsaReports.length}</span>
+              <span className="text-base sm:text-lg md:text-xl font-black text-emerald-300 leading-none">{myDsaReports.length}</span>
             </div>
-            <div className="bg-amber-500/20 backdrop-blur-md border border-amber-500/30 rounded-xl py-1 px-0.5 sm:py-2 sm:px-1.5 text-center shadow-xs hover:bg-amber-500/30 transition-all">
-              <span className="text-[7px] sm:text-[8.5px] text-amber-200 uppercase font-extrabold block mb-0.5 tracking-tight truncate whitespace-nowrap">
+            <div className="bg-amber-500/20 backdrop-blur-md border border-amber-500/30 rounded-xl py-1.5 px-1 sm:py-2.5 sm:px-2 text-center shadow-xs hover:bg-amber-500/30 transition-all">
+              <span className="text-[10.5px] sm:text-[12px] text-amber-200 uppercase font-extrabold block mb-1 tracking-tight truncate whitespace-nowrap">
                 <T><span translate="no" className="notranslate">Huy hiệu</span></T>
               </span>
-              <span className="text-[11px] sm:text-sm md:text-base font-black text-amber-300 leading-none">{managementBadges.length}</span>
+              <span className="text-base sm:text-lg md:text-xl font-black text-amber-300 leading-none">{managementBadges.length}</span>
             </div>
           </div>
         </div>
@@ -820,7 +864,7 @@ export const PersonalContributionTab: React.FC<PersonalContributionTabProps> = (
 
       {/* 3. KHỐI 2: CHI TIẾT SỰ CỐ KPH & ĐIỂM SÁNG DSA (TÁCH 2 DÒNG RIÊNG CHỒNG LÊN NHAU) */}
       <div className="grid grid-cols-1 gap-4 sm:gap-6">
-        {/* Card KPH & RRRO */}
+        {/* Card KPH & Rủi ro */}
         <div className="bg-white border border-rose-200/90 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3.5">
           <div className="flex items-center justify-between pb-2.5 border-b border-rose-100">
             <div className="flex items-center gap-2">
@@ -829,7 +873,7 @@ export const PersonalContributionTab: React.FC<PersonalContributionTabProps> = (
               </div>
               <div>
                 <h3 className="text-xs sm:text-sm font-black text-rose-900 uppercase tracking-wide">
-                  <T><span translate="no" className="notranslate">THỐNG KÊ SỰ CỐ KPH & RỦI RO RRRO</span></T>
+                  <T><span translate="no" className="notranslate">THỐNG KÊ SỰ CỐ KPH & RỦI RO</span></T>
                 </h3>
                 <p className="text-[10.5px] sm:text-[11px] text-slate-500">
                   <T><span translate="no" className="notranslate">Các vấn đề không phù hợp bạn đã kịp thời phát hiện & cảnh báo</span></T>
@@ -843,22 +887,22 @@ export const PersonalContributionTab: React.FC<PersonalContributionTabProps> = (
 
           <div className="grid grid-cols-3 gap-2">
             <div className="bg-rose-50/60 border border-rose-200/70 rounded-xl p-2.5 text-center">
-              <span className="text-[8.5px] sm:text-[10px] text-slate-600 font-bold block mb-0.5 truncate whitespace-nowrap">
-                <T><span translate="no" className="notranslate">KPH NỘI BỘ (NB)</span></T>
+              <span className="text-[10.5px] sm:text-xs text-slate-700 font-extrabold block mb-0.5 truncate whitespace-nowrap">
+                <T><span translate="no" className="notranslate">KPH (NB)</span></T>
               </span>
-              <span className="text-base sm:text-lg font-black text-rose-700">{kphInternalCount}</span>
+              <span className="text-lg sm:text-xl font-black text-rose-700 leading-tight block">{kphInternalCount}</span>
             </div>
             <div className="bg-rose-50/60 border border-rose-200/70 rounded-xl p-2.5 text-center">
-              <span className="text-[8.5px] sm:text-[10px] text-slate-600 font-bold block mb-0.5 truncate whitespace-nowrap">
-                <T><span translate="no" className="notranslate">KPH BÊN NGOÀI (BN)</span></T>
+              <span className="text-[10.5px] sm:text-xs text-slate-700 font-extrabold block mb-0.5 truncate whitespace-nowrap">
+                <T><span translate="no" className="notranslate">KPH (BN)</span></T>
               </span>
-              <span className="text-base sm:text-lg font-black text-rose-800">{kphExternalCount}</span>
+              <span className="text-lg sm:text-xl font-black text-rose-800 leading-tight block">{kphExternalCount}</span>
             </div>
             <div className="bg-amber-50/60 border border-amber-200/70 rounded-xl p-2.5 text-center">
-              <span className="text-[8.5px] sm:text-[10px] text-slate-600 font-bold block mb-0.5 truncate whitespace-nowrap">
-                <T><span translate="no" className="notranslate">RỦI RO TIỀM ĂN (RRO)</span></T>
+              <span className="text-[10.5px] sm:text-xs text-slate-700 font-extrabold block mb-0.5 truncate whitespace-nowrap">
+                <T><span translate="no" className="notranslate">RRO</span></T>
               </span>
-              <span className="text-base sm:text-lg font-black text-amber-700">{rroCount}</span>
+              <span className="text-lg sm:text-xl font-black text-amber-700 leading-tight block">{rroCount}</span>
             </div>
           </div>
 
@@ -1021,9 +1065,21 @@ export const PersonalContributionTab: React.FC<PersonalContributionTabProps> = (
       {/* 5. KHỐI 4: KHOẢNH KHẮC & ALBUM ẢNH THÀNH TÍCH */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4">
         <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
-          <div className="p-1.5 sm:p-2 bg-amber-100 text-amber-700 rounded-xl shrink-0">
-            <Camera className="w-4 h-4 sm:w-5 sm:h-5" />
-          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setNewPhotoUrl("");
+              setNewPhotoTitle("");
+              setNewPhotoDate(getTodayFormatted());
+              setNewPhotoNotes("");
+              setNewPhotoBadge("");
+              setIsAddPhotoOpen(true);
+            }}
+            className="p-1.5 sm:p-2 bg-amber-100 hover:bg-amber-200 text-amber-700 hover:text-amber-800 rounded-xl shrink-0 transition-all active:scale-95 cursor-pointer shadow-3xs flex items-center justify-center group"
+            title="Thêm ảnh khoảnh khắc mới"
+          >
+            <Camera className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" />
+          </button>
           <div className="min-w-0 flex-1">
             <h3 className="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-wide">
               <T><span translate="no" className="notranslate">KHOẢNH KHẮC & ALBUM ẢNH THÀNH TÍCH</span></T>
@@ -1067,27 +1123,6 @@ export const PersonalContributionTab: React.FC<PersonalContributionTabProps> = (
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            {/* Nút thêm ảnh dạng ô lưới tiện lợi */}
-            <button
-              type="button"
-              onClick={() => {
-                setNewPhotoUrl("");
-                setNewPhotoTitle("");
-                setNewPhotoDate(getTodayFormatted());
-                setNewPhotoNotes("");
-                setNewPhotoBadge("");
-                setIsAddPhotoOpen(true);
-              }}
-              className="group border-2 border-dashed border-amber-300 hover:border-amber-500 bg-amber-50/40 hover:bg-amber-50 rounded-xl aspect-4/3 flex flex-col items-center justify-center gap-1.5 p-2 transition-all cursor-pointer text-amber-700"
-            >
-              <div className="w-9 h-9 rounded-full bg-amber-100 group-hover:bg-amber-200 flex items-center justify-center text-amber-700 transition-colors shadow-3xs">
-                <Plus className="w-5 h-5 stroke-[2.5]" />
-              </div>
-              <span className="text-[10px] font-bold">
-                <T><span translate="no" className="notranslate">Thêm ảnh mới</span></T>
-              </span>
-            </button>
-
             {filteredPhotos.map((photo) => (
               <div
                 key={photo.id}
