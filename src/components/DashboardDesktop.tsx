@@ -151,6 +151,7 @@ import FirebaseQuotaMonitor from "./FirebaseQuotaMonitor";
 import StatisticsDashboard from "./StatisticsDashboard";
 import ProgressTrackingDashboard from "./ProgressTrackingDashboard";
 import BadgeStatisticsDashboard from "./BadgeStatisticsDashboard";
+import PersonalContributionTab from "./PersonalContributionTab";
 import { compressAvatar, getCategoryFallbackImage } from "../utils/imageProcessor";
 import { findUser, resolveUploaderInfo, resolveBadgeGiverInfo, resolveEvaluatorInfo, resolveSenderInfo, isCurrentUserSender, getDefaultMembersForReport, extractTaggedUserIds } from "../utils/userResolver";
 import CapaManagementHub from "./CapaManagementHub";
@@ -4279,8 +4280,14 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
   // States for inline quality report editing under Trang cá nhân
   const [editingPersonalReportId, setEditingPersonalReportId] = useState<string | null>(null);
   const [editingPersonalReportText, setEditingPersonalReportText] = useState("");
-  // Tab for personal broadcasts vs reports
-  const [personalTab, setPersonalTab] = useState<"4M1E1I" | "SYSTEM">("4M1E1I");
+  // Tab for personal broadcasts vs reports vs my tasks
+  const [personalTab, setPersonalTab] = useState<"4M1E1I" | "MY_TASKS" | "SYSTEM">("4M1E1I");
+  const [personalTaskScope, setPersonalTaskScope] = useState<"ALL" | "CREATED" | "ASSIGNED" | "RESOLVED">("ALL");
+  const [personalTaskStatusFilter, setPersonalTaskStatusFilter] = useState<string>("ALL");
+  const [personalTaskCategoryFilter, setPersonalTaskCategoryFilter] = useState<string>("ALL");
+  const [personalTaskTypeFilter, setPersonalTaskTypeFilter] = useState<string>("ALL");
+  const [personalTaskSearchTerm, setPersonalTaskSearchTerm] = useState<string>("");
+  const [selectedPersonalTaskReport, setSelectedPersonalTaskReport] = useState<QualityReport | null>(null);
 
   useEffect(() => {
     if (currentUser) {
@@ -10272,11 +10279,152 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
 
           {/* TAB 6: CÁ NHÂN (User profile) */}
           {activeTab === "CÁ_NHÂN" && (() => {
-            const myReports = reports.filter(
-              (r) =>
-                !r.isDeleted &&
-                (r.uploaderPhone === currentUser?.phone || r.uploaderName === currentUser?.fullName)
+            const isMyCreated = (r: QualityReport) => {
+              if (!r || r.isDeleted) return false;
+              return (
+                (currentUser?.id && r.uploaderId === currentUser.id) ||
+                (currentUser?.phone && r.uploaderPhone === currentUser.phone) ||
+                (currentUser?.fullName && r.uploaderName?.toLowerCase() === currentUser.fullName.toLowerCase())
+              );
+            };
+
+            const isMyAssigned = (r: QualityReport) => {
+              if (!r || r.isDeleted) return false;
+              const userName = (currentUser?.fullName || "").toLowerCase();
+              const userDept = (currentUser?.department || "").toLowerCase();
+              const userPhone = currentUser?.phone || "";
+              const userId = (currentUser?.id || "").toLowerCase();
+
+              return (r.directives || []).some((d) => {
+                const dText = (d.text || "").toLowerCase();
+                const dAuthor = (d.author || "").toLowerCase();
+                const dAckBy = (d.acknowledgedBy || "").toLowerCase();
+                return (
+                  (userName && (dText.includes(userName) || dAckBy.includes(userName))) ||
+                  (userDept && (dText.includes(userDept) || dAckBy.includes(userDept))) ||
+                  (userId && dText.includes(userId))
+                );
+              });
+            };
+
+            const isMyResolved = (r: QualityReport) => {
+              if (!r || r.isDeleted) return false;
+              const userName = (currentUser?.fullName || "").toLowerCase();
+              const userDept = (currentUser?.department || "").toLowerCase();
+
+              const inResolutions = (r.resolutions || []).some((res) => {
+                const handler = (res.handlerName || "").toLowerCase();
+                const dept = (res.departmentName || "").toLowerCase();
+                return (userName && handler.includes(userName)) || (userDept && dept.includes(userDept));
+              });
+
+              const inReplications = (r.replications || []).some((rep) => {
+                const reg = (rep.registrantName || "").toLowerCase();
+                const dept = (rep.departmentName || "").toLowerCase();
+                return (userName && reg.includes(userName)) || (userDept && dept.includes(userDept));
+              });
+
+              return inResolutions || inReplications;
+            };
+
+            const myReports = reports.filter((r) => isMyCreated(r));
+            const myAllTasks = reports.filter((r) => !r.isDeleted && (isMyCreated(r) || isMyAssigned(r) || isMyResolved(r)));
+            const myBroadcasts = (broadcasts || []).filter(
+              (b) => b.sender === currentUser?.fullName || currentUser?.role === UserRole.ADMIN
             );
+
+            const handleExportPersonalTasksToExcel = async (tasksToExport: QualityReport[]) => {
+              if (!tasksToExport || tasksToExport.length === 0) {
+                onShowToast?.("Không có dữ liệu đầu việc nào để xuất Excel!", "warning");
+                return;
+              }
+
+              try {
+                const workbook = new ExcelJS.Workbook();
+                const worksheet = workbook.addWorksheet("DS Viec Cua Toi");
+
+                worksheet.columns = [
+                  { header: "STT", key: "stt", width: 8 },
+                  { header: "Mã báo cáo", key: "reportCode", width: 16 },
+                  { header: "Phân loại 4M1E1I", key: "category", width: 18 },
+                  { header: "Loại hình", key: "reportType", width: 14 },
+                  { header: "Vai trò của tôi", key: "role", width: 22 },
+                  { header: "Nội dung vấn đề", key: "content", width: 42 },
+                  { header: "Ghi chú bổ sung", key: "notes", width: 26 },
+                  { header: "Chi nhánh / Nhà máy", key: "factory", width: 22 },
+                  { header: "Bộ phận", key: "department", width: 18 },
+                  { header: "Người tạo", key: "uploaderName", width: 20 },
+                  { header: "SĐT Người tạo", key: "uploaderPhone", width: 16 },
+                  { header: "Thời gian (dd/mm/yy)", key: "timestamp", width: 20 },
+                  { header: "Trạng thái", key: "status", width: 18 },
+                  { header: "Số chỉ đạo", key: "directivesCount", width: 14 },
+                  { header: "Số giải pháp", key: "resolutionsCount", width: 14 }
+                ];
+
+                const headerRow = worksheet.getRow(1);
+                headerRow.font = { bold: true, color: { argb: "FFFFFFFF" }, name: "Arial", size: 10 };
+                headerRow.fill = {
+                  type: "pattern",
+                  pattern: "solid",
+                  fgColor: { argb: "FF1E3A8A" }
+                };
+                headerRow.alignment = { vertical: "middle", horizontal: "center" };
+                headerRow.height = 26;
+
+                tasksToExport.forEach((r, idx) => {
+                  const isCreated = isMyCreated(r);
+                  const isAssigned = isMyAssigned(r);
+                  const isResolved = isMyResolved(r);
+                  const roleStr: string[] = [];
+                  if (isCreated) roleStr.push("Người tạo");
+                  if (isAssigned) roleStr.push("Được chỉ đạo");
+                  if (isResolved) roleStr.push("Tham gia GP");
+                  const myRole = roleStr.join(" & ") || "Người liên quan";
+
+                  const hasResolutions = (r.resolutions && r.resolutions.length > 0) || r.qcConfirmed;
+                  const isClosed = r.qcConfirmed;
+                  const statusStr = isClosed ? "Đã đóng hoàn tất" : hasResolutions ? "Đã có giải pháp" : "Đang xử lý";
+
+                  const row = worksheet.addRow({
+                    stt: idx + 1,
+                    reportCode: r.reportCode || r.id.substring(0, 8).toUpperCase(),
+                    category: r.category || "",
+                    reportType: r.reportType || "KPH",
+                    role: myRole,
+                    content: r.content || "",
+                    notes: r.notes || "",
+                    factory: r.factory || "",
+                    department: r.uploaderDepartment || "",
+                    uploaderName: r.uploaderName || "",
+                    uploaderPhone: r.uploaderPhone || "",
+                    timestamp: r.timestamp || "",
+                    status: statusStr,
+                    directivesCount: r.directives?.length || 0,
+                    resolutionsCount: r.resolutions?.length || 0
+                  });
+
+                  row.font = { name: "Arial", size: 9 };
+                  row.alignment = { vertical: "middle", wrapText: true };
+                });
+
+                const buffer = await workbook.xlsx.writeBuffer();
+                const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                const now = new Date();
+                const dd = String(now.getDate()).padStart(2, "0");
+                const mm = String(now.getMonth() + 1).padStart(2, "0");
+                const yy = String(now.getFullYear()).slice(-2);
+                a.download = `Danh_sach_viec_cua_toi_${dd}_${mm}_${yy}.xlsx`;
+                a.click();
+                window.URL.revokeObjectURL(url);
+                onShowToast?.("Đã xuất danh sách việc của bạn ra file Excel thành công! 📊", "success");
+              } catch (err: any) {
+                console.error("Lỗi xuất Excel:", err);
+                onShowToast?.("Không thể xuất file Excel: " + (err.message || "Lỗi không xác định"), "error");
+              }
+            };
             return (
               <div className="space-y-6">
                 {/* Header Banner - White, bright & elegant style */}
@@ -10628,19 +10776,32 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                   </form>
                 </div>
 
-                {/* Redesigned Tabbed Management Area: Personal 4M1E1I Reports & Announcements */}
+                {/* Redesigned Tabbed Management Area: Personal 4M1E1I Reports, My Tasks Table & Announcements */}
                 <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm font-sans w-full space-y-4">
                   <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <button
                         onClick={() => setPersonalTab("4M1E1I")}
-                        className={`px-4 py-2 rounded-lg text-xs font-black tracking-wider uppercase cursor-pointer transition-all ${
+                        className={`px-4 py-2 rounded-lg text-xs font-black tracking-wider uppercase cursor-pointer transition-all flex items-center gap-1.5 ${
                           personalTab === "4M1E1I" 
                             ? "bg-blue-50 text-blue-700 border border-blue-200 shadow-xs" 
                             : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
                         }`}
                       >
-                        <T>BẢN TIN 4M1E1I CỦA BẠN</T> ({myReports.length})
+                        <Award className="w-3.5 h-3.5 text-blue-600" />
+                        <T>ĐÓNG GÓP CỦA TÔI</T> ({myReports.length})
+                      </button>
+
+                      <button
+                        onClick={() => setPersonalTab("MY_TASKS")}
+                        className={`px-4 py-2 rounded-lg text-xs font-black tracking-wider uppercase cursor-pointer transition-all flex items-center gap-1.5 ${
+                          personalTab === "MY_TASKS" 
+                            ? "bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-xs font-bold" 
+                            : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+                        }`}
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5" />
+                        <T>DANH SÁCH CHI TIẾT VIỆC CỦA TÔI</T> ({myAllTasks.length})
                       </button>
                       
                       {currentUser.role === UserRole.ADMIN && (
@@ -10659,120 +10820,856 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                   </div>
 
                   {personalTab === "4M1E1I" ? (
-                    myReports.length === 0 ? (
-                      <div className="py-12 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
-                        <FileText className="w-8 h-8 opacity-40 text-slate-400" />
-                        <span className="text-xs font-bold">
-                          <T>Bạn chưa gửi báo cáo biến động chất lượng 4M1E1I nào.</T>
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {myReports.map((r) => {
-                          const isEditing = editingPersonalReportId === r.id;
-                          return (
-                            <div 
-                              key={r.id} 
-                              className="p-4 bg-slate-50/50 border border-slate-200/80 rounded-xl relative hover:shadow-md transition-all flex flex-col justify-between"
-                            >
-                              <div>
-                                <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2 mb-2">
-                                  <span className="px-2.5 py-0.5 rounded text-[9px] font-black border uppercase tracking-wider text-blue-700 bg-blue-50 border-blue-150">
-                                    {r.category}
-                                  </span>
-                                  <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-mono">
-                                    <span>{r.timestamp}</span>
-                                    <span>•</span>
-                                    <span className={`font-bold ${r.isApproved ? "text-emerald-600" : "text-amber-500"}`}>
-                                      {r.isApproved ? <T>ĐÃ DUYỆT</T> : <T>CHỜ DUYỆT</T>}
-                                    </span>
-                                  </div>
-                                </div>
-                                
-                                {isEditing ? (
-                                  <textarea
-                                    value={editingPersonalReportText}
-                                    onChange={(e) => setEditingPersonalReportText(e.target.value)}
-                                    className="w-full text-xs font-semibold font-sans p-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
-                                    rows={3}
-                                  />
-                                ) : (
-                                  <p className="text-xs text-slate-700 whitespace-pre-wrap font-sans break-words leading-relaxed">
-                                    {(r.content || "").toUpperCase()}
-                                  </p>
-                                )}
-                                
-                                {r.notes && (
-                                  <div className="mt-2 text-[11px] text-slate-500 bg-white border border-slate-100 rounded p-1.5">
-                                    <span className="font-extrabold text-[9px] uppercase text-slate-400 block"><T>GHI CHÚ PHÊ DUYỆT:</T></span>
-                                    {r.notes}
-                                  </div>
-                                )}
-                              </div>
+                    <PersonalContributionTab
+                      currentUser={currentUser}
+                      reports={reports}
+                      users={users}
+                      companies={companies}
+                      branches={branches}
+                      departments={departments}
+                      onSwitchToTasks={() => setPersonalTab("MY_TASKS")}
+                      onUpdateReport={onUpdateReport}
+                      onDeleteReport={onDeleteReport}
+                      onShowToast={onShowToast}
+                    />
+                  ) : personalTab === "MY_TASKS" ? (
+                    // DANH SÁCH CHI TIẾT VIỆC CỦA TÔI
+                    (() => {
+                      // 1. Filter by Scope
+                      const scopedReports = myAllTasks.filter((r) => {
+                        if (personalTaskScope === "CREATED") return isMyCreated(r);
+                        if (personalTaskScope === "ASSIGNED") return isMyAssigned(r);
+                        if (personalTaskScope === "RESOLVED") return isMyResolved(r);
+                        return true; // "ALL"
+                      });
 
-                              <div className="mt-4 pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
-                                {/* Edit or Save Button */}
-                                {isEditing ? (
-                                  <div className="flex items-center gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        if (!editingPersonalReportText.trim()) return;
-                                        if (onUpdateReport) {
-                                          onUpdateReport({
-                                            ...r,
-                                            content: editingPersonalReportText.trim().toUpperCase()
-                                          });
-                                          onShowToast?.("Đã cập nhật nội dung báo cáo thành công! 💾", "success");
-                                        }
-                                        setEditingPersonalReportId(null);
-                                      }}
-                                      className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-xs"
-                                    >
-                                      <T>LƯU</T>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setEditingPersonalReportId(null)}
-                                      className="px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
-                                    >
-                                      <T>HỦY</T>
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEditingPersonalReportId(r.id);
-                                      setEditingPersonalReportText(r.content);
-                                    }}
-                                    className="flex items-center gap-1 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg text-[10px] font-black border border-blue-200 transition-all cursor-pointer"
-                                  >
-                                    <Edit className="w-3 h-3 text-blue-600" />
-                                    <T>SỬA NỘI DUNG</T>
-                                  </button>
-                                )}
+                      // 2. Filter by Status, Category, Type, Search
+                      const filteredMyReports = scopedReports.filter((r) => {
+                        const hasResolutions = (r.resolutions && r.resolutions.length > 0) || r.qcConfirmed;
+                        const isClosed = r.qcConfirmed;
 
-                                {/* Delete Report Button */}
+                        // Status filter
+                        if (personalTaskStatusFilter === "RESOLVED" && !hasResolutions) return false;
+                        if (personalTaskStatusFilter === "IN_PROGRESS" && (hasResolutions || isClosed)) return false;
+                        if (personalTaskStatusFilter === "CLOSED" && !isClosed) return false;
+
+                        // Category filter
+                        if (personalTaskCategoryFilter !== "ALL" && r.category !== personalTaskCategoryFilter) return false;
+
+                        // Type filter
+                        if (personalTaskTypeFilter !== "ALL") {
+                          const rType = r.reportType || "KPH";
+                          if (personalTaskTypeFilter === "KPH" && rType !== "KPH") return false;
+                          if (personalTaskTypeFilter === "DSA" && rType !== "DSA") return false;
+                          if (personalTaskTypeFilter === "OTHER" && (rType === "KPH" || rType === "DSA")) return false;
+                        }
+
+                        // Search term
+                        if (personalTaskSearchTerm.trim()) {
+                          const term = personalTaskSearchTerm.toLowerCase();
+                          const matchContent = (r.content || "").toLowerCase().includes(term);
+                          const matchFactory = (r.factory || "").toLowerCase().includes(term);
+                          const matchDepartment = (r.uploaderDepartment || "").toLowerCase().includes(term);
+                          const matchCategory = (r.category || "").toLowerCase().includes(term);
+                          const matchUploader = (r.uploaderName || "").toLowerCase().includes(term);
+                          const matchId = (r.reportCode || r.id || "").toLowerCase().includes(term);
+                          const matchNotes = (r.notes || "").toLowerCase().includes(term);
+                          if (!matchContent && !matchFactory && !matchDepartment && !matchCategory && !matchUploader && !matchId && !matchNotes) {
+                            return false;
+                          }
+                        }
+                        return true;
+                      });
+
+                      // Counts for quick KPI stats
+                      const countTotal = scopedReports.length;
+                      const countInProgress = scopedReports.filter((r) => !(r.resolutions && r.resolutions.length > 0) && !r.qcConfirmed).length;
+                      const countResolved = scopedReports.filter((r) => (r.resolutions && r.resolutions.length > 0) || r.qcConfirmed).length;
+                      const countClosed = scopedReports.filter((r) => r.qcConfirmed).length;
+                      const countDSA = scopedReports.filter((r) => r.reportType === "DSA").length;
+
+                      const resetFilters = () => {
+                        setPersonalTaskScope("ALL");
+                        setPersonalTaskStatusFilter("ALL");
+                        setPersonalTaskCategoryFilter("ALL");
+                        setPersonalTaskTypeFilter("ALL");
+                        setPersonalTaskSearchTerm("");
+                      };
+
+                      return (
+                        <div className="space-y-4">
+                          {/* Scope Tabs: Tất cả / Tôi tạo / Được chỉ đạo / Tham gia GP */}
+                          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => setPersonalTaskScope("ALL")}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                                  personalTaskScope === "ALL"
+                                    ? "bg-indigo-600 text-white shadow-xs"
+                                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                }`}
+                              >
+                                <ListTodo className="w-3.5 h-3.5" />
+                                <T>Tất cả việc của tôi</T> ({myAllTasks.length})
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setPersonalTaskScope("CREATED")}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                                  personalTaskScope === "CREATED"
+                                    ? "bg-blue-600 text-white shadow-xs"
+                                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                }`}
+                              >
+                                <FileText className="w-3.5 h-3.5" />
+                                <T>Tôi đã tạo</T> ({myReports.length})
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setPersonalTaskScope("ASSIGNED")}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                                  personalTaskScope === "ASSIGNED"
+                                    ? "bg-amber-600 text-white shadow-xs"
+                                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                }`}
+                              >
+                                <Zap className="w-3.5 h-3.5" />
+                                <T>Được chỉ đạo / Phân công</T> ({myAllTasks.filter(isMyAssigned).length})
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setPersonalTaskScope("RESOLVED")}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                                  personalTaskScope === "RESOLVED"
+                                    ? "bg-emerald-600 text-white shadow-xs"
+                                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                }`}
+                              >
+                                <CheckSquare className="w-3.5 h-3.5" />
+                                <T>Tôi tham gia giải pháp</T> ({myAllTasks.filter(isMyResolved).length})
+                              </button>
+                            </div>
+
+                            {/* Export Excel & Reset Buttons */}
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleExportPersonalTasksToExcel(filteredMyReports)}
+                                className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs rounded-lg border border-emerald-200 flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
+                                title="Xuất danh sách đang lọc ra file Excel"
+                              >
+                                <Download className="w-3.5 h-3.5 text-emerald-600" />
+                                <T>Xuất Excel</T>
+                              </button>
+                              {(personalTaskStatusFilter !== "ALL" || personalTaskCategoryFilter !== "ALL" || personalTaskTypeFilter !== "ALL" || personalTaskSearchTerm.trim() !== "" || personalTaskScope !== "ALL") && (
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    if (onDeleteReport) {
-                                      onDeleteReport(r.id, false);
-                                      onShowToast?.("Đã xóa báo cáo 4M1E1I của bạn! 🗑️", "success");
-                                    }
-                                  }}
-                                  className="flex items-center gap-1 px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-[10px] font-black border border-rose-200 transition-all cursor-pointer shadow-xs active:scale-95"
+                                  onClick={resetFilters}
+                                  className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                                  title="Đặt lại tất cả bộ lọc"
                                 >
-                                  <Trash2 className="w-3 h-3" />
-                                  <T>XÓA BÁO CÁO</T>
+                                  <RotateCcw className="w-3 h-3 text-slate-500" />
+                                  <T>Đặt lại</T>
                                 </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* KPI Summary Cards */}
+                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                            <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 flex flex-col justify-between">
+                              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                                <T>Tổng việc</T>
+                              </span>
+                              <div className="flex items-baseline justify-between mt-1">
+                                <span className="text-xl font-black text-slate-800">{countTotal}</span>
+                                <span className="text-[10px] text-slate-400 font-semibold"><T>hồ sơ</T></span>
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    )
+
+                            <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3 flex flex-col justify-between">
+                              <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider">
+                                <T>Đang xử lý</T>
+                              </span>
+                              <div className="flex items-baseline justify-between mt-1">
+                                <span className="text-xl font-black text-amber-800">{countInProgress}</span>
+                                <span className="text-[10px] text-amber-600 font-semibold"><T>chưa GP</T></span>
+                              </div>
+                            </div>
+
+                            <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-3 flex flex-col justify-between">
+                              <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">
+                                <T>Đã có giải pháp</T>
+                              </span>
+                              <div className="flex items-baseline justify-between mt-1">
+                                <span className="text-xl font-black text-emerald-800">{countResolved}</span>
+                                <span className="text-[10px] text-emerald-600 font-semibold"><T>có GP</T></span>
+                              </div>
+                            </div>
+
+                            <div className="bg-blue-50/70 border border-blue-200/80 rounded-xl p-3 flex flex-col justify-between">
+                              <span className="text-[11px] font-bold text-blue-700 uppercase tracking-wider">
+                                <T>Đã đóng hoàn tất</T>
+                              </span>
+                              <div className="flex items-baseline justify-between mt-1">
+                                <span className="text-xl font-black text-blue-800">{countClosed}</span>
+                                <span className="text-[10px] text-blue-600 font-semibold"><T>đã duyệt</T></span>
+                              </div>
+                            </div>
+
+                            <div className="bg-purple-50/70 border border-purple-200/80 rounded-xl p-3 flex flex-col justify-between col-span-2 sm:col-span-1">
+                              <span className="text-[11px] font-bold text-purple-700 uppercase tracking-wider">
+                                <T>Điểm sáng DSA</T>
+                              </span>
+                              <div className="flex items-baseline justify-between mt-1">
+                                <span className="text-xl font-black text-purple-800">{countDSA}</span>
+                                <span className="text-[10px] text-purple-600 font-semibold"><T>cải tiến</T></span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Multi-Filter Bar: Status + Category + Type + Search */}
+                          <div className="bg-slate-50/90 p-3 rounded-xl border border-slate-200/90 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 flex-wrap flex-1">
+                              {/* Status Filter */}
+                              <div className="inline-flex rounded-lg p-0.5 bg-slate-200 border border-slate-300/70 text-xs">
+                                <button
+                                  type="button"
+                                  onClick={() => setPersonalTaskStatusFilter("ALL")}
+                                  className={`px-2.5 py-1 rounded-md font-bold transition-all ${
+                                    personalTaskStatusFilter === "ALL"
+                                      ? "bg-white text-slate-800 shadow-xs"
+                                      : "text-slate-600 hover:text-slate-900"
+                                  }`}
+                                >
+                                  <T>Tất cả</T>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setPersonalTaskStatusFilter("IN_PROGRESS")}
+                                  className={`px-2.5 py-1 rounded-md font-bold transition-all ${
+                                    personalTaskStatusFilter === "IN_PROGRESS"
+                                      ? "bg-amber-500 text-white shadow-xs"
+                                      : "text-slate-600 hover:text-slate-900"
+                                  }`}
+                                >
+                                  <T>Đang xử lý</T>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setPersonalTaskStatusFilter("RESOLVED")}
+                                  className={`px-2.5 py-1 rounded-md font-bold transition-all ${
+                                    personalTaskStatusFilter === "RESOLVED"
+                                      ? "bg-emerald-600 text-white shadow-xs"
+                                      : "text-slate-600 hover:text-slate-900"
+                                  }`}
+                                >
+                                  <T>Có giải pháp</T>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setPersonalTaskStatusFilter("CLOSED")}
+                                  className={`px-2.5 py-1 rounded-md font-bold transition-all ${
+                                    personalTaskStatusFilter === "CLOSED"
+                                      ? "bg-blue-600 text-white shadow-xs"
+                                      : "text-slate-600 hover:text-slate-900"
+                                  }`}
+                                >
+                                  <T>Đã đóng</T>
+                                </button>
+                              </div>
+
+                              {/* Category Filter */}
+                              <select
+                                value={personalTaskCategoryFilter}
+                                onChange={(e) => setPersonalTaskCategoryFilter(e.target.value)}
+                                className="px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-lg text-slate-700 font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              >
+                                <option value="ALL">-- Tất cả 4M1E1I --</option>
+                                <option value="CON NGƯỜI">Con người (Man)</option>
+                                <option value="MÁY MÓC">Máy móc (Machine)</option>
+                                <option value="NGUYÊN VẬT LIỆU">Nguyên vật liệu (Material)</option>
+                                <option value="PHƯƠNG PHÁP">Phương pháp (Method)</option>
+                                <option value="MÔI TRƯỜNG">Môi trường (Environment)</option>
+                                <option value="THÔNG TIN">Thông tin (Information)</option>
+                              </select>
+
+                              {/* Type Filter */}
+                              <select
+                                value={personalTaskTypeFilter}
+                                onChange={(e) => setPersonalTaskTypeFilter(e.target.value)}
+                                className="px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-lg text-slate-700 font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              >
+                                <option value="ALL">-- Tất cả loại hình --</option>
+                                <option value="KPH">Sự cố KPH</option>
+                                <option value="DSA">Điểm sáng DSA</option>
+                                <option value="OTHER">Khác</option>
+                              </select>
+                            </div>
+
+                            {/* Search box */}
+                            <div className="relative w-full md:w-64 shrink-0">
+                              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                              <input
+                                type="text"
+                                value={personalTaskSearchTerm}
+                                onChange={(e) => setPersonalTaskSearchTerm(e.target.value)}
+                                placeholder="Tìm mã, nội dung, bộ phận..."
+                                className="w-full pl-8 pr-7 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 font-sans"
+                              />
+                              {personalTaskSearchTerm && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPersonalTaskSearchTerm("")}
+                                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Table Container */}
+                          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+                            <div className="p-3.5 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2">
+                              <div className="flex items-center gap-2">
+                                <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
+                                <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                                  <T>DANH SÁCH CHI TIẾT VIỆC CỦA TÔI ({filteredMyReports.length})</T>
+                                </h3>
+                              </div>
+                              <span className="text-[11px] text-slate-500 font-medium">
+                                <T>Hiển thị</T> <strong className="text-slate-800">{filteredMyReports.length}</strong> / <strong className="text-slate-600">{scopedReports.length}</strong> <T>báo cáo</T>
+                              </span>
+                            </div>
+
+                            {filteredMyReports.length === 0 ? (
+                              <div className="py-12 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
+                                <FileText className="w-8 h-8 opacity-40 text-slate-400" />
+                                <span className="text-xs font-bold">
+                                  <T>Không tìm thấy báo cáo nào khớp với bộ lọc hiện tại.</T>
+                                </span>
+                                {(personalTaskStatusFilter !== "ALL" || personalTaskCategoryFilter !== "ALL" || personalTaskTypeFilter !== "ALL" || personalTaskSearchTerm.trim() !== "" || personalTaskScope !== "ALL") && (
+                                  <button
+                                    type="button"
+                                    onClick={resetFilters}
+                                    className="mt-2 px-3 py-1 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors cursor-pointer"
+                                  >
+                                    <T>Đặt lại bộ lọc</T>
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse text-xs">
+                                  <thead>
+                                    <tr className="bg-slate-100/80 border-b border-slate-200 text-[10px] font-black text-slate-600 uppercase tracking-wider">
+                                      <th className="py-2.5 px-3">#</th>
+                                      <th className="py-2.5 px-3"><T>MÃ BÁO CÁO</T></th>
+                                      <th className="py-2.5 px-3"><T>PHÂN LOẠI 4M1E1I</T></th>
+                                      <th className="py-2.5 px-3"><T>VAI TRÒ CỦA TÔI</T></th>
+                                      <th className="py-2.5 px-3 min-w-[220px]"><T>NỘI DUNG VẤN ĐỀ</T></th>
+                                      <th className="py-2.5 px-3"><T>NHÀ MÁY / BỘ PHẬN</T></th>
+                                      <th className="py-2.5 px-3"><T>NGÀY GỬI (dd/mm/yy)</T></th>
+                                      <th className="py-2.5 px-3"><T>TIẾN ĐỘ / TRẠNG THÁI</T></th>
+                                      <th className="py-2.5 px-3 text-center"><T>CHỈ ĐẠO & GP</T></th>
+                                      <th className="py-2.5 px-3 text-right"><T>THAO TÁC</T></th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100">
+                                    {filteredMyReports.map((r, index) => {
+                                      const isCreated = isMyCreated(r);
+                                      const isAssigned = isMyAssigned(r);
+                                      const isResolved = isMyResolved(r);
+                                      const hasResolutions = (r.resolutions && r.resolutions.length > 0) || r.qcConfirmed;
+                                      const isClosed = r.qcConfirmed;
+                                      const directivesCount = r.directives?.length || 0;
+                                      const resolutionsCount = r.resolutions?.length || 0;
+
+                                      return (
+                                        <tr key={r.id} className="hover:bg-indigo-50/30 transition-colors">
+                                          {/* STT */}
+                                          <td className="py-2.5 px-3 text-slate-400 font-mono text-[10px]">
+                                            {index + 1}
+                                          </td>
+
+                                          {/* Mã báo cáo & Loại hình */}
+                                          <td className="py-2.5 px-3 whitespace-nowrap">
+                                            <div className="flex items-center gap-1.5">
+                                              <button
+                                                type="button"
+                                                onClick={() => setSelectedPersonalTaskReport(r)}
+                                                className="font-mono font-bold text-blue-700 hover:text-blue-900 hover:underline text-[11px] text-left cursor-pointer"
+                                                title="Xem chi tiết báo cáo"
+                                              >
+                                                {r.reportCode || r.id.substring(0, 8).toUpperCase()}
+                                              </button>
+                                              {r.reportType === "DSA" ? (
+                                                <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-purple-100 text-purple-700 border border-purple-200">
+                                                  DSA
+                                                </span>
+                                              ) : (
+                                                <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-rose-50 text-rose-600 border border-rose-100">
+                                                  KPH
+                                                </span>
+                                              )}
+                                            </div>
+                                          </td>
+
+                                          {/* Phân loại 4M1E1I */}
+                                          <td className="py-2.5 px-3 whitespace-nowrap">
+                                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold border border-blue-200 bg-blue-50 text-blue-700">
+                                              {getCategoryIcon(r.category)}
+                                              <span>{r.category}</span>
+                                            </span>
+                                          </td>
+
+                                          {/* Vai trò của tôi */}
+                                          <td className="py-2.5 px-3 whitespace-nowrap">
+                                            <div className="flex items-center gap-1 flex-wrap">
+                                              {isCreated && (
+                                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                                  <T>Người tạo</T>
+                                                </span>
+                                              )}
+                                              {isAssigned && (
+                                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                                  <T>Được chỉ đạo</T>
+                                                </span>
+                                              )}
+                                              {isResolved && (
+                                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                  <T>Đã đăng GP</T>
+                                                </span>
+                                              )}
+                                              {!isCreated && !isAssigned && !isResolved && (
+                                                <span className="px-1.5 py-0.5 rounded text-[9px] font-medium text-slate-500 bg-slate-100">
+                                                  <T>Liên quan</T>
+                                                </span>
+                                              )}
+                                            </div>
+                                          </td>
+
+                                          {/* Nội dung vấn đề */}
+                                          <td className="py-2.5 px-3">
+                                            <p
+                                              onClick={() => setSelectedPersonalTaskReport(r)}
+                                              className="text-slate-800 font-medium line-clamp-2 leading-relaxed max-w-md cursor-pointer hover:text-blue-700"
+                                              title={r.content}
+                                            >
+                                              {r.content}
+                                            </p>
+                                          </td>
+
+                                          {/* Nhà máy / Bộ phận */}
+                                          <td className="py-2.5 px-3 whitespace-nowrap text-slate-600">
+                                            <span className="font-semibold text-slate-700">{r.factory || "—"}</span>
+                                            {r.uploaderDepartment && (
+                                              <span className="text-slate-400 text-[10px] block">
+                                                {r.uploaderDepartment}
+                                              </span>
+                                            )}
+                                          </td>
+
+                                          {/* Ngày gửi (dd/mm/yy) */}
+                                          <td className="py-2.5 px-3 whitespace-nowrap font-mono text-[10px] text-slate-500">
+                                            {r.timestamp || "—"}
+                                          </td>
+
+                                          {/* Tiến độ / Trạng thái */}
+                                          <td className="py-2.5 px-3 whitespace-nowrap">
+                                            {isClosed ? (
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-200">
+                                                <CheckCircle className="w-3 h-3 text-blue-600" />
+                                                <T>Đã đóng</T>
+                                              </span>
+                                            ) : hasResolutions ? (
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                                <T>Đã có GP</T>
+                                              </span>
+                                            ) : (
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-200">
+                                                <Clock className="w-3 h-3 text-amber-600" />
+                                                <T>Đang xử lý</T>
+                                              </span>
+                                            )}
+                                          </td>
+
+                                          {/* Chỉ đạo & Giải pháp counters */}
+                                          <td className="py-2.5 px-3 whitespace-nowrap text-center">
+                                            <div className="inline-flex items-center gap-1 text-[10px] font-bold">
+                                              <span
+                                                className={`px-1.5 py-0.5 rounded border ${
+                                                  directivesCount > 0
+                                                    ? "bg-amber-50 text-amber-700 border-amber-200"
+                                                    : "bg-slate-50 text-slate-400 border-slate-200"
+                                                }`}
+                                                title={`${directivesCount} chỉ đạo`}
+                                              >
+                                                ⚡ {directivesCount}
+                                              </span>
+                                              <span
+                                                className={`px-1.5 py-0.5 rounded border ${
+                                                  resolutionsCount > 0
+                                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                                    : "bg-slate-50 text-slate-400 border-slate-200"
+                                                }`}
+                                                title={`${resolutionsCount} giải pháp`}
+                                              >
+                                                💡 {resolutionsCount}
+                                              </span>
+                                            </div>
+                                          </td>
+
+                                          {/* Thao tác */}
+                                          <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                                            <div className="flex items-center justify-end gap-1.5">
+                                              {/* Xem chi tiết */}
+                                              <button
+                                                type="button"
+                                                onClick={() => setSelectedPersonalTaskReport(r)}
+                                                className="p-1 text-indigo-600 hover:bg-indigo-50 rounded border border-indigo-200 transition-colors cursor-pointer"
+                                                title="Xem chi tiết báo cáo"
+                                              >
+                                                <Eye className="w-3 h-3" />
+                                              </button>
+
+                                              {/* Sửa (chỉ nếu là người tạo hoặc Admin) */}
+                                              {(isCreated || currentUser?.role === UserRole.ADMIN) && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setEditingPersonalReportId(r.id);
+                                                    setEditingPersonalReportText(r.content);
+                                                    setPersonalTab("4M1E1I");
+                                                  }}
+                                                  className="p-1 text-blue-600 hover:bg-blue-50 rounded border border-blue-200 transition-colors cursor-pointer"
+                                                  title="Sửa nội dung"
+                                                >
+                                                  <Edit className="w-3 h-3" />
+                                                </button>
+                                              )}
+
+                                              {/* Xóa (chỉ nếu là người tạo hoặc Admin) */}
+                                              {(isCreated || currentUser?.role === UserRole.ADMIN) && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    if (onDeleteReport) {
+                                                      onDeleteReport(r.id, false);
+                                                      onShowToast?.("Đã xóa báo cáo 4M1E1I của bạn! 🗑️", "success");
+                                                    }
+                                                  }}
+                                                  className="p-1 text-rose-600 hover:bg-rose-50 rounded border border-rose-200 transition-colors cursor-pointer"
+                                                  title="Xóa báo cáo"
+                                                >
+                                                  <Trash2 className="w-3 h-3" />
+                                                </button>
+                                              )}
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Quick-View Modal for Selected Personal Task Report */}
+                          {selectedPersonalTaskReport && (
+                            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+                              <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                                {/* Modal Header */}
+                                <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between gap-3 shrink-0">
+                                  <div className="flex items-center gap-2.5">
+                                    <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shrink-0">
+                                      <FileSpreadsheet className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                      <div className="flex items-center gap-2">
+                                        <h3 className="text-sm sm:text-base font-black tracking-tight text-white font-mono">
+                                          {selectedPersonalTaskReport.reportCode || selectedPersonalTaskReport.id.substring(0, 8).toUpperCase()}
+                                        </h3>
+                                        <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                                          selectedPersonalTaskReport.reportType === "DSA"
+                                            ? "bg-purple-500/20 text-purple-300 border border-purple-400/30"
+                                            : "bg-rose-500/20 text-rose-300 border border-rose-400/30"
+                                        }`}>
+                                          {selectedPersonalTaskReport.reportType || "KPH"}
+                                        </span>
+                                      </div>
+                                      <p className="text-xs text-slate-300 mt-0.5">
+                                        <T>Chi tiết đầu việc & tiến độ giải quyết 4M1E1I</T>
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedPersonalTaskReport(null)}
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                                  >
+                                    <X className="w-5 h-5" />
+                                  </button>
+                                </div>
+
+                                {/* Modal Body */}
+                                <div className="p-5 overflow-y-auto space-y-5 flex-1 font-sans text-xs">
+                                  {/* Info Badges Grid */}
+                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                                    <div>
+                                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                                        <T>Phân loại 4M1E1I</T>
+                                      </span>
+                                      <div className="flex items-center gap-1.5 mt-1 font-bold text-slate-800">
+                                        {getCategoryIcon(selectedPersonalTaskReport.category)}
+                                        <span>{selectedPersonalTaskReport.category}</span>
+                                      </div>
+                                    </div>
+
+                                    <div>
+                                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                                        <T>Trạng thái</T>
+                                      </span>
+                                      <div className="mt-1">
+                                        {selectedPersonalTaskReport.qcConfirmed ? (
+                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-200">
+                                            <CheckCircle className="w-3 h-3 text-blue-600" />
+                                            <T>Đã đóng hoàn tất</T>
+                                          </span>
+                                        ) : (selectedPersonalTaskReport.resolutions && selectedPersonalTaskReport.resolutions.length > 0) ? (
+                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                            <T>Đã có giải pháp</T>
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-200">
+                                            <Clock className="w-3 h-3 text-amber-600" />
+                                            <T>Đang xử lý</T>
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <div>
+                                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                                        <T>Chi nhánh / Bộ phận</T>
+                                      </span>
+                                      <span className="font-semibold text-slate-800 mt-1 block">
+                                        {selectedPersonalTaskReport.factory || "—"}
+                                        {selectedPersonalTaskReport.uploaderDepartment ? ` / ${selectedPersonalTaskReport.uploaderDepartment}` : ""}
+                                      </span>
+                                    </div>
+
+                                    <div>
+                                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                                        <T>Ngày gửi (dd/mm/yy)</T>
+                                      </span>
+                                      <span className="font-mono text-slate-700 mt-1 block">
+                                        {selectedPersonalTaskReport.timestamp || "—"}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Người gửi */}
+                                  <div className="bg-slate-50/60 p-3 rounded-xl border border-slate-200 flex items-center justify-between flex-wrap gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
+                                        {selectedPersonalTaskReport.uploaderName ? selectedPersonalTaskReport.uploaderName.charAt(0).toUpperCase() : "U"}
+                                      </div>
+                                      <div>
+                                        <span className="font-bold text-slate-800 block text-xs">
+                                          {selectedPersonalTaskReport.uploaderName || "Người dùng"}
+                                        </span>
+                                        <span className="text-[10px] text-slate-500 font-mono">
+                                          {selectedPersonalTaskReport.uploaderPhone || "—"}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                                      <T>Tác giả báo cáo</T>
+                                    </span>
+                                  </div>
+
+                                  {/* Nội dung vấn đề */}
+                                  <div>
+                                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                                      <FileText className="w-3.5 h-3.5 text-blue-600" />
+                                      <T>Nội dung chi tiết biến động / sự cố</T>
+                                    </h4>
+                                    <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-slate-800 leading-relaxed whitespace-pre-wrap">
+                                      {selectedPersonalTaskReport.content}
+                                    </div>
+                                  </div>
+
+                                  {/* Ghi chú bổ sung (nếu có) */}
+                                  {selectedPersonalTaskReport.notes && (
+                                    <div>
+                                      <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                                        <Info className="w-3.5 h-3.5 text-slate-500" />
+                                        <T>Ghi chú bổ sung</T>
+                                      </h4>
+                                      <div className="p-3 bg-amber-50/50 rounded-xl border border-amber-200/80 text-amber-900 leading-relaxed whitespace-pre-wrap text-xs">
+                                        {selectedPersonalTaskReport.notes}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Hình ảnh đính kèm (nếu có) */}
+                                  {(() => {
+                                    const images = (selectedPersonalTaskReport.imageUrls && selectedPersonalTaskReport.imageUrls.length > 0)
+                                      ? selectedPersonalTaskReport.imageUrls
+                                      : (selectedPersonalTaskReport.imageUrl ? [selectedPersonalTaskReport.imageUrl] : []);
+                                    if (images.length === 0) return null;
+                                    return (
+                                      <div>
+                                        <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                          <ImageIcon className="w-3.5 h-3.5 text-blue-600" />
+                                          <T>Hình ảnh đính kèm</T>
+                                        </h4>
+                                        <div className="flex flex-wrap gap-2.5">
+                                          {images.filter(Boolean).map((imgUrl: string, idx: number) => (
+                                            <a
+                                              key={idx}
+                                              href={imgUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="block w-24 h-24 rounded-lg overflow-hidden border border-slate-200 hover:opacity-90 transition-opacity relative group"
+                                            >
+                                              <img
+                                                src={imgUrl}
+                                                alt={`Ảnh đính kèm ${idx + 1}`}
+                                                className="w-full h-full object-cover"
+                                                referrerPolicy="no-referrer"
+                                              />
+                                              <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                                                <ExternalLink className="w-4 h-4" />
+                                              </div>
+                                            </a>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
+
+                                  {/* Danh sách Chỉ đạo (Directives) */}
+                                  <div>
+                                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 flex items-center justify-between">
+                                      <span className="flex items-center gap-1.5">
+                                        <Zap className="w-3.5 h-3.5 text-amber-600" />
+                                        <T>Ý kiến chỉ đạo từ Ban Giám đốc / Quản lý</T> ({selectedPersonalTaskReport.directives?.length || 0})
+                                      </span>
+                                    </h4>
+                                    {(!selectedPersonalTaskReport.directives || selectedPersonalTaskReport.directives.length === 0) ? (
+                                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-400 text-center italic">
+                                        <T>Chưa có ý kiến chỉ đạo nào cho báo cáo này.</T>
+                                      </div>
+                                    ) : (
+                                      <div className="space-y-2">
+                                        {selectedPersonalTaskReport.directives.map((d: any, dIdx: number) => (
+                                          <div key={dIdx} className="p-3 bg-amber-50/60 border border-amber-200/80 rounded-xl space-y-1.5">
+                                            <div className="flex items-center justify-between text-[11px] font-bold text-amber-900">
+                                              <span className="flex items-center gap-1">
+                                                <Crown className="w-3 h-3 text-amber-600" />
+                                                {d.author || <T>Cấp Quản lý</T>}
+                                              </span>
+                                              <span className="font-mono text-amber-700 text-[10px]">
+                                                {d.timestamp || "dd/mm/yy"}
+                                              </span>
+                                            </div>
+                                            <p className="text-slate-800 leading-relaxed whitespace-pre-wrap">
+                                              {d.text}
+                                            </p>
+                                            {d.acknowledgedBy && (
+                                              <div className="text-[10px] text-slate-500 pt-1 border-t border-amber-200/50 flex items-center gap-1">
+                                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                                <T>Đã xác nhận:</T> <strong className="text-slate-700">{d.acknowledgedBy}</strong>
+                                              </div>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Danh sách Giải pháp (Resolutions) */}
+                                  <div>
+                                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 flex items-center justify-between">
+                                      <span className="flex items-center gap-1.5">
+                                        <CheckSquare className="w-3.5 h-3.5 text-emerald-600" />
+                                        <T>Giải pháp khắc phục & phòng ngừa</T> ({selectedPersonalTaskReport.resolutions?.length || 0})
+                                      </span>
+                                    </h4>
+                                    {(!selectedPersonalTaskReport.resolutions || selectedPersonalTaskReport.resolutions.length === 0) ? (
+                                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-400 text-center italic">
+                                        <T>Chưa có giải pháp nào được đăng ký cho sự cố này.</T>
+                                      </div>
+                                    ) : (
+                                      <div className="space-y-2">
+                                        {selectedPersonalTaskReport.resolutions.map((res: any, resIdx: number) => (
+                                          <div key={resIdx} className="p-3 bg-emerald-50/60 border border-emerald-200/80 rounded-xl space-y-1.5">
+                                            <div className="flex items-center justify-between text-[11px] font-bold text-emerald-900">
+                                              <span className="flex items-center gap-1">
+                                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                                {res.handlerName || <T>Người xử lý</T>} {res.departmentName ? `(${res.departmentName})` : ""}
+                                              </span>
+                                              <span className="font-mono text-emerald-700 text-[10px]">
+                                                {res.updatedAt || "dd/mm/yy"}
+                                              </span>
+                                            </div>
+                                            <p className="text-slate-800 leading-relaxed whitespace-pre-wrap">
+                                              {res.resultText || ""}
+                                            </p>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Modal Footer */}
+                                <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0">
+                                  <div className="text-[11px] text-slate-500 font-mono">
+                                    ID: {selectedPersonalTaskReport.id}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    {isMyCreated(selectedPersonalTaskReport) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const rep = selectedPersonalTaskReport;
+                                          setSelectedPersonalTaskReport(null);
+                                          setEditingPersonalReportId(rep.id);
+                                          setEditingPersonalReportText(rep.content);
+                                          setPersonalTab("4M1E1I");
+                                        }}
+                                        className="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold text-xs rounded-lg border border-blue-200 transition-colors flex items-center gap-1 cursor-pointer"
+                                      >
+                                        <Edit className="w-3.5 h-3.5" />
+                                        <T>Sửa nội dung</T>
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedPersonalTaskReport(null)}
+                                      className="px-4 py-1.5 bg-slate-800 text-white font-bold text-xs rounded-lg hover:bg-slate-900 transition-colors cursor-pointer"
+                                    >
+                                      <T>Đóng</T>
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()
                   ) : (
                     // Admin Announcements list
                     myBroadcasts.length === 0 ? (

@@ -405,6 +405,84 @@ export const initialReports: QualityReport[] = [
     isSpotlight: false,
     reportType: "KPH",
     notes: "Mẫu không đạt chất lượng kiểm định ngoại quan ngoại quan bình."
+  },
+  {
+    id: "R-8",
+    factory: "Văn Phòng Công Ty (TPP-CTY)",
+    timestamp: "09:30:00 10/06/2026",
+    category: "PHƯƠNG PHÁP",
+    content: "Ban hành và chuẩn hóa quy trình kiểm soát thay đổi 4M1E1I trên toàn bộ các cụm nhà máy Tân Phú và DNP.",
+    imageUrl: svgMethodIcon,
+    compressedSizeKb: 145,
+    originalSizeKb: 360,
+    uploaderName: "Lê Nhật Trường",
+    uploaderPhone: "0907767304",
+    uploaderId: "2018.00281",
+    uploaderDepartment: "Phòng Quản Lý Chất Lượng (TPP-CTY)",
+    isAbnormal: false,
+    isSpotlight: true,
+    reportType: "DSA",
+    notes: "Đã truyền thông và gửi tài liệu hướng dẫn đến toàn thể cán bộ quản lý.",
+    resolutions: [
+      {
+        id: "res-r8-1",
+        departmentName: "Phòng Quản Lý Chất Lượng (TPP-CTY)",
+        handlerName: "Lê Nhật Trường",
+        status: "Đã xử lý",
+        resultText: "Hoàn tất tài liệu và video đào tạo trực tuyến 4M1E1I.",
+        updatedAt: "11:00:00 11/06/2026"
+      }
+    ],
+    qcConfirmed: true,
+    qcConfirmedBy: "Lê Nhật Trường",
+    qcConfirmedAt: "11:30:00 11/06/2026"
+  },
+  {
+    id: "R-9",
+    factory: "Chi Nhánh Long An (TPP-LAN)",
+    timestamp: "14:15:20 12/06/2026",
+    category: "MÁY MÓC",
+    content: "Đánh giá nghiệm thu và hiệu chuẩn cánh tay robot gắp sản phẩm tự động chuyền ép 02.",
+    imageUrl: svgMachineIcon,
+    compressedSizeKb: 160,
+    originalSizeKb: 410,
+    uploaderName: "Lê Nhật Trường",
+    uploaderPhone: "0907767304",
+    uploaderId: "2018.00281",
+    uploaderDepartment: "Phòng Quản Lý Chất Lượng (TPP-CTY)",
+    isAbnormal: false,
+    isSpotlight: false,
+    reportType: "NORMAL",
+    notes: "Đạt độ chính xác 99.8%, chuẩn bị áp dụng nhân rộng.",
+    resolutions: [
+      {
+        id: "res-r9-1",
+        departmentName: "Phòng Kỹ Thuật (TPP-LAN)",
+        handlerName: "Lê Nhật Trường",
+        status: "Đang xử lý",
+        resultText: "Theo dõi chạy thử liên tục trong 72 giờ ca sản xuất.",
+        updatedAt: "16:00:00 12/06/2026"
+      }
+    ]
+  },
+  {
+    id: "R-10",
+    factory: "Chi Nhánh Bắc Ninh (TPP-BNI)",
+    timestamp: "08:45:10 15/06/2026",
+    category: "CON NGƯỜI",
+    content: "Kiểm tra chéo và tập huấn an toàn 5S - nhận diện điểm nguy cơ biến động nhân sự ca đêm.",
+    imageUrl: svgManIcon,
+    compressedSizeKb: 138,
+    originalSizeKb: 350,
+    uploaderName: "Lê Nhật Trường",
+    uploaderPhone: "0907767304",
+    uploaderId: "2018.00281",
+    uploaderDepartment: "Phòng Quản Lý Chất Lượng (TPP-CTY)",
+    isAbnormal: true,
+    isSpotlight: false,
+    reportType: "KPH",
+    notes: "Cần phân bổ thêm 2 giám sát viên hỗ trợ ca 3.",
+    resolutions: []
   }
 ];
 

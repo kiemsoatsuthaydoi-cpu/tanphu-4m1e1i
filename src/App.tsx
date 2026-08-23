@@ -576,8 +576,15 @@ export default function App() {
 
   const [reports, setReports] = useState<QualityReport[]>(() => {
     const saved = safeGetItem("4m1e1i_reports");
-    const loadedReports = safeParseJSON(saved, initialReports);
-    const mapped = loadedReports.map((r: QualityReport) => {
+    const loadedReports: QualityReport[] = safeParseJSON(saved, initialReports);
+    const existingIds = new Set((loadedReports || []).map((r: QualityReport) => r.id));
+    const mergedList = [...(loadedReports || [])];
+    initialReports.forEach((initR) => {
+      if (!existingIds.has(initR.id)) {
+        mergedList.push(initR);
+      }
+    });
+    const mapped = mergedList.map((r: QualityReport) => {
       let dept = r.uploaderDepartment || "";
       dept = dept.replace(/Quản\s+lí/gi, "Quản Lý").replace(/quản\s+lí/gi, "Quản Lý").replace(/Lí\s+Chất\s+Lượng/gi, "Lý Chất Lượng").replace(/lí\s+chất\s+lượng/gi, "Lý Chất Lượng");
       return {
