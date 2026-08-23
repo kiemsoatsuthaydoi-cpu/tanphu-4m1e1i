@@ -241,130 +241,143 @@ export default function ProgressTrackingDashboard({
   return (
     <div className="space-y-6 pb-12">
       {/* 1. Header Banner */}
-      <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-800 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
-        <div className="absolute right-0 top-0 w-96 h-96 bg-white/5 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full text-xs font-semibold backdrop-blur-md mb-2">
-              <TrendingUp className="w-3.5 h-3.5 text-sky-300" />
-              <T><span translate="no" className="notranslate">GIÁM SÁT TIẾN ĐỘ CẢI TIẾN 4M1E1I & CAPA</span></T>
-            </div>
-            <h2 className="text-xl md:text-2xl font-black tracking-tight">
+      <div className={`flex items-center justify-between gap-2 sm:gap-3.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-800 text-white ${
+        isMobile ? "p-2.5" : "p-2.5 sm:p-5"
+      } rounded-2xl shadow-lg border border-blue-400/30 overflow-hidden relative`}>
+        <div className="absolute right-0 top-0 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none -mr-16 -mt-16"></div>
+        <div className="relative z-10 flex items-center gap-2 sm:gap-3.5 min-w-0 flex-1">
+          <div className="p-1.5 sm:p-3 bg-white/20 rounded-xl border border-white/30 text-white shadow-inner shrink-0">
+            <TrendingUp className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-[10px] sm:text-sm md:text-base lg:text-lg font-black tracking-tight uppercase text-white leading-tight truncate">
               <T><span translate="no" className="notranslate">BẢNG TIẾN ĐỘ CẢI TIẾN & KHẮC PHỤC CHẤT LƯỢNG</span></T>
             </h2>
-            <p className="text-blue-100 text-xs md:text-sm mt-1 max-w-2xl font-normal leading-relaxed">
-              <T><span translate="no" className="notranslate">Theo dõi tỷ lệ giải quyết bất thường, tiến độ đóng hành động khắc phục phòng ngừa và phân bổ giải pháp 4M1E1I theo thời gian thực.</span></T>
+            <p className="text-[8.5px] sm:text-xs text-blue-100/90 mt-0.5 leading-snug truncate">
+              <T><span translate="no" className="notranslate">Theo dõi tỷ lệ giải quyết bất thường, tiến độ đóng hành động khắc phục phòng ngừa</span></T>
             </p>
           </div>
+        </div>
 
-          <div className="flex items-center gap-3 self-start md:self-auto">
-            <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-xl border border-white/15 text-center">
-              <div className="text-xs text-blue-200 uppercase font-bold tracking-wider">
-                <T><span translate="no" className="notranslate">TỶ LỆ CẢI TIẾN</span></T>
-              </div>
-              <div className="text-2xl font-black font-mono text-emerald-300 mt-0.5">
-                {metrics.resolutionRate}%
-              </div>
+        <div className="relative z-10 flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="bg-white/15 backdrop-blur-md px-2 py-1 sm:px-3.5 sm:py-2 rounded-xl border border-white/25 text-center min-w-[58px] sm:min-w-[80px]">
+            <div className="text-[8px] sm:text-[10.5px] text-blue-100 uppercase font-bold tracking-wider whitespace-nowrap leading-none">
+              <T><span translate="no" className="notranslate">TỶ LỆ CẢI TIẾN</span></T>
+            </div>
+            <div className="text-xs sm:text-lg font-black font-mono text-emerald-300 leading-tight mt-0.5">
+              {metrics.resolutionRate}%
             </div>
           </div>
         </div>
       </div>
 
-      {/* 2. Top Summary KPI Cards */}
-      <div className={`grid gap-3.5 ${isMobile ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"}`}>
+      {/* 2. Top Summary KPI Cards (Strictly 2 cards per row on mobile, 4-col on desktop) */}
+      <div className={`grid ${isMobile ? "grid-cols-2" : "grid-cols-2 lg:grid-cols-4"} gap-2.5 sm:gap-3.5 select-none`}>
         {/* Card 1: Tổng phát sinh */}
         <div 
           onClick={() => setSelectedStatus("ALL")}
-          className={`bg-white p-4 rounded-xl border transition-all cursor-pointer shadow-xs flex items-center justify-between ${
-            selectedStatus === "ALL" ? "ring-2 ring-blue-500/40 border-blue-400 bg-blue-50/20" : "border-slate-200 hover:border-slate-300"
+          className={`bg-gradient-to-br from-blue-50 via-white to-blue-100/50 p-2.5 sm:p-3.5 rounded-2xl border transition-all cursor-pointer shadow-2xs flex flex-col justify-between gap-1.5 min-w-0 ${
+            selectedStatus === "ALL" 
+              ? "ring-2 ring-blue-500/50 border-blue-400 shadow-xs" 
+              : "border-blue-200/80 hover:border-blue-300"
           }`}
         >
-          <div>
-            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              <T><span translate="no" className="notranslate">TỔNG BIẾN ĐỘNG / KPH</span></T>
-            </div>
-            <div className="text-2xl font-black font-mono text-slate-800 mt-1">
-              {metrics.total}
-            </div>
-            <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-1 flex-wrap">
-              <span>Bất thường:</span>
-              <span className="font-bold text-rose-600">{metrics.abnormalCount}</span>
-              <span className="mx-1">•</span>
-              <span>Điểm sáng:</span>
-              <span className="font-bold text-emerald-600">{metrics.spotlightCount}</span>
+          <div className="flex items-center justify-between gap-1 min-w-0">
+            <p className="text-[10px] sm:text-[11px] font-extrabold text-blue-800 uppercase tracking-tight truncate">
+              <T><span translate="no" className="notranslate">TỔNG BIẾN ĐỘNG</span></T>
+            </p>
+            <div className="p-1 sm:p-1.5 bg-blue-500/20 text-blue-700 rounded-lg border border-blue-300 shrink-0">
+              <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="w-11 h-11 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 shrink-0">
-            <FileText className="w-5 h-5" />
+          <div className="flex items-baseline justify-between gap-1 mt-0.5 min-w-0">
+            <h3 className="text-lg sm:text-2xl font-black text-blue-900 leading-none shrink-0">
+              <span translate="no" className="notranslate">{metrics.total}</span>
+            </h3>
+            <p className="text-[9px] sm:text-[10.5px] text-blue-700/80 font-bold truncate text-right">
+              <T><span translate="no" className="notranslate">Tổng vụ việc</span></T>
+            </p>
           </div>
         </div>
 
         {/* Card 2: Đã có giải pháp cải tiến */}
         <div 
           onClick={() => setSelectedStatus(selectedStatus === "RESOLVED" ? "ALL" : "RESOLVED")}
-          className={`bg-white p-4 rounded-xl border transition-all cursor-pointer shadow-xs flex items-center justify-between ${
-            selectedStatus === "RESOLVED" ? "ring-2 ring-emerald-500/40 border-emerald-400 bg-emerald-50/20" : "border-slate-200 hover:border-slate-300"
+          className={`bg-gradient-to-br from-emerald-50 via-white to-emerald-100/50 p-2.5 sm:p-3.5 rounded-2xl border transition-all cursor-pointer shadow-2xs flex flex-col justify-between gap-1.5 min-w-0 ${
+            selectedStatus === "RESOLVED" 
+              ? "ring-2 ring-emerald-500/50 border-emerald-400 shadow-xs" 
+              : "border-emerald-200/80 hover:border-emerald-300"
           }`}
         >
-          <div>
-            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              <T><span translate="no" className="notranslate">ĐÃ CÓ GIẢI PHÁP / CẢI TIẾN</span></T>
-            </div>
-            <div className="text-2xl font-black font-mono text-emerald-600 mt-1">
-              {metrics.resolvedCount}
-            </div>
-            <div className="text-[11px] text-emerald-600 mt-1 font-semibold">
-              {metrics.resolutionRate}% tổng số vụ việc
+          <div className="flex items-center justify-between gap-1 min-w-0">
+            <p className="text-[10px] sm:text-[11px] font-extrabold text-emerald-800 uppercase tracking-tight truncate">
+              <T><span translate="no" className="notranslate">ĐÃ CÓ GIẢI PHÁP</span></T>
+            </p>
+            <div className="p-1 sm:p-1.5 bg-emerald-500/20 text-emerald-700 rounded-lg border border-emerald-300 shrink-0">
+              <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="w-11 h-11 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600 shrink-0">
-            <CheckCircle2 className="w-5 h-5" />
+          <div className="flex items-baseline justify-between gap-1 mt-0.5 min-w-0">
+            <h3 className="text-lg sm:text-2xl font-black text-emerald-900 leading-none shrink-0">
+              <span translate="no" className="notranslate">{metrics.resolvedCount}</span>
+            </h3>
+            <p className="text-[9px] sm:text-[10.5px] text-emerald-700/80 font-bold truncate text-right">
+              <span translate="no" className="notranslate">{metrics.resolutionRate}%</span> <T><span translate="no" className="notranslate">tiến độ</span></T>
+            </p>
           </div>
         </div>
 
         {/* Card 3: Đã đóng & Nghiệm thu */}
         <div 
           onClick={() => setSelectedStatus(selectedStatus === "CLOSED" ? "ALL" : "CLOSED")}
-          className={`bg-white p-4 rounded-xl border transition-all cursor-pointer shadow-xs flex items-center justify-between ${
-            selectedStatus === "CLOSED" ? "ring-2 ring-indigo-500/40 border-indigo-400 bg-indigo-50/20" : "border-slate-200 hover:border-slate-300"
+          className={`bg-gradient-to-br from-indigo-50 via-white to-indigo-100/50 p-2.5 sm:p-3.5 rounded-2xl border transition-all cursor-pointer shadow-2xs flex flex-col justify-between gap-1.5 min-w-0 ${
+            selectedStatus === "CLOSED" 
+              ? "ring-2 ring-indigo-500/50 border-indigo-400 shadow-xs" 
+              : "border-indigo-200/80 hover:border-indigo-300"
           }`}
         >
-          <div>
-            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              <T><span translate="no" className="notranslate">ĐÃ NGHIỆM THU ĐẠT CHUẨN</span></T>
-            </div>
-            <div className="text-2xl font-black font-mono text-indigo-600 mt-1">
-              {metrics.closedCount}
-            </div>
-            <div className="text-[11px] text-indigo-600 mt-1 font-semibold">
-              {metrics.closedRate}% hoàn thành toàn diện
+          <div className="flex items-center justify-between gap-1 min-w-0">
+            <p className="text-[10px] sm:text-[11px] font-extrabold text-indigo-800 uppercase tracking-tight truncate">
+              <T><span translate="no" className="notranslate">ĐÃ NGHIỆM THU</span></T>
+            </p>
+            <div className="p-1 sm:p-1.5 bg-indigo-500/20 text-indigo-700 rounded-lg border border-indigo-300 shrink-0">
+              <ShieldCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="w-11 h-11 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 shrink-0">
-            <ShieldCheck className="w-5 h-5" />
+          <div className="flex items-baseline justify-between gap-1 mt-0.5 min-w-0">
+            <h3 className="text-lg sm:text-2xl font-black text-indigo-900 leading-none shrink-0">
+              <span translate="no" className="notranslate">{metrics.closedCount}</span>
+            </h3>
+            <p className="text-[9px] sm:text-[10.5px] text-indigo-700/80 font-bold truncate text-right">
+              <span translate="no" className="notranslate">{metrics.closedRate}%</span> <T><span translate="no" className="notranslate">hoàn thành</span></T>
+            </p>
           </div>
         </div>
 
         {/* Card 4: Đang chờ xử lý / Cần hành động */}
         <div 
           onClick={() => setSelectedStatus(selectedStatus === "IN_PROGRESS" ? "ALL" : "IN_PROGRESS")}
-          className={`bg-white p-4 rounded-xl border transition-all cursor-pointer shadow-xs flex items-center justify-between ${
-            selectedStatus === "IN_PROGRESS" ? "ring-2 ring-amber-500/40 border-amber-400 bg-amber-50/20" : "border-slate-200 hover:border-slate-300"
+          className={`bg-gradient-to-br from-amber-50 via-white to-amber-100/50 p-2.5 sm:p-3.5 rounded-2xl border transition-all cursor-pointer shadow-2xs flex flex-col justify-between gap-1.5 min-w-0 ${
+            selectedStatus === "IN_PROGRESS" 
+              ? "ring-2 ring-amber-500/50 border-amber-400 shadow-xs" 
+              : "border-amber-200/80 hover:border-amber-300"
           }`}
         >
-          <div>
-            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              <T><span translate="no" className="notranslate">ĐANG CHỜ HÀNH ĐỘNG</span></T>
-            </div>
-            <div className="text-2xl font-black font-mono text-amber-600 mt-1">
-              {metrics.pendingCount}
-            </div>
-            <div className="text-[11px] text-amber-600 mt-1 font-semibold">
-              Cần thúc đẩy giải pháp khắc phục
+          <div className="flex items-center justify-between gap-1 min-w-0">
+            <p className="text-[10px] sm:text-[11px] font-extrabold text-amber-800 uppercase tracking-tight truncate">
+              <T><span translate="no" className="notranslate">CHỜ HÀNH ĐỘNG</span></T>
+            </p>
+            <div className="p-1 sm:p-1.5 bg-amber-500/20 text-amber-700 rounded-lg border border-amber-300 shrink-0">
+              <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="w-11 h-11 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600 shrink-0">
-            <Clock className="w-5 h-5" />
+          <div className="flex items-baseline justify-between gap-1 mt-0.5 min-w-0">
+            <h3 className="text-lg sm:text-2xl font-black text-amber-900 leading-none shrink-0">
+              <span translate="no" className="notranslate">{metrics.pendingCount}</span>
+            </h3>
+            <p className="text-[9px] sm:text-[10.5px] text-amber-700/80 font-bold truncate text-right">
+              <T><span translate="no" className="notranslate">Cần xử lý</span></T>
+            </p>
           </div>
         </div>
       </div>

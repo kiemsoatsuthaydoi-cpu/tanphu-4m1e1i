@@ -4897,6 +4897,9 @@ export default function App() {
             onUpdateMobileUIConfig={handleUpdateMobileUIConfig}
             onLogout={() => setCurrentUser(null)}
             branches={branches}
+            departments={departments}
+            onUpdateUser={handleUpdateUser}
+            onShowToast={showToast}
             onManualRefresh={syncFromDb}
             users={users}
             companies={companies}
@@ -5138,6 +5141,9 @@ export default function App() {
                 onUpdateMobileUIConfig={handleUpdateMobileUIConfig}
                 onLogout={() => setCurrentUser(null)}
                 branches={branches}
+                departments={departments}
+                onUpdateUser={handleUpdateUser}
+                onShowToast={showToast}
                 onManualRefresh={syncFromDb}
                 users={users}
                 companies={companies}
@@ -5230,6 +5236,9 @@ export default function App() {
                 onUpdateMobileUIConfig={handleUpdateMobileUIConfig}
                 onLogout={() => setCurrentUser(null)}
                 branches={branches}
+                departments={departments}
+                onUpdateUser={handleUpdateUser}
+                onShowToast={showToast}
                 onManualRefresh={syncFromDb}
                 users={users}
                 companies={companies}

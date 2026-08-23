@@ -1,4 +1,5 @@
 import { UserRole } from "../types";
+import { parseReportTimestamp } from "./notificationHelper";
 
 export const isSameBranchOrFactory = (branchA?: string, branchB?: string): boolean => {
   if (!branchA || !branchB) return false;
@@ -347,5 +348,150 @@ export const formatNameCapitalized = (str: string | undefined | null): string =>
     })
     .join(" ");
 };
+
+/**
+ * Kiểm tra xem bản tin có nằm trong giới hạn 15 ngày kể từ ngày tạo hay không.
+ */
+export const isReportWithin15Days = (timestamp?: string): boolean => {
+  if (!timestamp) return true;
+  const reportDate = parseReportTimestamp(timestamp);
+  const now = new Date();
+  const diffMs = now.getTime() - reportDate.getTime();
+  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+  return diffDays <= 15;
+};
+
+/**
+ * Kiểm tra quyền Chỉnh sửa bản tin 4M1E1I:
+ * 1. Admin / Ban TGĐ: Luôn được sửa (không giới hạn 15 ngày).
+ * 2. Duyệt viên (Reviewer / canSpeciallyEditDelete) thuộc cùng chi nhánh/nhà máy:
+ *    CHỈ ĐƯỢC SỬA trong vòng 15 ngày kể từ ngày tạo bản tin. Sau 15 ngày -> ẩn/từ chối quyền.
+ * 3. Người đăng tin (Uploader):
+ *    - Cho phép sửa trong vòng 5 phút (nếu trên mobile) hoặc 15 ngày (nếu desktop), nhưng không được vượt quá 15 ngày.
+ */
+export const canUserEditReport = (
+  currentUser: any,
+  report: { timestamp?: string; factory?: string; uploaderId?: string; uploaderName?: string; uploaderPhone?: string },
+  options: { isMobile?: boolean } = {}
+): boolean => {
+  if (!currentUser || !report) return false;
+
+  const roleUpper = (currentUser.role || "").toString().toUpperCase();
+  const isAdmin =
+    roleUpper === "CHỦ ADMIN" ||
+    roleUpper === "ADMIN" ||
+    currentUser.role === UserRole.ADMIN;
+
+  // 1. Admin luôn có toàn quyền
+  if (isAdmin) return true;
+
+  // Kiểm tra thời hạn 15 ngày kể từ ngày tạo bản tin
+  const within15Days = isReportWithin15Days(report.timestamp);
+
+  // Nếu đã quá 15 ngày -> Duyệt viên và Người dùng thông thường đều KHÔNG ĐƯỢC SỬA (ẨN CHỨC NĂNG)
+  if (!within15Days) {
+    return false;
+  }
+
+  // 2. Duyệt viên / Người có thẩm quyền chi nhánh (trong vòng 15 ngày)
+  const isReviewerRole =
+    roleUpper === "DUYỆT VIÊN" ||
+    roleUpper === "REVIEWER" ||
+    roleUpper === "APPROVER" ||
+    currentUser.role === UserRole.REVIEWER ||
+    currentUser.canSpeciallyEditDelete === true;
+
+  if (isReviewerRole && isSameBranchOrFactory(currentUser.branch, report.factory)) {
+    return true;
+  }
+
+  // 3. Người đăng tin (Uploader)
+  const isUploader =
+    (currentUser.id && report.uploaderId && currentUser.id === report.uploaderId) ||
+    (currentUser.fullName && report.uploaderName && currentUser.fullName.trim().toLowerCase() === report.uploaderName.trim().toLowerCase()) ||
+    (currentUser.phone && report.uploaderPhone && currentUser.phone.trim() === report.uploaderPhone.trim());
+
+  if (isUploader) {
+    if (options.isMobile) {
+      if (report.timestamp) {
+        const reportDate = parseReportTimestamp(report.timestamp);
+        const now = new Date();
+        const diffMin = (now.getTime() - reportDate.getTime()) / (1000 * 60);
+        return diffMin >= 0 && diffMin <= 5;
+      }
+      return true;
+    }
+    return true; // Trên desktop, người tạo được sửa trong vòng 15 ngày
+  }
+
+  return false;
+};
+
+/**
+ * Kiểm tra quyền Xóa bản tin 4M1E1I:
+ * 1. Admin / Ban TGĐ: Luôn được xóa (không giới hạn 15 ngày).
+ * 2. Duyệt viên (Reviewer / canSpeciallyEditDelete) thuộc cùng chi nhánh/nhà máy:
+ *    CHỈ ĐƯỢC XÓA trong vòng 15 ngày kể từ ngày tạo bản tin. Sau 15 ngày -> ẩn/từ chối quyền.
+ * 3. Người đăng tin (Uploader):
+ *    - Cho phép xóa trong vòng 5 phút (nếu trên mobile) hoặc 15 ngày (nếu desktop), nhưng không được vượt quá 15 ngày.
+ */
+export const canUserDeleteReport = (
+  currentUser: any,
+  report: { timestamp?: string; factory?: string; uploaderId?: string; uploaderName?: string; uploaderPhone?: string },
+  options: { isMobile?: boolean } = {}
+): boolean => {
+  if (!currentUser || !report) return false;
+
+  const roleUpper = (currentUser.role || "").toString().toUpperCase();
+  const isAdmin =
+    roleUpper === "CHỦ ADMIN" ||
+    roleUpper === "ADMIN" ||
+    currentUser.role === UserRole.ADMIN;
+
+  // 1. Admin luôn có toàn quyền xóa
+  if (isAdmin) return true;
+
+  // Kiểm tra thời hạn 15 ngày kể từ ngày tạo bản tin
+  const within15Days = isReportWithin15Days(report.timestamp);
+
+  // Nếu đã quá 15 ngày -> Duyệt viên và Người dùng thông thường đều KHÔNG ĐƯỢC XÓA (ẨN CHỨC NĂNG)
+  if (!within15Days) {
+    return false;
+  }
+
+  // 2. Duyệt viên / Người có thẩm quyền chi nhánh (trong vòng 15 ngày)
+  const isReviewerRole =
+    roleUpper === "DUYỆT VIÊN" ||
+    roleUpper === "REVIEWER" ||
+    roleUpper === "APPROVER" ||
+    currentUser.role === UserRole.REVIEWER ||
+    currentUser.canSpeciallyEditDelete === true;
+
+  if (isReviewerRole && isSameBranchOrFactory(currentUser.branch, report.factory)) {
+    return true;
+  }
+
+  // 3. Người đăng tin (Uploader)
+  const isUploader =
+    (currentUser.id && report.uploaderId && currentUser.id === report.uploaderId) ||
+    (currentUser.fullName && report.uploaderName && currentUser.fullName.trim().toLowerCase() === report.uploaderName.trim().toLowerCase()) ||
+    (currentUser.phone && report.uploaderPhone && currentUser.phone.trim() === report.uploaderPhone.trim());
+
+  if (isUploader) {
+    if (options.isMobile) {
+      if (report.timestamp) {
+        const reportDate = parseReportTimestamp(report.timestamp);
+        const now = new Date();
+        const diffMin = (now.getTime() - reportDate.getTime()) / (1000 * 60);
+        return diffMin >= 0 && diffMin <= 5;
+      }
+      return true;
+    }
+    return true; // Trên desktop, người tạo được xóa trong vòng 15 ngày
+  }
+
+  return false;
+};
+
 
 

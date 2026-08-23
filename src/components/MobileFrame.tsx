@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import html2canvas from "html2canvas";
-import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, BellRing, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, CheckCircle2, AlertCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send, Award, Calendar, Clock, Lightbulb, Newspaper, AtSign, Flame, FlaskConical, Bold, Italic, Underline as UnderlineIcon, Smile, Image as ImageIcon, Highlighter, Crown, MessageCircle } from "lucide-react";
+import { Search, Bot, Brain, RotateCw, RotateCcw, Plus, Users, User as UserIcon, Cpu, FileText, Settings, Heart, BellOff, Bell, BellRing, Info, ArrowLeft, Camera, Trash2, Edit, Maximize, Minimize, ArrowUp, Share2, Copy, ExternalLink, MessageSquare, Check, X, LogOut, Monitor, BarChart2, Lock, ZoomIn, ZoomOut, Archive, QrCode, Download, Home, ClipboardCheck, Shield, Smartphone, AlertTriangle, CheckSquare, CheckCircle, CheckCircle2, AlertCircle, Cloud, ChevronDown, ChevronRight, ChevronLeft, ChevronUp, Database, Upload, Sparkles, Send, Award, Calendar, Clock, Lightbulb, Newspaper, AtSign, Flame, FlaskConical, Bold, Italic, Underline as UnderlineIcon, Smile, Image as ImageIcon, Highlighter, Crown, MessageCircle, Menu, BookOpen, ShieldCheck, Target, Activity, HelpCircle, EyeOff, Eye, ListTodo, FileSpreadsheet, Building2, Filter } from "lucide-react";
 import { QualityReport, Category4M1E1I, User, UserRole, UserStatus, Branch, Department, Company, ChatMessage, QualityReportResolution, QualityReportReplication, BroadcastNotice, ForumTopic, ForumReply, ForumTopicCategory, ForumTopicStatus, QualityReportBadge, AppNotification, ErrorCatalogItem, BadgePointConfigItem, DirectMessageItem } from "../types";
 import { T } from "./TranslateText";
 import { MentionTextArea, MentionInput } from "./MentionTextArea";
@@ -9,7 +9,7 @@ import { renderFormattedMessage } from "../utils/formatMessage";
 import { EMOJI_CATEGORIES } from "./RichChatInputBox";
 import { findMentionedUsers, parseReportTimestamp, calculateTimeDurationText } from "../utils/notificationHelper";
 import { QRCodeSVG } from "qrcode.react";
-import { isSameBranchOrFactory, formatNameCapitalized, canUserManageDirective, canUserProcessOrResolveReport, isHQOrManagerUser } from "../utils/branchHelpers";
+import { isSameBranchOrFactory, formatNameCapitalized, canUserManageDirective, canUserProcessOrResolveReport, isHQOrManagerUser, canUserEditReport, canUserDeleteReport, isReportWithin15Days } from "../utils/branchHelpers";
 import { AutoImageSlider } from "./AutoImageSlider";
 import { getCategoryFallbackImage, compressAvatar } from "../utils/imageProcessor";
 import { findUser, resolveUploaderInfo, resolveBadgeGiverInfo, resolveEvaluatorInfo, resolveSenderInfo, isCurrentUserSender, getDefaultMembersForReport } from "../utils/userResolver";
@@ -20,6 +20,7 @@ import StatisticsDashboard from "./StatisticsDashboard";
 import ProgressTrackingDashboard from "./ProgressTrackingDashboard";
 import BadgeStatisticsDashboard from "./BadgeStatisticsDashboard";
 import MobileForumView from "./MobileForumView";
+import PersonalContributionTab from "./PersonalContributionTab";
 import { TrialTrackingHub } from "./TrialTrackingHub";
 import { db } from "../utils/firebase";
 import { collection, onSnapshot } from "firebase/firestore";
@@ -292,6 +293,8 @@ interface MobileFrameProps {
   onAddErrorCatalogItem?: (item: ErrorCatalogItem) => void;
   isQcFeatureEnabled?: boolean;
   onToggleQcFeature?: (enabled: boolean) => void;
+  onUpdateUser?: (user: User) => void;
+  onShowToast?: (msg: string, type?: "success" | "error" | "info" | "warning") => void;
   isFormOpen?: boolean;
   onCloseForm?: () => void;
   editingReport?: QualityReport | null;
@@ -1587,6 +1590,8 @@ export default function MobileFrame({
   onAddErrorCatalogItem,
   isQcFeatureEnabled = true,
   onToggleQcFeature,
+  onUpdateUser,
+  onShowToast: onShowToastProp,
   isFormOpen,
   onCloseForm,
   editingReport,
@@ -2310,7 +2315,37 @@ export default function MobileFrame({
     return `${weekNo}/${utcDate.getUTCFullYear()}`;
   };
 
-  const [activeBottomTab, setActiveBottomTab] = useState<"BAO_CAO" | "PHAN_TICH" | "PHE_DUYET" | "TRAO_ĐỔI">("BAO_CAO");
+  const [activeBottomTab, setActiveBottomTab] = useState<"BAO_CAO" | "PHAN_TICH" | "PHE_DUYET" | "TRAO_ĐỔI" | "CA_NHAN">("BAO_CAO");
+  const [mobilePersonalTab, setMobilePersonalTab] = useState<"CONTRIBUTION" | "TASKS" | "PROFILE">("CONTRIBUTION");
+  const [mobileProfileFullName, setMobileProfileFullName] = useState(currentUser?.fullName || "");
+  const [mobileProfilePhone, setMobileProfilePhone] = useState(currentUser?.phone || "");
+  const [mobileProfilePassword, setMobileProfilePassword] = useState(currentUser?.password || "");
+  const [mobileProfileShowPassword, setMobileProfileShowPassword] = useState(false);
+  const [mobileProfileCompany, setMobileProfileCompany] = useState(currentUser?.company || "");
+  const [mobileProfileBranch, setMobileProfileBranch] = useState(currentUser?.branch || "");
+  const [mobileProfileDept, setMobileProfileDept] = useState(currentUser?.department || "");
+  const [mobileProfilePosition, setMobileProfilePosition] = useState(currentUser?.position || "");
+  const [mobileProfileAvatar, setMobileProfileAvatar] = useState(currentUser?.avatar || "");
+
+  // Personal task filters
+  const [mobileTaskScope, setMobileTaskScope] = useState<"ALL" | "CREATED" | "ASSIGNED" | "RESOLVED">("ALL");
+  const [mobileTaskStatusFilter, setMobileTaskStatusFilter] = useState<"ALL" | "IN_PROGRESS" | "RESOLVED" | "CLOSED">("ALL");
+  const [mobileTaskCategoryFilter, setMobileTaskCategoryFilter] = useState<string>("ALL");
+  const [mobileTaskSearchTerm, setMobileTaskSearchTerm] = useState<string>("");
+
+  useEffect(() => {
+    if (currentUser) {
+      setMobileProfileFullName(currentUser.fullName || "");
+      setMobileProfilePhone(currentUser.phone || "");
+      setMobileProfilePassword(currentUser.password || "");
+      setMobileProfileCompany(currentUser.company || "");
+      setMobileProfileBranch(currentUser.branch || "");
+      setMobileProfileDept(currentUser.department || "");
+      setMobileProfilePosition(currentUser.position || "");
+      setMobileProfileAvatar(currentUser.avatar || "");
+    }
+  }, [currentUser]);
+
   const [selectedMobileTopicId, setSelectedMobileTopicId] = useState<string | null>(null);
   const [isMobileCreatingTopic, setIsMobileCreatingTopic] = useState(false);
   const [mobileNewTopicTitle, setMobileNewTopicTitle] = useState("");
@@ -2585,62 +2620,6 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
     
     return cells;
   }, [chartCalendarMonth, chartYear]);
-
-  const [touchStartX, setTouchStartX] = useState<number | null>(null);
-  const [touchStartY, setTouchStartY] = useState<number | null>(null);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchStartX(e.targetTouches[0].clientX);
-    setTouchStartY(e.targetTouches[0].clientY);
-  };
-
-
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX === null || touchStartY === null) return;
-    const touchEndX = e.changedTouches[0].clientX;
-    const touchEndY = e.changedTouches[0].clientY;
-
-    const diffX = touchStartX - touchEndX;
-    const diffY = touchStartY - touchEndY;
-
-    // Phải là lướt ngang chủ đạo và vượt ngưỡng 50px
-    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
-      const tabs: ("NHAN_SU" | "TIEN_DO" | "CHAT_LUONG" | "HUY_HIEU")[] = [];
-      if (currentUser?.role === UserRole.ADMIN) {
-        tabs.push("NHAN_SU");
-      }
-      tabs.push("TIEN_DO");
-      tabs.push("CHAT_LUONG");
-      tabs.push("HUY_HIEU");
-
-      const currentIndex = tabs.indexOf(mobileStatsSubTab);
-      if (currentIndex !== -1) {
-        if (diffX > 0) {
-          // Vuốt sang trái -> chuyển tab tiếp theo
-          const nextIndex = Math.min(currentIndex + 1, tabs.length - 1);
-          if (nextIndex !== currentIndex) {
-            setMobileStatsSubTab(tabs[nextIndex]);
-            showToast(`Chuyển sang tab: ${
-              tabs[nextIndex] === "NHAN_SU" ? "Nhân sự" : tabs[nextIndex] === "TIEN_DO" ? "Tiến độ cải tiến" : tabs[nextIndex] === "HUY_HIEU" ? "Trao Huy Hiệu" : "Biểu đồ"
-            } 📑`);
-          }
-        } else {
-          // Vuốt sang phải -> chuyển tab trước đó
-          const prevIndex = Math.max(currentIndex - 1, 0);
-          if (prevIndex !== currentIndex) {
-            setMobileStatsSubTab(tabs[prevIndex]);
-            showToast(`Chuyển sang tab: ${
-              tabs[prevIndex] === "NHAN_SU" ? "Nhân sự" : tabs[prevIndex] === "TIEN_DO" ? "Tiến độ cải tiến" : tabs[prevIndex] === "HUY_HIEU" ? "Trao Huy Hiệu" : "Biểu đồ"
-            } 📑`);
-          }
-        }
-      }
-    }
-
-    setTouchStartX(null);
-    setTouchStartY(null);
-  };
 
   const filterByTimeRange = (reportDate: Date) => {
     const parts = getVietnamTimeParts(reportDate);
@@ -3082,6 +3061,11 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
   };
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
+  const [showAboutAndonModal, setShowAboutAndonModal] = useState(false);
+  const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
+  const [knowledgeTab, setKnowledgeTab] = useState<"5WHYS" | "SOP" | "CAPA">("5WHYS");
+  const [knowledgeSearch, setKnowledgeSearch] = useState("");
   const [showMobileCloudQuota, setShowMobileCloudQuota] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -3105,6 +3089,277 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
   const [showAwardMenuForRes, setShowAwardMenuForRes] = useState<boolean>(false);
   const [showBadgeExplanations, setShowBadgeExplanations] = useState<boolean>(false);
   const [selectedInfoBadge, setSelectedInfoBadge] = useState<any | null>(null);
+
+  // Tháng được chọn cho bộ sưu tập huy hiệu trong Sidebar (mặc định tháng hiện tại: MM/YYYY)
+  const currentMonthStr = useMemo(() => {
+    const now = new Date();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const yyyy = now.getFullYear();
+    return `${m}/${yyyy}`;
+  }, []);
+  const [sidebarBadgeMonth, setSidebarBadgeMonth] = useState<string>(currentMonthStr);
+  const [selectedBadgeDetailModal, setSelectedBadgeDetailModal] = useState<{
+    name: string;
+    count: number;
+    items: {
+      id?: string;
+      name: string;
+      category?: string;
+      giverName?: string;
+      giverRole?: string;
+      giverPosition?: string;
+      timestamp?: string;
+      reportCode?: string;
+      content?: string;
+      points?: number;
+      levelWeight?: number;
+      levelLabel?: string;
+    }[];
+    currentIndex: number;
+  } | null>(null);
+
+  // Danh sách các tháng có dữ liệu thực tế (từ tháng có bản tin đầu tiên đến nay)
+  const availableBadgeMonths = useMemo(() => {
+    const monthsMap = new Map<string, { year: number; month: number }>();
+    
+    // Đưa tháng hiện tại vào
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth() + 1;
+    monthsMap.set(currentMonthStr, { year: curYear, month: curMonth });
+
+    // Thu thập tất cả các tháng thực tế có bản tin trong hệ thống
+    (reports || []).forEach((r) => {
+      if (r.isDeleted) return;
+      const ts = r.timestamp;
+      if (!ts) return;
+      let m = 0;
+      let y = 0;
+      if (ts.includes("/")) {
+        const segs = ts.split("/");
+        if (segs.length >= 3) {
+          m = parseInt(segs[1], 10);
+          y = parseInt(segs[2], 10);
+          if (y < 100) y += 2000;
+        }
+      } else if (ts.includes("-")) {
+        const segs = ts.split("T")[0].split("-");
+        if (segs.length >= 3) {
+          y = parseInt(segs[0], 10);
+          m = parseInt(segs[1], 10);
+        }
+      }
+      if (m > 0 && y > 2020) {
+        const mStr = `${String(m).padStart(2, "0")}/${y}`;
+        monthsMap.set(mStr, { year: y, month: m });
+      }
+    });
+
+    // Sắp xếp các tháng giảm dần từ mới nhất về cũ nhất
+    const sorted = Array.from(monthsMap.entries()).sort((a, b) => {
+      if (b[1].year !== a[1].year) return b[1].year - a[1].year;
+      return b[1].month - a[1].month;
+    });
+
+    return sorted.map(([k]) => k);
+  }, [reports, currentMonthStr]);
+
+  // Trích xuất toàn bộ huy hiệu chi tiết của người dùng hiện tại
+  const currentUserAllBadges = useMemo(() => {
+    if (!currentUser) return [];
+    const list: {
+      id: string;
+      name: string;
+      category: "RED" | "GREEN" | string;
+      giverName: string;
+      giverRole: string;
+      giverPosition?: string;
+      timestamp: string; // formatted dd/mm/yy
+      monthStr: string; // MM/yyyy
+      reportCode?: string;
+      content?: string;
+      points?: number;
+      levelWeight: number; // 3: Cấp Công ty / Ban TGĐ, 2: Cấp Chi nhánh / Giám đốc Nhà máy, 1: Cấp Phòng ban / Quản lý
+      levelLabel: string;
+    }[] = [];
+
+    const userPhone = currentUser.phone ? currentUser.phone.trim() : "";
+    const userName = currentUser.fullName ? currentUser.fullName.trim().toLowerCase() : "";
+    const userId = currentUser.id ? currentUser.id.trim() : "";
+
+    const parseMonthFromTimestamp = (rawTs?: string): { day: string; month: string } => {
+      if (!rawTs) return { day: "", month: currentMonthStr };
+      const trimmed = rawTs.trim();
+      if (trimmed.includes("/")) {
+        const segs = trimmed.split("/");
+        if (segs.length === 3) {
+          const d = segs[0].padStart(2, "0");
+          const m = segs[1].padStart(2, "0");
+          let y = segs[2];
+          if (y.length === 2) y = "20" + y;
+          return { day: `${d}/${m}/${y.slice(-2)}`, month: `${m}/${y}` };
+        }
+      } else if (trimmed.includes("-")) {
+        const segs = trimmed.split("T")[0].split("-");
+        if (segs.length === 3) {
+          const y = segs[0];
+          const m = segs[1].padStart(2, "0");
+          const d = segs[2].padStart(2, "0");
+          return { day: `${d}/${m}/${y.slice(-2)}`, month: `${m}/${y}` };
+        }
+      }
+      return { day: trimmed, month: currentMonthStr };
+    };
+
+    // Phân loại cấp thẩm quyền và độ danh giá của huy hiệu
+    const getBadgeAuthority = (giverRole?: string, giverPos?: string): { levelWeight: number; levelLabel: string } => {
+      const r = (giverRole || "").toLowerCase();
+      const p = (giverPos || "").toLowerCase();
+      
+      // Cấp 3: Cấp Công Ty / Ban TGĐ / Hội đồng quản trị (Danh giá nhất)
+      if (
+        r.includes("tgđ") || r.includes("tổng giám đốc") || r.includes("cty") || 
+        r.includes("công ty") || p.includes("tổng giám đốc") || p.includes("tgđ") || 
+        p.includes("ban giám đốc cty") || p.includes("hội đồng")
+      ) {
+        return { levelWeight: 3, levelLabel: "Cấp Công Ty" };
+      }
+      
+      // Cấp 2: Cấp Chi nhánh / Giám đốc Nhà máy / Ban Giám Đốc Nhà máy
+      if (
+        r.includes("giám đốc") || r.includes("gđ") || r.includes("nhà máy") || 
+        r.includes("chi nhánh") || p.includes("giám đốc") || p.includes("gđ") || 
+        p.includes("phó giám đốc") || p.includes("pgđ") || r === "reviewer" || r === "admin"
+      ) {
+        return { levelWeight: 2, levelLabel: "Cấp Nhà Máy" };
+      }
+      
+      // Cấp 1: Cấp Phòng ban / Tổ trưởng / Trưởng phó phòng / Quản lý ca
+      return { levelWeight: 1, levelLabel: "Cấp Phòng Ban" };
+    };
+
+    (reports || []).forEach((r) => {
+      if (r.isDeleted) return;
+      const uploaderPhone = r.uploaderPhone ? r.uploaderPhone.trim() : "";
+      const uploaderName = r.uploaderName ? r.uploaderName.trim().toLowerCase() : "";
+      const uploaderId = r.uploaderId ? r.uploaderId.trim() : "";
+
+      const isReportAuthor = (userPhone && uploaderPhone === userPhone) ||
+                             (userName && uploaderName === userName) ||
+                             (userId && uploaderId === userId);
+
+      if (isReportAuthor && r.badges && Array.isArray(r.badges)) {
+        r.badges.forEach((b) => {
+          const parsed = parseMonthFromTimestamp(b.timestamp || r.timestamp);
+          const auth = getBadgeAuthority(b.giverRole, b.giverPosition);
+          list.push({
+            id: b.id,
+            name: b.name,
+            category: b.category,
+            giverName: b.giverName || "Cấp quản lý",
+            giverRole: b.giverRole || "Quản lý",
+            giverPosition: b.giverPosition,
+            timestamp: parsed.day,
+            monthStr: parsed.month,
+            reportCode: r.reportCode,
+            content: r.content,
+            points: 30,
+            levelWeight: auth.levelWeight,
+            levelLabel: auth.levelLabel
+          });
+        });
+      }
+
+      if (r.resolutions && Array.isArray(r.resolutions)) {
+        r.resolutions.forEach((res) => {
+          const handler = res.handlerName ? res.handlerName.trim().toLowerCase() : "";
+          const isResolver = userName && (handler === userName || handler.includes(userName) || userName.includes(handler));
+
+          if (isResolver && res.badges && Array.isArray(res.badges)) {
+            res.badges.forEach((b) => {
+              const auth = getBadgeAuthority(b.giverRole, b.giverPosition);
+              const parsed = parseMonthFromTimestamp(b.timestamp || res.updatedAt || r.timestamp);
+              list.push({
+                id: b.id,
+                name: b.name,
+                category: b.category,
+                giverName: b.giverName || "Cấp quản lý",
+                giverRole: b.giverRole || "Quản lý",
+                giverPosition: b.giverPosition,
+                timestamp: parsed.day,
+                monthStr: parsed.month,
+                reportCode: r.reportCode,
+                content: res.resultText || r.content,
+                points: 30,
+                levelWeight: auth.levelWeight,
+                levelLabel: auth.levelLabel
+              });
+            });
+          }
+        });
+      }
+    });
+
+    return list;
+  }, [reports, currentUser, currentMonthStr]);
+
+  // Huy hiệu của người dùng được lọc theo tháng đã chọn trong Sidebar
+  const sidebarFilteredBadges = useMemo(() => {
+    if (sidebarBadgeMonth === "ALL") {
+      return currentUserAllBadges;
+    }
+    return currentUserAllBadges.filter(b => b.monthStr === sidebarBadgeMonth);
+  }, [currentUserAllBadges, sidebarBadgeMonth]);
+
+  // Nhóm các huy hiệu theo loại (Icon + Số lần đạt), xếp theo Cấp độ danh giá giảm dần (Cấp Công ty -> Cấp Nhà máy -> Cấp Phòng ban)
+  const groupedSidebarBadges = useMemo(() => {
+    const map = new Map<string, {
+      name: string;
+      category: string;
+      count: number;
+      levelWeight: number;
+      levelLabel: string;
+      items: typeof currentUserAllBadges;
+    }>();
+
+    sidebarFilteredBadges.forEach((b) => {
+      const existing = map.get(b.name);
+      if (existing) {
+        existing.count += 1;
+        if (b.levelWeight > existing.levelWeight) {
+          existing.levelWeight = b.levelWeight;
+          existing.levelLabel = b.levelLabel;
+        }
+        existing.items.push(b);
+      } else {
+        map.set(b.name, {
+          name: b.name,
+          category: b.category,
+          count: 1,
+          levelWeight: b.levelWeight,
+          levelLabel: b.levelLabel,
+          items: [b]
+        });
+      }
+    });
+
+    // Sắp xếp: Cấp cao nhất (levelWeight giảm dần 3 -> 2 -> 1), nếu cùng cấp thì số lượng nhiều hơn xếp trước
+    return Array.from(map.values()).sort((a, b) => {
+      if (b.levelWeight !== a.levelWeight) {
+        return b.levelWeight - a.levelWeight;
+      }
+      if (b.count !== a.count) {
+        return b.count - a.count;
+      }
+      return a.name.localeCompare(b.name);
+    });
+  }, [sidebarFilteredBadges]);
+
+  // Tính toán số lượng huy hiệu thi đua của người dùng hiện tại
+  const userBadgesCount = useMemo(() => {
+    return currentUserAllBadges.length;
+  }, [currentUserAllBadges]);
+
   const lastScrollTopRef = useRef(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const phanTichScrollRef = useRef<HTMLDivElement>(null);
@@ -3623,6 +3878,9 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
   const activeBottomTabRef = useRef(activeBottomTab);
   const activeForumTopicIdRef = useRef(activeForumTopicId);
   const showLogoutConfirmRef = useRef(showLogoutConfirm);
+  const showMobileSidebarRef = useRef(showMobileSidebar);
+  const showAboutAndonModalRef = useRef(showAboutAndonModal);
+  const showKnowledgeModalRef = useRef(showKnowledgeModal);
   const showOnlineUsersDrawerRef = useRef(showOnlineUsersDrawer);
   const showNotifDrawerRef = useRef(showNotifDrawer);
   const showTrashRef = useRef(showTrash);
@@ -3666,6 +3924,9 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
   useEffect(() => { activeBottomTabRef.current = activeBottomTab; }, [activeBottomTab]);
   useEffect(() => { activeForumTopicIdRef.current = activeForumTopicId; }, [activeForumTopicId]);
   useEffect(() => { showLogoutConfirmRef.current = showLogoutConfirm; }, [showLogoutConfirm]);
+  useEffect(() => { showMobileSidebarRef.current = showMobileSidebar; }, [showMobileSidebar]);
+  useEffect(() => { showAboutAndonModalRef.current = showAboutAndonModal; }, [showAboutAndonModal]);
+  useEffect(() => { showKnowledgeModalRef.current = showKnowledgeModal; }, [showKnowledgeModal]);
   useEffect(() => { showOnlineUsersDrawerRef.current = showOnlineUsersDrawer; }, [showOnlineUsersDrawer]);
   useEffect(() => { showNotifDrawerRef.current = showNotifDrawer; }, [showNotifDrawer]);
   useEffect(() => { showTrashRef.current = showTrash; }, [showTrash]);
@@ -3733,6 +3994,18 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
       }
 
       // Priority 1: Close any open MobileFrame modal, drawer, popover or sheet
+      if (showAboutAndonModalRef.current) {
+        setShowAboutAndonModal(false);
+        return;
+      }
+      if (showKnowledgeModalRef.current) {
+        setShowKnowledgeModal(false);
+        return;
+      }
+      if (showMobileSidebarRef.current) {
+        setShowMobileSidebar(false);
+        return;
+      }
       if (showOnlineUsersDrawerRef.current) {
         setShowOnlineUsersDrawer(false);
         return;
@@ -4163,9 +4436,84 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
+    if (onShowToastProp) {
+      onShowToastProp(msg);
+    }
     setTimeout(() => {
       setToastMessage((current) => current === msg ? null : current);
     }, 2500);
+  };
+
+  const isMyCreated = useCallback((r: QualityReport) => {
+    if (!r || r.isDeleted) return false;
+    return (
+      (currentUser?.id && r.uploaderId === currentUser.id) ||
+      (currentUser?.phone && r.uploaderPhone === currentUser.phone) ||
+      (currentUser?.fullName && r.uploaderName?.toLowerCase() === currentUser.fullName.toLowerCase())
+    );
+  }, [currentUser]);
+
+  const isMyAssigned = useCallback((r: QualityReport) => {
+    if (!r || r.isDeleted) return false;
+    const userName = (currentUser?.fullName || "").toLowerCase();
+    const userDept = (currentUser?.department || "").toLowerCase();
+    const userId = (currentUser?.id || "").toLowerCase();
+
+    return (r.directives || []).some((d) => {
+      const dText = (d.text || "").toLowerCase();
+      const dAckBy = (d.acknowledgedBy || "").toLowerCase();
+      return (
+        (userName && (dText.includes(userName) || dAckBy.includes(userName))) ||
+        (userDept && (dText.includes(userDept) || dAckBy.includes(userDept))) ||
+        (userId && dText.includes(userId))
+      );
+    });
+  }, [currentUser]);
+
+  const isMyResolved = useCallback((r: QualityReport) => {
+    if (!r || r.isDeleted) return false;
+    const userName = (currentUser?.fullName || "").toLowerCase();
+    const userDept = (currentUser?.department || "").toLowerCase();
+
+    const inResolutions = (r.resolutions || []).some((res) => {
+      const handler = (res.handlerName || "").toLowerCase();
+      const dept = (res.departmentName || "").toLowerCase();
+      return (userName && handler.includes(userName)) || (userDept && dept.includes(userDept));
+    });
+
+    const inReplications = (r.replications || []).some((rep) => {
+      const reg = (rep.registrantName || "").toLowerCase();
+      const dept = (rep.departmentName || "").toLowerCase();
+      return (userName && reg.includes(userName)) || (userDept && dept.includes(userDept));
+    });
+
+    return inResolutions || inReplications;
+  }, [currentUser]);
+
+  const myReports = useMemo(() => reports.filter((r) => isMyCreated(r)), [reports, isMyCreated]);
+  const myAllTasks = useMemo(() => reports.filter((r) => !r.isDeleted && (isMyCreated(r) || isMyAssigned(r) || isMyResolved(r))), [reports, isMyCreated, isMyAssigned, isMyResolved]);
+
+  const handleSaveMobileProfile = () => {
+    if (!currentUser) return;
+    if (!mobileProfileFullName.trim()) {
+      showToast("Họ và tên không được để trống!");
+      return;
+    }
+    const updatedUser: User = {
+      ...currentUser,
+      fullName: mobileProfileFullName.trim(),
+      phone: mobileProfilePhone.trim(),
+      password: mobileProfilePassword.trim(),
+      company: mobileProfileCompany,
+      branch: mobileProfileBranch,
+      department: mobileProfileDept,
+      position: mobileProfilePosition.trim(),
+      avatar: mobileProfileAvatar
+    };
+    if (onUpdateUser) {
+      onUpdateUser(updatedUser);
+    }
+    showToast("Đã cập nhật và lưu hồ sơ cá nhân thành công! ✅");
   };
 
   const handleAcknowledgeDirective = (report: QualityReport, dirId: string) => {
@@ -4353,33 +4701,7 @@ App Link: ${window.location.origin}`;
 
 
   const isDeleteAllowed = (report: QualityReport): boolean => {
-    if (!currentUser) return false;
-    
-    // 1. Admin luôn được quyền xóa mọi thứ
-    if (currentUser.role === UserRole.ADMIN) {
-      return true;
-    }
-
-    // 2. Duyệt viên (Reviewer) chỉ có quyền xóa đối với các bản tin thuộc đúng chi nhánh của mình
-    if (currentUser.role === UserRole.REVIEWER) {
-      return isSameBranchOrFactory(currentUser.branch, report.factory);
-    }
-
-    // 3. Đặc cách cho Nhân viên / Duyệt viên (canSpeciallyEditDelete) của chi nhánh hiện tại
-    if (currentUser.canSpeciallyEditDelete && isSameBranchOrFactory(currentUser.branch, report.factory)) {
-      return true;
-    }
-    
-    // 4. Người đăng tin (uploader) chỉ được xóa bài của chính mình trong vòng 5 phút kể từ khi đăng
-    if (report.uploaderId === currentUser.id) {
-      const reportDate = parseReportTimestamp(report.timestamp);
-      const now = new Date();
-      const diffMs = now.getTime() - reportDate.getTime();
-      const diffMin = diffMs / (1000 * 60);
-      return diffMin >= 0 && diffMin <= 5; // Hợp lệ dưới 5 phút
-    }
-    
-    return false;
+    return canUserDeleteReport(currentUser, report, { isMobile: true });
   };
 
   const handleScroll = () => {
@@ -4972,33 +5294,7 @@ App Link: ${window.location.origin}`;
   });
 
   const isEditAllowed = (report: QualityReport): boolean => {
-    if (!currentUser) return false;
-    
-    // 1. Chỉ Admin mới được quyền chỉnh sửa mặc định mọi bản tin
-    if (currentUser.role === UserRole.ADMIN) {
-      return true;
-    }
-
-    // 2. Duyệt viên (Reviewer) chỉ có quyền chỉnh sửa đối với các bản tin thuộc đúng chi nhánh của mình
-    if (currentUser.role === UserRole.REVIEWER) {
-      return isSameBranchOrFactory(currentUser.branch, report.factory);
-    }
-
-    // 3. Đặc cách cho Nhân viên / Duyệt viên (canSpeciallyEditDelete) của chi nhánh hiện tại
-    if (currentUser.canSpeciallyEditDelete && isSameBranchOrFactory(currentUser.branch, report.factory)) {
-      return true;
-    }
-
-    // 4. Người đăng tin (uploader) chỉ được sửa bài của chính mình trong vòng 5 phút kể từ khi đăng
-    if (report.uploaderId === currentUser.id) {
-      const reportDate = parseReportTimestamp(report.timestamp);
-      const now = new Date();
-      const diffMs = now.getTime() - reportDate.getTime();
-      const diffMin = diffMs / (1000 * 60);
-      return diffMin >= 0 && diffMin <= 5; // Hợp lệ dưới 5 phút
-    }
-    
-    return false;
+    return canUserEditReport(currentUser, report, { isMobile: true });
   };
 
   const generateNotifications = (): AppNotification[] => {
@@ -6880,19 +7176,27 @@ App Link: ${window.location.origin}`;
         <div 
           ref={phanTichScrollRef}
           onScroll={(e) => setPhanTichScrollTop(e.currentTarget.scrollTop)}
-          onTouchStart={handleTouchStart}
-          onTouchEnd={handleTouchEnd}
-          className="flex-1 p-4 bg-slate-50 space-y-4 select-none overflow-y-auto phantich-scroll-container transition-all duration-300 touch-pan-y"
+          className="flex-1 p-4 bg-slate-50 space-y-4 select-none overflow-y-auto phantich-scroll-container transition-all duration-300"
         >
           {/* Header Analysis info with custom icon & switcher */}
           <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3.5">
-            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-              <div className={`p-1.5 rounded-xl text-white ${theme.bg} flex items-center justify-center`}>
-                <BarChart2 className="w-4 h-4 text-white" />
+            <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
+              <div className="flex items-center gap-2">
+                <div className={`p-1.5 rounded-xl text-white ${theme.bg} flex items-center justify-center`}>
+                  <BarChart2 className="w-4 h-4 text-white" />
+                </div>
+                <h2 className={`text-xs font-black tracking-tight ${theme.text}`}>
+                  <T><span translate="no" className="notranslate">Báo Cáo Thống Kê & Phân Tích</span></T>
+                </h2>
               </div>
-              <h2 className={`text-xs font-black tracking-tight ${theme.text}`}>
-                <T><span translate="no" className="notranslate">Báo Cáo Thống Kê & Phân Tích</span></T>
-              </h2>
+              <button
+                type="button"
+                onClick={() => setActiveBottomTab("BAO_CAO")}
+                className="px-2 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold flex items-center gap-1 border border-slate-200 transition-all cursor-pointer shadow-xs active:scale-95 shrink-0"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <T><span translate="no" className="notranslate">Quay lại Bản Tin</span></T>
+              </button>
             </div>
             <p className="text-[10px] text-slate-500 leading-normal">
               {currentUser?.role === UserRole.ADMIN ? (
@@ -8077,6 +8381,539 @@ App Link: ${window.location.origin}`;
           onTopicSelect={handleForumTopicSelect}
           onOpenDirectChat={(targetUser) => setActiveDirectChatUser(targetUser)}
         />
+      ) : activeBottomTab === "CA_NHAN" ? (
+        <div className="flex-1 overflow-y-auto bg-slate-50 relative p-3.5 space-y-3.5 pb-24">
+          {/* Header Card */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2.5">
+                <div className={`w-9 h-9 rounded-xl text-white ${theme.bg} flex items-center justify-center shadow-xs font-bold shrink-0`}>
+                  <UserIcon className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h2 className={`text-xs font-black tracking-tight ${theme.text}`}>
+                    <T><span translate="no" className="notranslate">Trang Cá Nhân & Thành Tích</span></T>
+                  </h2>
+                  <p className="text-[10px] text-slate-500 line-clamp-1">
+                    <T><span translate="no" className="notranslate">{currentUser?.fullName || "Người dùng"} • {currentUser?.branch || "Chi nhánh"} • {currentUser?.department || "Bộ phận"}</span></T>
+                  </p>
+                </div>
+              </div>
+
+              {/* Quick switch to system-wide Analytics */}
+              <button
+                type="button"
+                onClick={() => setActiveBottomTab("PHAN_TICH")}
+                className="px-2.5 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-[10px] font-bold flex items-center gap-1.5 border border-purple-200/80 transition-all cursor-pointer shadow-xs active:scale-95 shrink-0"
+                title="Xem Báo cáo Thống kê & Phân tích toàn hệ thống"
+              >
+                <BarChart2 className="w-3.5 h-3.5 text-purple-600" />
+                <T><span translate="no" className="notranslate">Xem Báo cáo Phân tích</span></T>
+              </button>
+            </div>
+
+            {/* Sub-tab Navigation (3 tabs) */}
+            <div className="flex bg-slate-100 p-1 rounded-xl text-[10px] font-black select-none border border-slate-200 gap-1 overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setMobilePersonalTab("CONTRIBUTION")}
+                className={`flex-1 min-w-0 py-2 px-1.5 rounded-lg transition-all cursor-pointer text-center flex items-center justify-center gap-1 border-none whitespace-nowrap overflow-hidden ${
+                  mobilePersonalTab === "CONTRIBUTION"
+                    ? "bg-[#1d4ed8] text-white shadow-xs font-extrabold"
+                    : "text-slate-600 hover:text-slate-800 bg-transparent"
+                }`}
+              >
+                <Award className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate whitespace-nowrap"><T><span translate="no" className="notranslate">Đóng Góp</span></T></span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMobilePersonalTab("TASKS")}
+                className={`flex-1 min-w-0 py-2 px-1.5 rounded-lg transition-all cursor-pointer text-center flex items-center justify-center gap-1 border-none relative whitespace-nowrap overflow-hidden ${
+                  mobilePersonalTab === "TASKS"
+                    ? "bg-[#1d4ed8] text-white shadow-xs font-extrabold"
+                    : "text-slate-600 hover:text-slate-800 bg-transparent"
+                }`}
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate whitespace-nowrap"><T><span translate="no" className="notranslate">Việc Của Tôi</span></T></span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[8.5px] font-black shrink-0 ${
+                  mobilePersonalTab === "TASKS" ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"
+                }`}>
+                  {myAllTasks.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMobilePersonalTab("PROFILE")}
+                className={`flex-1 min-w-0 py-2 px-1.5 rounded-lg transition-all cursor-pointer text-center flex items-center justify-center gap-1 border-none whitespace-nowrap overflow-hidden ${
+                  mobilePersonalTab === "PROFILE"
+                    ? "bg-[#1d4ed8] text-white shadow-xs font-extrabold"
+                    : "text-slate-600 hover:text-slate-800 bg-transparent"
+                }`}
+              >
+                <Settings className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate whitespace-nowrap"><T><span translate="no" className="notranslate">Hồ Sơ</span></T></span>
+              </button>
+            </div>
+          </div>
+
+          {/* TAB 1: ĐÓNG GÓP CỦA TÔI (Gamification, KPI, Month/Year Filter, Charts) */}
+          {mobilePersonalTab === "CONTRIBUTION" && currentUser && (
+            <div className="space-y-3">
+              <PersonalContributionTab
+                currentUser={currentUser}
+                reports={reports}
+                users={users || []}
+                companies={companies || []}
+                branches={branches || []}
+                departments={departments || []}
+                onSwitchToTasks={() => setMobilePersonalTab("TASKS")}
+                onUpdateReport={onUpdateReport}
+                onDeleteReport={onDeleteReport}
+                onShowToast={showToast}
+              />
+            </div>
+          )}
+
+          {/* TAB 2: VIỆC CỦA TÔI (Personal Tasks List & Filter) */}
+          {mobilePersonalTab === "TASKS" && (
+            <div className="space-y-3">
+              {/* Task Scope Filter Chips */}
+              <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs space-y-2.5">
+                <div className="text-[10px] font-bold uppercase text-slate-400">
+                  <T><span translate="no" className="notranslate">Phạm vi công việc</span></T>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setMobileTaskScope("ALL")}
+                    className={`p-2 rounded-xl text-left border text-[10px] font-bold transition-all flex items-center justify-between ${
+                      mobileTaskScope === "ALL"
+                        ? "bg-blue-50 border-blue-300 text-blue-700 shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span><T><span translate="no" className="notranslate">Tất cả việc của tôi</span></T></span>
+                    <span className="px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[9px] font-black">{myAllTasks.length}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMobileTaskScope("CREATED")}
+                    className={`p-2 rounded-xl text-left border text-[10px] font-bold transition-all flex items-center justify-between ${
+                      mobileTaskScope === "CREATED"
+                        ? "bg-blue-50 border-blue-300 text-blue-700 shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span><T><span translate="no" className="notranslate">Tôi đã tạo</span></T></span>
+                    <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[9px] font-black">{myReports.length}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMobileTaskScope("ASSIGNED")}
+                    className={`p-2 rounded-xl text-left border text-[10px] font-bold transition-all flex items-center justify-between ${
+                      mobileTaskScope === "ASSIGNED"
+                        ? "bg-blue-50 border-blue-300 text-blue-700 shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span><T><span translate="no" className="notranslate">Được phân công</span></T></span>
+                    <span className="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[9px] font-black">{myAllTasks.filter(isMyAssigned).length}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMobileTaskScope("RESOLVED")}
+                    className={`p-2 rounded-xl text-left border text-[10px] font-bold transition-all flex items-center justify-between ${
+                      mobileTaskScope === "RESOLVED"
+                        ? "bg-blue-50 border-blue-300 text-blue-700 shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span><T><span translate="no" className="notranslate">Tham gia giải pháp</span></T></span>
+                    <span className="px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-800 text-[9px] font-black">{myAllTasks.filter(isMyResolved).length}</span>
+                  </button>
+                </div>
+
+                {/* Search & Status Filters */}
+                <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Tìm kiếm đầu việc..."
+                      value={mobileTaskSearchTerm}
+                      onChange={(e) => setMobileTaskSearchTerm(e.target.value)}
+                      className="w-full pl-8 pr-3 py-1.5 text-[10px] bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-blue-500 focus:outline-hidden"
+                    />
+                    {mobileTaskSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => setMobileTaskSearchTerm("")}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+
+                  <select
+                    value={mobileTaskStatusFilter}
+                    onChange={(e) => setMobileTaskStatusFilter(e.target.value as any)}
+                    className="py-1.5 px-2 text-[10px] bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 focus:outline-hidden"
+                  >
+                    <option value="ALL">Tất cả TT</option>
+                    <option value="IN_PROGRESS">Đang xử lý</option>
+                    <option value="RESOLVED">Đã có GP</option>
+                    <option value="CLOSED">Đã đóng</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Task Items List */}
+              {(() => {
+                const filteredTasks = myAllTasks.filter((r) => {
+                  if (mobileTaskScope === "CREATED" && !isMyCreated(r)) return false;
+                  if (mobileTaskScope === "ASSIGNED" && !isMyAssigned(r)) return false;
+                  if (mobileTaskScope === "RESOLVED" && !isMyResolved(r)) return false;
+
+                  const isDone = (r.resolutions || []).some((res) => res.status === "Đã xử lý");
+                  if (mobileTaskStatusFilter === "IN_PROGRESS" && isDone) return false;
+                  if (mobileTaskStatusFilter === "RESOLVED" && !isDone) return false;
+
+                  if (mobileTaskSearchTerm.trim()) {
+                    const term = mobileTaskSearchTerm.toLowerCase();
+                    const content = (r.content || "").toLowerCase();
+                    const notes = (r.notes || "").toLowerCase();
+                    const factory = (r.factory || "").toLowerCase();
+                    const uploader = (r.uploaderName || "").toLowerCase();
+                    if (!content.includes(term) && !notes.includes(term) && !factory.includes(term) && !uploader.includes(term)) {
+                      return false;
+                    }
+                  }
+                  return true;
+                });
+
+                if (filteredTasks.length === 0) {
+                  return (
+                    <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center space-y-2">
+                      <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                        <FileSpreadsheet className="w-6 h-6" />
+                      </div>
+                      <h3 className="text-xs font-bold text-slate-700">
+                        <T><span translate="no" className="notranslate">Không có đầu việc nào phù hợp</span></T>
+                      </h3>
+                      <p className="text-[10px] text-slate-400">
+                        <T><span translate="no" className="notranslate">Thử thay đổi bộ lọc hoặc tạo báo cáo mới</span></T>
+                      </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-2.5">
+                    {filteredTasks.map((task) => {
+                      const isCreated = isMyCreated(task);
+                      const isAssigned = isMyAssigned(task);
+                      const isResolved = isMyResolved(task);
+                      const isDone = (task.resolutions || []).some((res) => res.status === "Đã xử lý");
+
+                      return (
+                        <div
+                          key={task.id}
+                          className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs space-y-2.5 hover:border-blue-200 transition-all"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 text-[9px] font-black">
+                                {task.category}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold ${
+                                isDone
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : "bg-amber-100 text-amber-800"
+                              }`}>
+                                {isDone ? "Đã xử lý" : "Đang xử lý"}
+                              </span>
+                              {isCreated && (
+                                <span className="px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[8.5px] font-semibold">
+                                  Tôi tạo
+                                </span>
+                              )}
+                              {isAssigned && (
+                                <span className="px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 text-[8.5px] font-semibold border border-amber-200">
+                                  Được phân công
+                                </span>
+                              )}
+                              {isResolved && (
+                                <span className="px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-700 text-[8.5px] font-semibold border border-purple-200">
+                                  Tham gia GP
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[9px] text-slate-400 shrink-0">
+                              {task.timestamp ? String(task.timestamp).slice(0, 10) : ""}
+                            </span>
+                          </div>
+
+                          <div className="text-[11px] font-bold text-slate-800 line-clamp-2">
+                            {task.content}
+                          </div>
+
+                          {task.notes && (
+                            <p className="text-[9.5px] text-slate-500 line-clamp-2">
+                              {task.notes}
+                            </p>
+                          )}
+
+                          <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[9px] text-slate-500">
+                            <div className="flex items-center gap-1">
+                              <Building2 className="w-3 h-3 text-slate-400" />
+                              <span>{task.factory}</span>
+                              {task.uploaderDepartment && <span>• {task.uploaderDepartment}</span>}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveBottomTab("BAO_CAO");
+                                setTimeout(() => {
+                                  const el = document.getElementById(`report-card-${task.id}`);
+                                  if (el) {
+                                    el.scrollIntoView({ behavior: "smooth", block: "center" });
+                                    el.classList.add("ring-4", "ring-blue-400", "ring-offset-2");
+                                    setTimeout(() => {
+                                      el.classList.remove("ring-4", "ring-blue-400", "ring-offset-2");
+                                    }, 3000);
+                                  }
+                                }, 250);
+                              }}
+                              className="px-2 py-1 rounded-lg bg-blue-50 text-blue-700 font-bold hover:bg-blue-100 transition-colors flex items-center gap-1 cursor-pointer border-none"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              <T><span translate="no" className="notranslate">Xem chi tiết</span></T>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* TAB 3: HỒ SƠ CÁ NHÂN (Profile edit & sync) */}
+          {mobilePersonalTab === "PROFILE" && currentUser && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-4">
+              <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+                <Settings className="w-4 h-4 text-blue-600" />
+                <h3 className="text-xs font-black text-slate-800">
+                  <T><span translate="no" className="notranslate">Hồ Sơ Cá Nhân & Thông Tin Tài Khoản</span></T>
+                </h3>
+              </div>
+
+              {/* Avatar Upload */}
+              <div className="flex items-center gap-3.5">
+                <div className="relative">
+                  {mobileProfileAvatar ? (
+                    <img
+                      src={mobileProfileAvatar}
+                      alt="Avatar"
+                      className="w-16 h-16 rounded-2xl object-cover border-2 border-blue-500 shadow-sm"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center font-black text-xl border-2 border-blue-200">
+                      {mobileProfileFullName ? mobileProfileFullName.charAt(0).toUpperCase() : "U"}
+                    </div>
+                  )}
+                  <label className="absolute -bottom-1 -right-1 p-1.5 bg-blue-600 text-white rounded-xl shadow-md cursor-pointer hover:bg-blue-700 active:scale-95 transition-all">
+                    <Camera className="w-3.5 h-3.5" />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          try {
+                            const compressed = await compressAvatar(file);
+                            setMobileProfileAvatar(compressed);
+                            showToast("Đã chọn ảnh đại diện mới!");
+                          } catch (err) {
+                            showToast("Không thể tải ảnh, vui lòng thử lại!");
+                          }
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-bold text-slate-800 truncate">{mobileProfileFullName || "Chưa đặt tên"}</div>
+                  <div className="text-[10px] text-slate-500 truncate">{currentUser.phone || "Chưa đăng ký số điện thoại"}</div>
+                  <div className="mt-1">
+                    <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[9px] font-black border border-blue-200">
+                      {currentUser.role || "MEMBER"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Form Fields */}
+              <div className="space-y-3">
+                {/* ID (Read-only) */}
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                    <T><span translate="no" className="notranslate">Mã định danh (ID)</span></T>
+                  </label>
+                  <div className="flex items-center gap-2 p-2 bg-slate-100 rounded-xl border border-slate-200 text-[10px] text-slate-500 font-semibold">
+                    <Lock className="w-3.5 h-3.5 text-slate-400" />
+                    <span>{currentUser.id}</span>
+                  </div>
+                </div>
+
+                {/* Full Name */}
+                <div>
+                  <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                    <T><span translate="no" className="notranslate">Họ và tên đầy đủ *</span></T>
+                  </label>
+                  <input
+                    type="text"
+                    value={mobileProfileFullName}
+                    onChange={(e) => setMobileProfileFullName(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-500 focus:outline-hidden"
+                    placeholder="Nhập họ và tên..."
+                  />
+                </div>
+
+                {/* Phone */}
+                <div>
+                  <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                    <T><span translate="no" className="notranslate">Số điện thoại đăng ký</span></T>
+                  </label>
+                  <input
+                    type="tel"
+                    value={mobileProfilePhone}
+                    onChange={(e) => setMobileProfilePhone(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-500 focus:outline-hidden"
+                    placeholder="Nhập số điện thoại..."
+                  />
+                </div>
+
+                {/* Password Change */}
+                <div>
+                  <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                    <T><span translate="no" className="notranslate">Mật khẩu tài khoản</span></T>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={mobileProfileShowPassword ? "text" : "password"}
+                      value={mobileProfilePassword}
+                      onChange={(e) => setMobileProfilePassword(e.target.value)}
+                      className="w-full p-2.5 pr-9 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-500 focus:outline-hidden"
+                      placeholder="Nhập mật khẩu mới..."
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setMobileProfileShowPassword(!mobileProfileShowPassword)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      {mobileProfileShowPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Position / Title */}
+                <div>
+                  <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                    <T><span translate="no" className="notranslate">Chức danh / Vị trí</span></T>
+                  </label>
+                  <input
+                    type="text"
+                    value={mobileProfilePosition}
+                    onChange={(e) => setMobileProfilePosition(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-500 focus:outline-hidden"
+                    placeholder="Ví dụ: Kỹ sư QC, Trưởng ca..."
+                  />
+                </div>
+
+                {/* Company Selector */}
+                <div>
+                  <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                    <T><span translate="no" className="notranslate">Tập đoàn / Doanh nghiệp</span></T>
+                  </label>
+                  <select
+                    value={mobileProfileCompany}
+                    onChange={(e) => setMobileProfileCompany(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-500 focus:outline-hidden"
+                  >
+                    <option value="">-- Chọn doanh nghiệp --</option>
+                    {(companies || []).map((c) => (
+                      <option key={c.id} value={c.name}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Branch Selector */}
+                <div>
+                  <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                    <T><span translate="no" className="notranslate">Chi nhánh trực thuộc</span></T>
+                  </label>
+                  <select
+                    value={mobileProfileBranch}
+                    onChange={(e) => setMobileProfileBranch(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-500 focus:outline-hidden"
+                  >
+                    <option value="">-- Chọn chi nhánh --</option>
+                    {(branches || []).map((b) => (
+                      <option key={b.id} value={b.name}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Department Selector */}
+                <div>
+                  <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                    <T><span translate="no" className="notranslate">Bộ phận / Phòng ban</span></T>
+                  </label>
+                  <select
+                    value={mobileProfileDept}
+                    onChange={(e) => setMobileProfileDept(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:border-blue-500 focus:outline-hidden"
+                  >
+                    <option value="">-- Chọn bộ phận --</option>
+                    {(departments || []).map((d) => (
+                      <option key={d.id} value={d.name}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Save Button */}
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={handleSaveMobileProfile}
+                    className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs flex items-center justify-center gap-2 shadow-md shadow-blue-600/20 active:scale-95 transition-all cursor-pointer border-none"
+                  >
+                    <CheckCircle className="w-4 h-4 text-white" />
+                    <T><span translate="no" className="notranslate">LƯU THAY ĐỔI & ĐỒNG BỘ</span></T>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       ) : mobileFeedViewMode === "TRIAL" ? (
         <div 
           ref={scrollContainerRef}
@@ -9887,75 +10724,37 @@ App Link: ${window.location.origin}`;
                 <div className="bg-slate-50 border-t border-slate-100 px-2 py-1.5 flex justify-between items-center select-none text-[10px] font-semibold text-slate-600 gap-1 flex-nowrap">
                   <div className="flex items-center gap-1 shrink-0 flex-nowrap whitespace-nowrap">
                     {(() => {
-                      const isUploader = currentUser?.id === report.uploaderId;
-                      const isSpeciallyAuthorized = currentUser?.canSpeciallyEditDelete && isSameBranchOrFactory(currentUser?.branch, report.factory);
-                      const isReviewerAtMyBranch = currentUser?.role === UserRole.REVIEWER && isSameBranchOrFactory(currentUser?.branch, report.factory);
-                      const isAdmin = currentUser?.role === UserRole.ADMIN;
-                      const shouldShow = isUploader || isSpeciallyAuthorized || isReviewerAtMyBranch || isAdmin;
-
-                      if (!shouldShow) return null;
-
                       const allowed = isDeleteAllowed(report);
-                      if (allowed) {
-                        return (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onDeleteReport(report.id);
-                            }}
-                            className="flex items-center justify-center p-1 cursor-pointer transition-all hover:scale-110 active:scale-90 text-rose-600 hover:text-rose-800 border-none bg-transparent"
-                            title="Xóa bản tin"
-                          >
-                            <Trash2 className="w-[18px] h-[18px] stroke-[2.2px]" />
-                          </button>
-                        );
-                      } else {
-                        return (
-                          <button
-                            type="button"
-                            disabled
-                            className="flex items-center justify-center p-1 text-slate-350 opacity-40 cursor-not-allowed select-none border-none bg-transparent"
-                            title="Nút xóa đã bị vô hiệu hóa (quá 5 phút)"
-                          >
-                            <Trash2 className="w-[18px] h-[18px] stroke-[1.8px] text-slate-350" />
-                          </button>
-                        );
-                      }
+                      if (!allowed) return null;
+
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onDeleteReport(report.id);
+                          }}
+                          className="flex items-center justify-center p-1 cursor-pointer transition-all hover:scale-110 active:scale-90 text-rose-600 hover:text-rose-800 border-none bg-transparent"
+                          title="Xóa bản tin"
+                        >
+                          <Trash2 className="w-[18px] h-[18px] stroke-[2.2px]" />
+                        </button>
+                      );
                     })()}
 
                     {(() => {
-                      const isUploader = currentUser?.id === report.uploaderId;
-                      const isSpeciallyAuthorized = currentUser?.canSpeciallyEditDelete && isSameBranchOrFactory(currentUser?.branch, report.factory);
-                      const isReviewerAtMyBranch = currentUser?.role === UserRole.REVIEWER && isSameBranchOrFactory(currentUser?.branch, report.factory);
-                      const isAdmin = currentUser?.role === UserRole.ADMIN;
-                      const shouldShow = isUploader || isSpeciallyAuthorized || isReviewerAtMyBranch || isAdmin;
-
-                      if (!shouldShow) return null;
-
                       const allowed = isEditAllowed(report);
-                      if (allowed) {
-                        return (
-                          <button
-                            type="button"
-                            onClick={() => onEditReport(report)}
-                            className="flex items-center justify-center p-1 cursor-pointer transition-all hover:scale-110 active:scale-90 text-blue-600 hover:text-blue-800 border-none bg-transparent"
-                            title="Chỉnh sửa bản tin"
-                          >
-                            <Edit className="w-[18px] h-[18px] stroke-[2.2px]" />
-                          </button>
-                        );
-                      } else {
-                        return (
-                          <button
-                            type="button"
-                            disabled
-                            className="flex items-center justify-center p-1 text-slate-350 opacity-40 cursor-not-allowed select-none border-none bg-transparent"
-                            title="Nút chỉnh sửa đã bị vô hiệu hóa (quá 5 phút)"
-                          >
-                            <Edit className="w-[18px] h-[18px] stroke-[1.8px] text-slate-350" />
-                          </button>
-                        );
-                      }
+                      if (!allowed) return null;
+
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => onEditReport(report)}
+                          className="flex items-center justify-center p-1 cursor-pointer transition-all hover:scale-110 active:scale-90 text-blue-600 hover:text-blue-800 border-none bg-transparent"
+                          title="Chỉnh sửa bản tin"
+                        >
+                          <Edit className="w-[18px] h-[18px] stroke-[2.2px]" />
+                        </button>
+                      );
                     })()}
                   </div>
 
@@ -10505,28 +11304,25 @@ App Link: ${window.location.origin}`;
 
       {/* Modern bottom navigation tab bar containing Phân Tích, Đề Xuất, Bản Tin, Duyệt NS, [Họ + Tên Rút Gọn] */}
       {!(activeBottomTab === "TRAO_ĐỔI" && activeForumTopicId) && !isInputFocused && (
-      <div id="mobile-bottom-nav" className={`bg-slate-50 border-t border-slate-200 grid ${(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER || isHQOrManagerUser(currentUser)) ? "grid-cols-5" : "grid-cols-4"} py-2 text-center text-[9px] font-bold select-none shrink-0 font-sans shadow-inner shrink-0`}>
-        {/* 1. PHÂN TÍCH */}
+      <div id="mobile-bottom-nav" className={`relative bg-slate-50 border-t border-slate-200 grid ${(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER || isHQOrManagerUser(currentUser)) ? "grid-cols-5" : "grid-cols-4"} py-2 text-center text-[9px] font-bold select-none shrink-0 font-sans shadow-inner z-50`}>
+        {/* 1. CÁ NHÂN */}
         <button
           type="button"
           onClick={() => {
-            if (currentUser?.role !== UserRole.ADMIN) {
-              setMobileStatsSubTab("CHAT_LUONG");
-            }
-            setActiveBottomTab("PHAN_TICH");
+            setActiveBottomTab("CA_NHAN");
           }}
           className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors min-w-0 overflow-hidden ${
-            activeBottomTab === "PHAN_TICH"
-              ? "text-violet-600 font-extrabold"
-              : "text-slate-400 hover:text-violet-600"
+            activeBottomTab === "CA_NHAN"
+              ? "text-blue-600 font-extrabold"
+              : "text-slate-400 hover:text-blue-600"
           }`}
         >
           <div className="relative">
-            <BarChart2 className={`w-[18px] h-[18px] mx-auto mb-0.5 transition-transform hover:scale-110 ${
-              activeBottomTab === "PHAN_TICH" ? "text-violet-600 font-extrabold" : "text-violet-400"
+            <UserIcon className={`w-[18px] h-[18px] mx-auto mb-0.5 transition-transform hover:scale-110 ${
+              activeBottomTab === "CA_NHAN" ? "text-blue-600 font-extrabold" : "text-slate-400"
             }`} />
           </div>
-          <T><span translate="no" className="notranslate truncate w-full block text-center">Phân Tích</span></T>
+          <T><span translate="no" className="notranslate truncate w-full block text-center">Cá Nhân</span></T>
         </button>
         
         {/* 2. ĐỀ XUẤT */}
@@ -10644,15 +11440,33 @@ App Link: ${window.location.origin}`;
           </button>
         )}
 
-        {/* 5. [HỌ + TÊN RÚT GỌN] */}
+        {/* 5. MENU -> Toggle Menu Ngăn Kéo Sidebar (Sáng rực rỡ và có liên kết với Slidebar) */}
         <button
           type="button"
-          onClick={() => setShowLogoutConfirm(true)}
-          className="flex flex-col items-center justify-center py-0.5 text-slate-400 hover:text-rose-500 transition-colors cursor-pointer select-none border-none bg-transparent w-full min-w-0 overflow-hidden"
-          title="Đăng xuất tài khoản"
+          onClick={() => setShowMobileSidebar(prev => !prev)}
+          className={`relative flex flex-col items-center justify-center py-1 px-1 rounded-xl transition-all duration-200 cursor-pointer select-none border-none min-w-0 overflow-visible mx-0.5 ${
+            showMobileSidebar 
+              ? "bg-gradient-to-t from-blue-700 to-blue-600 text-white font-black shadow-[0_0_12px_rgba(37,99,235,0.6)] ring-2 ring-blue-400 scale-[1.04]" 
+              : "text-slate-500 hover:text-blue-600 bg-transparent hover:bg-slate-100/60"
+          }`}
+          title={showMobileSidebar ? "Đóng Menu" : "Mở Menu cá nhân & Hệ thống"}
         >
-          <LogOut className="w-[18px] h-[18px] mx-auto mb-0.5 text-rose-500 hover:text-rose-600 hover:scale-110 transition-transform" />
-          <T><span translate="no" className="notranslate truncate w-full block text-center text-[8px] font-semibold">{formatShortName(currentUser?.fullName)}</span></T>
+          {/* Mũi tên liên kết chỉ thẳng lên đáy của Slidebar */}
+          {showMobileSidebar && (
+            <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 w-0 h-0 border-x-[6px] border-x-transparent border-b-[7px] border-b-blue-600 drop-shadow-[0_-2px_4px_rgba(37,99,235,0.4)] animate-bounce" />
+          )}
+          <Menu className={`w-[18px] h-[18px] mx-auto mb-0.5 transition-transform ${
+            showMobileSidebar 
+              ? "text-white stroke-[3] scale-110 drop-shadow-sm" 
+              : "text-slate-600 hover:scale-110"
+          }`} />
+          <T>
+            <span translate="no" className={`notranslate truncate w-full block text-center text-[8px] ${
+              showMobileSidebar ? "font-black text-white" : "font-semibold text-slate-600"
+            }`}>
+              Menu
+            </span>
+          </T>
         </button>
       </div>
       )}
@@ -14486,7 +15300,7 @@ App Link: ${window.location.origin}`}
       )}
 
       {showLogoutConfirm && (
-        <div className="fixed lg:absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-[60] select-none animate-fadeIn">
+        <div className="fixed lg:absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-[80] select-none animate-fadeIn">
           <div className="bg-white rounded-2xl w-full max-w-[280px] p-5 shadow-2xl border border-slate-100 flex flex-col items-center text-center">
             <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mb-3">
               <LogOut className="w-5 h-5 text-rose-600" />
@@ -14516,6 +15330,818 @@ App Link: ${window.location.origin}`}
                 className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-black text-[10px] py-2 rounded-xl shadow-md cursor-pointer transition-all uppercase border-none"
               >
                 <T>Đăng Xuất</T>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Floating Right Sidebar Drawer (Hở trên, hở phải, hở dưới - không che thanh Menu đáy) */}
+      {showMobileSidebar && (
+        <div className="fixed lg:absolute inset-0 z-40 overflow-hidden select-none animate-fadeIn flex justify-end">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity cursor-pointer"
+            onClick={() => setShowMobileSidebar(false)}
+          />
+
+          {/* Floating Drawer Panel (Hở biên trên, biên phải, biên dưới rộng thoáng hơn - tạo khoảng hở đẹp mắt với thanh MENU đáy) */}
+          <div className="relative w-[85%] max-w-[320px] top-2 sm:top-3 right-2 sm:right-3 bottom-[64px] h-[calc(100%-78px)] bg-slate-50 shadow-2xl flex flex-col z-10 animate-in slide-in-from-right duration-250 border-2 border-blue-500/30 rounded-2xl sm:rounded-3xl overflow-hidden ring-4 ring-blue-500/10">
+            
+            {/* 1. HEADER PROFILE THU NHỎ - TINH GỌN PHƯƠNG ÁN 1 */}
+            <div className="bg-gradient-to-r from-blue-700 via-blue-800 to-indigo-900 text-white px-3.5 py-2.5 shrink-0 shadow-sm relative overflow-hidden">
+              {/* Decorative glow */}
+              <div className="absolute -top-4 -right-4 w-20 h-20 bg-white/10 rounded-full blur-lg pointer-events-none" />
+              
+              {/* Hàng 1: Avatar (30px) + Tên + Huy hiệu vai trò + Nút đóng X */}
+              <div className="flex items-center justify-between relative z-10 gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="relative shrink-0">
+                    <div className="w-8 h-8 rounded-xl bg-white/20 backdrop-blur-md text-white font-black text-xs flex items-center justify-center border border-white/30 shadow-xs">
+                      {currentUser?.fullName ? currentUser.fullName.charAt(0).toUpperCase() : "U"}
+                    </div>
+                    <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-emerald-500 border border-blue-900 rounded-full" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <h3 className="text-[12px] font-black text-white leading-tight truncate">
+                        <span translate="no" className="notranslate">{currentUser?.fullName || "Người dùng"}</span>
+                      </h3>
+                      <span className={`text-[7.5px] font-black px-1.5 py-0.2 rounded uppercase tracking-wider shrink-0 ${
+                        currentUser?.role === UserRole.ADMIN 
+                          ? "bg-rose-500 text-white" 
+                          : currentUser?.role === UserRole.REVIEWER 
+                          ? "bg-amber-400 text-slate-900" 
+                          : "bg-blue-400/30 text-blue-100 border border-blue-300/30"
+                      }`}>
+                        <span translate="no" className="notranslate">
+                          {currentUser?.role === UserRole.ADMIN 
+                            ? "ADMIN" 
+                            : currentUser?.role === UserRole.REVIEWER 
+                            ? "DUYỆT VIÊN" 
+                            : "USER"}
+                        </span>
+                      </span>
+                    </div>
+                    {/* Hàng 2: 1 dòng text thanh thoát hiển thị tên Phòng/Bộ phận */}
+                    <div className="text-[9.5px] text-blue-200/90 font-medium truncate mt-0.5 max-w-[190px]">
+                      <span translate="no" className="notranslate">{currentUser?.department || "Bộ phận chưa cập nhật"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Close Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowMobileSidebar(false)}
+                  className="w-6 h-6 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 text-white/80 hover:text-white flex items-center justify-center transition-all cursor-pointer border border-white/10 shrink-0"
+                  title="Đóng menu"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* 2. BODY / MENU ITEMS */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-3">
+
+              {/* BỘ SƯU TẬP HUY HIỆU THI ĐUA THEO THÁNG (PHƯƠNG ÁN A: DẢI TRƯỢT NGANG CAROUSEL MINI) */}
+              <div className="bg-gradient-to-b from-amber-50/90 via-orange-50/40 to-white rounded-2xl p-2.5 border border-amber-200/80 shadow-xs space-y-2">
+                {/* Header dải huy hiệu: Tiêu đề + Bộ lọc tháng mini */}
+                <div className="flex items-center justify-between gap-1">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <div className="w-5 h-5 rounded-lg bg-amber-500 text-white flex items-center justify-center font-bold shrink-0 shadow-2xs text-[10px]">
+                      🏆
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-[9px] font-black text-amber-950 uppercase tracking-wider block truncate">
+                        <span translate="no" className="notranslate">HUY HIỆU THI ĐUA</span>
+                      </span>
+                      <span className="text-[8px] font-bold text-amber-700 block">
+                        <span translate="no" className="notranslate">
+                          {sidebarFilteredBadges.length > 0 
+                            ? `${sidebarFilteredBadges.length} Huy hiệu đạt được`
+                            : "Chưa có huy hiệu"}
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Dropdown lọc tháng mini */}
+                  <div className="relative shrink-0">
+                    <select
+                      value={sidebarBadgeMonth}
+                      onChange={(e) => setSidebarBadgeMonth(e.target.value)}
+                      className="bg-white hover:bg-amber-50/80 border border-amber-300 text-amber-900 text-[8.5px] font-black rounded-lg px-2 py-1 pr-5 appearance-none outline-none focus:border-amber-500 shadow-3xs cursor-pointer"
+                    >
+                      <option value={currentMonthStr}>Tháng {currentMonthStr}</option>
+                      {availableBadgeMonths.filter(m => m !== currentMonthStr).map((m) => (
+                        <option key={m} value={m}>Tháng {m}</option>
+                      ))}
+                      <option value="ALL">Tất cả các tháng</option>
+                    </select>
+                    <ChevronDown className="w-2.5 h-2.5 text-amber-700 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Dải trượt ngang các huy hiệu đạt được (Carousel) */}
+                {groupedSidebarBadges.length > 0 ? (
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5 no-scrollbar scroll-smooth">
+                    {groupedSidebarBadges.map((badgeGroup, idx) => {
+                      const weight = badgeGroup.levelWeight;
+                      // Phân màu sắc & hiệu ứng theo Cấp Quản Lý khen thưởng:
+                      // Level 3 (Cấp Công ty / Ban TGĐ): Vàng Kim Hoàng Gia Cao Cấp (Gold / Crimson)
+                      // Level 2 (Cấp Giám đốc Chi nhánh / Nhà máy): Xanh Dương Sapphire Đậm (Royal Blue / Cyan)
+                      // Level 1 (Cấp Phòng ban / Tổ trưởng): Xanh Ngọc Lục Bảo Tinh Tế (Emerald / Teal)
+                      const cardStyle = weight === 3
+                        ? "bg-gradient-to-br from-amber-100 via-amber-50 to-orange-50 border-amber-400 text-amber-950 shadow-amber-500/10 ring-1 ring-amber-400/50"
+                        : weight === 2
+                        ? "bg-gradient-to-br from-blue-100 via-sky-50 to-indigo-50 border-blue-300 text-blue-950 shadow-blue-500/10"
+                        : "bg-gradient-to-br from-emerald-100 via-teal-50 to-emerald-50 border-emerald-300 text-emerald-950 shadow-emerald-500/10";
+
+                      const badgeIcon = weight === 3 ? "👑" : weight === 2 ? "🥇" : "🎖️";
+                      const tagBadgeStyle = weight === 3
+                        ? "bg-gradient-to-r from-amber-600 to-rose-600 text-white font-black shadow-3xs"
+                        : weight === 2
+                        ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black shadow-3xs"
+                        : "bg-emerald-600 text-white font-bold";
+
+                      const countColor = weight === 3 
+                        ? "text-rose-600" 
+                        : weight === 2 
+                        ? "text-blue-700" 
+                        : "text-emerald-700";
+
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setSelectedBadgeDetailModal({
+                              name: badgeGroup.name,
+                              count: badgeGroup.count,
+                              items: badgeGroup.items,
+                              currentIndex: 0
+                            });
+                          }}
+                          className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer select-none active:scale-95 shadow-3xs ${cardStyle}`}
+                        >
+                          <span className="text-base shrink-0 leading-none">{badgeIcon}</span>
+                          <div className="text-left min-w-0 max-w-[105px]">
+                            <div className="flex items-center gap-1 mb-0.5">
+                              <span className={`text-[6.5px] px-1 py-0.2 rounded-sm uppercase tracking-tight ${tagBadgeStyle}`}>
+                                <span translate="no" className="notranslate">{badgeGroup.levelLabel}</span>
+                              </span>
+                            </div>
+                            <div className="text-[8.5px] font-black leading-tight truncate">
+                              <span translate="no" className="notranslate">{badgeGroup.name}</span>
+                            </div>
+                            <div className="text-[7.5px] font-bold text-slate-500 flex items-center gap-1 mt-0.2">
+                              <span className={`font-black ${countColor}`}>
+                                x{badgeGroup.count}
+                              </span>
+                              <span className="opacity-40">•</span>
+                              <span className="text-emerald-600 font-black">+{badgeGroup.count * 30}đ</span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="py-2 px-2 bg-white/70 rounded-xl border border-dashed border-amber-200 text-center">
+                    <p className="text-[8.5px] text-amber-800/80 font-semibold">
+                      <span translate="no" className="notranslate">Chưa ghi nhận huy hiệu trong {sidebarBadgeMonth === "ALL" ? "hệ thống" : `tháng ${sidebarBadgeMonth}`}</span>
+                    </p>
+                  </div>
+                )}
+              </div>
+              
+              {/* Nhóm 1: Hệ thống & Giới thiệu */}
+              <div>
+                <div className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 px-1 mb-1 flex items-center gap-1">
+                  <ShieldCheck className="w-3 h-3 text-blue-600" />
+                  <span translate="no" className="notranslate">HỆ THỐNG & GIỚI THIỆU</span>
+                </div>
+                <div className="space-y-1 bg-white rounded-2xl p-1.5 border border-slate-200/80 shadow-xs">
+                  {/* Item 1: Giới thiệu Hệ thống META ANDON */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMobileSidebar(false);
+                      setShowAboutAndonModal(true);
+                    }}
+                    className="w-full p-2 rounded-xl text-left hover:bg-blue-50/80 active:bg-blue-100 transition-all flex items-center gap-2.5 group cursor-pointer border border-transparent hover:border-blue-100"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold shrink-0 group-hover:scale-105 transition-transform shadow-xs">
+                      <Info className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[11px] font-bold text-slate-800 group-hover:text-blue-700">
+                        <span translate="no" className="notranslate">Giới thiệu META ANDON</span>
+                      </div>
+                      <div className="text-[8.5px] text-slate-500 line-clamp-1 mt-0.5">
+                        <span translate="no" className="notranslate">Triết lý "Mỗi NV là 1 QC", 4M1E1I & CAPA</span>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all shrink-0" />
+                  </button>
+
+                  {/* Item 2: Kho Tri thức AI & Sổ tay hướng dẫn */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMobileSidebar(false);
+                      setShowKnowledgeModal(true);
+                    }}
+                    className="w-full p-2 rounded-xl text-left hover:bg-indigo-50/80 active:bg-indigo-100 transition-all flex items-center gap-2.5 group cursor-pointer border border-transparent hover:border-indigo-100"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shrink-0 group-hover:scale-105 transition-transform shadow-xs">
+                      <BookOpen className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[11px] font-bold text-slate-800 group-hover:text-indigo-700">
+                        <span translate="no" className="notranslate">Kho Tri thức AI & Sổ tay</span>
+                      </div>
+                      <div className="text-[8.5px] text-slate-500 line-clamp-1 mt-0.5">
+                        <span translate="no" className="notranslate">Quy trình SOP, tiêu chuẩn, tài liệu 5-Whys</span>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all shrink-0" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Nhóm 2: Tra cứu & Chuyên môn nâng cao */}
+              <div>
+                <div className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 px-1 mb-1 flex items-center gap-1">
+                  <BarChart2 className="w-3 h-3 text-purple-600" />
+                  <span translate="no" className="notranslate">TRA CỨU & CHUYÊN MÔN</span>
+                </div>
+                <div className="space-y-1 bg-white rounded-2xl p-1.5 border border-slate-200/80 shadow-xs">
+                  {/* Item 3: Báo cáo Thống kê & Phân tích */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMobileSidebar(false);
+                      setActiveBottomTab("PHAN_TICH");
+                    }}
+                    className="w-full p-2 rounded-xl text-left hover:bg-purple-50/80 active:bg-purple-100 transition-all flex items-center gap-2.5 group cursor-pointer border border-transparent hover:border-purple-100"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-bold shrink-0 group-hover:scale-105 transition-transform shadow-xs">
+                      <BarChart2 className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[11px] font-bold text-slate-800 group-hover:text-purple-700">
+                        <span translate="no" className="notranslate">Báo cáo Thống kê & Phân tích</span>
+                      </div>
+                      <div className="text-[8.5px] text-slate-500 line-clamp-1 mt-0.5">
+                        <span translate="no" className="notranslate">Biểu đồ 4M1E1I, tiến độ CAPA, thi đua</span>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-purple-600 group-hover:translate-x-0.5 transition-all shrink-0" />
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+            {/* 3. FOOTER CỐ ĐỊNH DƯỚI CÙNG (Chỉ còn duy nhất nút Đăng Xuất tinh gọn) */}
+            <div className="p-2.5 bg-white border-t border-slate-200 shrink-0 shadow-sm">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMobileSidebar(false);
+                  setShowLogoutConfirm(true);
+                }}
+                className="w-full py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm shadow-rose-600/20 transition-all cursor-pointer border-none"
+              >
+                <LogOut className="w-3.5 h-3.5 text-white" />
+                <span translate="no" className="notranslate">ĐĂNG XUẤT TÀI KHOẢN</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CHI TIẾT HUY HIỆU THI ĐUA */}
+      {selectedBadgeDetailModal && (() => {
+        const totalItems = selectedBadgeDetailModal.items?.length || 0;
+        const curIdx = selectedBadgeDetailModal.currentIndex >= 0 && selectedBadgeDetailModal.currentIndex < totalItems 
+          ? selectedBadgeDetailModal.currentIndex 
+          : 0;
+        const currentItem = totalItems > 0 ? selectedBadgeDetailModal.items[curIdx] : null;
+        const hasMultiple = totalItems > 1;
+
+        const handlePrev = () => {
+          if (!hasMultiple) return;
+          setSelectedBadgeDetailModal(prev => {
+            if (!prev) return null;
+            const nextIdx = (prev.currentIndex - 1 + prev.items.length) % prev.items.length;
+            return { ...prev, currentIndex: nextIdx };
+          });
+        };
+
+        const handleNext = () => {
+          if (!hasMultiple) return;
+          setSelectedBadgeDetailModal(prev => {
+            if (!prev) return null;
+            const nextIdx = (prev.currentIndex + 1) % prev.items.length;
+            return { ...prev, currentIndex: nextIdx };
+          });
+        };
+
+        const giverName = currentItem?.giverName || "Cấp quản lý";
+        const giverRole = currentItem?.giverRole || "Quản lý";
+        const timestamp = currentItem?.timestamp;
+        const reportCode = currentItem?.reportCode;
+        const content = currentItem?.content;
+        const points = currentItem?.points || 30;
+        const levelLabel = currentItem?.levelLabel;
+        const levelWeight = currentItem?.levelWeight || 1;
+
+        const badgeIcon = levelWeight === 3 ? "👑" : levelWeight === 2 ? "🥇" : "🎖️";
+
+        return (
+          <div className="fixed lg:absolute inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-[90] animate-fadeIn select-none">
+            <div className="bg-white rounded-3xl w-full max-w-[320px] p-4 shadow-2xl border border-slate-100 flex flex-col space-y-3 animate-in zoom-in-95 duration-150 relative">
+              {/* Header Modal */}
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xl shrink-0">{badgeIcon}</span>
+                  <div className="min-w-0">
+                    <h4 className="text-xs font-black text-slate-900 leading-tight truncate">
+                      <span translate="no" className="notranslate">{selectedBadgeDetailModal.name}</span>
+                    </h4>
+                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                      <span className="text-[8.5px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
+                        <span translate="no" className="notranslate">
+                          {hasMultiple ? `Đạt ${totalItems} lần (Lần ${curIdx + 1}/${totalItems})` : `Đạt 1 lần`}
+                        </span>
+                      </span>
+                      {levelLabel && (
+                        <span className="text-[7px] font-extrabold uppercase px-1 py-0.2 rounded bg-blue-50 text-blue-800 border border-blue-200">
+                          <span translate="no" className="notranslate">{levelLabel}</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedBadgeDetailModal(null)}
+                  className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
+                  title="Đóng"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Khung nội dung chi tiết với 2 nút chuyển qua lại 2 bên */}
+              <div className="relative flex items-center gap-1.5">
+                {/* Nút lùi (Trái) */}
+                {hasMultiple && (
+                  <button
+                    type="button"
+                    onClick={handlePrev}
+                    className="w-7 h-7 shrink-0 rounded-full bg-slate-100 hover:bg-blue-100 active:scale-90 text-slate-600 hover:text-blue-700 flex items-center justify-center transition-all cursor-pointer border border-slate-200 shadow-2xs"
+                    title="Huy hiệu trước"
+                  >
+                    <ChevronLeft className="w-4 h-4 stroke-[2.5]" />
+                  </button>
+                )}
+
+                {/* Chi tiết trao huy hiệu */}
+                <div className="flex-1 min-w-0 bg-slate-50 rounded-2xl p-3 border border-slate-200/80 space-y-2 text-[10px]">
+                  {giverName && (
+                    <div className="flex items-center justify-between text-slate-600 gap-1">
+                      <span className="shrink-0"><T>Cấp khen thưởng:</T></span>
+                      <span className="font-bold text-indigo-900 truncate max-w-[130px]" translate="no">
+                        {giverName} ({giverRole})
+                      </span>
+                    </div>
+                  )}
+                  {timestamp && (
+                    <div className="flex items-center justify-between text-slate-600 gap-1">
+                      <span className="shrink-0"><T>Thời điểm ghi nhận:</T></span>
+                      <span className="font-bold text-slate-800" translate="no">
+                        {timestamp}
+                      </span>
+                    </div>
+                  )}
+                  {reportCode && (
+                    <div className="flex items-center justify-between text-slate-600 gap-1">
+                      <span className="shrink-0"><T>Bản tin liên quan:</T></span>
+                      <span className="font-mono font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 text-[9.5px]" translate="no">
+                        #{reportCode}
+                      </span>
+                    </div>
+                  )}
+                  {points && (
+                    <div className="flex items-center justify-between text-slate-600 gap-1">
+                      <span className="shrink-0"><T>Điểm thi đua:</T></span>
+                      <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-[9.5px]">
+                        +{points}đ
+                      </span>
+                    </div>
+                  )}
+                  {content && (
+                    <div className="pt-1.5 border-t border-slate-200 text-slate-600 italic line-clamp-3 text-[9.5px]">
+                      "<span translate="no">{content}</span>"
+                    </div>
+                  )}
+                </div>
+
+                {/* Nút tiến (Phải) */}
+                {hasMultiple && (
+                  <button
+                    type="button"
+                    onClick={handleNext}
+                    className="w-7 h-7 shrink-0 rounded-full bg-slate-100 hover:bg-blue-100 active:scale-90 text-slate-600 hover:text-blue-700 flex items-center justify-center transition-all cursor-pointer border border-slate-200 shadow-2xs"
+                    title="Huy hiệu tiếp theo"
+                  >
+                    <ChevronRight className="w-4 h-4 stroke-[2.5]" />
+                  </button>
+                )}
+              </div>
+
+              {/* Dải chỉ số phân trang tròn (Dots Pagination) khi có nhiều hơn 1 huy hiệu */}
+              {hasMultiple && (
+                <div className="flex items-center justify-center gap-1.5 py-0.5">
+                  {selectedBadgeDetailModal.items.map((_, dotIdx) => (
+                    <button
+                      key={dotIdx}
+                      type="button"
+                      onClick={() => setSelectedBadgeDetailModal(prev => prev ? ({ ...prev, currentIndex: dotIdx }) : null)}
+                      className={`h-1.5 rounded-full transition-all cursor-pointer border-none ${
+                        dotIdx === curIdx 
+                          ? "w-5 bg-blue-600 shadow-xs" 
+                          : "w-1.5 bg-slate-300 hover:bg-slate-400"
+                      }`}
+                      title={`Xem lần ${dotIdx + 1}`}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* Nút đóng */}
+              <button
+                type="button"
+                onClick={() => setSelectedBadgeDetailModal(null)}
+                className="w-full py-2 bg-gradient-to-r from-blue-700 to-indigo-800 hover:from-blue-800 hover:to-indigo-900 active:scale-[0.98] text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer border-none transition-all"
+              >
+                <T>Đóng</T>
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* MODAL 1: GIỚI THIỆU HỆ THỐNG META ANDON */}
+      {showAboutAndonModal && (
+        <div className="fixed lg:absolute inset-0 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-[70] select-none animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-blue-700 via-blue-800 to-indigo-900 text-white p-4 flex items-center justify-between shrink-0 shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white font-bold border border-white/20 shadow-sm">
+                  <Info className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-xs sm:text-sm font-black text-white uppercase tracking-tight">
+                    <span translate="no" className="notranslate">GIỚI THIỆU HỆ THỐNG META ANDON</span>
+                  </h3>
+                  <p className="text-[9.5px] text-blue-200 font-medium">
+                    <span translate="no" className="notranslate">Quản lý Biến động 4M1E1I & Nâng cao Chất lượng</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAboutAndonModal(false)}
+                className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 text-white flex items-center justify-center transition-all cursor-pointer border border-white/10"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 overflow-y-auto space-y-4 text-slate-700 text-xs">
+              {/* Section 1: Triết lý cốt lõi */}
+              <div className="bg-blue-50/80 border border-blue-200 rounded-2xl p-3.5 space-y-2">
+                <div className="flex items-center gap-2 text-blue-800 font-extrabold text-xs">
+                  <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span translate="no" className="notranslate">TRIẾT LÝ: "MỖI NHÂN VIÊN LÀ MỘT QC"</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-slate-700 font-medium">
+                  <span translate="no" className="notranslate">
+                    Tại Tân Phú, chất lượng không chỉ là trách nhiệm riêng của phòng QC mà là cam kết của toàn thể đội ngũ. Mỗi người lao động trên chuyền ép, thổi, in, đóng gói đều là một kiểm soát viên chất lượng. Khi phát hiện bất kỳ biến động bất thường nào (KPH, rủi ro, sai sót tiềm ẩn), người lao động có quyền và trách nhiệm phát tín hiệu Andon ngay lập tức để ngăn chặn sản phẩm lỗi lọt sang công đoạn tiếp theo.
+                  </span>
+                </p>
+              </div>
+
+              {/* Section 2: Phương pháp quản lý 4M1E1I */}
+              <div className="space-y-2">
+                <div className="text-[11px] font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                  <Target className="w-4 h-4 text-indigo-600" />
+                  <span translate="no" className="notranslate">Ý NGHĨA PHƯƠNG PHÁP QUẢN TRỊ 4M1E1I</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
+                    <div className="font-extrabold text-indigo-700 flex items-center gap-1">
+                      <span>👷</span>
+                      <span translate="no" className="notranslate">MAN (Con người)</span>
+                    </div>
+                    <p className="text-slate-500 text-[9.5px]">
+                      <span translate="no" className="notranslate">Ý thức, tay nghề, thao tác, đào tạo và phân công nhân sự.</span>
+                    </p>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
+                    <div className="font-extrabold text-blue-700 flex items-center gap-1">
+                      <span>⚙️</span>
+                      <span translate="no" className="notranslate">MACHINE (Máy móc)</span>
+                    </div>
+                    <p className="text-slate-500 text-[9.5px]">
+                      <span translate="no" className="notranslate">Thiết bị, khuôn mẫu, thông số ép/thổi, bảo trì định kỳ.</span>
+                    </p>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
+                    <div className="font-extrabold text-emerald-700 flex items-center gap-1">
+                      <span>🧱</span>
+                      <span translate="no" className="notranslate">MATERIAL (Vật liệu)</span>
+                    </div>
+                    <p className="text-slate-500 text-[9.5px]">
+                      <span translate="no" className="notranslate">Hạt nhựa, phẩm màu, phụ gia, bao bì và chất lượng đầu vào.</span>
+                    </p>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
+                    <div className="font-extrabold text-amber-700 flex items-center gap-1">
+                      <span>📋</span>
+                      <span translate="no" className="notranslate">METHOD (Phương pháp)</span>
+                    </div>
+                    <p className="text-slate-500 text-[9.5px]">
+                      <span translate="no" className="notranslate">SOP, tiêu chuẩn thao tác chuẩn, hướng dẫn công việc.</span>
+                    </p>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
+                    <div className="font-extrabold text-teal-700 flex items-center gap-1">
+                      <span>🌿</span>
+                      <span translate="no" className="notranslate">ENVIRONMENT (Môi trường)</span>
+                    </div>
+                    <p className="text-slate-500 text-[9.5px]">
+                      <span translate="no" className="notranslate">Nhiệt độ, độ ẩm, ánh sáng, bụi bẩn, 5S tại chuyền.</span>
+                    </p>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
+                    <div className="font-extrabold text-purple-700 flex items-center gap-1">
+                      <span>💡</span>
+                      <span translate="no" className="notranslate">INFORMATION (Thông tin)</span>
+                    </div>
+                    <p className="text-slate-500 text-[9.5px]">
+                      <span translate="no" className="notranslate">Bản vẽ, lệnh sản xuất, tiêu chuẩn kỹ thuật, giao tiếp ca.</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3: Quy trình CAPA */}
+              <div className="space-y-2">
+                <div className="text-[11px] font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                  <Activity className="w-4 h-4 text-rose-600" />
+                  <span translate="no" className="notranslate">QUY TRÌNH CAPA (KHẮC PHỤC & PHÒNG NGỪA)</span>
+                </div>
+                <div className="space-y-1.5 text-[10px]">
+                  <div className="p-2 rounded-xl bg-rose-50 border border-rose-100 flex items-start gap-2">
+                    <span className="w-4 h-4 rounded-full bg-rose-600 text-white font-bold text-[9px] flex items-center justify-center shrink-0 mt-0.5">1</span>
+                    <div>
+                      <span className="font-bold text-rose-900"><span translate="no" className="notranslate">Cảnh báo Tức thì:</span></span>
+                      <p className="text-slate-600 text-[9.5px] mt-0.5"><span translate="no" className="notranslate">Phát hiện sự cố và gửi bản tin kèm ảnh hiện trường lên hệ thống.</span></p>
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-xl bg-amber-50 border border-amber-100 flex items-start gap-2">
+                    <span className="w-4 h-4 rounded-full bg-amber-600 text-white font-bold text-[9px] flex items-center justify-center shrink-0 mt-0.5">2</span>
+                    <div>
+                      <span className="font-bold text-amber-900"><span translate="no" className="notranslate">Phân tích 5-Whys:</span></span>
+                      <p className="text-slate-600 text-[9.5px] mt-0.5"><span translate="no" className="notranslate">Họp chớp nhoáng tại hiện trường, truy tìm nguyên nhân gốc rễ.</span></p>
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-xl bg-blue-50 border border-blue-100 flex items-start gap-2">
+                    <span className="w-4 h-4 rounded-full bg-blue-600 text-white font-bold text-[9px] flex items-center justify-center shrink-0 mt-0.5">3</span>
+                    <div>
+                      <span className="font-bold text-blue-900"><span translate="no" className="notranslate">Hành động CAPA:</span></span>
+                      <p className="text-slate-600 text-[9.5px] mt-0.5"><span translate="no" className="notranslate">Đề xuất giải pháp khắc phục tạm thời và phòng ngừa tái diễn lâu dài.</span></p>
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-100 flex items-start gap-2">
+                    <span className="w-4 h-4 rounded-full bg-emerald-600 text-white font-bold text-[9px] flex items-center justify-center shrink-0 mt-0.5">4</span>
+                    <div>
+                      <span className="font-bold text-emerald-900"><span translate="no" className="notranslate">Nghiệm thu & Nhân rộng:</span></span>
+                      <p className="text-slate-600 text-[9.5px] mt-0.5"><span translate="no" className="notranslate">Xác nhận hiệu quả và nhân rộng bài học cho toàn bộ các chuyền/nhà máy.</span></p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowAboutAndonModal(false)}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs transition-all cursor-pointer shadow-sm border-none"
+              >
+                <span translate="no" className="notranslate">Đã hiểu & Đóng</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: KHO TRI THỨC AI & SỔ TAY HƯỚNG DẪN */}
+      {showKnowledgeModal && (
+        <div className="fixed lg:absolute inset-0 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-[70] select-none animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[92vh] shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-indigo-700 via-indigo-800 to-purple-900 text-white p-4 flex items-center justify-between shrink-0 shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white font-bold border border-white/20 shadow-sm">
+                  <BookOpen className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-xs sm:text-sm font-black text-white uppercase tracking-tight">
+                    <span translate="no" className="notranslate">KHO TRI THỨC AI & SỔ TAY HƯỚNG DẪN</span>
+                  </h3>
+                  <p className="text-[9.5px] text-indigo-200 font-medium">
+                    <span translate="no" className="notranslate">Sổ tay SOP, Tài liệu Kỹ thuật & Cẩm nang 5-Whys</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowKnowledgeModal(false)}
+                className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 text-white flex items-center justify-center transition-all cursor-pointer border border-white/10"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Navigation Tabs */}
+            <div className="p-2.5 bg-slate-50 border-b border-slate-200 flex gap-1.5 shrink-0 overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setKnowledgeTab("5WHYS")}
+                className={`px-3 py-1.5 rounded-xl font-bold text-[10.5px] transition-all cursor-pointer whitespace-nowrap ${
+                  knowledgeTab === "5WHYS"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "bg-white text-slate-600 border border-slate-200 hover:bg-indigo-50"
+                }`}
+              >
+                <span translate="no" className="notranslate">🔍 Cẩm nang 5-Whys</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setKnowledgeTab("SOP")}
+                className={`px-3 py-1.5 rounded-xl font-bold text-[10.5px] transition-all cursor-pointer whitespace-nowrap ${
+                  knowledgeTab === "SOP"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "bg-white text-slate-600 border border-slate-200 hover:bg-indigo-50"
+                }`}
+              >
+                <span translate="no" className="notranslate">📑 Tiêu chuẩn & SOP</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setKnowledgeTab("CAPA")}
+                className={`px-3 py-1.5 rounded-xl font-bold text-[10.5px] transition-all cursor-pointer whitespace-nowrap ${
+                  knowledgeTab === "CAPA"
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "bg-white text-slate-600 border border-slate-200 hover:bg-indigo-50"
+                }`}
+              >
+                <span translate="no" className="notranslate">⚡ SLA & Phản ứng nhanh</span>
+              </button>
+            </div>
+
+            {/* Tab Contents */}
+            <div className="p-4 overflow-y-auto space-y-3.5 text-slate-700 text-xs flex-1">
+              {knowledgeTab === "5WHYS" && (
+                <div className="space-y-3">
+                  <div className="bg-indigo-50/80 border border-indigo-200 rounded-2xl p-3 space-y-1.5">
+                    <div className="font-extrabold text-indigo-900 text-xs flex items-center gap-1.5">
+                      <Lightbulb className="w-4 h-4 text-indigo-600" />
+                      <span translate="no" className="notranslate">NGUYÊN TẮC THỰC HIỆN 5-WHYS HIỆU QUẢ</span>
+                    </div>
+                    <p className="text-[10px] text-slate-600 leading-relaxed font-medium">
+                      <span translate="no" className="notranslate">
+                        5-Whys là phương pháp đặt liên tiếp 5 câu hỏi "Tại sao?" để xuyên qua các triệu chứng bề mặt và chạm tới nguyên nhân gốc rễ. Tránh đổ lỗi cho con người, tập trung vào lỗ hổng trong quy trình, thiết bị hoặc phương pháp.
+                      </span>
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="text-[10.5px] font-black text-slate-800 uppercase">
+                      <span translate="no" className="notranslate">VÍ DỤ THỰC TẾ: LỖI SẢN PHẨM BỊ CONG VÊNH (WARPAGE)</span>
+                    </div>
+                    <div className="space-y-1.5 text-[10px]">
+                      <div className="p-2 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-2">
+                        <span className="font-black text-indigo-600 min-w-12">Tại sao 1:</span>
+                        <span className="text-slate-700 font-medium">Sản phẩm sau khi ép ra bị cong vênh không đậy kín được nắp? → Do co ngót không đồng đều.</span>
+                      </div>
+                      <div className="p-2 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-2">
+                        <span className="font-black text-indigo-600 min-w-12">Tại sao 2:</span>
+                        <span className="text-slate-700 font-medium">Tại sao co ngót không đều? → Do nhiệt độ bề mặt khuôn chênh lệch lớn giữa khuôn đực và khuôn cái.</span>
+                      </div>
+                      <div className="p-2 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-2">
+                        <span className="font-black text-indigo-600 min-w-12">Tại sao 3:</span>
+                        <span className="text-slate-700 font-medium">Tại sao nhiệt độ khuôn chênh lệch? → Do đường nước giải nhiệt khuôn bị nghẹt cặn canxi.</span>
+                      </div>
+                      <div className="p-2 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-2">
+                        <span className="font-black text-indigo-600 min-w-12">Tại sao 4:</span>
+                        <span className="text-slate-700 font-medium">Tại sao đường nước bị nghẹt? → Do hệ thống lọc tháp giải nhiệt chưa được vệ sinh định kỳ.</span>
+                      </div>
+                      <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200 flex items-start gap-2">
+                        <span className="font-black text-emerald-700 min-w-12">Nguyên nhân gốc:</span>
+                        <span className="text-emerald-900 font-bold">Chưa có lịch bảo trì định kỳ tháp giải nhiệt và kiểm tra lưu lượng nước làm mát khuôn.</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {knowledgeTab === "SOP" && (
+                <div className="space-y-3">
+                  <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-1.5">
+                    <div className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span translate="no" className="notranslate">TIÊU CHUẨN GHI NHẬN HÌNH ẢNH SỰ CỐ</span>
+                    </div>
+                    <ul className="text-[10px] text-slate-600 space-y-1 list-disc pl-4 font-medium">
+                      <li><span translate="no" className="notranslate">Chụp 01 ảnh cận cảnh: Thấy rõ vị trí lỗi, ba via, bọt khí, biến dạng.</span></li>
+                      <li><span translate="no" className="notranslate">Chụp 01 ảnh toàn cảnh: Thấy rõ mã máy, chuyền sản xuất và vị trí đặt khuôn.</span></li>
+                      <li><span translate="no" className="notranslate">Kèm nhãn tem nhận diện lô sản phẩm và thời điểm phát hiện.</span></li>
+                    </ul>
+                  </div>
+
+                  <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-1.5">
+                    <div className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-blue-600" />
+                      <span translate="no" className="notranslate">PHÂN LOẠI MỨC ĐỘ KHẨN CẤP</span>
+                    </div>
+                    <div className="space-y-1 text-[10px]">
+                      <div className="flex items-center justify-between p-1.5 bg-rose-50 rounded-lg text-rose-900 font-medium">
+                        <span>🔴 Khẩn Cấp (Critical)</span>
+                        <span className="font-bold">Dừng chuyền ngay - SLA 15 phút</span>
+                      </div>
+                      <div className="flex items-center justify-between p-1.5 bg-amber-50 rounded-lg text-amber-900 font-medium">
+                        <span>🟡 Điểm KPH (Warning)</span>
+                        <span className="font-bold">Họp hiện trường - SLA 2 giờ</span>
+                      </div>
+                      <div className="flex items-center justify-between p-1.5 bg-blue-50 rounded-lg text-blue-900 font-medium">
+                        <span>🔵 Đề Xuất Cải Tiến (Kaizen)</span>
+                        <span className="font-bold">Đánh giá trong 24 giờ</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {knowledgeTab === "CAPA" && (
+                <div className="space-y-3">
+                  <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                    <div className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                      <Clock className="w-4 h-4 text-indigo-600" />
+                      <span translate="no" className="notranslate">CAM KẾT THỜI GIAN ĐÁP ỨNG (SLA)</span>
+                    </div>
+                    <p className="text-[10px] text-slate-600 font-medium leading-relaxed">
+                      <span translate="no" className="notranslate">
+                        Khi tín hiệu Andon phát ra, các bên liên quan (Kỹ thuật máy, Bảo trì khuôn, Quản lý chất lượng, Trưởng ca sản xuất) phải có mặt tại vị trí phát sinh sự cố theo đúng khung giờ SLA để phối hợp giải quyết dứt điểm.
+                      </span>
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-2xl bg-indigo-50/80 border border-indigo-200 text-[10px] space-y-1.5">
+                    <div className="font-extrabold text-indigo-900">
+                      <span translate="no" className="notranslate">QUY TẮC PHÒNG NGỪA TÁI DIỄN</span>
+                    </div>
+                    <p className="text-slate-700 leading-relaxed font-medium">
+                      <span translate="no" className="notranslate">
+                        Một hành động CAPA chỉ được coi là hoàn tất khi đã chuẩn hóa thành văn bản SOP, đào tạo cho nhân sự toàn ca và tiến hành theo dõi đối chứng trong tối thiểu 3 ca sản xuất liên tiếp không phát sinh lỗi tương tự.
+                      </span>
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowKnowledgeModal(false)}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs transition-all cursor-pointer shadow-sm border-none"
+              >
+                <span translate="no" className="notranslate">Đóng Sổ tay</span>
               </button>
             </div>
           </div>

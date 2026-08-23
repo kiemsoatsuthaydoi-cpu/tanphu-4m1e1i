@@ -142,7 +142,7 @@ import {
 import { parseReportTimestamp } from "../utils/notificationHelper";
 import { STANDARDIZED_QC_DEPT } from "../data";
 import { generateDailyReportPDF } from "../utils/pdfGenerator";
-import { formatNameCapitalized, canUserManageDirective, isSameBranchOrFactory, canUserProcessOrResolveReport, canUserTransferDnpTpp } from "../utils/branchHelpers";
+import { formatNameCapitalized, canUserManageDirective, isSameBranchOrFactory, canUserProcessOrResolveReport, canUserTransferDnpTpp, canUserEditReport, canUserDeleteReport, isReportWithin15Days } from "../utils/branchHelpers";
 import { MobileReportRatingContainer } from "./MobileReportRatingSection";
 import { MentionInput, MentionTextArea } from "./MentionTextArea";
 import { RichChatInputBox, AttachedImage } from "./RichChatInputBox";
@@ -2249,13 +2249,7 @@ export default function DashboardDesktop({
     if (urlParams.get("print") === "true" || urlParams.get("tab") === "capa" || urlParams.get("reportId")) {
       return "FORM_CAPA";
     }
-    if (currentUser?.role === UserRole.ADMIN) {
-      return "PHÊ_DUYỆT";
-    }
-    if (currentUser?.role === UserRole.REVIEWER) {
-      return "ĐỀ_XUẤT";
-    }
-    return "FORM_CAPA";
+    return "DỮ_LIỆU";
   });
 
   const [sidebarThemeId, setSidebarThemeId] = useState<string>(() => {
@@ -4011,58 +4005,11 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
   };
 
   const isDeleteReportAllowed = (report: QualityReport): boolean => {
-    if (!currentUser) return false;
-    const roleStr = currentUser.role as unknown as string;
-    if (
-      roleStr === "QUAN_LY_TRUONG" ||
-      roleStr === "BAN_GIAM_DOC" ||
-      roleStr === "ADMIN" ||
-      currentUser.role === UserRole.ADMIN ||
-      currentUser.role === UserRole.REVIEWER
-    ) {
-      return true;
-    }
-    if (report.uploaderName === currentUser.fullName || report.uploaderPhone === currentUser.phone) {
-      return true;
-    }
-    if (currentUser.canSpeciallyEditDelete && currentUser.branch === report.factory) {
-      return true;
-    }
-    return false;
+    return canUserDeleteReport(currentUser, report);
   };
 
   const isEditReportAllowed = (report: QualityReport): boolean => {
-    if (!currentUser) return false;
-    
-    // 1. Chỉ Admin mới được quyền chỉnh sửa mặc định mọi bản tin
-    if (currentUser.role === UserRole.ADMIN) {
-      return true;
-    }
-
-    // 2. Duyệt viên (Reviewer) chỉ có quyền chỉnh sửa đối với các bản tin thuộc đúng chi nhánh của mình
-    if (currentUser.role === UserRole.REVIEWER) {
-      return isSameBranchOrFactory(currentUser.branch, report.factory);
-    }
-
-    // 3. Đặc cách cho Nhân viên / Duyệt viên (canSpeciallyEditDelete) của chi nhánh hiện tại
-    if (currentUser.canSpeciallyEditDelete && isSameBranchOrFactory(currentUser.branch, report.factory)) {
-      return true;
-    }
-
-    // 4. Người đăng tin (uploader) chỉ được sửa bài của chính mình trong vòng 5 phút kể từ khi đăng
-    if (
-      report.uploaderId === currentUser.id ||
-      report.uploaderName === currentUser.fullName ||
-      report.uploaderPhone === currentUser.phone
-    ) {
-      const reportDate = parseReportTimestamp(report.timestamp);
-      const now = new Date();
-      const diffMs = now.getTime() - reportDate.getTime();
-      const diffMin = diffMs / (1000 * 60);
-      return diffMin >= 0 && diffMin <= 5; // Hợp lệ dưới 5 phút
-    }
-    
-    return false;
+    return canUserEditReport(currentUser, report);
   };
 
   const getFormattedUserDept = (userDeptText: string | undefined | null, userBranchText: string | undefined | null) => {
@@ -10175,54 +10122,23 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                       </button>
                                     )}
 
-                                    {(() => {
-                                      const isUploader = currentUser?.id === r.uploaderId || currentUser?.fullName === r.uploaderName || currentUser?.phone === r.uploaderPhone;
-                                      const isSpeciallyAuthorized = currentUser?.canSpeciallyEditDelete && isSameBranchOrFactory(currentUser?.branch, r.factory);
-                                      const isReviewerAtMyBranch = currentUser?.role === UserRole.REVIEWER && isSameBranchOrFactory(currentUser?.branch, r.factory);
-                                      const isAdmin = currentUser?.role === UserRole.ADMIN;
-                                      const shouldShow = isUploader || isSpeciallyAuthorized || isReviewerAtMyBranch || isAdmin;
+                                    {isEditReportAllowed(r) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (onEditReport) {
+                                            onEditReport(r);
+                                          }
+                                        }}
+                                        className="w-full p-1 px-2 bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-800 border border-blue-200 rounded text-[10px] font-extrabold cursor-pointer transition-all uppercase flex items-center justify-center gap-1 mx-auto shadow-2xs"
+                                        title="Chỉnh sửa bản tin 4M1E1I"
+                                      >
+                                        <Edit className="w-3.5 h-3.5" />
+                                        <T><span translate="no" className="notranslate font-black">Sửa</span></T>
+                                      </button>
+                                    )}
 
-                                      if (!shouldShow) return null;
-
-                                      const allowed = isEditReportAllowed(r);
-                                      if (allowed) {
-                                        return (
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              if (onEditReport) {
-                                                onEditReport(r);
-                                              }
-                                            }}
-                                            className="w-full p-1 px-2 bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-800 border border-blue-200 rounded text-[10px] font-extrabold cursor-pointer transition-all uppercase flex items-center justify-center gap-1 mx-auto shadow-2xs"
-                                            title="Chỉnh sửa bản tin 4M1E1I"
-                                          >
-                                            <Edit className="w-3.5 h-3.5" />
-                                            <T><span translate="no" className="notranslate font-black">Sửa</span></T>
-                                          </button>
-                                        );
-                                      } else {
-                                        return (
-                                          <button
-                                            type="button"
-                                            disabled
-                                            className="w-full p-1 px-2 bg-slate-100 text-slate-400 border border-slate-200 rounded text-[10px] font-extrabold cursor-not-allowed opacity-50 uppercase flex items-center justify-center gap-1 mx-auto"
-                                            title="Nút chỉnh sửa đã bị vô hiệu hóa (quá 5 phút đối với người tạo)"
-                                          >
-                                            <Edit className="w-3.5 h-3.5" />
-                                            <T><span translate="no" className="notranslate font-black">Sửa</span></T>
-                                          </button>
-                                        );
-                                      }
-                                    })()}
-
-                                    {!isDeleteReportAllowed(r) && !(() => {
-                                      const isUploader = currentUser?.id === r.uploaderId || currentUser?.fullName === r.uploaderName || currentUser?.phone === r.uploaderPhone;
-                                      const isSpeciallyAuthorized = currentUser?.canSpeciallyEditDelete && isSameBranchOrFactory(currentUser?.branch, r.factory);
-                                      const isReviewerAtMyBranch = currentUser?.role === UserRole.REVIEWER && isSameBranchOrFactory(currentUser?.branch, r.factory);
-                                      const isAdmin = currentUser?.role === UserRole.ADMIN;
-                                      return isUploader || isSpeciallyAuthorized || isReviewerAtMyBranch || isAdmin;
-                                    })() && (
+                                    {!isDeleteReportAllowed(r) && !isEditReportAllowed(r) && (
                                       <span className="text-slate-400 text-[10px] italic">-</span>
                                     )}
                                   </div>
@@ -10570,7 +10486,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                             type="text" 
                             disabled 
                             value={currentUser.id}
-                            className="w-full bg-slate-100 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-500 font-bold font-mono focus:outline-none cursor-not-allowed"
+                            className="w-full bg-slate-100 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-500 font-bold focus:outline-none cursor-not-allowed"
                           />
                         </div>
                       </div>
@@ -10608,7 +10524,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                             value={profilePhone}
                             onChange={(e) => setProfilePhone(e.target.value)}
                             placeholder="Nhập số điện thoại..."
-                            className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-850 font-semibold font-mono focus:outline-none shadow-xs transition-colors"
+                            className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-850 font-semibold focus:outline-none shadow-xs transition-colors"
                           />
                         </div>
                       </div>
@@ -11339,8 +11255,8 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                                 <Eye className="w-3 h-3" />
                                               </button>
 
-                                              {/* Sửa (chỉ nếu là người tạo hoặc Admin) */}
-                                              {(isCreated || currentUser?.role === UserRole.ADMIN) && (
+                                              {/* Sửa (chỉ nếu có quyền & trong thời hạn 15 ngày) */}
+                                              {isEditReportAllowed(r) && (
                                                 <button
                                                   type="button"
                                                   onClick={() => {
@@ -11355,8 +11271,8 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                                 </button>
                                               )}
 
-                                              {/* Xóa (chỉ nếu là người tạo hoặc Admin) */}
-                                              {(isCreated || currentUser?.role === UserRole.ADMIN) && (
+                                              {/* Xóa (chỉ nếu có quyền & trong thời hạn 15 ngày) */}
+                                              {isDeleteReportAllowed(r) && (
                                                 <button
                                                   type="button"
                                                   onClick={() => {

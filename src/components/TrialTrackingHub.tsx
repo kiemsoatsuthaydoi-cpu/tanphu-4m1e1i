@@ -522,7 +522,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
   };
   const [newTitle, setNewTitle] = useState("");
   const [newProduct, setNewProduct] = useState("");
-  const [newTrialType, setNewTrialType] = useState<"B2B" | "B2C">("B2B");
+  const [newTrialType, setNewTrialType] = useState<"B2B" | "B2C" | "">("");
   const [newCategory, setNewCategory] = useState<Category4M1E1I>("NGUYÊN VẬT LIỆU");
   const [newCompany, setNewCompany] = useState<"TPP" | "DNP">(
     currentUser?.company === "DNP" ? "DNP" : "TPP"
@@ -1580,6 +1580,10 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
   // Handle Create New Trial
   const handleCreateTrial = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newTrialType) {
+      if (showToast) showToast("Vui lòng chọn Phân hệ Thử nghiệm (TN-B2B hoặc TN-B2C)!");
+      return;
+    }
     if (!newTitle.trim() || !newProduct.trim()) return;
 
     const dateStr = new Date().toLocaleDateString("vi-VN", {
@@ -1730,6 +1734,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
     setIsCreateModalOpen(false);
     setClonedFromTrial(null);
     // Reset inputs
+    setNewTrialType("");
     setNewTitle("");
     setNewProduct("");
     setNewReqDocNo("");
@@ -1776,7 +1781,11 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
             <div className="flex items-center gap-2.5 flex-wrap">
               <button
                 type="button"
-                onClick={() => setIsCreateModalOpen(true)}
+                onClick={() => {
+                  setClonedFromTrial(null);
+                  setNewTrialType("");
+                  setIsCreateModalOpen(true);
+                }}
                 className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-teal-600 hover:bg-teal-700 active:scale-95 text-white shadow-md shadow-teal-600/25 transition-all flex items-center justify-center cursor-pointer border border-teal-500 shrink-0"
                 title="Tạo đợt thử nghiệm mới"
                 aria-label="Tạo đợt thử nghiệm mới"
@@ -4415,9 +4424,16 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
 
               {/* Phân hệ Thử nghiệm (TN-B2B vs TN-B2C) */}
               <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  <span translate="no" className="notranslate">Phân hệ Thử Nghiệm: *</span>
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-bold text-slate-700">
+                    <span translate="no" className="notranslate">Phân hệ Thử Nghiệm: *</span>
+                  </label>
+                  {!newTrialType && (
+                    <span className="text-[10px] text-amber-600 font-bold animate-pulse">
+                      <span translate="no" className="notranslate">⚠️ Bắt buộc chọn 1 phân hệ</span>
+                    </span>
+                  )}
+                </div>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
@@ -4425,7 +4441,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                     className={`py-2 px-2.5 rounded-xl font-bold text-xs border flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap min-w-0 ${
                       newTrialType === "B2B"
                         ? "bg-blue-600 text-white border-blue-600 shadow-sm ring-2 ring-blue-200"
-                        : "bg-amber-50/50 text-slate-700 border-amber-200 hover:bg-blue-50"
+                        : "bg-white hover:bg-blue-50 text-slate-700 border-slate-300 hover:border-blue-300"
                     }`}
                   >
                     <span>🏢</span>
@@ -4437,7 +4453,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                     className={`py-2 px-2.5 rounded-xl font-bold text-xs border flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap min-w-0 ${
                       newTrialType === "B2C"
                         ? "bg-purple-600 text-white border-purple-600 shadow-sm ring-2 ring-purple-200"
-                        : "bg-amber-50/50 text-slate-700 border-amber-200 hover:bg-purple-50"
+                        : "bg-white hover:bg-purple-50 text-slate-700 border-slate-300 hover:border-purple-300"
                     }`}
                   >
                     <span>🛍️</span>
