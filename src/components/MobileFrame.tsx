@@ -7112,7 +7112,7 @@ App Link: ${window.location.origin}`;
       </div>
 
       {/* Internal layout controls (Search inputs & Status filters) */}
-      {activeBottomTab === "BAO_CAO" && (
+      {activeBottomTab === "BAO_CAO" && mobileFeedSubTab === "FEED" && (
         <div className={`transition-all duration-300 overflow-hidden shrink-0 ${
           showFilters ? (mobileFeedViewMode === "TRIAL" ? "max-h-[140px] opacity-100" : "max-h-[105px] opacity-100") : "max-h-0 opacity-0 pointer-events-none"
         }`}>
@@ -9814,7 +9814,7 @@ App Link: ${window.location.origin}`;
             </div>
           )}
         </div>
-      ) : mobileFeedViewMode === "TRIAL" ? (
+      ) : (mobileFeedViewMode === "TRIAL" && mobileFeedSubTab !== "PROPOSAL") ? (
         <div 
           ref={scrollContainerRef}
           onScroll={handleScroll}
@@ -9847,9 +9847,42 @@ App Link: ${window.location.origin}`;
             onScroll={handleScroll}
             className="flex-1 p-3 space-y-3.5 bg-slate-50 relative overflow-y-auto"
           >
+            {mobileFeedSubTab === "PROPOSAL" && (
+              <div className="bg-white rounded-2xl border border-amber-200 p-3.5 shadow-xs space-y-1.5 mb-3 select-none">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-xl bg-amber-500 text-white flex items-center justify-center">
+                      <Lightbulb className="w-4 h-4 text-white" />
+                    </div>
+                    <h2 className="text-xs font-black tracking-tight uppercase text-amber-900">
+                      <T><span translate="no" className="notranslate">ĐỀ XUẤT CHỜ PHÊ DUYỆT</span></T>
+                    </h2>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-black">
+                    {sortedReports.length} <T><span translate="no" className="notranslate">tin bài</span></T>
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-600 leading-snug">
+                  <T><span translate="no" className="notranslate">Danh sách các tin bài đề xuất gửi lên cần Ban quản lý kiểm duyệt trước khi phát hành lên Bản tin chung.</span></T>
+                </p>
+              </div>
+            )}
+
         {sortedReports.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center p-6 bg-white rounded-2xl border border-slate-200 bg-opacity-70">
-            <T className="text-slate-400 text-xs font-semibold">Không tìm thấy báo cáo nào phù hợp.</T>
+          <div className="h-full flex flex-col items-center justify-center text-center p-6 bg-white rounded-2xl border border-slate-200 bg-opacity-70 my-6">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-500 flex items-center justify-center mb-3">
+              <Lightbulb className="w-6 h-6 text-amber-500" />
+            </div>
+            <T className="text-slate-700 text-xs font-bold mb-1">
+              {mobileFeedSubTab === "PROPOSAL"
+                ? "Không có đề xuất nào đang chờ duyệt"
+                : "Không tìm thấy báo cáo nào phù hợp."}
+            </T>
+            <T className="text-slate-400 text-[10px]">
+              {mobileFeedSubTab === "PROPOSAL"
+                ? "Tất cả đề xuất đã được phê duyệt hoặc chưa có đề xuất mới."
+                : "Vui lòng thử chọn bộ lọc hoặc từ khóa tìm kiếm khác."}
+            </T>
           </div>
         ) : (
           sortedReports.map((report) => {
@@ -12210,6 +12243,7 @@ App Link: ${window.location.origin}`;
           onClick={() => {
             setActiveBottomTab("BAO_CAO");
             setMobileFeedSubTab("PROPOSAL");
+            setMobileFeedViewMode("REPORT");
           }}
           className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors min-w-0 overflow-visible ${
             activeBottomTab === "BAO_CAO" && mobileFeedSubTab === "PROPOSAL"

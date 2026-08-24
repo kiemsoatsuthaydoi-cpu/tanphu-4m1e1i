@@ -278,10 +278,10 @@ export default function ProgressTrackingDashboard({
         <div className="absolute right-0 top-0 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none -mr-16 -mt-16"></div>
         <div className="relative z-10 flex items-center gap-2 sm:gap-3.5 min-w-0 flex-1">
           <div className="min-w-0 flex-1">
-            <h2 className="text-[8px] sm:text-xs md:text-sm lg:text-base font-black tracking-tight uppercase text-white leading-tight">
+            <h2 className="text-sm md:text-base lg:text-lg font-black tracking-tight uppercase text-white leading-tight">
               <T><span translate="no" className="notranslate">BẢNG TIẾN ĐỘ CẢI TIẾN & KHẮC PHỤC CHẤT LƯỢNG</span></T>
             </h2>
-            <p className="text-[6.5px] sm:text-[9.5px] text-blue-100/90 mt-0.5 leading-snug">
+            <p className="text-[10px] sm:text-xs text-blue-100/90 mt-0.5 leading-snug">
               <T><span translate="no" className="notranslate">Theo dõi tỷ lệ giải quyết bất thường, tiến độ đóng hành động khắc phục phòng ngừa</span></T>
             </p>
           </div>
