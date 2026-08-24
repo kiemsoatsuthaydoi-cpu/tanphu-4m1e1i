@@ -450,8 +450,13 @@ export function generateNotifications(
     });
   }
 
-  // Filter out deleted notifications
-  const activeList = list.filter((n) => !deletedNotifIds.includes(n.id));
+  // Filter out deleted notifications (checking both original ID and any broadcast prefix variants)
+  const deletedSet = new Set(deletedNotifIds || []);
+  const activeList = list.filter((n) => {
+    const rawId = n.id.replace(/^broadcast-/, "");
+    const broadcastKey = `broadcast-${rawId}`;
+    return !deletedSet.has(n.id) && !deletedSet.has(rawId) && !deletedSet.has(broadcastKey);
+  });
 
   // Sort notifications chronologically descending (newest first)
   return activeList.sort((a, b) => {

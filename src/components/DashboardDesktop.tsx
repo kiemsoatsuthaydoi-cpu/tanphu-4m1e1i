@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import ExcelJS from "exceljs";
 import ReactMarkdown from "react-markdown";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../utils/firebase";
 import { COLLECTIONS, saveDocument, deleteDocument } from "../utils/firebaseSync";
 import {
@@ -68,6 +68,7 @@ import {
   ChevronDown,
   ChevronUp,
   CornerUpLeft,
+  HelpCircle,
   User as UserIcon,
   Award,
   ExternalLink,
@@ -227,6 +228,7 @@ interface DashboardDesktopProps {
   onForceSyncMetadata?: () => Promise<void>;
   onForceSyncUsers?: () => Promise<void>;
   onDeleteReport?: (id: string, forcePermanent?: boolean) => void;
+  onEmptyTrash?: () => void;
   onShowToast?: (message: string, type?: "success" | "error" | "warning" | "info") => void;
   onDeleteBroadcast?: (id: string) => void;
   tickerConfig?: { text: string; speed: number; spacing: number };
@@ -234,6 +236,7 @@ interface DashboardDesktopProps {
   aiKnowledgeText?: string;
   onUpdateAiKnowledge?: (newText: string) => void;
   systemNotifications?: AppNotification[];
+  deletedNotifIds?: string[];
   onDeleteNotification?: (id: string) => void;
   readNotifIds?: string[];
   setReadNotifIds?: React.Dispatch<React.SetStateAction<string[]>>;
@@ -712,13 +715,13 @@ function DesktopDirectiveForm({
           value={text}
           onChange={setText}
           placeholder="Nhập chỉ đạo (@ nhắc tên)..."
-          className="w-full bg-transparent border-none text-[11.5px] px-2 py-0.5 placeholder:text-slate-400 placeholder:italic focus:outline-none select-text"
+          className="w-full bg-transparent border-none text-[12.5px] px-2 py-0.5 placeholder:text-slate-400 placeholder:italic focus:outline-none select-text"
         />
       </div>
       <button
         type="submit"
         disabled={!text.trim()}
-        className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-bold text-[11px] rounded-md shadow-2xs cursor-pointer transition-all shrink-0 flex items-center gap-1.5 active:scale-95 select-none"
+        className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-bold text-[12.5px] rounded-md shadow-2xs cursor-pointer transition-all shrink-0 flex items-center gap-1.5 active:scale-95 select-none"
       >
         <Send className="w-3 h-3" />
         <T><span translate="no" className="notranslate">GỬI</span></T>
@@ -2200,6 +2203,7 @@ export default function DashboardDesktop({
   onForceSyncMetadata,
   onForceSyncUsers,
   onDeleteReport,
+  onEmptyTrash,
   onShowToast,
   onDeleteBroadcast,
   tickerConfig,
@@ -2207,6 +2211,7 @@ export default function DashboardDesktop({
   aiKnowledgeText,
   onUpdateAiKnowledge,
   systemNotifications = [],
+  deletedNotifIds: deletedNotifIdsProp = [],
   onDeleteNotification,
   readNotifIds: readNotifIdsProp,
   setReadNotifIds: setReadNotifIdsProp,
@@ -2811,6 +2816,7 @@ export default function DashboardDesktop({
 
     const userSig = `${currentUser?.department || "Bộ phận"} - ${currentUser?.fullName || "Người nhận"}`;
 
+    let isCancelling = false;
     const updatedDirectives = (report.directives || []).map((d) => {
       if (d.id === dirId) {
         const currentList = d.acknowledges ? [...d.acknowledges] : [];
@@ -2821,15 +2827,20 @@ export default function DashboardDesktop({
           });
         }
         const isAlreadyAdded = currentList.some(item => item.by === userSig);
-        const newList = isAlreadyAdded 
-          ? currentList 
-          : [...currentList, { by: userSig, at: stamp }];
+        let newList: { by: string; at: string }[];
+        if (isAlreadyAdded) {
+          isCancelling = true;
+          newList = currentList.filter(item => item.by !== userSig);
+        } else {
+          newList = [...currentList, { by: userSig, at: stamp }];
+        }
 
+        const stillAck = newList.length > 0;
         return {
           ...d,
-          isAcknowledged: true,
-          acknowledgedBy: userSig,
-          acknowledgedAt: stamp,
+          isAcknowledged: stillAck,
+          acknowledgedBy: stillAck ? (newList[newList.length - 1]?.by || userSig) : undefined,
+          acknowledgedAt: stillAck ? (newList[newList.length - 1]?.at || stamp) : undefined,
           acknowledges: newList
         };
       }
@@ -2843,7 +2854,7 @@ export default function DashboardDesktop({
       });
     }
     if (onShowToast) {
-      onShowToast("Đã xác nhận tiếp nhận chỉ đạo! 🤝", "success");
+      onShowToast(isCancelling ? "Đã hủy tiếp nhận chỉ đạo! ↩️" : "Đã xác nhận tiếp nhận chỉ đạo! 🤝", "success");
     }
   };
 
@@ -2877,12 +2888,44 @@ export default function DashboardDesktop({
   const directChatScrollRefDesktop = useRef<HTMLDivElement | null>(null);
   const directMessageInputRefDesktop = useRef<HTMLInputElement | null>(null);
 
+  const [deletedDirectMsgIds, setDeletedDirectMsgIds] = useState<string[]>(() => {
+    try {
+      const saved = safeGetItem("4m1e1i_deleted_direct_msg_ids_v1");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+
+  const deletedDirectMsgIdsRef = useRef(deletedDirectMsgIds);
+  useEffect(() => {
+    deletedDirectMsgIdsRef.current = deletedDirectMsgIds;
+    try {
+      safeSetItem("4m1e1i_deleted_direct_msg_ids_v1", JSON.stringify(deletedDirectMsgIds));
+    } catch {}
+  }, [deletedDirectMsgIds]);
+
   const [directMessages, setDirectMessages] = useState<DirectMessageItem[]>(() => {
     try {
+      const deletedIds = (() => {
+        try {
+          const s = safeGetItem("4m1e1i_deleted_direct_msg_ids_v1");
+          return s ? JSON.parse(s) : [];
+        } catch {
+          return [];
+        }
+      })();
       const saved = safeGetItem("4m1e1i_direct_messages_v1");
       if (saved) {
         const parsed: DirectMessageItem[] = JSON.parse(saved);
-        return parsed.filter(m => !m.id?.startsWith("dm-reply-") && !m.content?.includes("Dạ em chào anh/chị"));
+        return parsed.filter(m => 
+          !m.id?.startsWith("dm-reply-") && 
+          !m.content?.includes("Dạ em chào anh/chị") &&
+          !deletedIds.includes(m.id) &&
+          !(m as any).isDeleted
+        );
       }
     } catch {}
     return [
@@ -2912,15 +2955,15 @@ export default function DashboardDesktop({
         collection(db, COLLECTIONS.DIRECT_MESSAGES),
         (snapshot) => {
           const list: DirectMessageItem[] = [];
+          const currentDeleted = deletedDirectMsgIdsRef.current || [];
           snapshot.forEach((docSnap) => {
             const data = docSnap.data() as DirectMessageItem;
-            if (data && data.id) {
-              list.push(data);
+            const msgId = docSnap.id || data?.id;
+            if (data && msgId && !(data as any).isDeleted && !currentDeleted.includes(msgId)) {
+              list.push({ ...data, id: msgId });
             }
           });
-          if (list.length > 0) {
-            setDirectMessages(list);
-          }
+          setDirectMessages(list);
         },
         (err) => {
           console.warn("[Firestore] Desktop direct_messages realtime sync error:", err);
@@ -3048,47 +3091,97 @@ export default function DashboardDesktop({
     }, 50);
   }, [activeDirectChatUser, directMessageInput, currentUser, markMsgAsReadForUser]);
 
-  const handleClearDirectMessages = useCallback(() => {
-    if (!activeDirectChatUser || !currentUser) return;
-    directMessages.forEach(m => {
-      if ((isMsgFromUser(m, currentUser) && isMsgToUser(m, activeDirectChatUser)) ||
-          (isMsgFromUser(m, activeDirectChatUser) && isMsgToUser(m, currentUser))) {
-        deleteDocument(COLLECTIONS.DIRECT_MESSAGES, m.id);
-      }
-    });
-    setDirectMessages(prev => prev.filter(m => 
-      !(
-        (isMsgFromUser(m, currentUser) && isMsgToUser(m, activeDirectChatUser)) ||
-        (isMsgFromUser(m, activeDirectChatUser) && isMsgToUser(m, currentUser))
-      )
-    ));
-  }, [activeDirectChatUser, currentUser, directMessages, isMsgFromUser, isMsgToUser]);
+  const isMessageInConversation = useCallback((
+    m: DirectMessageItem,
+    userA: User | null | undefined,
+    userB: User | null | undefined
+  ): boolean => {
+    if (!userA || !userB || !m) return false;
+
+    const norm = (s?: string | null) => (s ? s.normalize("NFC").trim().toLowerCase().replace(/\s+/g, " ") : "");
+    const base = (s?: string | null) => norm(s).replace(/\(.*?\)/g, "").trim();
+
+    const fromA = isCurrentUserSender(userA, (m as any).senderPhone, m.senderName, m.senderId, m.senderRole);
+    const toA = isCurrentUserSender(userA, (m as any).receiverPhone, m.receiverName, m.receiverId, (m as any).receiverRole);
+
+    const fromB = isCurrentUserSender(userB, (m as any).senderPhone, m.senderName, m.senderId, m.senderRole);
+    const toB = isCurrentUserSender(userB, (m as any).receiverPhone, m.receiverName, m.receiverId, (m as any).receiverRole);
+
+    const nameA = norm(userA.fullName);
+    const baseA = base(userA.fullName);
+    const idA = norm(userA.id);
+
+    const nameB = norm(userB.fullName);
+    const baseB = base(userB.fullName);
+    const idB = norm(userB.id);
+
+    const mSenderName = norm(m.senderName);
+    const mSenderBase = base(m.senderName);
+    const mSenderId = norm(m.senderId);
+
+    const mReceiverName = norm(m.receiverName);
+    const mReceiverBase = base(m.receiverName);
+    const mReceiverId = norm(m.receiverId);
+
+    const matchA_as_sender = fromA || (idA && mSenderId === idA) || (nameA && mSenderName === nameA) || (baseA && mSenderBase === baseA);
+    const matchA_as_receiver = toA || (idA && mReceiverId === idA) || (nameA && mReceiverName === nameA) || (baseA && mReceiverBase === baseA);
+
+    const matchB_as_sender = fromB || (idB && mSenderId === idB) || (nameB && mSenderName === nameB) || (baseB && mSenderBase === baseB);
+    const matchB_as_receiver = toB || (idB && mReceiverId === idB) || (nameB && mReceiverName === nameB) || (baseB && mReceiverBase === baseB);
+
+    return (matchA_as_sender && matchB_as_receiver) || (matchB_as_sender && matchA_as_receiver);
+  }, []);
 
   const handleDeleteConversation = useCallback((partner: User) => {
     if (!currentUser) return;
-    const partnerNameClean = partner.fullName?.trim().toLowerCase();
     
-    directMessages.forEach(m => {
-      const isFromMe = isMsgFromUser(m, currentUser);
-      const isToMe = isMsgToUser(m, currentUser);
-      const isFromPartner = isMsgFromUser(m, partner) || (partnerNameClean && m.senderName?.trim().toLowerCase() === partnerNameClean);
-      const isToPartner = isMsgToUser(m, partner) || (partnerNameClean && m.receiverName?.trim().toLowerCase() === partnerNameClean);
+    // Find all messages belonging to this conversation
+    const msgsToDelete = directMessages.filter(m => isMessageInConversation(m, currentUser, partner));
+    const idsToDelete = msgsToDelete.map(m => m.id);
 
-      const isBetweenUs = (isFromMe && isToPartner) || (isFromPartner && isToMe);
-      if (isBetweenUs) {
-        deleteDocument(COLLECTIONS.DIRECT_MESSAGES, m.id);
-      }
+    // Additional fallback for raw name/id matching
+    const normPartnerName = partner.fullName?.trim().toLowerCase();
+    const partnerIdNorm = partner.id?.trim().toLowerCase();
+    const fallbackMsgs = directMessages.filter(m => {
+      const sName = m.senderName?.trim().toLowerCase();
+      const rName = m.receiverName?.trim().toLowerCase();
+      const sId = m.senderId?.trim().toLowerCase();
+      const rId = m.receiverId?.trim().toLowerCase();
+      return (normPartnerName && (sName === normPartnerName || rName === normPartnerName)) ||
+             (partnerIdNorm && (sId === partnerIdNorm || rId === partnerIdNorm));
     });
 
-    setDirectMessages(prev => prev.filter(m => {
-      const isFromMe = isMsgFromUser(m, currentUser);
-      const isToMe = isMsgToUser(m, currentUser);
-      const isFromPartner = isMsgFromUser(m, partner) || (partnerNameClean && m.senderName?.trim().toLowerCase() === partnerNameClean);
-      const isToPartner = isMsgToUser(m, partner) || (partnerNameClean && m.receiverName?.trim().toLowerCase() === partnerNameClean);
+    const allToDelete = Array.from(new Set([...idsToDelete, ...fallbackMsgs.map(m => m.id)]));
 
-      const isBetweenUs = (isFromMe && isToPartner) || (isFromPartner && isToMe);
-      return !isBetweenUs;
-    }));
+    if (allToDelete.length > 0) {
+      // 1. Add to blacklist in state & localStorage
+      setDeletedDirectMsgIds(prev => {
+        const next = Array.from(new Set([...prev, ...allToDelete]));
+        try {
+          safeSetItem("4m1e1i_deleted_direct_msg_ids_v1", JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+
+      // 2. Soft-delete + hard-delete from Firestore
+      allToDelete.forEach(id => {
+        if (db) {
+          const docRef = doc(db, COLLECTIONS.DIRECT_MESSAGES, id);
+          setDoc(docRef, { isDeleted: true, updatedAt: new Date().toISOString() }, { merge: true })
+            .then(() => deleteDoc(docRef))
+            .catch(() => deleteDoc(docRef).catch(() => {}));
+        }
+      });
+
+      // 3. Update local state and localStorage immediately
+      setDirectMessages(prev => {
+        const filtered = prev.filter(m => !allToDelete.includes(m.id));
+        try {
+          safeSetItem("4m1e1i_direct_messages_v1", JSON.stringify(filtered));
+        } catch {}
+        return filtered;
+      });
+    }
 
     if (activeDirectChatUser && (
       (partner.id && activeDirectChatUser.id === partner.id) ||
@@ -3096,7 +3189,12 @@ export default function DashboardDesktop({
     )) {
       setActiveDirectChatUser(null);
     }
-  }, [currentUser, activeDirectChatUser, directMessages, isMsgFromUser, isMsgToUser]);
+  }, [currentUser, activeDirectChatUser, directMessages, isMessageInConversation]);
+
+  const handleClearDirectMessages = useCallback(() => {
+    if (!activeDirectChatUser || !currentUser) return;
+    handleDeleteConversation(activeDirectChatUser);
+  }, [activeDirectChatUser, currentUser, handleDeleteConversation]);
 
   const handleOpenDirectChatWithSender = useCallback((reply: ForumReply, resolvedSender: any) => {
     const partnerUser = users.find(
@@ -3703,7 +3801,14 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
       timestamp: string;
     }> = [];
 
+    const deletedSet = new Set(deletedNotifIdsProp || []);
+
     broadcasts.forEach((b) => {
+      const rawId = b.id.replace(/^broadcast-/, "");
+      const broadcastKey = `broadcast-${rawId}`;
+      if (deletedSet.has(b.id) || deletedSet.has(rawId) || deletedSet.has(broadcastKey)) {
+        return;
+      }
       list.push({
         id: b.id,
         isBroadcast: true,
@@ -3716,9 +3821,19 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
 
     if (Array.isArray(systemNotifications)) {
       systemNotifications.forEach((n) => {
+        const rawId = n.id.replace(/^broadcast-/, "");
+        const broadcastKey = `broadcast-${rawId}`;
+        if (deletedSet.has(n.id) || deletedSet.has(rawId) || deletedSet.has(broadcastKey)) {
+          return;
+        }
+        // Avoid duplicate if it's already in broadcasts
+        const isFromBroadcast = n.id.startsWith("broadcast-");
+        if (isFromBroadcast && broadcasts.some((b) => b.id === rawId || b.id === n.id)) {
+          return;
+        }
         list.push({
           id: n.id,
-          isBroadcast: false,
+          isBroadcast: isFromBroadcast,
           type: n.title,
           content: n.description,
           sender: n.authorName || "Hệ thống",
@@ -3732,7 +3847,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
       const tB = parseReportTimestamp(b.timestamp).getTime();
       return tB - tA;
     });
-  }, [broadcasts, systemNotifications]);
+  }, [broadcasts, systemNotifications, deletedNotifIdsProp]);
 
   const unreadCount = React.useMemo(() => {
     if (!Array.isArray(systemNotifications)) return 0;
@@ -3742,8 +3857,16 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
   const myBroadcasts = React.useMemo(() => {
     if (!broadcasts || !currentUser) return [];
     const currentFullName = currentUser.fullName.toLowerCase().trim();
-    return broadcasts.filter((b) => (b.sender || "").toLowerCase().trim() === currentFullName);
-  }, [broadcasts, currentUser]);
+    const deletedSet = new Set(deletedNotifIdsProp || []);
+    return broadcasts.filter((b) => {
+      const rawId = b.id.replace(/^broadcast-/, "");
+      const broadcastKey = `broadcast-${rawId}`;
+      if (deletedSet.has(b.id) || deletedSet.has(rawId) || deletedSet.has(broadcastKey)) {
+        return false;
+      }
+      return (b.sender || "").toLowerCase().trim() === currentFullName;
+    });
+  }, [broadcasts, currentUser, deletedNotifIdsProp]);
 
   // Helper functions for auto-generating clean, consistent, neat IDs
   const generateAutoCompanyId = (name: string): string => {
@@ -4277,6 +4400,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
   const [personalTaskTypeFilter, setPersonalTaskTypeFilter] = useState<string>("ALL");
   const [personalTaskSearchTerm, setPersonalTaskSearchTerm] = useState<string>("");
   const [selectedPersonalTaskReport, setSelectedPersonalTaskReport] = useState<QualityReport | null>(null);
+  const [showPersonalTaskGuideModal, setShowPersonalTaskGuideModal] = useState<boolean>(false);
 
   useEffect(() => {
     if (currentUser) {
@@ -5330,7 +5454,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
               )}
             </button>
             <div className="flex flex-col justify-center select-none min-w-0">
-              <T className="font-black text-xl tracking-wider whitespace-nowrap leading-none block text-left text-slate-900 font-['Orbitron',sans-serif]">
+              <T className="font-black text-[20px] tracking-wider whitespace-nowrap leading-none block text-left text-slate-900 font-['Orbitron',sans-serif]">
                 META ANDON
               </T>
               <T className="text-xs font-bold tracking-[-0.015em] text-slate-500 whitespace-nowrap block text-left leading-none mt-1.5">
@@ -5725,7 +5849,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                     <UserCheck className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+                    <h1 className="text-lg font-bold text-slate-800 tracking-normal uppercase">
                       <T>PHÊ DUYỆT HOẠT ĐỘNG NHÂN VIÊN</T>
                     </h1>
                     <p className="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">
@@ -6770,7 +6894,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                     <Sliders className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+                    <h1 className="text-lg font-bold text-slate-800 tracking-normal uppercase">
                       <T><span translate="no" className="notranslate">KHAI BÁO VÀ MÃ HÓA DỮ LIỆU ĐỒNG BỘ</span></T>
                     </h1>
                     <p className="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">
@@ -7999,7 +8123,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                       <BarChart4 className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                      <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+                      <h1 className="text-lg font-bold text-slate-800 tracking-normal uppercase">
                         <T><span translate="no" className="notranslate">TRUNG TÂM THỐNG KÊ & PHÂN TÍCH 4M1E1I</span></T>
                       </h1>
                       <p className="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">
@@ -8364,7 +8488,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                     <CheckSquare className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+                    <h1 className="text-lg font-bold text-slate-800 tracking-normal uppercase">
                       <T><span translate="no" className="notranslate">HỆ THỐNG ĐỀ XUẤT CHỜ PHÊ DUYỆT</span></T>
                     </h1>
                     <p className="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">
@@ -8712,7 +8836,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                     <Database className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+                    <h1 className="text-lg font-bold text-slate-800 tracking-normal uppercase">
                       <T><span translate="no" className="notranslate">SỔ NHẬT KÝ BIẾN ĐỘNG 4M1E1I</span></T>
                     </h1>
                     <p className="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">
@@ -9058,9 +9182,22 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                           </p>
                         </div>
                       </div>
-                      <span className="text-[10px] bg-rose-600/30 text-rose-300 border border-rose-500/30 px-2.5 py-1 rounded-full font-bold uppercase select-none animate-pulse">
-                        <T><span translate="no" className="notranslate">THÙNG RÁC</span></T>
-                      </span>
+                      <div className="flex items-center gap-2.5">
+                        {scopedReports.filter((r) => r.isDeleted).length > 0 && onEmptyTrash && (
+                          <button
+                            type="button"
+                            onClick={onEmptyTrash}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-lg text-[11px] font-black transition-all cursor-pointer shadow-md"
+                            title="Xóa vĩnh viễn toàn bộ bản ghi trong thùng rác khỏi máy chủ"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <T><span translate="no" className="notranslate">DỌN SẠCH THÙNG RÁC</span></T>
+                          </button>
+                        )}
+                        <span className="text-[10px] bg-rose-600/30 text-rose-300 border border-rose-500/30 px-2.5 py-1 rounded-full font-bold uppercase select-none animate-pulse">
+                          <T><span translate="no" className="notranslate">THÙNG RÁC</span></T>
+                        </span>
+                      </div>
                     </div>
                   </div>
 
@@ -9596,52 +9733,52 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                 {/* Cột THÔNG TIN GHI NHẬN TÍCH HỢP TOÀN DIỆN (Logic từ trên xuống dưới tương tự mobile) */}
                                 <td className="p-3 space-y-2.5 w-[450px] min-w-[420px] max-w-[510px] border border-slate-300 align-top">
                                   {/* 1. Header Information Box: Đơn vị + Phân loại badge + Người ghi nhận & Thời gian + Mã ID + Thanh chuyển giao liên công ty */}
-                                  <div className="rounded-xl border border-slate-300 bg-gradient-to-b from-slate-50 to-white overflow-hidden shadow-2xs">
+                                  <div className="rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50/70 to-white overflow-hidden shadow-2xs">
                                     {/* Top banner: Chi nhánh / Xưởng + Tag phân loại & Mã ID */}
                                     <div className="px-2.5 py-2 bg-transparent flex justify-between items-start gap-1.5">
                                       <div className="flex-1 min-w-0">
-                                        <span className="font-black block leading-tight truncate text-[#1e3a8a] text-[12px]">
+                                        <span className="font-black block leading-tight truncate text-[#1e3a8a] text-[13.5px]">
                                           <T><span translate="no" className="notranslate">{getFactoryDisplayName(r.factory)?.toUpperCase()}</span></T>
                                         </span>
-                                        <div className="text-[11px] text-slate-600 font-extrabold mt-1 flex items-center flex-wrap gap-1">
+                                        <div className="text-[12.5px] text-slate-600 font-extrabold mt-1 flex items-center flex-wrap gap-1">
                                           <div className="text-blue-700 font-black flex items-center gap-0.5">
                                             <UserIcon className="w-3.5 h-3.5 stroke-[2.5] text-blue-600 shrink-0" />
                                             <span translate="no" className="notranslate">{formatNameCapitalized(resolveUploaderInfo(users, r).fullName)}</span>
                                           </div>
                                           <span className="text-slate-300 font-normal">|</span>
-                                          <span className="text-[10px] text-slate-400 font-sans font-semibold select-none">{r.timestamp}</span>
+                                          <span className="text-[11.5px] text-slate-400 font-sans font-semibold select-none">{r.timestamp}</span>
                                         </div>
                                       </div>
 
                                       <div className="shrink-0 flex flex-col items-end gap-1">
                                         {r.reportType === "RRO" ? (
-                                          <span className="text-[9.5px] font-black text-white flex items-center gap-1 bg-blue-600 border border-blue-700 px-1.5 py-0.5 rounded-md leading-none shadow-3xs shrink-0 select-none">
+                                          <span className="text-[11px] font-black text-white flex items-center gap-1 bg-blue-600 border border-blue-700 px-1.5 py-0.5 rounded-md leading-none shadow-3xs shrink-0 select-none">
                                             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block" />
                                             <T><span translate="no" className="notranslate">⚠️ RỦI RO (RRO)</span></T>
                                           </span>
                                         ) : r.reportType === "KNN" || (r.reportType === "KPH" && r.kphSubtype === "BN") ? (
-                                          <span className="text-[9.5px] font-black text-white flex items-center gap-1 bg-red-600 border border-red-700 px-1.5 py-0.5 rounded-md leading-none shadow-3xs shrink-0 select-none">
+                                          <span className="text-[11px] font-black text-white flex items-center gap-1 bg-red-600 border border-red-700 px-1.5 py-0.5 rounded-md leading-none shadow-3xs shrink-0 select-none">
                                             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block" />
                                             <T><span translate="no" className="notranslate">🚨 ĐIỂM KPH (BN)</span></T>
                                           </span>
                                         ) : r.reportType === "KPH" || r.isAbnormal ? (
-                                          <span className="text-[9.5px] font-black text-white flex items-center gap-1 bg-amber-600 border border-amber-700 px-1.5 py-0.5 rounded-md leading-none shadow-3xs shrink-0 select-none">
+                                          <span className="text-[11px] font-black text-white flex items-center gap-1 bg-amber-600 border border-amber-700 px-1.5 py-0.5 rounded-md leading-none shadow-3xs shrink-0 select-none">
                                             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block" />
                                             <T><span translate="no" className="notranslate">⚠️ ĐIỂM KPH (NB)</span></T>
                                           </span>
                                         ) : r.reportType === "DSA" || r.isSpotlight ? (
-                                          <span className="text-[9.5px] font-black text-white flex items-center gap-1 bg-emerald-600 border border-emerald-700 px-1.5 py-0.5 rounded-md leading-none shadow-3xs shrink-0 select-none">
+                                          <span className="text-[11px] font-black text-white flex items-center gap-1 bg-emerald-600 border border-emerald-700 px-1.5 py-0.5 rounded-md leading-none shadow-3xs shrink-0 select-none">
                                             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block" />
                                             <T><span translate="no" className="notranslate">⭐ ĐIỂM SÁNG (DSA)</span></T>
                                           </span>
                                         ) : (
-                                          <span className="text-[9.5px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded select-none">
+                                          <span className="text-[11px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded select-none">
                                             <T><span translate="no" className="notranslate">NORMAL</span></T>
                                           </span>
                                         )}
 
                                         {r.reportCode && (
-                                          <span className="text-[10px] text-slate-400 font-sans font-semibold select-none">
+                                          <span className="text-[11.5px] text-slate-400 font-sans font-semibold select-none">
                                             <span translate="no" className="notranslate">ID: {r.reportCode}</span>
                                           </span>
                                         )}
@@ -9653,7 +9790,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                       <div className="mx-2 mb-1.5 bg-amber-50/90 border border-amber-200/80 rounded-lg px-2.5 py-1 flex items-center justify-between select-none">
                                         <div className="flex items-center gap-1.5 min-w-0">
                                           <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping shrink-0" />
-                                          <span className="text-[10px] font-black text-amber-800 uppercase tracking-wide truncate">
+                                          <span className="text-[11.5px] font-black text-amber-800 uppercase tracking-wide truncate">
                                             <T><span translate="no" className="notranslate">Đề xuất chờ phê duyệt</span></T>
                                           </span>
                                         </div>
@@ -9683,7 +9820,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                                 }
                                                 onShowToast?.("Đã duyệt đề xuất bài viết này lên Bản tin! 🎉", "success");
                                               }}
-                                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[9.5px] px-2 py-0.5 rounded flex items-center gap-0.5 cursor-pointer uppercase shadow-3xs border-none"
+                                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] px-2 py-0.5 rounded flex items-center gap-0.5 cursor-pointer uppercase shadow-3xs border-none"
                                             >
                                               <Check className="w-2.5 h-2.5 stroke-[2.5px]" />
                                               <T><span translate="no" className="notranslate">Duyệt đăng</span></T>
@@ -9696,7 +9833,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                                 }
                                                 onShowToast?.("Đã từ chối bài viết đề xuất! ♻️", "info");
                                               }}
-                                              className="bg-rose-500 hover:bg-rose-600 text-white font-black text-[9.5px] px-2 py-0.5 rounded flex items-center gap-0.5 cursor-pointer uppercase shadow-3xs border-none"
+                                              className="bg-rose-500 hover:bg-rose-600 text-white font-black text-[11px] px-2 py-0.5 rounded flex items-center gap-0.5 cursor-pointer uppercase shadow-3xs border-none"
                                             >
                                               <X className="w-2.5 h-2.5 stroke-[2.5px]" />
                                               <T><span translate="no" className="notranslate">Từ chối</span></T>
@@ -9708,12 +9845,12 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
 
                                     {/* Cross-Company Transfer Bar */}
                                     {(r.targetCompany || r.assignedCompany || (r.transferHistory && r.transferHistory.length > 0)) ? (
-                                      <div className="border-t border-slate-150/80 bg-indigo-50/40 px-2.5 py-1 flex items-center justify-between text-[10px] select-none">
+                                      <div className="border-t border-indigo-100/90 bg-indigo-50/50 px-2.5 py-1.5 flex items-center justify-between text-[11.5px] select-none">
                                         <div className="flex items-center gap-1 min-w-0">
-                                          <span className="px-1 py-0.2 rounded bg-indigo-600 text-white text-[8.5px] font-black uppercase tracking-wider shrink-0">
+                                          <span className="px-1 py-0.2 rounded bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wider shrink-0">
                                             🔄 Liên CTY
                                           </span>
-                                          <span className="font-extrabold text-indigo-900 truncate text-[10px]">
+                                          <span className="font-extrabold text-indigo-900 truncate text-[11.5px]">
                                             {r.targetCompany === "DNP" ? "Đã chuyển ➔ DNP thụ lý" : r.targetCompany === "TPP" ? "Đã chuyển ➔ TPP thụ lý" : `Đã chuyển ➔ ${r.targetCompany || r.assignedCompany} thụ lý`}
                                           </span>
                                         </div>
@@ -9730,7 +9867,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                                 setTransferCompanyModalReport(r);
                                                 setTransferTargetCompany(r.targetCompany || "DNP");
                                               }}
-                                              className={`font-extrabold text-[9px] border px-1.5 py-0.5 rounded transition-colors shrink-0 shadow-3xs ${
+                                              className={`font-extrabold text-[10.5px] border px-1.5 py-0.5 rounded transition-colors shrink-0 shadow-3xs ${
                                                 isAllowed
                                                   ? "text-indigo-700 hover:text-indigo-900 bg-white hover:bg-indigo-100 border-indigo-300 cursor-pointer"
                                                   : "text-slate-400 bg-slate-100 border-slate-200 cursor-not-allowed opacity-75"
@@ -9743,7 +9880,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                         })()}
                                       </div>
                                     ) : (
-                                      <div className="border-t border-slate-150/80 bg-slate-50/40 px-2.5 py-1 flex items-center justify-between text-[9.5px] select-none">
+                                      <div className="border-t border-slate-100 bg-slate-50/60 px-2.5 py-1.5 flex items-center justify-between text-[11px] select-none">
                                         <span className="text-slate-400 font-bold">
                                           Đơn vị gốc: <span className="text-slate-600 font-extrabold">{r.factory.includes("DNP") || r.factory.includes("BBM") || r.factory.includes("BBC") ? "DNP / BBM" : "TPP"}</span>
                                         </span>
@@ -9761,7 +9898,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                                 const defaultTarget = (r.factory.includes("DNP") || r.factory.includes("BBM") || r.factory.includes("BBC")) ? "TPP" : "DNP";
                                                 setTransferTargetCompany(defaultTarget);
                                               }}
-                                              className={`font-bold text-[9px] border px-1.5 py-0.2 rounded transition-colors shrink-0 ${
+                                              className={`font-bold text-[10.5px] border px-1.5 py-0.2 rounded transition-colors shrink-0 ${
                                                 isAllowed
                                                   ? "text-slate-600 hover:text-indigo-700 bg-white hover:bg-indigo-50 border-slate-250 hover:border-indigo-300 cursor-pointer"
                                                   : "text-slate-400 bg-slate-100 border-slate-200 cursor-not-allowed opacity-75"
@@ -9790,11 +9927,11 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
 
                                   {/* 3. Tên sự vụ / Nội dung & Ghi chú */}
                                   <div className="space-y-1 pt-0.5">
-                                    <div className="font-bold text-slate-900 text-[13px] leading-snug">
+                                    <div className="font-bold text-slate-900 text-[14.5px] leading-snug">
                                       <T>{(r.content || "").toUpperCase()}</T>
                                     </div>
                                     {r.notes && (
-                                      <div className="text-[11px] text-slate-700 font-medium italic block border-l-2 border-emerald-500 pl-1.5 whitespace-pre-wrap break-words max-h-[100px] overflow-y-auto thin-scrollbar">
+                                      <div className="text-[12.5px] text-slate-700 font-medium italic block border-l-2 border-emerald-500 pl-1.5 whitespace-pre-wrap break-words max-h-[100px] overflow-y-auto thin-scrollbar">
                                         <T>Ghi chú: {r.notes}</T>
                                       </div>
                                     )}
@@ -9805,7 +9942,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                     {(r.reportType === "KPH" || r.isAbnormal) && (
                                       <button
                                         onClick={() => handleAIAnalyze(r)}
-                                        className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-[11px] rounded-lg shadow-sm border border-blue-500/10 cursor-pointer hover:shadow active:scale-95 transition-all select-none uppercase tracking-wide"
+                                        className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-[12.5px] rounded-lg shadow-sm border border-blue-500/10 cursor-pointer hover:shadow active:scale-95 transition-all select-none uppercase tracking-wide"
                                       >
                                         <Bot className="w-3.5 h-3.5 text-blue-100" />
                                         <span translate="no" className="notranslate">5-WHYs & CƠ HỘI CẢI TIẾN</span>
@@ -9815,7 +9952,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                     {(r.reportType === "DSA" || r.isSpotlight) && (
                                       <button
                                         onClick={() => handleAIDsaAnalyze(r)}
-                                        className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-[11px] rounded-lg shadow-sm border border-emerald-500/10 cursor-pointer hover:shadow active:scale-95 transition-all select-none uppercase tracking-wide"
+                                        className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-[12.5px] rounded-lg shadow-sm border border-emerald-500/10 cursor-pointer hover:shadow active:scale-95 transition-all select-none uppercase tracking-wide"
                                       >
                                         <Bot className="w-3.5 h-3.5 text-emerald-100" />
                                         <span translate="no" className="notranslate">PHÂN TÍCH CƠ HỘI & THÁCH THỨC</span>
@@ -9840,12 +9977,12 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                                 setActiveTab("TRAO_ĐỔI");
                                                 setForumSubTab("TOPICS");
                                               }}
-                                              className="w-full py-1.5 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 hover:text-emerald-800 border border-emerald-300/80 rounded-lg text-[11px] font-extrabold flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95 select-none uppercase tracking-wide"
+                                              className="w-full py-1.5 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 hover:text-emerald-800 border border-emerald-300/80 rounded-lg text-[12.5px] font-extrabold flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95 select-none uppercase tracking-wide"
                                               title="Chủ đề thảo luận đã được giải quyết / kết thúc"
                                             >
                                               <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                                               <T>Đã giải quyết</T>
-                                              <span className="bg-emerald-200 text-emerald-800 px-1.5 py-0.2 rounded-full text-[10px] font-black">
+                                              <span className="bg-emerald-200 text-emerald-800 px-1.5 py-0.2 rounded-full text-[11px] font-black">
                                                 {replyCount}
                                               </span>
                                             </button>
@@ -9860,7 +9997,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                               setActiveTab("TRAO_ĐỔI");
                                               setForumSubTab("TOPICS");
                                             }}
-                                            className={`w-full py-1.5 px-3 rounded-lg text-[11px] font-extrabold flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95 select-none uppercase tracking-wide ${
+                                            className={`w-full py-1.5 px-3 rounded-lg text-[12.5px] font-extrabold flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95 select-none uppercase tracking-wide ${
                                               hasUserTaskInTopic
                                                 ? "bg-gradient-to-r from-red-600 via-rose-600 to-pink-600 hover:from-red-700 hover:to-pink-700 text-white border border-red-400 shadow-sm animate-pulse"
                                                 : "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border border-amber-400/50 shadow-sm"
@@ -9869,7 +10006,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                           >
                                             <Flame className="w-3.5 h-3.5 text-amber-100 shrink-0 animate-bounce" />
                                             <T>{hasUserTaskInTopic ? "Cần xử lý task" : "Vào thảo luận"}</T>
-                                            <span className="bg-white/25 text-white px-1.5 py-0.2 rounded-full text-[10px] font-black">
+                                            <span className="bg-white/25 text-white px-1.5 py-0.2 rounded-full text-[11px] font-black">
                                               {replyCount}
                                             </span>
                                           </button>
@@ -9881,7 +10018,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                         <button
                                           type="button"
                                           onClick={() => handleOpenEmergencyDiscussionModal(r)}
-                                          className="w-full py-1.5 px-3 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white rounded-lg text-[11px] font-extrabold flex items-center justify-center gap-1.5 shadow-sm hover:shadow active:scale-95 transition-all cursor-pointer border border-rose-400/30 select-none uppercase tracking-wide"
+                                          className="w-full py-1.5 px-3 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white rounded-lg text-[12.5px] font-extrabold flex items-center justify-center gap-1.5 shadow-sm hover:shadow active:scale-95 transition-all cursor-pointer border border-rose-400/30 select-none uppercase tracking-wide"
                                           title="Khởi tạo thảo luận chuyên đề cho sự cố này"
                                         >
                                           <Flame className="w-3.5 h-3.5 text-rose-100 shrink-0" />
@@ -9893,7 +10030,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                     {/* Display directives history in Nhật ký table row */}
                                     {r.directives && r.directives.length > 0 && (
                                       <div className="space-y-1.5 block border-l-2 border-amber-500 pl-1.5 bg-amber-50/50 p-1.5 rounded">
-                                        <div className="text-[10px] font-extrabold text-[#78350f] uppercase flex items-center gap-1 mb-1.5">
+                                        <div className="text-[11.5px] font-extrabold text-[#78350f] uppercase flex items-center gap-1 mb-1.5">
                                           <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500"></span>
                                           <T>Chỉ đạo / Điều hành:</T>
                                         </div>
@@ -9905,13 +10042,13 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                                 key={dir.id}
                                                 data-directive-container-desktop="true"
                                                 onClick={() => setExpandedDirectiveIdsDesktop(prev => ({ ...prev, [dir.id]: true }))}
-                                                className="bg-amber-50/70 hover:bg-amber-100/70 border border-amber-100/60 rounded p-1 flex items-center justify-between text-[11px] text-amber-900 cursor-pointer transition-all select-none shadow-3xs active:scale-[0.98]"
+                                                className="bg-amber-50/70 hover:bg-amber-100/70 border border-amber-100/60 rounded p-1 flex items-center justify-between text-[12.5px] text-amber-900 cursor-pointer transition-all select-none shadow-3xs active:scale-[0.98]"
                                               >
-                                                <span className="flex items-center gap-1 font-bold text-[10.5px]">
+                                                <span className="flex items-center gap-1 font-bold text-[12px]">
                                                   <span>🛡️</span>
                                                   <T>Chỉ đạo từ: {dir.author}</T>
                                                 </span>
-                                                <span className="text-[9.5px] text-slate-400 font-bold flex items-center gap-0.5 shrink-0">
+                                                <span className="text-[11px] text-slate-400 font-bold flex items-center gap-0.5 shrink-0">
                                                   <T>Xem chỉ đạo</T>
                                                   <span>➔</span>
                                                 </span>
@@ -9930,28 +10067,58 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                           const hasUserAcknowledged = acknowledgesList.some(item => item.by === currentUserSignature);
 
                                           return (
-                                            <div key={dir.id} data-directive-container-desktop="true" className="text-[11px] text-amber-800 leading-normal border border-amber-150 bg-amber-50/30 p-2 rounded mb-1 last:mb-0">
-                                              <div className="flex justify-between items-center text-[10px] text-slate-400 font-bold mb-1 select-none border-b border-amber-155/40 pb-1">
+                                            <div key={dir.id} data-directive-container-desktop="true" className="text-[12.5px] text-amber-800 leading-normal border border-amber-150 bg-amber-50/30 p-2 rounded mb-1 last:mb-0">
+                                              <div className="flex justify-between items-center text-[11.5px] text-slate-400 font-bold mb-1 select-none border-b border-amber-155/40 pb-1">
                                                 <span className="text-amber-800 font-extrabold flex items-center gap-0.5">
                                                   <span>🛡️</span>
                                                   <T>{dir.author}</T>
                                                 </span>
                                                 <div className="flex items-center gap-2">
                                                   <span>{dir.timestamp}</span>
+                                                  {currentUser && (
+                                                    currentUser.fullName?.toLowerCase() === dir.author?.toLowerCase() ||
+                                                    currentUser.role === UserRole.ADMIN ||
+                                                    (currentUser.position && (
+                                                      currentUser.position.toLowerCase().includes('giám đốc') ||
+                                                      currentUser.position.toLowerCase().includes('trưởng phòng') ||
+                                                      currentUser.position.toLowerCase().includes('quản lý')
+                                                    ))
+                                                  ) && (
+                                                    <button
+                                                      type="button"
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        const updatedDirectives = (r.directives || []).filter(d => d.id !== dir.id);
+                                                        if (onUpdateReport) {
+                                                          onUpdateReport({
+                                                            ...r,
+                                                            directives: updatedDirectives
+                                                          });
+                                                        }
+                                                        if (onShowToast) {
+                                                          onShowToast("Đã xóa chỉ đạo thành công! 🗑️", "success");
+                                                        }
+                                                      }}
+                                                      className="text-slate-400 hover:text-rose-600 transition-colors cursor-pointer border-none bg-transparent p-0.5 flex items-center"
+                                                      title="Xóa chỉ đạo"
+                                                    >
+                                                      <Trash2 className="w-3 h-3 text-rose-500" />
+                                                    </button>
+                                                  )}
                                                   <button
                                                     type="button"
                                                     onClick={(e) => {
                                                       e.stopPropagation();
                                                       setExpandedDirectiveIdsDesktop(prev => ({ ...prev, [dir.id]: false }));
                                                     }}
-                                                    className="text-[9px] text-amber-800 hover:text-amber-950 bg-amber-100 px-1.5 py-0.2 rounded border border-amber-200 font-sans cursor-pointer active:scale-95 transition-all"
+                                                    className="text-[10.5px] text-amber-800 hover:text-amber-950 bg-amber-100 px-1.5 py-0.2 rounded border border-amber-200 font-sans cursor-pointer active:scale-95 transition-all"
                                                   >
                                                     <T>Thu gọn</T>
                                                   </button>
                                                 </div>
                                               </div>
 
-                                              <div className="text-[11px] text-amber-900 leading-relaxed font-semibold break-words py-1">
+                                              <div className="text-[12.5px] text-amber-900 leading-relaxed font-semibold break-words py-1">
                                                 <T>{dir.text}</T>
                                               </div>
 
@@ -9960,11 +10127,11 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                                 <button
                                                   type="button"
                                                   onClick={() => handleAcknowledgeDirectiveDesktop(r, dir.id)}
-                                                  disabled={hasUserAcknowledged}
-                                                  className={`px-1.5 py-0.5 rounded text-[10px] font-sans font-bold flex items-center gap-0.5 transition-all ${
+                                                  title={hasUserAcknowledged ? "Nhấp để hủy tiếp nhận" : "Nhấp để tiếp nhận chỉ đạo"}
+                                                  className={`px-1.5 py-0.5 rounded text-[11.5px] font-sans font-bold flex items-center gap-0.5 transition-all active:scale-95 cursor-pointer ${
                                                     hasUserAcknowledged
-                                                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-not-allowed opacity-85"
-                                                      : "bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 hover:border-emerald-400 active:scale-95 cursor-pointer shadow-3xs"
+                                                      ? "bg-emerald-50 hover:bg-rose-50 text-emerald-700 hover:text-rose-700 border border-emerald-300 hover:border-rose-300 shadow-3xs"
+                                                      : "bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 hover:border-emerald-400 shadow-3xs"
                                                   }`}
                                                 >
                                                   <span>{hasUserAcknowledged ? "✓ Đã Tiếp Nhận" : "📥 Tiếp Nhận Chỉ Đạo"}</span>
@@ -9975,7 +10142,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                                     <button
                                                       type="button"
                                                       onClick={() => setShowAckDetailsDesktop(prev => ({ ...prev, [dir.id]: !prev[dir.id] }))}
-                                                      className={`px-1.5 py-0.5 border rounded text-[10px] font-sans font-extrabold flex items-center gap-1 active:scale-95 transition-all cursor-pointer ${
+                                                      className={`px-1.5 py-0.5 border rounded text-[11.5px] font-sans font-extrabold flex items-center gap-1 active:scale-95 transition-all cursor-pointer ${
                                                         showAckDetailsDesktop[dir.id]
                                                           ? "bg-emerald-600 text-white border-emerald-600 shadow-3xs"
                                                           : "bg-amber-100/70 hover:bg-amber-200/70 text-amber-900 border-amber-200/60"
@@ -9991,15 +10158,15 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
 
                                               {/* Details drawer */}
                                               {showAckDetailsDesktop[dir.id] && acknowledgesList.length > 0 && (
-                                                <div className="mt-1.5 p-1.5 bg-white border border-emerald-200/60 rounded text-[10px] text-slate-700 space-y-1 animate-fadeIn max-h-24 overflow-y-auto">
-                                                  <div className="font-extrabold text-emerald-800 text-[9px] uppercase tracking-wider pb-0.5 border-b border-slate-100 select-none flex justify-between items-center">
+                                                <div className="mt-1.5 p-1.5 bg-white border border-emerald-200/60 rounded text-[11.5px] text-slate-700 space-y-1 animate-fadeIn max-h-24 overflow-y-auto">
+                                                  <div className="font-extrabold text-emerald-800 text-[10.5px] uppercase tracking-wider pb-0.5 border-b border-slate-100 select-none flex justify-between items-center">
                                                     <T>Danh Sách Tiếp Nhận:</T>
                                                     <span className="text-slate-400 font-normal">({acknowledgesList.length})</span>
                                                   </div>
                                                   {acknowledgesList.map((ack, aIdx) => (
                                                     <div key={aIdx} className="flex justify-between items-center gap-1.5 text-slate-700">
                                                       <span className="font-semibold text-slate-800 truncate max-w-[200px]"><T>{ack.by}</T></span>
-                                                      <span className="text-slate-400 shrink-0 font-sans font-semibold text-[9px] select-none">{ack.at}</span>
+                                                      <span className="text-slate-400 shrink-0 font-sans font-semibold text-[10.5px] select-none">{ack.at}</span>
                                                     </div>
                                                   ))}
                                                 </div>
@@ -10022,7 +10189,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                   {/* 6. Thích & Tiếp nhận / Nhân rộng */}
                                   <div className="pt-1.5 border-t border-slate-100 space-y-1.5">
                                     {/* Người thích */}
-                                    <div className="flex items-center gap-1.5 flex-wrap text-[10px]">
+                                    <div className="flex items-center gap-1.5 flex-wrap text-[11.5px]">
                                       <span className="font-extrabold text-rose-600 uppercase flex items-center gap-1 shrink-0">
                                         <Heart className="w-3 h-3 text-rose-500 fill-rose-500" />
                                         <T><span translate="no" className="notranslate">Người Thích:</span></T>
@@ -10030,18 +10197,18 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                       {r.likedBy && r.likedBy.length > 0 ? (
                                         <div className="flex flex-wrap gap-1 max-h-12 overflow-y-auto">
                                           {r.likedBy.map((name, i) => (
-                                            <span key={i} className="bg-rose-50 text-rose-700 text-[9px] px-1.5 py-0.2 rounded border border-rose-100 font-bold truncate max-w-[130px]" title={name}>
+                                            <span key={i} className="bg-rose-50 text-rose-700 text-[10.5px] px-1.5 py-0.2 rounded border border-rose-100 font-bold truncate max-w-[130px]" title={name}>
                                               <T><span translate="no" className="notranslate">{name}</span></T>
                                             </span>
                                           ))}
                                         </div>
                                       ) : (
-                                        <span className="text-slate-400 italic text-[10px]"><T><span translate="no" className="notranslate">Chưa có</span></T></span>
+                                        <span className="text-slate-400 italic text-[11.5px]"><T><span translate="no" className="notranslate">Chưa có</span></T></span>
                                       )}
                                     </div>
 
                                     {/* Tiếp nhận / Nhân rộng */}
-                                    <div className="text-[10px]">
+                                    <div className="text-[11.5px]">
                                       <div className={`font-extrabold uppercase mb-1 flex items-center gap-1 ${
                                         r.reportType === "DSA" || r.isSpotlight ? "text-emerald-700" : "text-blue-700"
                                       }`}>
@@ -10078,12 +10245,12 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                               );
 
                                               return (
-                                                <div key={i} className="flex items-center justify-between gap-1 bg-slate-50 p-1 rounded border border-slate-150 text-[9.5px]">
+                                                <div key={i} className="flex items-center justify-between gap-1 bg-slate-50 p-1 rounded border border-slate-150 text-[11px]">
                                                   <span translate="no" className="notranslate font-bold text-slate-700 truncate max-w-[130px]" title={name}>
                                                     {name}
                                                   </span>
                                                   {resForDept ? (
-                                                    <span translate="no" className={`notranslate text-[8.5px] font-black px-1 py-0.2 rounded border uppercase shrink-0 ${
+                                                    <span translate="no" className={`notranslate text-[10px] font-black px-1 py-0.2 rounded border uppercase shrink-0 ${
                                                       resForDept.status === "Đã xử lý"
                                                         ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                                                         : "bg-amber-50 text-amber-700 border-amber-200"
@@ -10091,7 +10258,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                                       {resForDept.status === "Đã xử lý" ? "✓ Xong" : "⏳ Trì"}
                                                     </span>
                                                   ) : (
-                                                    <span translate="no" className="notranslate text-[8.5px] text-slate-400 italic shrink-0">
+                                                    <span translate="no" className="notranslate text-[10px] text-slate-400 italic shrink-0">
                                                       Chưa xử lý
                                                     </span>
                                                   )}
@@ -10100,17 +10267,17 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                             })}
                                           </div>
                                         ) : (
-                                          <span translate="no" className="notranslate text-slate-400 text-[9.5px] italic">Chưa tiếp nhận</span>
+                                          <span translate="no" className="notranslate text-slate-400 text-[11px] italic">Chưa tiếp nhận</span>
                                         )
                                       ) : (
                                         r.replications && r.replications.length > 0 ? (
                                           <div className="flex flex-col gap-1 max-h-24 overflow-y-auto">
                                             {r.replications.map((rep) => (
-                                              <div key={rep.id} className="flex items-center justify-between gap-1 bg-emerald-50/30 p-1 rounded border border-emerald-100 text-[9.5px]">
+                                              <div key={rep.id} className="flex items-center justify-between gap-1 bg-emerald-50/30 p-1 rounded border border-emerald-100 text-[11px]">
                                                 <span translate="no" className="notranslate font-bold text-emerald-900 truncate max-w-[130px]" title={`${rep.factoryName} - ${rep.departmentName}`}>
                                                   {rep.factoryName} - {rep.departmentName}
                                                 </span>
-                                                <span translate="no" className={`notranslate text-[8.5px] font-black px-1 py-0.2 rounded border uppercase shrink-0 ${
+                                                <span translate="no" className={`notranslate text-[10px] font-black px-1 py-0.2 rounded border uppercase shrink-0 ${
                                                   rep.status === "Đã hoàn thành"
                                                     ? "bg-emerald-100 text-emerald-800 border-emerald-300"
                                                     : rep.status === "Đang triển khai"
@@ -10123,7 +10290,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                             ))}
                                           </div>
                                         ) : (
-                                          <span translate="no" className="notranslate text-slate-400 text-[9.5px] italic">Chưa tiếp nhận</span>
+                                          <span translate="no" className="notranslate text-slate-400 text-[11px] italic">Chưa tiếp nhận</span>
                                         )
                                       )}
                                     </div>
@@ -10304,9 +10471,15 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
 
             const myReports = reports.filter((r) => isMyCreated(r));
             const myAllTasks = reports.filter((r) => !r.isDeleted && (isMyCreated(r) || isMyAssigned(r) || isMyResolved(r)));
-            const myBroadcasts = (broadcasts || []).filter(
-              (b) => b.sender === currentUser?.fullName || currentUser?.role === UserRole.ADMIN
-            );
+            const deletedNotifSet = new Set(deletedNotifIdsProp || []);
+            const myBroadcasts = (broadcasts || []).filter((b) => {
+              const rawId = b.id.replace(/^broadcast-/, "");
+              const broadcastKey = `broadcast-${rawId}`;
+              if (deletedNotifSet.has(b.id) || deletedNotifSet.has(rawId) || deletedNotifSet.has(broadcastKey)) {
+                return false;
+              }
+              return b.sender === currentUser?.fullName || currentUser?.role === UserRole.ADMIN;
+            });
 
             const handleExportPersonalTasksToExcel = async (tasksToExport: QualityReport[]) => {
               if (!tasksToExport || tasksToExport.length === 0) {
@@ -10356,8 +10529,8 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                   if (isResolved) roleStr.push("Tham gia GP");
                   const myRole = roleStr.join(" & ") || "Người liên quan";
 
-                  const hasResolutions = (r.resolutions && r.resolutions.length > 0) || r.qcConfirmed;
-                  const isClosed = r.qcConfirmed;
+                  const isClosed = (r.resolutions && r.resolutions.length > 0 && r.resolutions.every((res) => res.status === "Đã xử lý")) || !!r.qcConfirmed;
+                  const hasResolutions = (r.resolutions && r.resolutions.length > 0) || !!r.qcConfirmed;
                   const statusStr = isClosed ? "Đã đóng hoàn tất" : hasResolutions ? "Đã có giải pháp" : "Đang xử lý";
 
                   const row = worksheet.addRow({
@@ -10409,7 +10582,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                       <Users className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                      <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+                      <h1 className="text-lg font-bold text-slate-800 tracking-normal uppercase">
                         <T>TRANG CÁ NHÂN & HỒ SƠ TÀI KHOẢN</T>
                       </h1>
                       <p className="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">
@@ -10820,11 +10993,11 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
 
                       // 2. Filter by Status, Category, Type, Search
                       const filteredMyReports = scopedReports.filter((r) => {
-                        const hasResolutions = (r.resolutions && r.resolutions.length > 0) || r.qcConfirmed;
-                        const isClosed = r.qcConfirmed;
+                        const isClosed = (r.resolutions && r.resolutions.length > 0 && r.resolutions.every((res) => res.status === "Đã xử lý")) || !!r.qcConfirmed;
+                        const hasResolutions = (r.resolutions && r.resolutions.length > 0) || !!r.qcConfirmed;
 
                         // Status filter
-                        if (personalTaskStatusFilter === "RESOLVED" && !hasResolutions) return false;
+                        if (personalTaskStatusFilter === "RESOLVED" && (!hasResolutions || isClosed)) return false;
                         if (personalTaskStatusFilter === "IN_PROGRESS" && (hasResolutions || isClosed)) return false;
                         if (personalTaskStatusFilter === "CLOSED" && !isClosed) return false;
 
@@ -10858,9 +11031,17 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
 
                       // Counts for quick KPI stats
                       const countTotal = scopedReports.length;
-                      const countInProgress = scopedReports.filter((r) => !(r.resolutions && r.resolutions.length > 0) && !r.qcConfirmed).length;
-                      const countResolved = scopedReports.filter((r) => (r.resolutions && r.resolutions.length > 0) || r.qcConfirmed).length;
-                      const countClosed = scopedReports.filter((r) => r.qcConfirmed).length;
+                      const countInProgress = scopedReports.filter((r) => {
+                        const isClosed = (r.resolutions && r.resolutions.length > 0 && r.resolutions.every((res) => res.status === "Đã xử lý")) || !!r.qcConfirmed;
+                        const hasResolutions = (r.resolutions && r.resolutions.length > 0) || !!r.qcConfirmed;
+                        return !hasResolutions && !isClosed;
+                      }).length;
+                      const countResolved = scopedReports.filter((r) => {
+                        const isClosed = (r.resolutions && r.resolutions.length > 0 && r.resolutions.every((res) => res.status === "Đã xử lý")) || !!r.qcConfirmed;
+                        const hasResolutions = (r.resolutions && r.resolutions.length > 0) || !!r.qcConfirmed;
+                        return hasResolutions && !isClosed;
+                      }).length;
+                      const countClosed = scopedReports.filter((r) => (r.resolutions && r.resolutions.length > 0 && r.resolutions.every((res) => res.status === "Đã xử lý")) || !!r.qcConfirmed).length;
                       const countDSA = scopedReports.filter((r) => r.reportType === "DSA").length;
 
                       const resetFilters = () => {
@@ -10929,8 +11110,17 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                               </button>
                             </div>
 
-                            {/* Export Excel & Reset Buttons */}
+                            {/* Export Excel, Ghi chú & Reset Buttons */}
                             <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setShowPersonalTaskGuideModal(true)}
+                                className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-lg border border-indigo-200 flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
+                                title="Bấm xem hướng dẫn, giải nghĩa các Vai trò của tôi và quy tắc hoàn tất xử lý"
+                              >
+                                <HelpCircle className="w-3.5 h-3.5 text-indigo-600" />
+                                <T>Ghi chú</T>
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => handleExportPersonalTasksToExcel(filteredMyReports)}
@@ -11117,9 +11307,20 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                   <T>DANH SÁCH CHI TIẾT VIỆC CỦA TÔI ({filteredMyReports.length})</T>
                                 </h3>
                               </div>
-                              <span className="text-[11px] text-slate-500 font-medium">
-                                <T>Hiển thị</T> <strong className="text-slate-800">{filteredMyReports.length}</strong> / <strong className="text-slate-600">{scopedReports.length}</strong> <T>báo cáo</T>
-                              </span>
+                              <div className="flex items-center gap-3">
+                                <span className="text-[11px] text-slate-500 font-medium">
+                                  <T>Hiển thị</T> <strong className="text-slate-800">{filteredMyReports.length}</strong> / <strong className="text-slate-600">{scopedReports.length}</strong> <T>báo cáo</T>
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowPersonalTaskGuideModal(true)}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold transition-all shadow-3xs cursor-pointer active:scale-95"
+                                  title="Xem hướng dẫn giải nghĩa vai trò và quy trình đóng hoàn tất"
+                                >
+                                  <Info className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                                  <T>Ghi chú</T>
+                                </button>
+                              </div>
                             </div>
 
                             {filteredMyReports.length === 0 ? (
@@ -11146,7 +11347,19 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                       <th className="py-2.5 px-3">#</th>
                                       <th className="py-2.5 px-3"><T>MÃ BÁO CÁO</T></th>
                                       <th className="py-2.5 px-3"><T>PHÂN LOẠI 4M1E1I</T></th>
-                                      <th className="py-2.5 px-3"><T>VAI TRÒ CỦA TÔI</T></th>
+                                      <th className="py-2.5 px-3">
+                                        <div className="flex items-center gap-1">
+                                          <T>VAI TRÒ CỦA TÔI</T>
+                                          <button
+                                            type="button"
+                                            onClick={() => setShowPersonalTaskGuideModal(true)}
+                                            className="text-indigo-600 hover:text-indigo-800 p-0.5 hover:bg-indigo-100/50 rounded transition-colors cursor-pointer"
+                                            title="Bấm để xem giải nghĩa các Vai trò của tôi"
+                                          >
+                                            <HelpCircle className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      </th>
                                       <th className="py-2.5 px-3 min-w-[220px]"><T>NỘI DUNG VẤN ĐỀ</T></th>
                                       <th className="py-2.5 px-3"><T>NHÀ MÁY / BỘ PHẬN</T></th>
                                       <th className="py-2.5 px-3"><T>NGÀY GỬI (dd/mm/yy)</T></th>
@@ -11160,8 +11373,8 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                       const isCreated = isMyCreated(r);
                                       const isAssigned = isMyAssigned(r);
                                       const isResolved = isMyResolved(r);
-                                      const hasResolutions = (r.resolutions && r.resolutions.length > 0) || r.qcConfirmed;
-                                      const isClosed = r.qcConfirmed;
+                                      const isClosed = (r.resolutions && r.resolutions.length > 0 && r.resolutions.every((res) => res.status === "Đã xử lý")) || !!r.qcConfirmed;
+                                      const hasResolutions = (r.resolutions && r.resolutions.length > 0) || !!r.qcConfirmed;
                                       const directivesCount = r.directives?.length || 0;
                                       const resolutionsCount = r.resolutions?.length || 0;
 
@@ -11413,22 +11626,26 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                         <T>Trạng thái</T>
                                       </span>
                                       <div className="mt-1">
-                                        {selectedPersonalTaskReport.qcConfirmed ? (
-                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-200">
-                                            <CheckCircle className="w-3 h-3 text-blue-600" />
-                                            <T>Đã đóng hoàn tất</T>
-                                          </span>
-                                        ) : (selectedPersonalTaskReport.resolutions && selectedPersonalTaskReport.resolutions.length > 0) ? (
-                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                            <T>Đã có giải pháp</T>
-                                          </span>
-                                        ) : (
-                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-200">
-                                            <Clock className="w-3 h-3 text-amber-600" />
-                                            <T>Đang xử lý</T>
-                                          </span>
-                                        )}
+                                        {(() => {
+                                          const isClosed = (selectedPersonalTaskReport.resolutions && selectedPersonalTaskReport.resolutions.length > 0 && selectedPersonalTaskReport.resolutions.every((res: any) => res.status === "Đã xử lý")) || !!selectedPersonalTaskReport.qcConfirmed;
+                                          const hasResolutions = (selectedPersonalTaskReport.resolutions && selectedPersonalTaskReport.resolutions.length > 0) || !!selectedPersonalTaskReport.qcConfirmed;
+                                          return isClosed ? (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-200">
+                                              <CheckCircle className="w-3 h-3 text-blue-600" />
+                                              <T>Đã đóng hoàn tất</T>
+                                            </span>
+                                          ) : hasResolutions ? (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                              <T>Đã có giải pháp</T>
+                                            </span>
+                                          ) : (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-200">
+                                              <Clock className="w-3 h-3 text-amber-600" />
+                                              <T>Đang xử lý</T>
+                                            </span>
+                                          );
+                                        })()}
                                       </div>
                                     </div>
 
@@ -11642,6 +11859,194 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                               </div>
                             </div>
                           )}
+
+                          {/* Modal Ghi Chú & Hướng Dẫn Danh Sách Việc Của Tôi */}
+                          {showPersonalTaskGuideModal && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+                              <div 
+                                className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {/* Header */}
+                                <div className="p-4 sm:p-5 bg-gradient-to-r from-indigo-700 to-blue-700 text-white flex items-center justify-between shadow-sm">
+                                  <div className="flex items-center gap-2.5">
+                                    <div className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center backdrop-blur-xs border border-white/20">
+                                      <Info className="w-4 h-4 text-white" />
+                                    </div>
+                                    <div>
+                                      <h3 className="text-sm sm:text-base font-black tracking-wide uppercase">
+                                        <T>HƯỚNG DẪN & GIẢI NGHĨA "VIỆC CỦA TÔI"</T>
+                                      </h3>
+                                      <p className="text-[11px] text-indigo-100 font-medium">
+                                        <T>Quy tắc nhận diện vai trò, theo dõi tiến độ và cơ chế đóng hoàn tất</T>
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowPersonalTaskGuideModal(false)}
+                                    className="text-white/80 hover:text-white p-1.5 hover:bg-white/15 rounded-lg transition-colors cursor-pointer"
+                                  >
+                                    <X className="w-5 h-5" />
+                                  </button>
+                                </div>
+
+                                {/* Body */}
+                                <div className="p-5 sm:p-6 overflow-y-auto space-y-6 text-xs text-slate-700 leading-relaxed">
+                                  
+                                  {/* Mục 1: Ý nghĩa các nhãn Vai trò của tôi */}
+                                  <div>
+                                    <h4 className="text-xs sm:text-sm font-black text-indigo-900 uppercase tracking-wider mb-3 flex items-center gap-2 pb-1.5 border-b border-indigo-100">
+                                      <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 inline-flex items-center justify-center text-[10px] font-black">1</span>
+                                      <T>Ý NGHĨA CÁC NHÃN TẠI CỘT "VAI TRÒ CỦA TÔI"</T>
+                                    </h4>
+                                    <p className="text-slate-600 mb-3 text-[11.5px]">
+                                      <T>Hệ thống tự động quét dữ liệu của từng bản tin để gắn các nhãn trách nhiệm tương ứng với tài khoản của bạn:</T>
+                                    </p>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                      {/* Nhãn Đã đăng GP */}
+                                      <div className="p-3.5 rounded-xl bg-emerald-50/60 border border-emerald-200/80 space-y-2">
+                                        <div className="flex items-center gap-2">
+                                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
+                                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[9.5px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                            <T>Đã đăng GP</T>
+                                          </span>
+                                        </div>
+                                        <p className="text-[11px] text-slate-700">
+                                          <T>Bản tin này có giải pháp xử lý hoặc đăng ký nhân rộng do <strong>chính bạn (hoặc bộ phận của bạn)</strong> đăng ký / phụ trách. Tên bạn xuất hiện trong danh sách người giải quyết vấn đề.</T>
+                                        </p>
+                                      </div>
+
+                                      {/* Nhãn Được chỉ đạo */}
+                                      <div className="p-3.5 rounded-xl bg-amber-50/60 border border-amber-200/80 space-y-2">
+                                        <div className="flex items-center gap-2">
+                                          <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0"></span>
+                                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[9.5px] font-black bg-amber-100 text-amber-800 border border-amber-200">
+                                            <T>Được chỉ đạo</T>
+                                          </span>
+                                        </div>
+                                        <p className="text-[11px] text-slate-700">
+                                          <T>Cấp quản lý/Ban giám đốc có chỉ đạo trong bản tin và <strong>có gắn thẻ nhắc tên (@tên bạn)</strong> hoặc <strong>đích danh phòng ban của bạn</strong>; hoặc bạn đã bấm nút <em>"Tiếp nhận chỉ đạo"</em>.</T>
+                                        </p>
+                                      </div>
+
+                                      {/* Nhãn Tôi đã tạo */}
+                                      <div className="p-3.5 rounded-xl bg-blue-50/60 border border-blue-200/80 space-y-2">
+                                        <div className="flex items-center gap-2">
+                                          <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0"></span>
+                                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[9.5px] font-black bg-blue-100 text-blue-800 border border-blue-200">
+                                            <T>Tôi đã tạo</T>
+                                          </span>
+                                        </div>
+                                        <p className="text-[11px] text-slate-700">
+                                          <T>Bạn chính là người lập và gửi báo cáo biến động/sự cố 4M1E1I ban đầu lên hệ thống.</T>
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Mục 2: Khi nào thì hoàn tất xử lý? (Đóng / Khóa bản tin) */}
+                                  <div>
+                                    <h4 className="text-xs sm:text-sm font-black text-indigo-900 uppercase tracking-wider mb-3 flex items-center gap-2 pb-1.5 border-b border-indigo-100">
+                                      <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 inline-flex items-center justify-center text-[10px] font-black">2</span>
+                                      <T>KHI NÀO THÌ HOÀN TẤT XỬ LÝ & ĐÓNG (KHÓA) BẢN TIN?</T>
+                                    </h4>
+                                    
+                                    <div className="space-y-3">
+                                      <div className="p-3.5 bg-blue-50/70 rounded-xl border border-blue-200 flex items-start gap-3">
+                                        <div className="p-1.5 bg-blue-600 text-white rounded-lg shrink-0 mt-0.5">
+                                          <CheckCircle className="w-4 h-4" />
+                                        </div>
+                                        <div className="space-y-1">
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="font-extrabold text-blue-900 text-xs">
+                                              <T>CƠ CHẾ ĐÓNG HOÀN TẤT TỰ ĐỘNG:</T>
+                                            </span>
+                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-200">
+                                              <T>Đã đóng hoàn tất</T>
+                                            </span>
+                                          </div>
+                                          <p className="text-[11.5px] text-blue-950">
+                                            <T>Bản tin được xác nhận <strong>HOÀN TẤT và TỰ ĐỘNG ĐÓNG (KHÓA)</strong> khi <strong>TẤT CẢ</strong> những người/bộ phận tiếp nhận xử lý đều đã cập nhật trạng thái trong <em>"Form Kết quả xử lý chi tiết"</em> là <span className="font-bold text-emerald-700">"ĐÃ XỬ LÝ"</span>.</T>
+                                          </p>
+                                        </div>
+                                      </div>
+
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                                        <div className="p-3 bg-amber-50/50 rounded-xl border border-amber-200/80 space-y-1">
+                                          <div className="flex items-center gap-1.5">
+                                            <Clock className="w-3.5 h-3.5 text-amber-600" />
+                                            <span className="font-bold text-amber-900 text-xs">
+                                              <T>Trạng thái "Đang xử lý":</T>
+                                            </span>
+                                          </div>
+                                          <p className="text-[11px] text-slate-600">
+                                            <T>Bản tin mới ghi nhận hoặc chưa có giải pháp nào được cập nhật trên hệ thống.</T>
+                                          </p>
+                                        </div>
+
+                                        <div className="p-3 bg-emerald-50/50 rounded-xl border border-emerald-200/80 space-y-1">
+                                          <div className="flex items-center gap-1.5">
+                                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                            <span className="font-bold text-emerald-900 text-xs">
+                                              <T>Trạng thái "Đã có giải pháp":</T>
+                                            </span>
+                                          </div>
+                                          <p className="text-[11px] text-slate-600">
+                                            <T>Đã có giải pháp được đăng ký nhưng còn người tiếp nhận đang trong trạng thái xử lý.</T>
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Mục 3: Các bước thực hiện */}
+                                  <div>
+                                    <h4 className="text-xs sm:text-sm font-black text-indigo-900 uppercase tracking-wider mb-3 flex items-center gap-2 pb-1.5 border-b border-indigo-100">
+                                      <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 inline-flex items-center justify-center text-[10px] font-black">3</span>
+                                      <T>CÁCH THỰC HIỆN XỬ LÝ & ĐÓNG ĐẦU VIỆC CỦA BẠN</T>
+                                    </h4>
+
+                                    <div className="space-y-2.5">
+                                      <div className="flex items-start gap-2.5 p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                                        <span className="w-5 h-5 rounded-full bg-slate-800 text-white font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">1</span>
+                                        <div className="text-[11.5px] text-slate-700">
+                                          <T>Bấm vào biểu tượng <strong>Con mắt (Xem chi tiết) 👁️</strong> ở cột <em>Thao tác</em> hoặc bấm trực tiếp vào dòng báo cáo cần xử lý.</T>
+                                        </div>
+                                      </div>
+
+                                      <div className="flex items-start gap-2.5 p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                                        <span className="w-5 h-5 rounded-full bg-slate-800 text-white font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">2</span>
+                                        <div className="text-[11.5px] text-slate-700">
+                                          <T>Xem chỉ đạo giao việc từ Ban Giám Đốc / Quản lý và tiến hành giải quyết vấn đề thực tế tại hiện trường.</T>
+                                        </div>
+                                      </div>
+
+                                      <div className="flex items-start gap-2.5 p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                                        <span className="w-5 h-5 rounded-full bg-slate-800 text-white font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">3</span>
+                                        <div className="text-[11.5px] text-slate-700">
+                                          <T>Tại form <strong>"KẾT QUẢ XỬ LÝ CHI TIẾT"</strong>, nhập nội dung biện pháp đã xử lý, chọn trạng thái <strong>"ĐÃ XỬ LÝ"</strong> và bấm <strong>Lưu</strong>. Khi tất cả các bên cùng hoàn tất, bản tin tự động chuyển sang <strong>"ĐÃ ĐÓNG HOÀN TẤT"</strong>.</T>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                </div>
+
+                                {/* Footer */}
+                                <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowPersonalTaskGuideModal(false)}
+                                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                                  >
+                                    <T>Đã hiểu & Đóng</T>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })()
@@ -11679,10 +12084,19 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                               <button
                                 type="button"
                                 onClick={() => {
+                                  const rawId = b.id.replace(/^broadcast-/, "");
+                                  const broadcastId = `broadcast-${rawId}`;
                                   if (onDeleteBroadcast) {
                                     onDeleteBroadcast(b.id);
-                                    onShowToast?.("Xóa bản tin thành công! 🗑️", "success");
+                                    onDeleteBroadcast(rawId);
+                                    onDeleteBroadcast(broadcastId);
                                   }
+                                  if (onDeleteNotification) {
+                                    onDeleteNotification(b.id);
+                                    onDeleteNotification(rawId);
+                                    onDeleteNotification(broadcastId);
+                                  }
+                                  onShowToast?.("Xóa thông báo thành công! 🗑️", "success");
                                 }}
                                 className="flex items-center gap-1.5 px-3 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-[10px] font-extrabold border border-rose-200 transition-all cursor-pointer shadow-xs active:scale-95"
                               >
@@ -11710,7 +12124,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                     <Bell className="w-6 h-6 text-white animate-pulse" />
                   </div>
                   <div>
-                    <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+                    <h1 className="text-lg font-bold text-slate-800 tracking-normal uppercase">
                       <T>TRUNG TÂM CẤU HÌNH & PHÁT SÓNG BẢNG TIN</T>
                     </h1>
                     <p className="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">
@@ -12207,21 +12621,25 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                   </span>
                                   {currentUser?.role === UserRole.ADMIN && (
                                     notifIdConfirmDlt === item.id ? (
-                                      <div className="flex items-center gap-1 animate-fade-in">
+                                      <div className="flex items-center gap-1 animate-fade-in" onClick={(e) => e.stopPropagation()}>
                                         <span translate="no" className="notranslate text-[9px] text-rose-600 font-black uppercase mr-1">Xóa?</span>
                                         <button
-                                          onClick={() => {
-                                            if (item.isBroadcast) {
-                                              if (onDeleteBroadcast) {
-                                                onDeleteBroadcast(item.id);
-                                                if (onShowToast) onShowToast("Xóa bản tin thành công! 🗑️", "success");
-                                              }
-                                            } else {
-                                              if (onDeleteNotification) {
-                                                onDeleteNotification(item.id);
-                                                if (onShowToast) onShowToast("Xóa thông báo thành công! 🗑️", "success");
-                                              }
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            const rawId = item.id.replace(/^broadcast-/, "");
+                                            const broadcastId = `broadcast-${rawId}`;
+                                            if (onDeleteBroadcast) {
+                                              onDeleteBroadcast(item.id);
+                                              onDeleteBroadcast(rawId);
+                                              onDeleteBroadcast(broadcastId);
                                             }
+                                            if (onDeleteNotification) {
+                                              onDeleteNotification(item.id);
+                                              onDeleteNotification(rawId);
+                                              onDeleteNotification(broadcastId);
+                                            }
+                                            if (onShowToast) onShowToast("Xóa thông báo thành công! 🗑️", "success");
                                             setNotifIdConfirmDlt(null);
                                           }}
                                           className="p-1 px-2 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded text-[9px] cursor-pointer transition-colors uppercase leading-none"
@@ -12229,7 +12647,11 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                           <span translate="no" className="notranslate font-black">Xóa</span>
                                         </button>
                                         <button
-                                          onClick={() => setNotifIdConfirmDlt(null)}
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setNotifIdConfirmDlt(null);
+                                          }}
                                           className="p-1 px-1.5 bg-slate-100 hover:bg-slate-200 text-slate-500 font-extrabold border border-slate-300 rounded text-[9px] cursor-pointer transition-colors uppercase leading-none"
                                         >
                                           <span translate="no" className="notranslate font-black">Hủy</span>
@@ -12237,7 +12659,11 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                       </div>
                                     ) : (
                                       <button
-                                        onClick={() => setNotifIdConfirmDlt(item.id)}
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setNotifIdConfirmDlt(item.id);
+                                        }}
                                         className="text-slate-400 hover:text-red-600 transition-colors p-1 rounded-md hover:bg-red-50 cursor-pointer"
                                         title="Xóa thông báo"
                                       >
@@ -12271,7 +12697,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                     <MessageSquare className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+                    <h1 className="text-lg font-bold text-slate-800 tracking-normal uppercase">
                       <T>KÊNH TRAO ĐỔI & HỘP THOẠI TIN NHẮN 1:1</T>
                     </h1>
                     <p className="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">
@@ -13596,14 +14022,8 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                         {/* Messages Stream */}
                         <div ref={directChatScrollRefDesktop} className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#f8fafc] select-text">
                           {(() => {
-                            const currentPartnerClean = activeDirectChatUser.fullName?.trim().toLowerCase();
                             const conversationMessages = directMessages.filter((m) => {
-                              const isFromMe = isMsgFromUser(m, currentUser);
-                              const isToMe = isMsgToUser(m, currentUser);
-                              const isFromPartner = isMsgFromUser(m, activeDirectChatUser) || (currentPartnerClean && m.senderName?.trim().toLowerCase() === currentPartnerClean);
-                              const isToPartner = isMsgToUser(m, activeDirectChatUser) || (currentPartnerClean && m.receiverName?.trim().toLowerCase() === currentPartnerClean);
-
-                              return (isFromMe && isToPartner) || (isFromPartner && isToMe);
+                              return isMessageInConversation(m, currentUser, activeDirectChatUser);
                             }).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
 
                             if (conversationMessages.length === 0) {

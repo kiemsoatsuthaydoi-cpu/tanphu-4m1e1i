@@ -9,6 +9,7 @@ export interface DirectMessageItem {
   timestamp: string; // dd/mm/yy HH:mm
   createdAt: number;
   isRead?: boolean;
+  isDeleted?: boolean;
   quotedText?: string;
   reportRefId?: string;
   attachments?: ForumReplyAttachment[];

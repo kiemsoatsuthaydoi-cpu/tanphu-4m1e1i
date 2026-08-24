@@ -23,7 +23,7 @@ import MobileForumView from "./MobileForumView";
 import PersonalContributionTab from "./PersonalContributionTab";
 import { TrialTrackingHub } from "./TrialTrackingHub";
 import { db } from "../utils/firebase";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { COLLECTIONS, saveDocument, deleteDocument } from "../utils/firebaseSync";
 import {
   ResponsiveContainer,
@@ -224,6 +224,7 @@ interface MobileFrameProps {
   currentUserId: string;
   onOpenReportForm: () => void;
   onDeleteReport: (id: string, forcePermanent?: boolean) => void;
+  onEmptyTrash?: () => void;
   onEditReport: (report: QualityReport) => void;
   offlineMode: boolean;
   currentUser?: User | null;
@@ -2230,6 +2231,7 @@ export default function MobileFrame({
   currentUserId,
   onOpenReportForm,
   onDeleteReport,
+  onEmptyTrash,
   onEditReport,
   offlineMode,
   currentUser,
@@ -4177,12 +4179,44 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
   const directChatScrollRef = useRef<HTMLDivElement | null>(null);
   const directMessageInputRef = useRef<HTMLInputElement | null>(null);
 
+  const [deletedDirectMsgIds, setDeletedDirectMsgIds] = useState<string[]>(() => {
+    try {
+      const saved = safeGetItem("4m1e1i_deleted_direct_msg_ids_v1");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+
+  const deletedDirectMsgIdsRef = useRef(deletedDirectMsgIds);
+  useEffect(() => {
+    deletedDirectMsgIdsRef.current = deletedDirectMsgIds;
+    try {
+      safeSetItem("4m1e1i_deleted_direct_msg_ids_v1", JSON.stringify(deletedDirectMsgIds));
+    } catch {}
+  }, [deletedDirectMsgIds]);
+
   const [directMessages, setDirectMessages] = useState<DirectMessageItem[]>(() => {
     try {
+      const deletedIds = (() => {
+        try {
+          const s = safeGetItem("4m1e1i_deleted_direct_msg_ids_v1");
+          return s ? JSON.parse(s) : [];
+        } catch {
+          return [];
+        }
+      })();
       const saved = safeGetItem("4m1e1i_direct_messages_v1");
       if (saved) {
         const parsed: DirectMessageItem[] = JSON.parse(saved);
-        return parsed.filter(m => !m.id?.startsWith("dm-reply-") && !m.content?.includes("Dạ em chào anh/chị"));
+        return parsed.filter(m => 
+          !m.id?.startsWith("dm-reply-") && 
+          !m.content?.includes("Dạ em chào anh/chị") &&
+          !deletedIds.includes(m.id) &&
+          !(m as any).isDeleted
+        );
       }
     } catch {}
     return [
@@ -4222,15 +4256,15 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
         collection(db, COLLECTIONS.DIRECT_MESSAGES),
         (snapshot) => {
           const list: DirectMessageItem[] = [];
+          const currentDeleted = deletedDirectMsgIdsRef.current || [];
           snapshot.forEach((docSnap) => {
             const data = docSnap.data() as DirectMessageItem;
-            if (data && data.id) {
-              list.push(data);
+            const msgId = docSnap.id || data?.id;
+            if (data && msgId && !(data as any).isDeleted && !currentDeleted.includes(msgId)) {
+              list.push({ ...data, id: msgId });
             }
           });
-          if (list.length > 0) {
-            setDirectMessages(list);
-          }
+          setDirectMessages(list);
         },
         (err) => {
           console.warn("[Firestore] direct_messages realtime sync error:", err);
@@ -4358,47 +4392,97 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
     }, 50);
   }, [activeDirectChatUser, directMessageInput, currentUser, markMsgAsReadForUser]);
 
-  const handleClearDirectMessages = useCallback(() => {
-    if (!activeDirectChatUser || !currentUser) return;
-    directMessages.forEach(m => {
-      if ((isMsgFromUser(m, currentUser) && isMsgToUser(m, activeDirectChatUser)) ||
-          (isMsgFromUser(m, activeDirectChatUser) && isMsgToUser(m, currentUser))) {
-        deleteDocument(COLLECTIONS.DIRECT_MESSAGES, m.id);
-      }
-    });
-    setDirectMessages(prev => prev.filter(m => 
-      !(
-        (isMsgFromUser(m, currentUser) && isMsgToUser(m, activeDirectChatUser)) ||
-        (isMsgFromUser(m, activeDirectChatUser) && isMsgToUser(m, currentUser))
-      )
-    ));
-  }, [activeDirectChatUser, currentUser, directMessages, isMsgFromUser, isMsgToUser]);
+  const isMessageInConversation = useCallback((
+    m: DirectMessageItem,
+    userA: User | null | undefined,
+    userB: User | null | undefined
+  ): boolean => {
+    if (!userA || !userB || !m) return false;
+
+    const norm = (s?: string | null) => (s ? s.normalize("NFC").trim().toLowerCase().replace(/\s+/g, " ") : "");
+    const base = (s?: string | null) => norm(s).replace(/\(.*?\)/g, "").trim();
+
+    const fromA = isCurrentUserSender(userA, (m as any).senderPhone, m.senderName, m.senderId, m.senderRole);
+    const toA = isCurrentUserSender(userA, (m as any).receiverPhone, m.receiverName, m.receiverId, (m as any).receiverRole);
+
+    const fromB = isCurrentUserSender(userB, (m as any).senderPhone, m.senderName, m.senderId, m.senderRole);
+    const toB = isCurrentUserSender(userB, (m as any).receiverPhone, m.receiverName, m.receiverId, (m as any).receiverRole);
+
+    const nameA = norm(userA.fullName);
+    const baseA = base(userA.fullName);
+    const idA = norm(userA.id);
+
+    const nameB = norm(userB.fullName);
+    const baseB = base(userB.fullName);
+    const idB = norm(userB.id);
+
+    const mSenderName = norm(m.senderName);
+    const mSenderBase = base(m.senderName);
+    const mSenderId = norm(m.senderId);
+
+    const mReceiverName = norm(m.receiverName);
+    const mReceiverBase = base(m.receiverName);
+    const mReceiverId = norm(m.receiverId);
+
+    const matchA_as_sender = fromA || (idA && mSenderId === idA) || (nameA && mSenderName === nameA) || (baseA && mSenderBase === baseA);
+    const matchA_as_receiver = toA || (idA && mReceiverId === idA) || (nameA && mReceiverName === nameA) || (baseA && mReceiverBase === baseA);
+
+    const matchB_as_sender = fromB || (idB && mSenderId === idB) || (nameB && mSenderName === nameB) || (baseB && mSenderBase === baseB);
+    const matchB_as_receiver = toB || (idB && mReceiverId === idB) || (nameB && mReceiverName === nameB) || (baseB && mReceiverBase === baseB);
+
+    return (matchA_as_sender && matchB_as_receiver) || (matchB_as_sender && matchA_as_receiver);
+  }, []);
 
   const handleDeleteConversation = useCallback((partner: User) => {
     if (!currentUser) return;
-    const partnerNameClean = partner.fullName?.trim().toLowerCase();
     
-    directMessages.forEach(m => {
-      const isFromMe = isMsgFromUser(m, currentUser);
-      const isToMe = isMsgToUser(m, currentUser);
-      const isFromPartner = isMsgFromUser(m, partner) || (partnerNameClean && m.senderName?.trim().toLowerCase() === partnerNameClean);
-      const isToPartner = isMsgToUser(m, partner) || (partnerNameClean && m.receiverName?.trim().toLowerCase() === partnerNameClean);
+    // Find all messages belonging to this conversation
+    const msgsToDelete = directMessages.filter(m => isMessageInConversation(m, currentUser, partner));
+    const idsToDelete = msgsToDelete.map(m => m.id);
 
-      const isBetweenUs = (isFromMe && isToPartner) || (isFromPartner && isToMe);
-      if (isBetweenUs) {
-        deleteDocument(COLLECTIONS.DIRECT_MESSAGES, m.id);
-      }
+    // Fallback: check direct name/id matching in case of custom aliases
+    const normPartnerName = partner.fullName?.trim().toLowerCase();
+    const partnerIdNorm = partner.id?.trim().toLowerCase();
+    const fallbackMsgs = directMessages.filter(m => {
+      const sName = m.senderName?.trim().toLowerCase();
+      const rName = m.receiverName?.trim().toLowerCase();
+      const sId = m.senderId?.trim().toLowerCase();
+      const rId = m.receiverId?.trim().toLowerCase();
+      return (normPartnerName && (sName === normPartnerName || rName === normPartnerName)) ||
+             (partnerIdNorm && (sId === partnerIdNorm || rId === partnerIdNorm));
     });
 
-    setDirectMessages(prev => prev.filter(m => {
-      const isFromMe = isMsgFromUser(m, currentUser);
-      const isToMe = isMsgToUser(m, currentUser);
-      const isFromPartner = isMsgFromUser(m, partner) || (partnerNameClean && m.senderName?.trim().toLowerCase() === partnerNameClean);
-      const isToPartner = isMsgToUser(m, partner) || (partnerNameClean && m.receiverName?.trim().toLowerCase() === partnerNameClean);
+    const allToDelete = Array.from(new Set([...idsToDelete, ...fallbackMsgs.map(m => m.id)]));
 
-      const isBetweenUs = (isFromMe && isToPartner) || (isFromPartner && isToMe);
-      return !isBetweenUs;
-    }));
+    if (allToDelete.length > 0) {
+      // 1. Add to blacklist in state & localStorage
+      setDeletedDirectMsgIds(prev => {
+        const next = Array.from(new Set([...prev, ...allToDelete]));
+        try {
+          safeSetItem("4m1e1i_deleted_direct_msg_ids_v1", JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+
+      // 2. Soft-delete + hard-delete from Firestore
+      allToDelete.forEach(id => {
+        if (db) {
+          const docRef = doc(db, COLLECTIONS.DIRECT_MESSAGES, id);
+          setDoc(docRef, { isDeleted: true, updatedAt: new Date().toISOString() }, { merge: true })
+            .then(() => deleteDoc(docRef))
+            .catch(() => deleteDoc(docRef).catch(() => {}));
+        }
+      });
+
+      // 3. Update directMessages state & localStorage immediately
+      setDirectMessages(prev => {
+        const filtered = prev.filter(m => !allToDelete.includes(m.id));
+        try {
+          safeSetItem("4m1e1i_direct_messages_v1", JSON.stringify(filtered));
+        } catch {}
+        return filtered;
+      });
+    }
 
     if (activeDirectChatUser && (
       (partner.id && activeDirectChatUser.id === partner.id) ||
@@ -4406,7 +4490,12 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
     )) {
       setActiveDirectChatUser(null);
     }
-  }, [currentUser, activeDirectChatUser, directMessages, isMsgFromUser, isMsgToUser]);
+  }, [currentUser, activeDirectChatUser, directMessages, isMessageInConversation]);
+
+  const handleClearDirectMessages = useCallback(() => {
+    if (!activeDirectChatUser || !currentUser) return;
+    handleDeleteConversation(activeDirectChatUser);
+  }, [activeDirectChatUser, currentUser, handleDeleteConversation]);
   const [localReadNotifIds, setLocalReadNotifIds] = useState<string[]>(() => {
     try {
       const saved = safeGetItem("4m1e1i_read_notifications");
@@ -5222,6 +5311,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
 
     const userSig = `${currentUser?.department || "Bộ phận"} - ${currentUser?.fullName || "Người nhận"}`;
 
+    let isCancelling = false;
     const updatedDirectives = (report.directives || []).map((d) => {
       if (d.id === dirId) {
         const currentList = d.acknowledges ? [...d.acknowledges] : [];
@@ -5232,15 +5322,20 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
           });
         }
         const isAlreadyAdded = currentList.some(item => item.by === userSig);
-        const newList = isAlreadyAdded 
-          ? currentList 
-          : [...currentList, { by: userSig, at: stamp }];
+        let newList: { by: string; at: string }[];
+        if (isAlreadyAdded) {
+          isCancelling = true;
+          newList = currentList.filter(item => item.by !== userSig);
+        } else {
+          newList = [...currentList, { by: userSig, at: stamp }];
+        }
 
+        const stillAck = newList.length > 0;
         return {
           ...d,
-          isAcknowledged: true,
-          acknowledgedBy: userSig,
-          acknowledgedAt: stamp,
+          isAcknowledged: stillAck,
+          acknowledgedBy: stillAck ? (newList[newList.length - 1]?.by || userSig) : undefined,
+          acknowledgedAt: stillAck ? (newList[newList.length - 1]?.at || stamp) : undefined,
           acknowledges: newList
         };
       }
@@ -5253,7 +5348,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
         directives: updatedDirectives
       });
     }
-    showToast("Đã xác nhận tiếp nhận chỉ đạo! 🤝");
+    showToast(isCancelling ? "Đã hủy tiếp nhận chỉ đạo! ↩️" : "Đã xác nhận tiếp nhận chỉ đạo! 🤝");
   };
 
   const handleShare = async (report: QualityReport) => {
@@ -7842,15 +7937,29 @@ App Link: ${window.location.origin}`;
           <div className="bg-slate-900 text-white rounded-xl p-3 shadow-md border-b-4 border-rose-500">
             <div className="flex items-center justify-between mb-1.5">
               <button
+                type="button"
                 onClick={() => setShowTrash(false)}
-                className="flex items-center gap-1 text-[10px] font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-2 flex items-center py-1 rounded-lg border-none cursor-pointer transition-colors"
+                className="flex items-center gap-1 text-[10px] font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded-lg border-none cursor-pointer transition-colors"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <T><span translate="no" className="notranslate">Quay Lại</span></T>
               </button>
-              <span className="text-[8px] bg-rose-600 px-2 py-0.5 rounded-full font-black uppercase text-white animate-pulse">
-                <T><span translate="no" className="notranslate">Thùng Rác</span></T>
-              </span>
+              <div className="flex items-center gap-1.5">
+                {reports.filter((r) => r.isDeleted).length > 0 && onEmptyTrash && (
+                  <button
+                    type="button"
+                    onClick={onEmptyTrash}
+                    className="flex items-center gap-1 text-[9px] font-black text-white bg-rose-600 hover:bg-rose-700 px-2 py-1 rounded-lg border-none cursor-pointer transition-all active:scale-95 shadow-sm"
+                    title="Xóa vĩnh viễn tất cả"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <T><span translate="no" className="notranslate">Dọn sạch</span></T>
+                  </button>
+                )}
+                <span className="text-[8px] bg-rose-600 px-2 py-0.5 rounded-full font-black uppercase text-white animate-pulse">
+                  <T><span translate="no" className="notranslate">Thùng Rác</span></T>
+                </span>
+              </div>
             </div>
             <h2 className="text-[11px] font-black uppercase tracking-tight text-white flex items-center gap-1.5">
               <span>🗑️</span>
@@ -7922,7 +8031,9 @@ App Link: ${window.location.origin}`;
                     {/* Trash Operations panel */}
                     <div className="bg-slate-50 border-t border-slate-100 px-3 py-2 flex items-center justify-between gap-2 shrink-0">
                       <button
-                        onClick={() => {
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
                           if (onUpdateReport) {
                             onUpdateReport({ ...report, isDeleted: false });
                             showToast("Đã hoàn tác và phục hồi báo cáo thành công! ♻️");
@@ -7935,7 +8046,9 @@ App Link: ${window.location.origin}`;
                       </button>
 
                       <button
-                        onClick={() => {
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
                           onDeleteReport(report.id, true);
                         }}
                         className="flex-1 flex items-center justify-center gap-1 text-[9px] font-black text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 py-1.5 rounded-lg cursor-pointer transition-colors"
@@ -9341,9 +9454,12 @@ App Link: ${window.location.origin}`;
                   if (mobileTaskScope === "ASSIGNED" && !isMyAssigned(r)) return false;
                   if (mobileTaskScope === "RESOLVED" && !isMyResolved(r)) return false;
 
-                  const isDone = (r.resolutions || []).some((res) => res.status === "Đã xử lý");
-                  if (mobileTaskStatusFilter === "IN_PROGRESS" && isDone) return false;
-                  if (mobileTaskStatusFilter === "RESOLVED" && !isDone) return false;
+                  const isClosed = (r.resolutions && r.resolutions.length > 0 && r.resolutions.every((res) => res.status === "Đã xử lý")) || !!r.qcConfirmed;
+                  const hasResolutions = (r.resolutions && r.resolutions.length > 0) || !!r.qcConfirmed;
+
+                  if (mobileTaskStatusFilter === "IN_PROGRESS" && (hasResolutions || isClosed)) return false;
+                  if (mobileTaskStatusFilter === "RESOLVED" && (!hasResolutions || isClosed)) return false;
+                  if (mobileTaskStatusFilter === "CLOSED" && !isClosed) return false;
 
                   if (mobileTaskSearchTerm.trim()) {
                     const term = mobileTaskSearchTerm.toLowerCase();
@@ -9380,7 +9496,8 @@ App Link: ${window.location.origin}`;
                       const isCreated = isMyCreated(task);
                       const isAssigned = isMyAssigned(task);
                       const isResolved = isMyResolved(task);
-                      const isDone = (task.resolutions || []).some((res) => res.status === "Đã xử lý");
+                      const isClosed = (task.resolutions && task.resolutions.length > 0 && task.resolutions.every((res) => res.status === "Đã xử lý")) || !!task.qcConfirmed;
+                      const hasResolutions = (task.resolutions && task.resolutions.length > 0) || !!task.qcConfirmed;
 
                       return (
                         <div
@@ -9392,13 +9509,19 @@ App Link: ${window.location.origin}`;
                               <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 text-[9px] font-black">
                                 {task.category}
                               </span>
-                              <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold ${
-                                isDone
-                                  ? "bg-emerald-100 text-emerald-800"
-                                  : "bg-amber-100 text-amber-800"
-                              }`}>
-                                {isDone ? "Đã xử lý" : "Đang xử lý"}
-                              </span>
+                              {isClosed ? (
+                                <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                                  Đã đóng
+                                </span>
+                              ) : hasResolutions ? (
+                                <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  Đã có GP
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                  Đang xử lý
+                                </span>
+                              )}
                               {isCreated && (
                                 <span className="px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[8.5px] font-semibold">
                                   Tôi tạo
@@ -10345,11 +10468,11 @@ App Link: ${window.location.origin}`;
                                        <button
                                          type="button"
                                          onClick={() => handleAcknowledgeDirective(report, dir.id)}
-                                         disabled={hasUserAcknowledged}
-                                         className={`px-2 py-1 rounded text-[10.5px] font-sans font-extrabold flex items-center gap-1 transition-all ${
+                                         title={hasUserAcknowledged ? "Nhấp để hủy tiếp nhận" : "Nhấp để tiếp nhận chỉ đạo"}
+                                         className={`px-2 py-1 rounded text-[10.5px] font-sans font-extrabold flex items-center gap-1 transition-all active:scale-95 cursor-pointer ${
                                            hasUserAcknowledged
-                                             ? "bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-not-allowed opacity-85"
-                                             : "bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 hover:border-emerald-400 active:scale-95 cursor-pointer shadow-3xs"
+                                             ? "bg-emerald-50 hover:bg-rose-50 text-emerald-700 hover:text-rose-700 border border-emerald-300 hover:border-rose-300 shadow-3xs"
+                                             : "bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 hover:border-emerald-400 shadow-3xs"
                                          }`}
                                        >
                                          <span>{hasUserAcknowledged ? "✓ Đã Tiếp Nhận" : "📥 Tiếp Nhận Chỉ Đạo"}</span>
@@ -14228,12 +14351,17 @@ App Link: ${window.location.origin}`}
                                 </span>
                                 <div className="flex items-center gap-1 shrink-0">
                                   <button
-                                    onClick={() => {
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
                                       if (onDeleteNotification) {
                                         onDeleteNotification(notif.id);
-                                      } else {
-                                        setLocalDeletedNotifIds((prev) => [...prev, notif.id]);
                                       }
+                                      if (onDeleteBroadcast) {
+                                        onDeleteBroadcast(notif.id);
+                                        onDeleteBroadcast(notif.id.replace(/^broadcast-/, ""));
+                                      }
+                                      setLocalDeletedNotifIds((prev) => [...prev, notif.id, notif.id.replace(/^broadcast-/, ""), `broadcast-${notif.id.replace(/^broadcast-/, "")}`]);
                                       setNotifIdConfirmDlt(null);
                                     }}
                                     className="bg-rose-650 hover:bg-rose-700 text-white font-extrabold text-[9px] px-2.5 py-1 rounded transition-colors cursor-pointer uppercase"
@@ -14241,7 +14369,11 @@ App Link: ${window.location.origin}`}
                                     <span translate="no" className="notranslate">Xóa</span>
                                   </button>
                                   <button
-                                    onClick={() => setNotifIdConfirmDlt(null)}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setNotifIdConfirmDlt(null);
+                                    }}
                                     className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold text-[9px] px-2.5 py-1 rounded transition-colors cursor-pointer uppercase"
                                   >
                                     <span translate="no" className="notranslate">Hủy</span>
@@ -14419,12 +14551,17 @@ App Link: ${window.location.origin}`}
                               </span>
                               <div className="flex items-center gap-1 shrink-0">
                                 <button
-                                  onClick={() => {
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
                                     if (onDeleteNotification) {
                                       onDeleteNotification(notif.id);
-                                    } else {
-                                      setLocalDeletedNotifIds((prev) => [...prev, notif.id]);
                                     }
+                                    if (onDeleteBroadcast) {
+                                      onDeleteBroadcast(notif.id);
+                                      onDeleteBroadcast(notif.id.replace(/^broadcast-/, ""));
+                                    }
+                                    setLocalDeletedNotifIds((prev) => [...prev, notif.id, notif.id.replace(/^broadcast-/, ""), `broadcast-${notif.id.replace(/^broadcast-/, "")}`]);
                                     setNotifIdConfirmDlt(null);
                                   }}
                                   className="bg-rose-650 hover:bg-rose-700 text-white font-extrabold text-[9px] px-2.5 py-1 rounded transition-colors cursor-pointer uppercase"
@@ -14432,7 +14569,11 @@ App Link: ${window.location.origin}`}
                                   <span translate="no" className="notranslate">Xóa</span>
                                 </button>
                                 <button
-                                  onClick={() => setNotifIdConfirmDlt(null)}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setNotifIdConfirmDlt(null);
+                                  }}
                                   className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold text-[9px] px-2.5 py-1 rounded transition-colors cursor-pointer uppercase"
                                 >
                                   <span translate="no" className="notranslate">Hủy</span>
@@ -15228,10 +15369,10 @@ App Link: ${window.location.origin}`}
             <button
               type="button"
               onClick={() => setActiveDirectChatUser(null)}
-              className="flex items-center gap-1.5 text-slate-700 hover:text-slate-900 font-black text-[12.5px] cursor-pointer transition-colors active:scale-95"
+              className="w-8 h-8 rounded-full bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white flex items-center justify-center shrink-0 cursor-pointer shadow-sm transition-all border-none"
+              title="Quay lại"
             >
-              <ArrowLeft className="w-4 h-4 text-slate-700 stroke-[2.5]" />
-              <T>Quay lại</T>
+              <ArrowLeft className="w-4.5 h-4.5 stroke-[2.5px] text-white" />
             </button>
 
             <div className="text-center px-2">
@@ -15260,9 +15401,7 @@ App Link: ${window.location.origin}`}
           >
             {(() => {
               const convMsgs = directMessages.filter(
-                (m) =>
-                  (isMsgFromUser(m, currentUser) && isMsgToUser(m, activeDirectChatUser)) ||
-                  (isMsgFromUser(m, activeDirectChatUser) && isMsgToUser(m, currentUser))
+                (m) => isMessageInConversation(m, currentUser, activeDirectChatUser)
               );
 
               if (convMsgs.length === 0) {

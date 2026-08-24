@@ -516,7 +516,7 @@ export default function FirebaseQuotaMonitor({
             <Cloud className="w-6 h-6 text-white" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+            <h1 className="text-lg font-bold text-slate-800 tracking-normal uppercase">
               <span translate="no" className="notranslate">GIÁM SÁT ĐỊNH MỨC CLOUD & DUNG LƯỢNG BỘ NHỚ</span>
             </h1>
             <p className="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">

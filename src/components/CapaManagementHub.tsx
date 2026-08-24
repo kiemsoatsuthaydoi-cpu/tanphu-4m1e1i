@@ -2229,7 +2229,7 @@ export default function CapaManagementHub({
             <FileText className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h2 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+            <h2 className="text-lg font-bold text-slate-800 tracking-normal uppercase">
               <span translate="no" className="notranslate">TRUNG TÂM LẬP & QUẢN LÝ BÁO CÁO CAPA</span>
             </h2>
             <p className="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">

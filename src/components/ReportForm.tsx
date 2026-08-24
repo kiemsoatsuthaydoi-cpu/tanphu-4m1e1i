@@ -585,8 +585,12 @@ export default function ReportForm({
       <div className={`bg-[#1e3a8a] text-white px-4 py-3.5 flex items-center shrink-0 border-b border-blue-900 shadow-md ${
         isRealMobile ? "rounded-none" : "rounded-t-[15px] lg:rounded-t-[28px]"
       }`}>
-        <button onClick={handleCancelWithConfirm} className="mr-3 hover:scale-110 active:scale-90 transition-transform">
-          <ArrowLeft className="w-5 h-5" />
+        <button 
+          onClick={handleCancelWithConfirm} 
+          className="w-8 h-8 rounded-full bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white flex items-center justify-center shrink-0 cursor-pointer shadow-sm transition-all border-none mr-3"
+          title="Quay lại"
+        >
+          <ArrowLeft className="w-4.5 h-4.5 stroke-[2.5px] text-white" />
         </button>
         <div className="flex-1">
           <T className="font-bold text-[15px] block">GHI NHẬN 4M1E1I</T>

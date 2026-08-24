@@ -88,10 +88,10 @@ export default function ProgressTrackingDashboard({
       }
 
       // Filter by status
-      const hasResolutions = (r.resolutions && r.resolutions.length > 0) || r.qcConfirmed;
-      const isClosed = r.qcConfirmed;
+      const isClosed = (r.resolutions && r.resolutions.length > 0 && r.resolutions.every(res => res.status === "Đã xử lý")) || !!r.qcConfirmed;
+      const hasResolutions = (r.resolutions && r.resolutions.length > 0) || !!r.qcConfirmed;
       
-      if (selectedStatus === "RESOLVED" && !hasResolutions) return false;
+      if (selectedStatus === "RESOLVED" && (!hasResolutions || isClosed)) return false;
       if (selectedStatus === "IN_PROGRESS" && (hasResolutions || isClosed)) return false;
       if (selectedStatus === "CLOSED" && !isClosed) return false;
 
@@ -117,11 +117,15 @@ export default function ProgressTrackingDashboard({
     const abnormalReports = filteredReports.filter(r => r.isAbnormal || r.reportType === "KPH" || r.reportType === "RRO");
     const spotlightReports = filteredReports.filter(r => r.isSpotlight || r.reportType === "DSA");
     
-    const resolvedCount = filteredReports.filter(r => (r.resolutions && r.resolutions.length > 0) || r.qcConfirmed).length;
-    const closedCount = filteredReports.filter(r => r.qcConfirmed).length;
-    const pendingCount = total - resolvedCount;
+    const resolvedCount = filteredReports.filter(r => {
+      const isClosed = (r.resolutions && r.resolutions.length > 0 && r.resolutions.every(res => res.status === "Đã xử lý")) || !!r.qcConfirmed;
+      const hasResolutions = (r.resolutions && r.resolutions.length > 0) || !!r.qcConfirmed;
+      return hasResolutions && !isClosed;
+    }).length;
+    const closedCount = filteredReports.filter(r => (r.resolutions && r.resolutions.length > 0 && r.resolutions.every(res => res.status === "Đã xử lý")) || !!r.qcConfirmed).length;
+    const pendingCount = total - resolvedCount - closedCount;
     
-    const resolutionRate = total > 0 ? Math.round((resolvedCount / total) * 100) : 0;
+    const resolutionRate = total > 0 ? Math.round(((resolvedCount + closedCount) / total) * 100) : 0;
     const closedRate = total > 0 ? Math.round((closedCount / total) * 100) : 0;
 
     return {
@@ -153,9 +157,13 @@ export default function ProgressTrackingDashboard({
     });
 
     const total = baseReports.length;
-    const closed = baseReports.filter(r => r.qcConfirmed).length;
-    const resolved = baseReports.filter(r => (r.resolutions && r.resolutions.length > 0) || r.qcConfirmed).length;
-    const pending = total - resolved;
+    const closed = baseReports.filter(r => (r.resolutions && r.resolutions.length > 0 && r.resolutions.every(res => res.status === "Đã xử lý")) || !!r.qcConfirmed).length;
+    const resolved = baseReports.filter(r => {
+      const isClosed = (r.resolutions && r.resolutions.length > 0 && r.resolutions.every(res => res.status === "Đã xử lý")) || !!r.qcConfirmed;
+      const hasResolutions = (r.resolutions && r.resolutions.length > 0) || !!r.qcConfirmed;
+      return hasResolutions && !isClosed;
+    }).length;
+    const pending = total - resolved - closed;
 
     return { total, closed, resolved, pending };
   }, [activeReports, selectedBranch, selectedCategory, searchTerm]);
@@ -167,9 +175,9 @@ export default function ProgressTrackingDashboard({
 
     activeReports.forEach((r) => {
       if (selectedBranch !== "ALL" && r.factory !== selectedBranch) return false;
-      const hasResolutions = (r.resolutions && r.resolutions.length > 0) || r.qcConfirmed;
-      const isClosed = r.qcConfirmed;
-      if (selectedStatus === "RESOLVED" && !hasResolutions) return;
+      const isClosed = (r.resolutions && r.resolutions.length > 0 && r.resolutions.every(res => res.status === "Đã xử lý")) || !!r.qcConfirmed;
+      const hasResolutions = (r.resolutions && r.resolutions.length > 0) || !!r.qcConfirmed;
+      if (selectedStatus === "RESOLVED" && (!hasResolutions || isClosed)) return;
       if (selectedStatus === "IN_PROGRESS" && (hasResolutions || isClosed)) return;
       if (selectedStatus === "CLOSED" && !isClosed) return;
       if (searchTerm.trim()) {
@@ -722,8 +730,8 @@ export default function ProgressTrackingDashboard({
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
                 {filteredReports.slice(0, 50).map((r) => {
-                  const hasResolutions = r.resolutions && r.resolutions.length > 0;
-                  const isClosed = r.qcConfirmed;
+                  const isClosed = (r.resolutions && r.resolutions.length > 0 && r.resolutions.every(res => res.status === "Đã xử lý")) || !!r.qcConfirmed;
+                  const hasResolutions = (r.resolutions && r.resolutions.length > 0) || !!r.qcConfirmed;
                   const latestResolution = hasResolutions ? r.resolutions![r.resolutions!.length - 1] : null;
 
                   return (

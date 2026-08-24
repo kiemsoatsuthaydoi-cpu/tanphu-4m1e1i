@@ -118,13 +118,13 @@ export function MobileReportRatingSectionTrigger({
       {stats.count > 0 ? (
         <>
           {renderSummaryStars(stats.average, eligible)}
-          <T className="text-[10px] text-slate-600 font-black font-sans ml-0.5 leading-none">{stats.average}</T>
-          <T className="text-[8.5px] text-slate-400 font-bold font-sans leading-none">({stats.count})</T>
+          <T className="text-[11.5px] text-slate-600 font-black font-sans ml-0.5 leading-none">{stats.average}</T>
+          <T className="text-[10px] text-slate-400 font-bold font-sans leading-none">({stats.count})</T>
         </>
       ) : (
         <>
           {renderSummaryStars(0, eligible)}
-          <T className="text-[9px] text-slate-500 font-extrabold font-sans hover:text-amber-600 transition-colors ml-0.5 leading-none">
+          <T className="text-[10.5px] text-slate-500 font-extrabold font-sans hover:text-amber-600 transition-colors ml-0.5 leading-none">
             {eligible ? "Đánh giá" : "Chưa đánh giá"}
           </T>
         </>
@@ -547,7 +547,7 @@ export function MobileReportRatingContainer({
   return (
     <div ref={containerRef} className="pb-2 border-b border-slate-100 block w-full select-none">
       <div className="flex items-center justify-between w-full">
-        <div className={`flex items-center font-bold text-xs uppercase select-none ${theme.text}`}>
+        <div className={`flex items-center font-bold text-[13.5px] uppercase select-none ${theme.text}`}>
           {categoryIcon}
           <T>{report.category}</T>
         </div>

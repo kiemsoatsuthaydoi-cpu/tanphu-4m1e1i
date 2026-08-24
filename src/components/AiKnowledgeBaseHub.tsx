@@ -307,7 +307,7 @@ ${d.content}
             <BookOpen className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+            <h1 className="text-lg font-bold text-slate-800 tracking-normal uppercase">
               <T>KHO TRI THỨC TIÊU CHUẨN AI</T>
             </h1>
             <p className="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">

@@ -1061,7 +1061,9 @@ export default function App() {
     return [];
   });
 
+  const deletedNotifIdsRef = useRef<string[]>(deletedNotifIds);
   useEffect(() => {
+    deletedNotifIdsRef.current = deletedNotifIds;
     safeSetItem("4m1e1i_deleted_notifications", JSON.stringify(deletedNotifIds));
   }, [deletedNotifIds]);
 
@@ -1082,11 +1084,24 @@ export default function App() {
   }, [readNotifIds]);
 
   const handleDeleteNotification = useCallback((id: string) => {
+    const rawId = id.startsWith("broadcast-") ? id.replace(/^broadcast-/, "") : id;
+    const broadcastId = id.startsWith("broadcast-") ? id : `broadcast-${id}`;
+
+    // Also remove from broadcasts in case it was a broadcast notice!
+    setBroadcasts((prev) => prev.filter((b) => b.id !== id && b.id !== rawId && b.id !== broadcastId));
+
     setDeletedNotifIds((prev) => {
-      if (prev.includes(id)) return prev;
-      const next = [...prev, id];
+      const next = [...prev];
+      if (!next.includes(id)) next.push(id);
+      if (!next.includes(broadcastId)) next.push(broadcastId);
+      if (!next.includes(rawId)) next.push(rawId);
+      deletedNotifIdsRef.current = next;
       if (dbConnected) {
         saveDocument("config", "deleted_notifications", { ids: next }).catch(console.error);
+        saveDocument("config", "deleted_broadcast_ids", { ids: next }).catch(console.error);
+        deleteDocument(COLLECTIONS.BROADCASTS, rawId).catch(console.error);
+        deleteDocument(COLLECTIONS.BROADCASTS, id).catch(console.error);
+        deleteDocument(COLLECTIONS.BROADCASTS, broadcastId).catch(console.error);
       }
       return next;
     });
@@ -1532,6 +1547,47 @@ export default function App() {
         fetchCollection<KnowledgeDoc>(COLLECTIONS.KNOWLEDGE_BASE)
       ]);
 
+      // Extract cloud-deleted records from fConfigs before processing collections
+      const remoteDeletedReports = fConfigs.find((c: any) => c.id === "deleted_report_ids");
+      if (remoteDeletedReports && Array.isArray(remoteDeletedReports.ids)) {
+        const merged = Array.from(new Set([...deletedReportIdsRef.current, ...remoteDeletedReports.ids]));
+        setDeletedReportIds(merged);
+        deletedReportIdsRef.current = merged;
+        safeSetItem("4m1e1i_deleted_report_ids", JSON.stringify(merged));
+      }
+
+      const remoteDeletedUsers = fConfigs.find((c: any) => c.id === "deleted_user_ids");
+      if (remoteDeletedUsers && Array.isArray(remoteDeletedUsers.ids)) {
+        const merged = Array.from(new Set([...deletedUserIdsRef.current, ...remoteDeletedUsers.ids]));
+        setDeletedUserIds(merged);
+        deletedUserIdsRef.current = merged;
+        safeSetItem("4m1e1i_deleted_user_ids", JSON.stringify(merged));
+      }
+
+      const remoteDeletedTopics = fConfigs.find((c: any) => c.id === "deleted_topic_ids");
+      if (remoteDeletedTopics && Array.isArray(remoteDeletedTopics.ids)) {
+        const merged = Array.from(new Set([...deletedTopicIdsRef.current, ...remoteDeletedTopics.ids]));
+        setDeletedTopicIds(merged);
+        deletedTopicIdsRef.current = merged;
+        safeSetItem("4m1e1i_deleted_topic_ids", JSON.stringify(merged));
+      }
+
+      const remoteDeletedReplies = fConfigs.find((c: any) => c.id === "deleted_reply_ids");
+      if (remoteDeletedReplies && Array.isArray(remoteDeletedReplies.ids)) {
+        const merged = Array.from(new Set([...deletedReplyIdsRef.current, ...remoteDeletedReplies.ids]));
+        setDeletedReplyIds(merged);
+        deletedReplyIdsRef.current = merged;
+        safeSetItem("4m1e1i_deleted_reply_ids", JSON.stringify(merged));
+      }
+
+      const remoteDeletedNotifs = fConfigs.find((c: any) => c.id === "deleted_notifications" || c.id === "deleted_broadcast_ids");
+      if (remoteDeletedNotifs && Array.isArray(remoteDeletedNotifs.ids)) {
+        const merged = Array.from(new Set([...deletedNotifIdsRef.current, ...remoteDeletedNotifs.ids]));
+        setDeletedNotifIds(merged);
+        deletedNotifIdsRef.current = merged;
+        safeSetItem("4m1e1i_deleted_notifications", JSON.stringify(merged));
+      }
+
       let finalUsers = [...users];
       if (fUsers.length > 0) {
         fUsers.forEach((fu) => {
@@ -1595,10 +1651,10 @@ export default function App() {
       setUsers(finalUsers);
 
       const validReportsFromDb = fReports.filter(
-        (r) => !deletedReportIdsRef.current.includes(r.id)
+        (r) => !deletedReportIdsRef.current.includes(r.id) && (!r.reportCode || !deletedReportIdsRef.current.includes(r.reportCode))
       );
       const fallbackReports = reports.filter(
-        (r) => !deletedReportIdsRef.current.includes(r.id)
+        (r) => !deletedReportIdsRef.current.includes(r.id) && (!r.reportCode || !deletedReportIdsRef.current.includes(r.reportCode))
       );
       const finalReports = sanitizeReports(
         attachLocalImages(validReportsFromDb.length > 0 ? validReportsFromDb : fallbackReports)
@@ -1699,7 +1755,14 @@ export default function App() {
         }
       }
 
-      setBroadcasts(fBroadcasts);
+      const validBroadcasts = (fBroadcasts || []).filter(b => {
+        const rawId = b.id.replace(/^broadcast-/, "");
+        const broadcastKey = `broadcast-${rawId}`;
+        return !deletedNotifIdsRef.current.includes(b.id) &&
+               !deletedNotifIdsRef.current.includes(rawId) &&
+               !deletedNotifIdsRef.current.includes(broadcastKey);
+      });
+      setBroadcasts(validBroadcasts);
       setChats(fChats);
       setProductionRequests(fProdRequests);
 
@@ -1927,7 +1990,13 @@ export default function App() {
         snapshot.forEach((doc) => {
           const data = doc.data() as QualityReport;
           const repId = doc.id || data.id;
-          if (repId && !deletedReportIdsRef.current.includes(repId)) {
+          const code = data.reportCode;
+          const isDeletedByFilter = 
+            (repId && deletedReportIdsRef.current.includes(repId)) ||
+            (data.id && deletedReportIdsRef.current.includes(data.id)) ||
+            (code && deletedReportIdsRef.current.includes(code));
+
+          if (repId && !isDeletedByFilter) {
             list.push({ ...data, id: repId });
           }
         });
@@ -1953,7 +2022,18 @@ export default function App() {
       (snapshot) => {
         const list: BroadcastNotice[] = [];
         snapshot.forEach((doc) => {
-          list.push(doc.data() as BroadcastNotice);
+          const bData = doc.data() as BroadcastNotice;
+          const bId = doc.id || bData.id;
+          const rawId = bId ? bId.replace(/^broadcast-/, "") : "";
+          const broadcastKey = rawId ? `broadcast-${rawId}` : "";
+          if (
+            bId &&
+            !deletedNotifIdsRef.current.includes(bId) &&
+            !deletedNotifIdsRef.current.includes(rawId) &&
+            !deletedNotifIdsRef.current.includes(broadcastKey)
+          ) {
+            list.push({ ...bData, id: bId });
+          }
         });
         setBroadcasts(list);
       },
@@ -3144,9 +3224,31 @@ export default function App() {
   };
 
   const handleDeleteBroadcast = (id: string) => {
-    setBroadcasts((prev) => prev.filter((b) => b.id !== id));
+    const rawId = id.startsWith("broadcast-") ? id.replace(/^broadcast-/, "") : id;
+    const broadcastId = id.startsWith("broadcast-") ? id : `broadcast-${id}`;
+
+    setBroadcasts((prev) => prev.filter((b) => b.id !== id && b.id !== rawId && b.id !== broadcastId));
+    setDeletedNotifIds((prev) => {
+      const next = [...prev];
+      if (!next.includes(id)) next.push(id);
+      if (!next.includes(broadcastId)) next.push(broadcastId);
+      if (!next.includes(rawId)) next.push(rawId);
+      deletedNotifIdsRef.current = next;
+      if (dbConnected) {
+        saveDocument("config", "deleted_notifications", { ids: next }).catch(console.error);
+        saveDocument("config", "deleted_broadcast_ids", { ids: next }).catch(console.error);
+      }
+      return next;
+    });
+
     if (dbConnected) {
+      deleteDocument(COLLECTIONS.BROADCASTS, rawId).catch((err) => {
+        console.error("Lỗi khi xóa thông báo trên Firestore:", err);
+      });
       deleteDocument(COLLECTIONS.BROADCASTS, id).catch((err) => {
+        console.error("Lỗi khi xóa thông báo trên Firestore:", err);
+      });
+      deleteDocument(COLLECTIONS.BROADCASTS, broadcastId).catch((err) => {
         console.error("Lỗi khi xóa thông báo trên Firestore:", err);
       });
     }
@@ -3846,16 +3948,28 @@ export default function App() {
         title: "Xóa vĩnh viễn báo cáo?",
         message: "Kiểm soát chất lượng: Bạn có thật sự muốn XÓA VĨNH VIỄN bản báo cáo này? Thao tác này KHÔNG THỂ KHÔI PHỤC!",
         onConfirm: async () => {
-          // Lưu vào danh sách đã xóa vĩnh viễn
+          const targetReport = reports.find((r) => r.id === id || r.reportCode === id);
+          const targetIds = Array.from(new Set([id, targetReport?.id, targetReport?.reportCode].filter(Boolean))) as string[];
+
+          // Lưu vào danh sách đã xóa vĩnh viễn (Cục bộ & Firestore Cloud Config)
           setDeletedReportIds((prev) => {
-            const next = Array.from(new Set([...prev, id]));
+            const next = Array.from(new Set([...prev, ...targetIds]));
             safeSetItem("4m1e1i_deleted_report_ids", JSON.stringify(next));
+            if (dbConnected) {
+              saveDocument("config", "deleted_report_ids", { ids: next }).catch(console.error);
+            }
             return next;
           });
-          deletedReportIdsRef.current.push(id);
+          targetIds.forEach((tId) => {
+            if (!deletedReportIdsRef.current.includes(tId)) {
+              deletedReportIdsRef.current.push(tId);
+            }
+          });
 
           setReports((prev) => {
-            const next = sanitizeReports(prev.filter((r) => r.id !== id));
+            const next = sanitizeReports(
+              prev.filter((r) => !targetIds.includes(r.id) && (!r.reportCode || !targetIds.includes(r.reportCode)))
+            );
             try {
               const lightweightReports = next.map((r) => {
                 const { imageUrl, imageUrls, ...rest } = r;
@@ -3867,13 +3981,17 @@ export default function App() {
           });
 
           if (dbConnected) {
-            deleteDocument(COLLECTIONS.REPORTS, id).catch((err) => {
-              console.error("Lỗi khi xóa báo cáo Firestore:", err);
+            targetIds.forEach((tId) => {
+              deleteDocument(COLLECTIONS.REPORTS, tId).catch((err) => {
+                console.error("Lỗi khi xóa báo cáo Firestore:", err);
+              });
             });
           }
           try {
-            localStorage.removeItem(`4m1e1i_img_${id}`);
-            localStorage.removeItem(`4m1e1i_img_urls_${id}`);
+            targetIds.forEach((tId) => {
+              localStorage.removeItem(`4m1e1i_img_${tId}`);
+              localStorage.removeItem(`4m1e1i_img_urls_${tId}`);
+            });
           } catch (e) {
             console.error("Lỗi xóa cache ảnh cục bộ:", e);
           }
@@ -3911,19 +4029,90 @@ export default function App() {
     }
   };
 
+  // Empty entire trash permanently
+  const handleEmptyTrash = () => {
+    const trashReports = reports.filter((r) => r.isDeleted);
+    if (trashReports.length === 0) {
+      showToast("Thùng rác hiện đang trống!", "info");
+      return;
+    }
+    setConfirmDialog({
+      isOpen: true,
+      title: "Dọn sạch toàn bộ thùng rác?",
+      message: `Kiểm soát chất lượng: Bạn có chắc chắn muốn XÓA VĨNH VIỄN TOÀN BỘ ${trashReports.length} bản tin trong thùng rác? Thao tác này sẽ xóa sạch khỏi đám mây và KHÔNG THỂ KHÔI PHỤC!`,
+      onConfirm: async () => {
+        const targetIds: string[] = [];
+        trashReports.forEach((r) => {
+          if (r.id) targetIds.push(r.id);
+          if (r.reportCode) targetIds.push(r.reportCode);
+        });
+        const uniqueIds = Array.from(new Set(targetIds));
+
+        setDeletedReportIds((prev) => {
+          const next = Array.from(new Set([...prev, ...uniqueIds]));
+          safeSetItem("4m1e1i_deleted_report_ids", JSON.stringify(next));
+          if (dbConnected) {
+            saveDocument("config", "deleted_report_ids", { ids: next }).catch(console.error);
+          }
+          return next;
+        });
+        uniqueIds.forEach((tId) => {
+          if (!deletedReportIdsRef.current.includes(tId)) {
+            deletedReportIdsRef.current.push(tId);
+          }
+        });
+
+        setReports((prev) => {
+          const next = sanitizeReports(
+            prev.filter((r) => !uniqueIds.includes(r.id) && (!r.reportCode || !uniqueIds.includes(r.reportCode)) && !r.isDeleted)
+          );
+          try {
+            const lightweightReports = next.map((r) => {
+              const { imageUrl, imageUrls, ...rest } = r;
+              return rest;
+            });
+            safeSetItem("4m1e1i_reports", JSON.stringify(lightweightReports));
+          } catch (e) {}
+          return next;
+        });
+
+        if (dbConnected) {
+          uniqueIds.forEach((tId) => {
+            deleteDocument(COLLECTIONS.REPORTS, tId).catch((err) => {
+              console.error("Lỗi khi xóa báo cáo Firestore:", err);
+            });
+          });
+        }
+        try {
+          uniqueIds.forEach((tId) => {
+            localStorage.removeItem(`4m1e1i_img_${tId}`);
+            localStorage.removeItem(`4m1e1i_img_urls_${tId}`);
+          });
+        } catch (e) {}
+
+        showToast(`Đã dọn sạch ${trashReports.length} bản tin trong thùng rác thành công! 🧹`, "success");
+        setConfirmDialog(null);
+      }
+    });
+  };
+
   // Update report handler for likes, shares, or directives
   const handleUpdateReport = (updatedReport: QualityReport) => {
     const existing = reports.find(r => r.id === updatedReport.id);
     if (!existing) return;
 
     // If report is recovered from trash, remove from deletedReportIds if present
-    if (updatedReport.isDeleted === false && deletedReportIdsRef.current.includes(updatedReport.id)) {
+    if (updatedReport.isDeleted === false) {
+      const recoveredIds = [updatedReport.id, updatedReport.reportCode].filter(Boolean) as string[];
       setDeletedReportIds((prev) => {
-        const next = prev.filter((x) => x !== updatedReport.id);
+        const next = prev.filter((x) => !recoveredIds.includes(x));
         safeSetItem("4m1e1i_deleted_report_ids", JSON.stringify(next));
+        if (dbConnected) {
+          saveDocument("config", "deleted_report_ids", { ids: next }).catch(console.error);
+        }
         return next;
       });
-      deletedReportIdsRef.current = deletedReportIdsRef.current.filter((x) => x !== updatedReport.id);
+      deletedReportIdsRef.current = deletedReportIdsRef.current.filter((x) => !recoveredIds.includes(x));
     }
 
     const now = new Date();
@@ -4981,6 +5170,7 @@ export default function App() {
             currentUserId={currentUser.id}
             onOpenReportForm={() => setIsFormOpen(true)}
             onDeleteReport={handleDeleteReportTrigger}
+            onEmptyTrash={handleEmptyTrash}
             onEditReport={handleEditReportTrigger}
             offlineMode={offlineMode}
             currentUser={currentUser}
@@ -5130,6 +5320,7 @@ export default function App() {
             onUpdateReport={handleUpdateReport}
             onEditReport={handleEditReportTrigger}
             onDeleteReport={handleDeleteReportTrigger}
+            onEmptyTrash={handleEmptyTrash}
             onForceSyncMetadata={handleForceSyncMetadata}
             onForceSyncUsers={handleForceSyncUsers}
             onShowToast={showToast}
@@ -5139,6 +5330,7 @@ export default function App() {
             aiKnowledgeText={aiKnowledgeText}
             onUpdateAiKnowledge={handleUpdateAiKnowledge}
             systemNotifications={systemNotifications}
+            deletedNotifIds={deletedNotifIds}
             onDeleteNotification={handleDeleteNotification}
             readNotifIds={readNotifIds}
             setReadNotifIds={setReadNotifIds}
@@ -5227,6 +5419,7 @@ export default function App() {
                 currentUserId={currentUser.id}
                 onOpenReportForm={() => setIsFormOpen(true)}
                 onDeleteReport={handleDeleteReportTrigger}
+                onEmptyTrash={handleEmptyTrash}
                 onEditReport={handleEditReportTrigger}
                 offlineMode={offlineMode}
                 currentUser={currentUser}
@@ -5322,6 +5515,7 @@ export default function App() {
                 currentUserId={currentUser.id}
                 onOpenReportForm={() => setIsFormOpen(true)}
                 onDeleteReport={handleDeleteReportTrigger}
+                onEmptyTrash={handleEmptyTrash}
                 onEditReport={handleEditReportTrigger}
                 offlineMode={offlineMode}
                 currentUser={currentUser}
