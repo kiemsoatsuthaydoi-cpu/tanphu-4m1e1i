@@ -16221,17 +16221,17 @@ App Link: ${window.location.origin}`}
         </div>
       )}
 
-      {/* Mobile Floating Right Sidebar Drawer (Hở trên, hở phải, hở dưới - không che thanh Menu đáy) */}
+      {/* Mobile Floating Right Sidebar Drawer (Hở trên, hở phải, hở dưới cách thanh Menu đáy ~5pt, tự co giãn chiều cao) */}
       {showMobileSidebar && (
-        <div className="fixed lg:absolute inset-0 z-40 overflow-hidden select-none animate-fadeIn flex justify-end">
+        <div className="fixed lg:absolute inset-0 z-40 overflow-hidden select-none animate-fadeIn flex justify-end items-end p-2 sm:p-3 pb-[72px] sm:pb-[74px]">
           {/* Backdrop */}
           <div 
             className="absolute inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity cursor-pointer"
             onClick={() => setShowMobileSidebar(false)}
           />
 
-          {/* Floating Drawer Panel (Hở biên trên, biên phải, biên dưới rộng thoáng hơn - tạo khoảng hở đẹp mắt với thanh MENU đáy) */}
-          <div className="relative w-[85%] max-w-[320px] top-2 sm:top-3 right-2 sm:right-3 bottom-[64px] h-[calc(100%-78px)] bg-slate-50 shadow-2xl flex flex-col z-10 animate-in slide-in-from-right duration-250 border-2 border-blue-500/30 rounded-2xl sm:rounded-3xl overflow-hidden ring-4 ring-blue-500/10">
+          {/* Floating Drawer Panel (Tự co giãn chiều cao theo nội dung huy hiệu thi đua, có độ cao tối thiểu thanh thoát tạo khoảng hở trên nút Đăng xuất, cách thanh menu đáy 5pt) */}
+          <div className="relative w-[85%] max-w-[320px] min-h-[400px] sm:min-h-[420px] max-h-[calc(100%-8px)] bg-slate-50 shadow-2xl flex flex-col z-10 animate-in slide-in-from-right duration-250 border-2 border-blue-500/30 rounded-2xl sm:rounded-3xl overflow-hidden ring-4 ring-blue-500/10">
             
             {/* 1. HEADER PROFILE THU NHỎ - TINH GỌN PHƯƠNG ÁN 1 */}
             <div className="bg-gradient-to-r from-blue-700 via-blue-800 to-indigo-900 text-white px-3.5 py-2.5 shrink-0 shadow-sm relative overflow-hidden">

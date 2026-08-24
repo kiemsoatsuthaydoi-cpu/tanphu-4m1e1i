@@ -53,6 +53,7 @@ export default function ProgressTrackingDashboard({
   currentUser,
   isMobile = false
 }: ProgressTrackingDashboardProps) {
+  const safeReports = useMemo(() => (Array.isArray(reports) ? reports : []), [reports]);
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
   const [selectedStatus, setSelectedStatus] = useState<string>("ALL");
   const [searchTerm, setSearchTerm] = useState<string>("");
@@ -60,14 +61,14 @@ export default function ProgressTrackingDashboard({
 
   // Valid reports (not deleted)
   const activeReports = useMemo(() => {
-    return reports.filter(r => !r.isDeleted);
-  }, [reports]);
+    return safeReports.filter(r => r && !r.isDeleted);
+  }, [safeReports]);
 
   // Extract unique branches with count
   const branchList = useMemo(() => {
     const map = new Map<string, number>();
     activeReports.forEach(r => {
-      if (r.factory) {
+      if (r && r.factory) {
         map.set(r.factory, (map.get(r.factory) || 0) + 1);
       }
     });
@@ -77,6 +78,7 @@ export default function ProgressTrackingDashboard({
   // Filter reports based on active filters
   const filteredReports = useMemo(() => {
     return activeReports.filter((r) => {
+      if (!r) return false;
       // Filter by branch
       if (selectedBranch !== "ALL" && r.factory !== selectedBranch) {
         return false;
@@ -88,8 +90,9 @@ export default function ProgressTrackingDashboard({
       }
 
       // Filter by status
-      const isClosed = (r.resolutions && r.resolutions.length > 0 && r.resolutions.every(res => res.status === "Đã xử lý")) || !!r.qcConfirmed;
-      const hasResolutions = (r.resolutions && r.resolutions.length > 0) || !!r.qcConfirmed;
+      const resList = Array.isArray(r.resolutions) ? r.resolutions : [];
+      const isClosed = (resList.length > 0 && resList.every(res => res && res.status === "Đã xử lý")) || !!r.qcConfirmed;
+      const hasResolutions = resList.length > 0 || !!r.qcConfirmed;
       
       if (selectedStatus === "RESOLVED" && (!hasResolutions || isClosed)) return false;
       if (selectedStatus === "IN_PROGRESS" && (hasResolutions || isClosed)) return false;
@@ -114,15 +117,21 @@ export default function ProgressTrackingDashboard({
   // Metrics calculation
   const metrics = useMemo(() => {
     const total = filteredReports.length;
-    const abnormalReports = filteredReports.filter(r => r.isAbnormal || r.reportType === "KPH" || r.reportType === "RRO");
-    const spotlightReports = filteredReports.filter(r => r.isSpotlight || r.reportType === "DSA");
+    const abnormalReports = filteredReports.filter(r => r && (r.isAbnormal || r.reportType === "KPH" || r.reportType === "RRO"));
+    const spotlightReports = filteredReports.filter(r => r && (r.isSpotlight || r.reportType === "DSA"));
     
     const resolvedCount = filteredReports.filter(r => {
-      const isClosed = (r.resolutions && r.resolutions.length > 0 && r.resolutions.every(res => res.status === "Đã xử lý")) || !!r.qcConfirmed;
-      const hasResolutions = (r.resolutions && r.resolutions.length > 0) || !!r.qcConfirmed;
+      if (!r) return false;
+      const resList = Array.isArray(r.resolutions) ? r.resolutions : [];
+      const isClosed = (resList.length > 0 && resList.every(res => res && res.status === "Đã xử lý")) || !!r.qcConfirmed;
+      const hasResolutions = resList.length > 0 || !!r.qcConfirmed;
       return hasResolutions && !isClosed;
     }).length;
-    const closedCount = filteredReports.filter(r => (r.resolutions && r.resolutions.length > 0 && r.resolutions.every(res => res.status === "Đã xử lý")) || !!r.qcConfirmed).length;
+    const closedCount = filteredReports.filter(r => {
+      if (!r) return false;
+      const resList = Array.isArray(r.resolutions) ? r.resolutions : [];
+      return (resList.length > 0 && resList.every(res => res && res.status === "Đã xử lý")) || !!r.qcConfirmed;
+    }).length;
     const pendingCount = total - resolvedCount - closedCount;
     
     const resolutionRate = total > 0 ? Math.round(((resolvedCount + closedCount) / total) * 100) : 0;
@@ -143,6 +152,7 @@ export default function ProgressTrackingDashboard({
   // Status counts based on current other filters (branch, category, search)
   const statusCounts = useMemo(() => {
     const baseReports = activeReports.filter((r) => {
+      if (!r) return false;
       if (selectedBranch !== "ALL" && r.factory !== selectedBranch) return false;
       if (selectedCategory !== "ALL" && r.category !== selectedCategory) return false;
       if (searchTerm.trim()) {
@@ -157,10 +167,16 @@ export default function ProgressTrackingDashboard({
     });
 
     const total = baseReports.length;
-    const closed = baseReports.filter(r => (r.resolutions && r.resolutions.length > 0 && r.resolutions.every(res => res.status === "Đã xử lý")) || !!r.qcConfirmed).length;
+    const closed = baseReports.filter(r => {
+      if (!r) return false;
+      const resList = Array.isArray(r.resolutions) ? r.resolutions : [];
+      return (resList.length > 0 && resList.every(res => res && res.status === "Đã xử lý")) || !!r.qcConfirmed;
+    }).length;
     const resolved = baseReports.filter(r => {
-      const isClosed = (r.resolutions && r.resolutions.length > 0 && r.resolutions.every(res => res.status === "Đã xử lý")) || !!r.qcConfirmed;
-      const hasResolutions = (r.resolutions && r.resolutions.length > 0) || !!r.qcConfirmed;
+      if (!r) return false;
+      const resList = Array.isArray(r.resolutions) ? r.resolutions : [];
+      const isClosed = (resList.length > 0 && resList.every(res => res && res.status === "Đã xử lý")) || !!r.qcConfirmed;
+      const hasResolutions = resList.length > 0 || !!r.qcConfirmed;
       return hasResolutions && !isClosed;
     }).length;
     const pending = total - resolved - closed;
@@ -174,9 +190,11 @@ export default function ProgressTrackingDashboard({
     CATEGORIES.forEach(cat => map.set(cat, 0));
 
     activeReports.forEach((r) => {
-      if (selectedBranch !== "ALL" && r.factory !== selectedBranch) return false;
-      const isClosed = (r.resolutions && r.resolutions.length > 0 && r.resolutions.every(res => res.status === "Đã xử lý")) || !!r.qcConfirmed;
-      const hasResolutions = (r.resolutions && r.resolutions.length > 0) || !!r.qcConfirmed;
+      if (!r) return;
+      if (selectedBranch !== "ALL" && r.factory !== selectedBranch) return;
+      const resList = Array.isArray(r.resolutions) ? r.resolutions : [];
+      const isClosed = (resList.length > 0 && resList.every(res => res && res.status === "Đã xử lý")) || !!r.qcConfirmed;
+      const hasResolutions = resList.length > 0 || !!r.qcConfirmed;
       if (selectedStatus === "RESOLVED" && (!hasResolutions || isClosed)) return;
       if (selectedStatus === "IN_PROGRESS" && (hasResolutions || isClosed)) return;
       if (selectedStatus === "CLOSED" && !isClosed) return;
@@ -201,11 +219,16 @@ export default function ProgressTrackingDashboard({
   const categoryStats = useMemo(() => {
     return CATEGORIES.map(cat => {
       const catReports = activeReports.filter(r => {
+        if (!r) return false;
         if (selectedBranch !== "ALL" && r.factory !== selectedBranch) return false;
         return r.category === cat;
       });
       const total = catReports.length;
-      const resolved = catReports.filter(r => (r.resolutions && r.resolutions.length > 0) || r.qcConfirmed).length;
+      const resolved = catReports.filter(r => {
+        if (!r) return false;
+        const resList = Array.isArray(r.resolutions) ? r.resolutions : [];
+        return resList.length > 0 || !!r.qcConfirmed;
+      }).length;
       const rate = total > 0 ? Math.round((resolved / total) * 100) : 0;
       return {
         category: cat,
@@ -254,25 +277,25 @@ export default function ProgressTrackingDashboard({
       } rounded-2xl shadow-lg border border-blue-400/30 overflow-hidden relative`}>
         <div className="absolute right-0 top-0 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none -mr-16 -mt-16"></div>
         <div className="relative z-10 flex items-center gap-2 sm:gap-3.5 min-w-0 flex-1">
-          <div className="p-1.5 sm:p-3 bg-white/20 rounded-xl border border-white/30 text-white shadow-inner shrink-0">
-            <TrendingUp className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
-          </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-[10px] sm:text-sm md:text-base lg:text-lg font-black tracking-tight uppercase text-white leading-tight truncate">
+            <h2 className="text-[8px] sm:text-xs md:text-sm lg:text-base font-black tracking-tight uppercase text-white leading-tight">
               <T><span translate="no" className="notranslate">BẢNG TIẾN ĐỘ CẢI TIẾN & KHẮC PHỤC CHẤT LƯỢNG</span></T>
             </h2>
-            <p className="text-[8.5px] sm:text-xs text-blue-100/90 mt-0.5 leading-snug truncate">
+            <p className="text-[6.5px] sm:text-[9.5px] text-blue-100/90 mt-0.5 leading-snug">
               <T><span translate="no" className="notranslate">Theo dõi tỷ lệ giải quyết bất thường, tiến độ đóng hành động khắc phục phòng ngừa</span></T>
             </p>
           </div>
         </div>
 
-        <div className="relative z-10 flex items-center gap-2 sm:gap-3 shrink-0">
-          <div className="bg-white/15 backdrop-blur-md px-2 py-1 sm:px-3.5 sm:py-2 rounded-xl border border-white/25 text-center min-w-[58px] sm:min-w-[80px]">
-            <div className="text-[8px] sm:text-[10.5px] text-blue-100 uppercase font-bold tracking-wider whitespace-nowrap leading-none">
+        <div className="relative z-10 flex items-center shrink-0">
+          <div className="bg-white/15 backdrop-blur-md px-2 py-1.5 sm:px-3 sm:py-2 rounded-xl border border-white/25 text-center flex flex-col items-center justify-center min-w-[56px] sm:min-w-[76px] shadow-sm">
+            <div className="p-1 bg-white/20 rounded-lg border border-white/30 text-white shadow-inner mb-0.5 flex items-center justify-center">
+              <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
+            </div>
+            <div className="text-[5.5px] sm:text-[7.5px] text-blue-100 uppercase font-bold tracking-wider whitespace-nowrap leading-none">
               <T><span translate="no" className="notranslate">TỶ LỆ CẢI TIẾN</span></T>
             </div>
-            <div className="text-xs sm:text-lg font-black font-mono text-emerald-300 leading-tight mt-0.5">
+            <div className="text-xs sm:text-base font-black font-mono text-emerald-300 leading-tight mt-0.5">
               {metrics.resolutionRate}%
             </div>
           </div>
@@ -484,22 +507,22 @@ export default function ProgressTrackingDashboard({
           <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">
             <T><span translate="no" className="notranslate">1. Trạng thái tiến độ:</span></T>
           </label>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
             {/* Tất cả */}
             <button
               type="button"
               onClick={() => setSelectedStatus("ALL")}
-              className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+              className={`flex items-center justify-between px-2 py-1.5 sm:px-3 sm:py-2.5 rounded-xl text-[7.5px] sm:text-xs font-bold border transition-all cursor-pointer ${
                 selectedStatus === "ALL"
                   ? "bg-slate-900 text-white border-slate-900 shadow-sm"
                   : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 hover:border-slate-300"
               }`}
             >
-              <span className="flex items-center gap-1.5">
-                <FileText className="w-3.5 h-3.5 opacity-80" />
+              <span className="flex items-center gap-1 sm:gap-1.5">
+                <FileText className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 opacity-80 shrink-0" />
                 <T><span translate="no" className="notranslate">Tất cả trạng thái</span></T>
               </span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
+              <span className={`px-1.5 py-0.5 rounded-full text-[7.5px] sm:text-[10px] font-mono shrink-0 ${
                 selectedStatus === "ALL" ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"
               }`}>
                 {statusCounts.total}
@@ -510,17 +533,17 @@ export default function ProgressTrackingDashboard({
             <button
               type="button"
               onClick={() => setSelectedStatus("RESOLVED")}
-              className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+              className={`flex items-center justify-between px-2 py-1.5 sm:px-3 sm:py-2.5 rounded-xl text-[7.5px] sm:text-xs font-bold border transition-all cursor-pointer ${
                 selectedStatus === "RESOLVED"
                   ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
                   : "bg-emerald-50/60 text-emerald-800 border-emerald-200 hover:bg-emerald-100/80"
               }`}
             >
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 opacity-90" />
+              <span className="flex items-center gap-1 sm:gap-1.5">
+                <CheckCircle2 className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 opacity-90 shrink-0" />
                 <T><span translate="no" className="notranslate">Đã có giải pháp</span></T>
               </span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
+              <span className={`px-1.5 py-0.5 rounded-full text-[7.5px] sm:text-[10px] font-mono shrink-0 ${
                 selectedStatus === "RESOLVED" ? "bg-white/25 text-white" : "bg-emerald-200/80 text-emerald-900"
               }`}>
                 {statusCounts.resolved}
@@ -531,17 +554,17 @@ export default function ProgressTrackingDashboard({
             <button
               type="button"
               onClick={() => setSelectedStatus("CLOSED")}
-              className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+              className={`flex items-center justify-between px-2 py-1.5 sm:px-3 sm:py-2.5 rounded-xl text-[7.5px] sm:text-xs font-bold border transition-all cursor-pointer ${
                 selectedStatus === "CLOSED"
                   ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
                   : "bg-indigo-50/60 text-indigo-800 border-indigo-200 hover:bg-indigo-100/80"
               }`}
             >
-              <span className="flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 opacity-90" />
+              <span className="flex items-center gap-1 sm:gap-1.5">
+                <ShieldCheck className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 opacity-90 shrink-0" />
                 <T><span translate="no" className="notranslate">Đã nghiệm thu</span></T>
               </span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
+              <span className={`px-1.5 py-0.5 rounded-full text-[7.5px] sm:text-[10px] font-mono shrink-0 ${
                 selectedStatus === "CLOSED" ? "bg-white/25 text-white" : "bg-indigo-200/80 text-indigo-900"
               }`}>
                 {statusCounts.closed}
@@ -552,17 +575,17 @@ export default function ProgressTrackingDashboard({
             <button
               type="button"
               onClick={() => setSelectedStatus("IN_PROGRESS")}
-              className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+              className={`flex items-center justify-between px-2 py-1.5 sm:px-3 sm:py-2.5 rounded-xl text-[7.5px] sm:text-xs font-bold border transition-all cursor-pointer ${
                 selectedStatus === "IN_PROGRESS"
                   ? "bg-amber-600 text-white border-amber-600 shadow-sm"
                   : "bg-amber-50/60 text-amber-800 border-amber-200 hover:bg-amber-100/80"
               }`}
             >
-              <span className="flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 opacity-90" />
+              <span className="flex items-center gap-1 sm:gap-1.5">
+                <Clock className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 opacity-90 shrink-0" />
                 <T><span translate="no" className="notranslate">Đang chờ xử lý</span></T>
               </span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${
+              <span className={`px-1.5 py-0.5 rounded-full text-[7.5px] sm:text-[10px] font-mono shrink-0 ${
                 selectedStatus === "IN_PROGRESS" ? "bg-white/25 text-white" : "bg-amber-200/80 text-amber-900"
               }`}>
                 {statusCounts.pending}
@@ -576,19 +599,21 @@ export default function ProgressTrackingDashboard({
           <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2">
             <T><span translate="no" className="notranslate">2. Phân loại theo 6 yếu tố 4M1E1I:</span></T>
           </label>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-1.5 sm:gap-2">
             {/* Tất cả 4M */}
             <button
               type="button"
               onClick={() => setSelectedCategory("ALL")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-xl text-[8.5px] sm:text-xs font-bold border transition-all cursor-pointer flex items-center justify-between sm:justify-start gap-1 sm:gap-1.5 ${
                 selectedCategory === "ALL"
                   ? "bg-blue-600 text-white border-blue-600 shadow-xs"
                   : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
               }`}
             >
-              <span>🌐</span>
-              <T><span translate="no" className="notranslate">Tất cả 6 yếu tố</span></T>
+              <span className="flex items-center gap-1 sm:gap-1.5 min-w-0 truncate">
+                <span className="text-xs sm:text-sm shrink-0">🌐</span>
+                <span className="truncate"><T><span translate="no" className="notranslate">Tất cả 6 yếu tố</span></T></span>
+              </span>
             </button>
 
             {CATEGORIES.map(cat => {
@@ -599,15 +624,17 @@ export default function ProgressTrackingDashboard({
                   key={cat}
                   type="button"
                   onClick={() => setSelectedCategory(isSelected ? "ALL" : cat)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-xl text-[8.5px] sm:text-xs font-bold border transition-all cursor-pointer flex items-center justify-between sm:justify-start gap-1 sm:gap-1.5 ${
                     isSelected
                       ? "bg-blue-600 text-white border-blue-600 shadow-xs"
                       : "bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:bg-blue-50/40"
                   }`}
                 >
-                  {getCategoryIcon(cat, "w-3.5 h-3.5")}
-                  <T><span translate="no" className="notranslate">{cat}</span></T>
-                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  <span className="flex items-center gap-1 sm:gap-1.5 min-w-0 truncate">
+                    <span className="shrink-0">{getCategoryIcon(cat, "w-3 h-3 sm:w-3.5 sm:h-3.5")}</span>
+                    <span className="truncate"><T><span translate="no" className="notranslate">{cat}</span></T></span>
+                  </span>
+                  <span className={`px-1.5 py-0.5 rounded-full text-[8px] sm:text-[10px] font-mono shrink-0 ${
                     isSelected ? "bg-white/25 text-white" : "bg-slate-100 text-slate-600"
                   }`}>
                     {count}
@@ -730,9 +757,10 @@ export default function ProgressTrackingDashboard({
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
                 {filteredReports.slice(0, 50).map((r) => {
-                  const isClosed = (r.resolutions && r.resolutions.length > 0 && r.resolutions.every(res => res.status === "Đã xử lý")) || !!r.qcConfirmed;
-                  const hasResolutions = (r.resolutions && r.resolutions.length > 0) || !!r.qcConfirmed;
-                  const latestResolution = hasResolutions ? r.resolutions![r.resolutions!.length - 1] : null;
+                  const resList = Array.isArray(r.resolutions) ? r.resolutions : [];
+                  const isClosed = (resList.length > 0 && resList.every(res => res && res.status === "Đã xử lý")) || !!r.qcConfirmed;
+                  const hasResolutions = resList.length > 0 || !!r.qcConfirmed;
+                  const latestResolution = resList.length > 0 ? resList[resList.length - 1] : null;
 
                   return (
                     <tr key={r.id} className="hover:bg-blue-50/30 transition-colors">
