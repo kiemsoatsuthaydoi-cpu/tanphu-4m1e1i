@@ -1379,6 +1379,11 @@ function MobileApprovalView({
 
                 {/* Action Buttons Row */}
                 {(() => {
+                  // If not admin and user is not in PENDING status, non-admins (Duyệt viên) should not see any action buttons (e.g. Khóa TK, Kích hoạt, Sửa)
+                  if (!isAdmin && u.status !== UserStatus.PENDING) {
+                    return null;
+                  }
+
                   // If not admin and this card is isMe or Admin, do not show action buttons
                   if (!isAdmin && (isMe || u.role === UserRole.ADMIN)) {
                     return null;
@@ -7573,6 +7578,11 @@ App Link: ${window.location.origin}`;
                     setActiveBottomTab("BAO_CAO");
                     setMobileFeedSubTab("FEED");
                     setShowFilters(true);
+                    setMobileTrialSearchQuery("");
+                    setMobileTrialBranchFilter("ALL");
+                    setMobileTrialStatusFilter("ALL");
+                    setMobileTrialTypeFilter("ALL");
+                    setShowNewsCompanyPopover(false);
                   }}
                   className={`py-2 px-1.5 rounded-lg text-[9.5px] xs:text-[10px] font-black flex items-center justify-center gap-1 transition-all cursor-pointer border-none whitespace-nowrap flex-nowrap shrink-0 min-w-0 ${
                     mobileFeedViewMode === "REPORT"
@@ -7591,6 +7601,13 @@ App Link: ${window.location.origin}`;
                     setActiveBottomTab("BAO_CAO");
                     setMobileFeedSubTab("FEED");
                     setShowFilters(true);
+                    setMobileBranchFilter("Tất cả");
+                    setSelectedFactoryFilters([]);
+                    setSelectedCategory(null);
+                    setSelectedReportTypeFilter(null);
+                    setSelectedProcessStatusFilter("ALL");
+                    setSearchTerm("");
+                    setShowNewsCompanyPopover(false);
                   }}
                   className={`py-2 px-1.5 rounded-lg text-[9.5px] xs:text-[10px] font-black flex items-center justify-center gap-1 transition-all cursor-pointer border-none whitespace-nowrap flex-nowrap shrink-0 min-w-0 ${
                     mobileFeedViewMode === "TRIAL"
@@ -12103,7 +12120,7 @@ App Link: ${window.location.origin}`;
           <T><span translate="no" className="notranslate truncate w-full block text-center">Đề Xuất</span></T>
         </button>
 
-        {/* 3. BẢN TIN */}
+        {/* 3. BẢN TIN / THỬ NGHIỆM */}
         <button
           type="button"
           onClick={() => {
@@ -12116,19 +12133,31 @@ App Link: ${window.location.origin}`;
           }}
           className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors min-w-0 overflow-visible ${
             activeBottomTab === "BAO_CAO" && mobileFeedSubTab === "FEED"
-              ? activeNewsCompany === "DNP" ? "text-teal-700 font-extrabold" : "text-[#1e3a8a] font-extrabold"
+              ? mobileFeedViewMode === "TRIAL"
+                ? "text-teal-700 font-extrabold"
+                : activeNewsCompany === "DNP" ? "text-teal-700 font-extrabold" : "text-[#1e3a8a] font-extrabold"
               : "text-slate-400 hover:text-[#1e3a8a]"
           }`}
-          title="Bấm để lọc Bản Tin TPP / DNP"
+          title="Bấm để lọc Bản Tin & Sổ Thử Nghiệm"
         >
           <div className="relative">
-            <Newspaper className={`w-[18px] h-[18px] mx-auto mb-0.5 transition-transform hover:scale-110 ${
-              activeBottomTab === "BAO_CAO" && mobileFeedSubTab === "FEED"
-                ? activeNewsCompany === "DNP" ? "text-teal-700" : "text-[#1e3a8a]"
-                : activeNewsCompany === "DNP" ? "text-teal-600/80" : "text-[#1e3a8a]/80"
-            }`} />
+            {mobileFeedViewMode === "TRIAL" ? (
+              <FlaskConical className={`w-[18px] h-[18px] mx-auto mb-0.5 transition-transform hover:scale-110 ${
+                activeBottomTab === "BAO_CAO" && mobileFeedSubTab === "FEED"
+                  ? "text-teal-700"
+                  : "text-teal-600/80"
+              }`} />
+            ) : (
+              <Newspaper className={`w-[18px] h-[18px] mx-auto mb-0.5 transition-transform hover:scale-110 ${
+                activeBottomTab === "BAO_CAO" && mobileFeedSubTab === "FEED"
+                  ? activeNewsCompany === "DNP" ? "text-teal-700" : "text-[#1e3a8a]"
+                  : activeNewsCompany === "DNP" ? "text-teal-600/80" : "text-[#1e3a8a]/80"
+              }`} />
+            )}
             <span className={`absolute top-[-1px] -right-2.5 text-white text-[8px] font-black rounded-full h-3.5 min-w-[15px] px-1 flex items-center justify-center shadow-xs border border-white tracking-tight ${
-              activeNewsCompany === "DNP"
+              mobileFeedViewMode === "TRIAL"
+                ? "bg-teal-700"
+                : activeNewsCompany === "DNP"
                 ? "bg-teal-700"
                 : "bg-[#1e3a8a]"
             }`}>
@@ -12137,7 +12166,9 @@ App Link: ${window.location.origin}`;
           </div>
           <T>
             <span translate="no" className="notranslate truncate w-full flex items-center justify-center gap-0.5">
-              {activeNewsCompany === "TPP"
+              {mobileFeedViewMode === "TRIAL"
+                ? "Thử Nghiệm"
+                : activeNewsCompany === "TPP"
                 ? "Bản Tin TPP"
                 : activeNewsCompany === "DNP"
                 ? "Bản Tin DNP"
@@ -16118,21 +16149,21 @@ App Link: ${window.location.origin}`}
             </div>
 
             {/* 2. BODY / MENU ITEMS */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-3">
+            <div className="flex-1 overflow-y-auto p-2 space-y-2">
 
               {/* BỘ SƯU TẬP HUY HIỆU THI ĐUA THEO THÁNG (PHƯƠNG ÁN A: DẢI TRƯỢT NGANG CAROUSEL MINI) */}
-              <div className="bg-gradient-to-b from-amber-50/90 via-orange-50/40 to-white rounded-2xl p-2.5 border border-amber-200/80 shadow-xs space-y-2">
+              <div className="bg-gradient-to-b from-amber-50/90 via-orange-50/40 to-white rounded-xl p-2 border border-amber-200/80 shadow-xs space-y-1.5">
                 {/* Header dải huy hiệu: Tiêu đề + Bộ lọc tháng mini */}
                 <div className="flex items-center justify-between gap-1">
                   <div className="flex items-center gap-1.5 min-w-0">
-                    <div className="w-5 h-5 rounded-lg bg-amber-500 text-white flex items-center justify-center font-bold shrink-0 shadow-2xs text-[10px]">
+                    <div className="w-4.5 h-4.5 rounded-md bg-amber-500 text-white flex items-center justify-center font-bold shrink-0 shadow-2xs text-[9px]">
                       🏆
                     </div>
                     <div className="min-w-0">
-                      <span className="text-[9px] font-black text-amber-950 uppercase tracking-wider block truncate">
+                      <span className="text-[8.5px] font-black text-amber-950 uppercase tracking-wider block truncate">
                         <span translate="no" className="notranslate">HUY HIỆU THI ĐUA</span>
                       </span>
-                      <span className="text-[8px] font-bold text-amber-700 block">
+                      <span className="text-[7.5px] font-bold text-amber-700 block">
                         <span translate="no" className="notranslate">
                           {sidebarFilteredBadges.length > 0 
                             ? `${sidebarFilteredBadges.length} Huy hiệu đạt được`
@@ -16147,7 +16178,7 @@ App Link: ${window.location.origin}`}
                     <select
                       value={sidebarBadgeMonth}
                       onChange={(e) => setSidebarBadgeMonth(e.target.value)}
-                      className="bg-white hover:bg-amber-50/80 border border-amber-300 text-amber-900 text-[8.5px] font-black rounded-lg px-2 py-1 pr-5 appearance-none outline-none focus:border-amber-500 shadow-3xs cursor-pointer"
+                      className="bg-white hover:bg-amber-50/80 border border-amber-300 text-amber-900 text-[8px] font-black rounded-md px-1.5 py-0.5 pr-4 appearance-none outline-none focus:border-amber-500 shadow-3xs cursor-pointer"
                     >
                       <option value={currentMonthStr}>Tháng {currentMonthStr}</option>
                       {availableBadgeMonths.filter(m => m !== currentMonthStr).map((m) => (
@@ -16155,19 +16186,15 @@ App Link: ${window.location.origin}`}
                       ))}
                       <option value="ALL">Tất cả các tháng</option>
                     </select>
-                    <ChevronDown className="w-2.5 h-2.5 text-amber-700 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <ChevronDown className="w-2 h-2 text-amber-700 absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none" />
                   </div>
                 </div>
 
                 {/* Dải trượt ngang các huy hiệu đạt được (Carousel) */}
                 {groupedSidebarBadges.length > 0 ? (
-                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5 no-scrollbar scroll-smooth">
+                  <div className="flex items-center gap-1 overflow-x-auto pb-0.5 pt-0.5 no-scrollbar scroll-smooth">
                     {groupedSidebarBadges.map((badgeGroup, idx) => {
                       const weight = badgeGroup.levelWeight;
-                      // Phân màu sắc & hiệu ứng theo Cấp Quản Lý khen thưởng:
-                      // Level 3 (Cấp Công ty / Ban TGĐ): Vàng Kim Hoàng Gia Cao Cấp (Gold / Crimson)
-                      // Level 2 (Cấp Giám đốc Chi nhánh / Nhà máy): Xanh Dương Sapphire Đậm (Royal Blue / Cyan)
-                      // Level 1 (Cấp Phòng ban / Tổ trưởng): Xanh Ngọc Lục Bảo Tinh Tế (Emerald / Teal)
                       const cardStyle = weight === 3
                         ? "bg-gradient-to-br from-amber-100 via-amber-50 to-orange-50 border-amber-400 text-amber-950 shadow-amber-500/10 ring-1 ring-amber-400/50"
                         : weight === 2
@@ -16199,19 +16226,19 @@ App Link: ${window.location.origin}`}
                               currentIndex: 0
                             });
                           }}
-                          className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer select-none active:scale-95 shadow-3xs ${cardStyle}`}
+                          className={`shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg border transition-all cursor-pointer select-none active:scale-95 shadow-3xs ${cardStyle}`}
                         >
-                          <span className="text-base shrink-0 leading-none">{badgeIcon}</span>
-                          <div className="text-left min-w-0 max-w-[105px]">
+                          <span className="text-sm shrink-0 leading-none">{badgeIcon}</span>
+                          <div className="text-left min-w-0 max-w-[100px]">
                             <div className="flex items-center gap-1 mb-0.5">
-                              <span className={`text-[6.5px] px-1 py-0.2 rounded-sm uppercase tracking-tight ${tagBadgeStyle}`}>
+                              <span className={`text-[6px] px-1 py-0.2 rounded-sm uppercase tracking-tight ${tagBadgeStyle}`}>
                                 <span translate="no" className="notranslate">{badgeGroup.levelLabel}</span>
                               </span>
                             </div>
-                            <div className="text-[8.5px] font-black leading-tight truncate">
+                            <div className="text-[8px] font-black leading-tight truncate">
                               <span translate="no" className="notranslate">{badgeGroup.name}</span>
                             </div>
-                            <div className="text-[7.5px] font-bold text-slate-500 flex items-center gap-1 mt-0.2">
+                            <div className="text-[7px] font-bold text-slate-500 flex items-center gap-1 mt-0.2">
                               <span className={`font-black ${countColor}`}>
                                 x{badgeGroup.count}
                               </span>
@@ -16224,8 +16251,8 @@ App Link: ${window.location.origin}`}
                     })}
                   </div>
                 ) : (
-                  <div className="py-2 px-2 bg-white/70 rounded-xl border border-dashed border-amber-200 text-center">
-                    <p className="text-[8.5px] text-amber-800/80 font-semibold">
+                  <div className="py-1 px-2 bg-white/70 rounded-lg border border-dashed border-amber-200 text-center">
+                    <p className="text-[8px] text-amber-800/80 font-semibold">
                       <span translate="no" className="notranslate">Chưa ghi nhận huy hiệu trong {sidebarBadgeMonth === "ALL" ? "hệ thống" : `tháng ${sidebarBadgeMonth}`}</span>
                     </p>
                   </div>
@@ -16234,11 +16261,11 @@ App Link: ${window.location.origin}`}
               
               {/* Nhóm 1: Hệ thống & Giới thiệu */}
               <div>
-                <div className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 px-1 mb-1 flex items-center gap-1">
-                  <ShieldCheck className="w-3 h-3 text-blue-600" />
+                <div className="text-[8.5px] font-extrabold uppercase tracking-wider text-slate-400 px-1 mb-0.5 flex items-center gap-1">
+                  <ShieldCheck className="w-2.5 h-2.5 text-blue-600" />
                   <span translate="no" className="notranslate">HỆ THỐNG & GIỚI THIỆU</span>
                 </div>
-                <div className="space-y-1 bg-white rounded-2xl p-1.5 border border-slate-200/80 shadow-xs">
+                <div className="space-y-0.5 bg-white rounded-xl p-1 border border-slate-200/80 shadow-xs">
                   {/* Item 1: Giới thiệu Hệ thống META ANDON */}
                   <button
                     type="button"
@@ -16246,20 +16273,20 @@ App Link: ${window.location.origin}`}
                       setShowMobileSidebar(false);
                       setShowAboutAndonModal(true);
                     }}
-                    className="w-full p-2 rounded-xl text-left hover:bg-blue-50/80 active:bg-blue-100 transition-all flex items-center gap-2.5 group cursor-pointer border border-transparent hover:border-blue-100"
+                    className="w-full p-1.5 rounded-lg text-left hover:bg-blue-50/80 active:bg-blue-100 transition-all flex items-center gap-2 group cursor-pointer border border-transparent hover:border-blue-100"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold shrink-0 group-hover:scale-105 transition-transform shadow-xs">
-                      <Info className="w-3.5 h-3.5" />
+                    <div className="w-6 h-6 rounded-md bg-blue-100 text-blue-700 flex items-center justify-center font-bold shrink-0 group-hover:scale-105 transition-transform shadow-xs">
+                      <Info className="w-3 h-3" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[11px] font-bold text-slate-800 group-hover:text-blue-700">
+                      <div className="text-[10px] font-bold text-slate-800 group-hover:text-blue-700">
                         <span translate="no" className="notranslate">Giới thiệu META ANDON</span>
                       </div>
-                      <div className="text-[8.5px] text-slate-500 line-clamp-1 mt-0.5">
+                      <div className="text-[7.5px] text-slate-500 line-clamp-1 mt-0.2">
                         <span translate="no" className="notranslate">Triết lý "Mỗi NV là 1 QC", 4M1E1I & CAPA</span>
                       </div>
                     </div>
-                    <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all shrink-0" />
+                    <ChevronRight className="w-3 h-3 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all shrink-0" />
                   </button>
 
                   {/* Item 2: Kho Tri thức AI & Sổ tay hướng dẫn */}
@@ -16269,31 +16296,31 @@ App Link: ${window.location.origin}`}
                       setShowMobileSidebar(false);
                       setShowKnowledgeModal(true);
                     }}
-                    className="w-full p-2 rounded-xl text-left hover:bg-indigo-50/80 active:bg-indigo-100 transition-all flex items-center gap-2.5 group cursor-pointer border border-transparent hover:border-indigo-100"
+                    className="w-full p-1.5 rounded-lg text-left hover:bg-indigo-50/80 active:bg-indigo-100 transition-all flex items-center gap-2 group cursor-pointer border border-transparent hover:border-indigo-100"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shrink-0 group-hover:scale-105 transition-transform shadow-xs">
-                      <BookOpen className="w-3.5 h-3.5" />
+                    <div className="w-6 h-6 rounded-md bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shrink-0 group-hover:scale-105 transition-transform shadow-xs">
+                      <BookOpen className="w-3 h-3" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[11px] font-bold text-slate-800 group-hover:text-indigo-700">
+                      <div className="text-[10px] font-bold text-slate-800 group-hover:text-indigo-700">
                         <span translate="no" className="notranslate">Kho Tri thức AI & Sổ tay</span>
                       </div>
-                      <div className="text-[8.5px] text-slate-500 line-clamp-1 mt-0.5">
+                      <div className="text-[7.5px] text-slate-500 line-clamp-1 mt-0.2">
                         <span translate="no" className="notranslate">Quy trình SOP, tiêu chuẩn, tài liệu 5-Whys</span>
                       </div>
                     </div>
-                    <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all shrink-0" />
+                    <ChevronRight className="w-3 h-3 text-slate-400 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all shrink-0" />
                   </button>
                 </div>
               </div>
 
               {/* Nhóm 2: Tra cứu & Chuyên môn nâng cao */}
               <div>
-                <div className="text-[9px] font-extrabold uppercase tracking-wider text-slate-400 px-1 mb-1 flex items-center gap-1">
-                  <BarChart2 className="w-3 h-3 text-purple-600" />
+                <div className="text-[8.5px] font-extrabold uppercase tracking-wider text-slate-400 px-1 mb-0.5 flex items-center gap-1">
+                  <BarChart2 className="w-2.5 h-2.5 text-purple-600" />
                   <span translate="no" className="notranslate">TRA CỨU & CHUYÊN MÔN</span>
                 </div>
-                <div className="space-y-1 bg-white rounded-2xl p-1.5 border border-slate-200/80 shadow-xs">
+                <div className="space-y-0.5 bg-white rounded-xl p-1 border border-slate-200/80 shadow-xs">
                   {/* Item 3: Báo cáo Thống kê & Phân tích */}
                   <button
                     type="button"
@@ -16301,20 +16328,20 @@ App Link: ${window.location.origin}`}
                       setShowMobileSidebar(false);
                       setActiveBottomTab("PHAN_TICH");
                     }}
-                    className="w-full p-2 rounded-xl text-left hover:bg-purple-50/80 active:bg-purple-100 transition-all flex items-center gap-2.5 group cursor-pointer border border-transparent hover:border-purple-100"
+                    className="w-full p-1.5 rounded-lg text-left hover:bg-purple-50/80 active:bg-purple-100 transition-all flex items-center gap-2 group cursor-pointer border border-transparent hover:border-purple-100"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-bold shrink-0 group-hover:scale-105 transition-transform shadow-xs">
-                      <BarChart2 className="w-3.5 h-3.5" />
+                    <div className="w-6 h-6 rounded-md bg-purple-100 text-purple-700 flex items-center justify-center font-bold shrink-0 group-hover:scale-105 transition-transform shadow-xs">
+                      <BarChart2 className="w-3 h-3" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[11px] font-bold text-slate-800 group-hover:text-purple-700">
+                      <div className="text-[10px] font-bold text-slate-800 group-hover:text-purple-700">
                         <span translate="no" className="notranslate">Báo cáo Thống kê & Phân tích</span>
                       </div>
-                      <div className="text-[8.5px] text-slate-500 line-clamp-1 mt-0.5">
+                      <div className="text-[7.5px] text-slate-500 line-clamp-1 mt-0.2">
                         <span translate="no" className="notranslate">Biểu đồ 4M1E1I, tiến độ CAPA, thi đua</span>
                       </div>
                     </div>
-                    <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-purple-600 group-hover:translate-x-0.5 transition-all shrink-0" />
+                    <ChevronRight className="w-3 h-3 text-slate-400 group-hover:text-purple-600 group-hover:translate-x-0.5 transition-all shrink-0" />
                   </button>
                 </div>
               </div>
@@ -16322,16 +16349,16 @@ App Link: ${window.location.origin}`}
             </div>
 
             {/* 3. FOOTER CỐ ĐỊNH DƯỚI CÙNG (Chỉ còn duy nhất nút Đăng Xuất tinh gọn) */}
-            <div className="p-2.5 bg-white border-t border-slate-200 shrink-0 shadow-sm">
+            <div className="p-2 bg-white border-t border-slate-200 shrink-0 shadow-sm">
               <button
                 type="button"
                 onClick={() => {
                   setShowMobileSidebar(false);
                   setShowLogoutConfirm(true);
                 }}
-                className="w-full py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm shadow-rose-600/20 transition-all cursor-pointer border-none"
+                className="w-full py-2 px-3 rounded-lg bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-sm shadow-rose-600/20 transition-all cursor-pointer border-none"
               >
-                <LogOut className="w-3.5 h-3.5 text-white" />
+                <LogOut className="w-3 h-3 text-white" />
                 <span translate="no" className="notranslate">ĐĂNG XUẤT TÀI KHOẢN</span>
               </button>
             </div>

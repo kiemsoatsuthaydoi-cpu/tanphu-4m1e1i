@@ -404,18 +404,46 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
     return fallbackMatched.length > 0 ? fallbackMatched : availableDepartments;
   }, [availableBranches, availableDepartments]);
   
+  // Deleted trial IDs tracking to prevent re-seeding or re-syncing deleted trials
+  const [deletedTrialIds, setDeletedTrialIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem("tanphu_deleted_trial_ids_v1");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  });
+  const deletedTrialIdsRef = useRef<string[]>(deletedTrialIds);
+  useEffect(() => {
+    deletedTrialIdsRef.current = deletedTrialIds;
+  }, [deletedTrialIds]);
+
   // Local state for items
   const [trialItems, setTrialItems] = useState<TrialTrackingItem[]>(() => {
+    let rawDeleted: string[] = [];
+    try {
+      const savedDeleted = localStorage.getItem("tanphu_deleted_trial_ids_v1");
+      if (savedDeleted) {
+        const parsed = JSON.parse(savedDeleted);
+        if (Array.isArray(parsed)) rawDeleted = parsed;
+      }
+    } catch (e) {}
+
     const saved = localStorage.getItem("tanphu_trial_trackings_v1");
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return filterTrialItemsWithin30Days(parsed, 30);
+          return filterTrialItemsWithin30Days(
+            parsed.filter((item: TrialTrackingItem) => !rawDeleted.includes(item.id) && !item.isDeleted),
+            30
+          );
         }
       } catch (e) {}
     }
-    return initialTrialTrackings;
+    return initialTrialTrackings.filter(item => !rawDeleted.includes(item.id));
   });
 
   const [isCloudConnected, setIsCloudConnected] = useState(true);
@@ -425,23 +453,27 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
   useEffect(() => {
     let isMounted = true;
 
-    // 1. Migrate local items to Cloud if Firestore is empty or missing them
-    autoMigrateLocalTrialsToCloud(trialItems).catch((err) => {
+    // 1. Migrate local items to Cloud if Firestore is empty or missing them (excluding deleted IDs)
+    autoMigrateLocalTrialsToCloud(trialItems, deletedTrialIdsRef.current).catch((err) => {
       console.warn("[TrialHub] Auto-migration to Firestore skipped:", err);
     });
 
-    // 2. Real-time subscription to trial_trackings collection
-    const unsubscribe = subscribeTrialsFromCloud((cloudItems) => {
-      if (!isMounted) return;
-      setIsCloudConnected(true);
-      if (Array.isArray(cloudItems) && cloudItems.length > 0) {
-        setTrialItems(cloudItems);
+    // 2. Real-time subscription to trial_trackings collection with blacklist check
+    const unsubscribe = subscribeTrialsFromCloud(
+      (cloudItems) => {
+        if (!isMounted) return;
+        setIsCloudConnected(true);
+        const filtered = (cloudItems || []).filter(
+          (item) => !deletedTrialIdsRef.current.includes(item.id) && !item.isDeleted
+        );
+        setTrialItems(filtered);
         try {
-          const retained = filterTrialItemsWithin30Days(cloudItems, 30);
+          const retained = filterTrialItemsWithin30Days(filtered, 30);
           localStorage.setItem("tanphu_trial_trackings_v1", JSON.stringify(retained));
         } catch (e) {}
-      }
-    });
+      },
+      () => deletedTrialIdsRef.current
+    );
 
     return () => {
       isMounted = false;
@@ -1528,6 +1560,17 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
 
   // Delete Trial
   const handleConfirmDeleteTrial = (itemId: string) => {
+    // 1. Immediately record into deleted blacklist
+    setDeletedTrialIds(prev => {
+      if (prev.includes(itemId)) return prev;
+      const next = [...prev, itemId];
+      try {
+        localStorage.setItem("tanphu_deleted_trial_ids_v1", JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+
+    // 2. Filter out from local state & storage
     const updated = trialItems.filter(i => i.id !== itemId);
     setTrialItems(updated);
     try {
@@ -1535,6 +1578,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
       localStorage.setItem("tanphu_trial_trackings_v1", JSON.stringify(retained));
     } catch (e) {}
 
+    // 3. Mark & delete from Firestore
     deleteTrialFromCloud(itemId).catch((err) => {
       console.warn("[Cloud Delete] Lỗi xóa bản tin thử nghiệm:", err);
     });
@@ -3068,54 +3112,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                     );
                   })()}
 
-                  {/* Final Conclusion for Mobile (Only visible on Mobile view: md:hidden) */}
-                  <div className="md:hidden">
-                    {item.finalConclusion ? (
-                      <div className={`mt-3 p-2.5 rounded-xl text-xs font-medium border flex items-start justify-between gap-2.5 transition-all ${
-                        item.overallStatus === "COMPLETED_FAIL" || /KHÔNG ĐẠT/i.test(item.finalConclusion)
-                          ? "bg-rose-50/90 text-rose-950 border-rose-200"
-                          : /TẠM CHẤP NHẬN/i.test(item.finalConclusion)
-                          ? "bg-amber-50/90 text-amber-950 border-amber-300"
-                          : "bg-emerald-50/90 text-emerald-950 border-emerald-200"
-                      }`}>
-                        <div className="flex items-start gap-2 flex-1 min-w-0">
-                          {item.overallStatus === "COMPLETED_FAIL" || /KHÔNG ĐẠT/i.test(item.finalConclusion) ? (
-                            <XCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
-                          ) : /TẠM CHẤP NHẬN/i.test(item.finalConclusion) ? (
-                            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
-                          ) : (
-                            <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
-                          )}
-                          <div className="flex-1 min-w-0 leading-relaxed">
-                            <strong className="text-slate-900 font-bold">
-                              <span translate="no" className="notranslate">Kết luận thử nghiệm:</span>
-                            </strong>{" "}
-                            <span className="text-slate-800 break-words">{item.finalConclusion}</span>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenConclusionModal(item)}
-                          className="p-1.5 rounded-lg bg-white/80 hover:bg-white text-slate-600 hover:text-teal-700 border border-slate-200/80 shadow-3xs hover:shadow-2xs transition-all cursor-pointer shrink-0 ml-1"
-                          title="Đánh giá / Chỉnh sửa kết luận chung"
-                        >
-                          <Pencil className="w-3.5 h-3.5 text-inherit" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="mt-3">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenConclusionModal(item)}
-                          className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-[13px] font-black text-teal-800 bg-teal-50/90 hover:bg-teal-100 border border-teal-300 hover:border-teal-400 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-3xs hover:shadow-2xs active:scale-[0.99]"
-                          title="Đánh giá kết luận thử nghiệm chung"
-                        >
-                          <Pencil className="w-4 h-4 text-teal-700 shrink-0" />
-                          <span translate="no" className="notranslate">ĐÁNH GIÁ KẾT LUẬN CHUNG</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
+
 
                   {/* ------------------------------------------------------------- */}
                   {/* PHẦN CHỈ ĐẠO CỦA CÁC CẤP QUẢN LÝ (MANAGEMENT DIRECTIVES) */}
@@ -3358,7 +3355,13 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                 {/* FOOTER ACTIONS CỦA BẢN TIN THỬ NGHIỆM */}
                 {/* ------------------------------------------------------------- */}
                 {(() => {
-                  const canEditOrDelete = isAdmin || currentUser?.fullName === item.createdByName;
+                  const isCreator = Boolean(
+                    (currentUser?.fullName && item.createdByName && currentUser.fullName.trim().toLowerCase() === item.createdByName.trim().toLowerCase()) ||
+                    (currentUser?.id && item.createdBy && currentUser.id === item.createdBy) ||
+                    (currentUser?.phone && item.createdByPhone && currentUser.phone === item.createdByPhone) ||
+                    (currentUser?.id && item.createdByName && currentUser.id.trim().toLowerCase() === item.createdByName.trim().toLowerCase())
+                  );
+                  const canEditOrDelete = isAdmin || isCreator;
                   return (
                     <div className="bg-slate-50 border-t border-slate-100 px-2.5 py-2 flex justify-between items-center select-none text-[10px] font-semibold text-slate-600 gap-1.5 flex-nowrap rounded-b-2xl">
                       {/* Left: Quick Actions (Clone, Delete, Edit) */}
@@ -3367,7 +3370,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                         <button
                           type="button"
                           onClick={() => handleCloneTrial(item)}
-                          className="flex items-center justify-center p-1 cursor-pointer transition-all hover:scale-110 active:scale-90 text-indigo-600 hover:text-indigo-800 border-none bg-transparent"
+                          className="flex items-center justify-center p-1.5 rounded-lg hover:bg-indigo-50 cursor-pointer transition-all hover:scale-110 active:scale-90 text-indigo-600 hover:text-indigo-800 border-none bg-transparent"
                           title="Nhân bản / Sao chép đợt thử nghiệm này (Kế thừa các bước & thông tin)"
                         >
                           <Copy className="w-[17px] h-[17px] stroke-[2.2px]" />
@@ -3375,19 +3378,21 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
 
                         {canEditOrDelete && (
                           <>
+                            {/* Nút Xóa đợt thử nghiệm */}
                             <button
                               type="button"
                               onClick={() => setDeleteConfirmItem(item)}
-                              className="flex items-center justify-center p-1 cursor-pointer transition-all hover:scale-110 active:scale-90 text-rose-600 hover:text-rose-800 border-none bg-transparent"
+                              className="flex items-center justify-center p-1.5 rounded-lg hover:bg-rose-50 cursor-pointer transition-all hover:scale-110 active:scale-90 text-rose-600 hover:text-rose-800 border-none bg-transparent"
                               title="Xóa đợt thử nghiệm"
                             >
                               <Trash2 className="w-[17px] h-[17px] stroke-[2.2px]" />
                             </button>
 
+                            {/* Nút Chỉnh sửa thông tin thử nghiệm */}
                             <button
                               type="button"
                               onClick={() => setEditTrialModalItem(item)}
-                              className="flex items-center justify-center p-1 cursor-pointer transition-all hover:scale-110 active:scale-90 text-blue-600 hover:text-blue-800 border-none bg-transparent"
+                              className="flex items-center justify-center p-1.5 rounded-lg hover:bg-blue-50 cursor-pointer transition-all hover:scale-110 active:scale-90 text-blue-600 hover:text-blue-800 border-none bg-transparent"
                               title="Chỉnh sửa thông tin thử nghiệm"
                             >
                               <Edit className="w-[17px] h-[17px] stroke-[2.2px]" />
@@ -4033,22 +4038,37 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
               </div>
 
               {/* Action Buttons */}
-              <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2 shrink-0">
+              <div className="pt-3 border-t border-slate-200 flex items-center justify-between gap-2 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setEditTrialModalItem(null)}
-                  className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold transition-all text-xs cursor-pointer"
+                  onClick={() => {
+                    const itemToDelete = editTrialModalItem;
+                    setEditTrialModalItem(null);
+                    setDeleteConfirmItem(itemToDelete);
+                  }}
+                  className="px-3 py-2 rounded-xl text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 font-bold transition-all text-xs cursor-pointer flex items-center gap-1.5"
+                  title="Xóa đợt thử nghiệm này"
                 >
-                  <span translate="no" className="notranslate">Hủy</span>
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span translate="no" className="notranslate">Xóa đợt này</span>
                 </button>
-                <button
-                  type="submit"
-                  disabled={isCompressingEditImages}
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs shadow-sm transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  <Check className="w-4 h-4" />
-                  <span translate="no" className="notranslate">Lưu thay đổi</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditTrialModalItem(null)}
+                    className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold transition-all text-xs cursor-pointer"
+                  >
+                    <span translate="no" className="notranslate">Hủy</span>
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isCompressingEditImages}
+                    className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs shadow-sm transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span translate="no" className="notranslate">Lưu thay đổi</span>
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -4059,31 +4079,36 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
       {/* MODAL XÁC NHẬN XÓA THỬ NGHIỆM (DELETE CONFIRM MODAL) */}
       {/* ------------------------------------------------------------- */}
       {deleteConfirmItem && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-150 p-4 sm:p-5 space-y-3 sm:space-y-4 my-auto">
-            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
-              <Trash2 className="w-6 h-6" />
+        <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-150 p-4 sm:p-5 space-y-3 sm:space-y-4 my-auto">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-inner">
+              <Trash2 className="w-6 h-6 stroke-[2.2]" />
             </div>
-            <div className="text-center space-y-1">
-              <h3 className="font-black text-sm text-slate-900">Xóa đợt thử nghiệm này?</h3>
-              <p className="text-xs text-slate-500">
-                Bạn có chắc chắn muốn xóa đợt thử nghiệm <strong className="text-slate-800">{deleteConfirmItem.code}</strong> không? Thao tác này không thể hoàn tác.
+            <div className="text-center space-y-1.5">
+              <h3 className="font-black text-sm text-slate-900">
+                <span translate="no" className="notranslate">Xóa đợt thử nghiệm này?</span>
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                <span translate="no" className="notranslate">
+                  Bạn có chắc chắn muốn xóa đợt thử nghiệm <strong className="text-slate-800 font-bold">{deleteConfirmItem.code || deleteConfirmItem.title}</strong> ({deleteConfirmItem.productName}) không? Thao tác này sẽ xóa dữ liệu trên hệ thống và không thể hoàn tác.
+                </span>
               </p>
             </div>
             <div className="flex gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setDeleteConfirmItem(null)}
-                className="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs"
+                className="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer transition-colors"
               >
-                Hủy bỏ
+                <span translate="no" className="notranslate">Hủy bỏ</span>
               </button>
               <button
                 type="button"
                 onClick={() => handleConfirmDeleteTrial(deleteConfirmItem.id)}
-                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-sm"
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5"
               >
-                Xác nhận xóa
+                <Trash2 className="w-3.5 h-3.5" />
+                <span translate="no" className="notranslate">Xác nhận xóa</span>
               </button>
             </div>
           </div>

@@ -198,13 +198,18 @@ export async function saveTrialToCloud(item: TrialTrackingItem): Promise<boolean
 }
 
 /**
- * Delete a Trial Tracking document from Firestore
+ * Delete a Trial Tracking document from Firestore (Mark soft delete and then remove doc)
  */
 export async function deleteTrialFromCloud(id: string): Promise<boolean> {
   if (!db || !id) return false;
 
   try {
     const docRef = doc(db, TRIAL_COLLECTION, id);
+    // 1. Mark isDeleted flag first so all listeners and local caches filter it out immediately
+    try {
+      await setDoc(docRef, { isDeleted: true, updatedAt: new Date().toISOString() }, { merge: true });
+    } catch (e) {}
+    // 2. Also try deleteDoc
     await deleteDoc(docRef);
     console.log(`[Firestore] Trial Tracking item ${id} deleted from Cloud.`);
     return true;
@@ -217,7 +222,7 @@ export async function deleteTrialFromCloud(id: string): Promise<boolean> {
 /**
  * Fetch all Trial Tracking documents from Firestore
  */
-export async function fetchTrialsFromCloud(): Promise<TrialTrackingItem[]> {
+export async function fetchTrialsFromCloud(deletedTrialIds: string[] = []): Promise<TrialTrackingItem[]> {
   if (!db) return [];
 
   try {
@@ -226,10 +231,11 @@ export async function fetchTrialsFromCloud(): Promise<TrialTrackingItem[]> {
 
     snap.forEach((d) => {
       const data = d.data() as TrialTrackingItem;
-      if (data && !data.isDeleted) {
+      const itemId = d.id || data?.id;
+      if (data && !data.isDeleted && !deletedTrialIds.includes(itemId)) {
         items.push({
           ...data,
-          id: d.id || data.id
+          id: itemId
         });
       }
     });
@@ -247,7 +253,8 @@ export async function fetchTrialsFromCloud(): Promise<TrialTrackingItem[]> {
  * Real-time subscription to Trial Tracking collection in Firestore
  */
 export function subscribeTrialsFromCloud(
-  onUpdate: (items: TrialTrackingItem[]) => void
+  onUpdate: (items: TrialTrackingItem[]) => void,
+  getDeletedIds?: () => string[]
 ): () => void {
   if (!db) {
     return () => {};
@@ -258,13 +265,15 @@ export function subscribeTrialsFromCloud(
     const unsubscribe = onSnapshot(
       collRef,
       (snap) => {
+        const deletedIds = getDeletedIds ? getDeletedIds() : [];
         const items: TrialTrackingItem[] = [];
         snap.forEach((d) => {
           const data = d.data() as TrialTrackingItem;
-          if (data && !data.isDeleted) {
+          const itemId = d.id || data?.id;
+          if (data && !data.isDeleted && !deletedIds.includes(itemId)) {
             items.push({
               ...data,
-              id: d.id || data.id
+              id: itemId
             });
           }
         });
@@ -272,9 +281,8 @@ export function subscribeTrialsFromCloud(
         // Sort descending by createdTimestamp
         items.sort((a, b) => (b.createdTimestamp || 0) - (a.createdTimestamp || 0));
 
-        if (items.length > 0) {
-          onUpdate(items);
-        }
+        // Always trigger update so when all are deleted or filtered, list updates cleanly
+        onUpdate(items);
       },
       (error) => {
         console.warn(`[Firestore] Snapshot listener error on ${TRIAL_COLLECTION}:`, error);
@@ -292,27 +300,31 @@ export function subscribeTrialsFromCloud(
  * Non-destructive Auto-migration / seeding from local data to Firestore
  */
 export async function autoMigrateLocalTrialsToCloud(
-  localItems: TrialTrackingItem[]
+  localItems: TrialTrackingItem[],
+  deletedTrialIds: string[] = []
 ): Promise<boolean> {
   if (!db) return false;
 
   try {
-    const cloudItems = await fetchTrialsFromCloud();
+    const cloudItems = await fetchTrialsFromCloud(deletedTrialIds);
 
-    // If Cloud collection is empty or missing initial trials, seed/migrate them
-    const itemsToSeed = localItems && localItems.length > 0 ? localItems : initialTrialTrackings;
+    // Filter out any deleted IDs
+    const itemsToSeed = (localItems && localItems.length > 0 ? localItems : initialTrialTrackings)
+      .filter(item => !deletedTrialIds.includes(item.id) && !item.isDeleted);
 
     if (cloudItems.length === 0) {
-      console.log(`[Auto Migration] Seeding ${itemsToSeed.length} initial trial trackings to Firestore...`);
-      for (const item of itemsToSeed) {
-        await saveTrialToCloud(item);
+      if (itemsToSeed.length > 0) {
+        console.log(`[Auto Migration] Seeding ${itemsToSeed.length} initial trial trackings to Firestore...`);
+        for (const item of itemsToSeed) {
+          await saveTrialToCloud(item);
+        }
       }
       return true;
     } else {
-      // Check if any local item does not exist on Cloud
+      // Check if any local item does not exist on Cloud and not in deleted list
       const cloudIdSet = new Set(cloudItems.map((c) => c.id));
       for (const localItem of itemsToSeed) {
-        if (!cloudIdSet.has(localItem.id)) {
+        if (!cloudIdSet.has(localItem.id) && !deletedTrialIds.includes(localItem.id)) {
           console.log(`[Auto Migration] Syncing local trial ${localItem.id} to Firestore...`);
           await saveTrialToCloud(localItem);
         }
