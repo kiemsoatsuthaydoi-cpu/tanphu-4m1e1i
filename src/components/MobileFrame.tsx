@@ -8075,8 +8075,8 @@ App Link: ${window.location.origin}`;
                 <div className={`p-1.5 rounded-xl text-white ${theme.bg} flex items-center justify-center`}>
                   <BarChart2 className="w-4 h-4 text-white" />
                 </div>
-                <h2 className={`text-xs font-black tracking-tight ${theme.text}`}>
-                  <T><span translate="no" className="notranslate">Báo Cáo Thống Kê & Phân Tích</span></T>
+                <h2 className={`text-xs font-black tracking-tight uppercase ${theme.text}`}>
+                  <T><span translate="no" className="notranslate">BÁO CÁO THỐNG KÊ & PHÂN TÍCH</span></T>
                 </h2>
               </div>
             </div>
@@ -9277,8 +9277,8 @@ App Link: ${window.location.origin}`;
               </button>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-1">
-                  <h2 className={`text-xs font-black tracking-tight ${theme.text}`}>
-                    <T><span translate="no" className="notranslate">Trang Cá Nhân & Thành Tích</span></T>
+                  <h2 className={`text-xs font-black tracking-tight uppercase ${theme.text}`}>
+                    <T><span translate="no" className="notranslate">TRANG CÁ NHÂN & THÀNH TÍCH</span></T>
                   </h2>
                   {mobilePersonalTab === "PROFILE" && (
                     <button
@@ -16242,8 +16242,17 @@ App Link: ${window.location.origin}`}
               <div className="flex items-center justify-between relative z-10 gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <div className="relative shrink-0">
-                    <div className="w-8 h-8 rounded-xl bg-white/20 backdrop-blur-md text-white font-black text-xs flex items-center justify-center border border-white/30 shadow-xs">
-                      {currentUser?.fullName ? currentUser.fullName.charAt(0).toUpperCase() : "U"}
+                    <div className="w-8 h-8 rounded-xl bg-white/20 backdrop-blur-md text-white font-black text-xs flex items-center justify-center border border-white/30 shadow-xs overflow-hidden">
+                      {currentUser?.avatar ? (
+                        <img 
+                          src={currentUser.avatar} 
+                          alt={currentUser.fullName || "Avatar"} 
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <span>{currentUser?.fullName ? currentUser.fullName.charAt(0).toUpperCase() : "U"}</span>
+                      )}
                     </div>
                     <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-emerald-500 border border-blue-900 rounded-full" />
                   </div>

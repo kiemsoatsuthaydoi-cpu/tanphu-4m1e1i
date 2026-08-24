@@ -424,9 +424,6 @@ export default function ProgressTrackingDashboard({
               <T><span translate="no" className="notranslate">TIẾN ĐỘ GIẢI QUYẾT THEO 6 YẾU TỐ 4M1E1I</span></T>
             </h3>
           </div>
-          <span className="text-xs text-slate-500 font-medium">
-            <T><span translate="no" className="notranslate">Bấm vào từng yếu tố để lọc nhanh</span></T>
-          </span>
         </div>
 
         <div className={`grid gap-4 ${isMobile ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"}`}>
@@ -698,31 +695,31 @@ export default function ProgressTrackingDashboard({
       </div>
 
       {/* 5. Data Table / Detailed Tracking List */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
+      <div className="bg-white rounded-xl border border-slate-900 shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-900 bg-slate-50 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></div>
-            <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-              <T><span translate="no" className="notranslate">DANH SÁCH CHI TIẾT TIẾN TRÌNH CẢI TIẾN ({filteredReports.length})</span></T>
+            <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+              <T><span translate="no" className="notranslate">{isMobile ? "DS CHI TIẾT TIẾN TRÌNH CẢI TIẾN" : "DANH SÁCH CHI TIẾT TIẾN TRÌNH CẢI TIẾN"} ({filteredReports.length})</span></T>
             </h4>
           </div>
 
           {/* Quick active tags */}
           {isFilterActive && (
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-500 flex-wrap">
-              <span className="font-semibold">Đang lọc theo:</span>
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-600 flex-wrap">
+              <span className="font-semibold"><T><span translate="no" className="notranslate">Đang lọc theo:</span></T></span>
               {selectedStatus !== "ALL" && (
-                <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-bold">
+                <span className="bg-slate-200 text-slate-900 border border-slate-800 px-2 py-0.5 rounded-md font-bold">
                   {selectedStatus === "RESOLVED" ? "Đã có giải pháp" : selectedStatus === "CLOSED" ? "Đã nghiệm thu" : "Đang chờ"}
                 </span>
               )}
               {selectedCategory !== "ALL" && (
-                <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-bold">
+                <span className="bg-blue-100 text-blue-900 border border-blue-800 px-2 py-0.5 rounded-md font-bold">
                   {selectedCategory}
                 </span>
               )}
               {selectedBranch !== "ALL" && (
-                <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold">
+                <span className="bg-indigo-100 text-indigo-900 border border-indigo-800 px-2 py-0.5 rounded-md font-bold">
                   {selectedBranch}
                 </span>
               )}
@@ -745,17 +742,17 @@ export default function ProgressTrackingDashboard({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse border border-slate-900">
               <thead>
-                <tr className="bg-slate-50/80 border-b border-slate-100 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  <th className="py-3 px-4">Mã / Ngày</th>
-                  <th className="py-3 px-4">Đơn vị & Yếu tố</th>
-                  <th className="py-3 px-4">Nội dung biến động / KPH</th>
-                  <th className="py-3 px-4">Phương án Cải tiến / Xử lý</th>
-                  <th className="py-3 px-4 text-center">Tiến độ</th>
+                <tr className="bg-slate-100 text-[11px] font-black text-slate-900 uppercase tracking-wider">
+                  <th className="py-2.5 px-3 border border-slate-900"><T><span translate="no" className="notranslate">Mã / Ngày</span></T></th>
+                  <th className="py-2.5 px-3 border border-slate-900"><T><span translate="no" className="notranslate">Đơn vị & Yếu tố</span></T></th>
+                  <th className="py-2.5 px-3 border border-slate-900"><T><span translate="no" className="notranslate">Nội dung biến động / KPH</span></T></th>
+                  <th className="py-2.5 px-3 border border-slate-900"><T><span translate="no" className="notranslate">Phương án Cải tiến / Xử lý</span></T></th>
+                  <th className="py-2.5 px-3 border border-slate-900 text-center"><T><span translate="no" className="notranslate">Tiến độ</span></T></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-xs">
+              <tbody className="text-xs">
                 {filteredReports.slice(0, 50).map((r) => {
                   const resList = Array.isArray(r.resolutions) ? r.resolutions : [];
                   const isClosed = (resList.length > 0 && resList.every(res => res && res.status === "Đã xử lý")) || !!r.qcConfirmed;
@@ -763,71 +760,71 @@ export default function ProgressTrackingDashboard({
                   const latestResolution = resList.length > 0 ? resList[resList.length - 1] : null;
 
                   return (
-                    <tr key={r.id} className="hover:bg-blue-50/30 transition-colors">
+                    <tr key={r.id} className="hover:bg-blue-50/40 transition-colors">
                       {/* Cột 1: Mã & Thời gian */}
-                      <td className="py-3 px-4 align-top whitespace-nowrap">
-                        <div className="font-mono font-bold text-blue-600">
+                      <td className="py-2.5 px-3 border border-slate-900 align-top whitespace-nowrap">
+                        <div className="font-mono font-bold text-blue-700">
                           {r.reportCode || r.id.substring(0, 8)}
                         </div>
-                        <div className="text-[10.5px] text-slate-400 mt-0.5">
+                        <div className="text-[10px] text-slate-500 mt-0.5">
                           {r.timestamp || "dd/mm/yy"}
                         </div>
                       </td>
 
                       {/* Cột 2: Đơn vị & 4M1E1I */}
-                      <td className="py-3 px-4 align-top">
-                        <div className="font-bold text-slate-800 text-[11.5px]">
+                      <td className="py-2.5 px-3 border border-slate-900 align-top">
+                        <div className="font-bold text-slate-900 text-[11px]">
                           {r.factory}
                         </div>
-                        <div className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-semibold">
+                        <div className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded border border-slate-800 bg-slate-100 text-slate-800 text-[9.5px] font-semibold">
                           {getCategoryIcon(r.category)}
                           <span>{r.category}</span>
                         </div>
                       </td>
 
                       {/* Cột 3: Nội dung */}
-                      <td className="py-3 px-4 align-top max-w-xs md:max-w-md">
-                        <p className="text-slate-700 line-clamp-2 text-[11.5px] leading-relaxed">
+                      <td className="py-2.5 px-3 border border-slate-900 align-top max-w-xs md:max-w-md">
+                        <p className="text-slate-800 line-clamp-2 text-[11px] leading-relaxed">
                           {r.content}
                         </p>
-                        <div className="text-[10px] text-slate-400 mt-1">
-                          Người gửi: <span className="font-medium text-slate-600">{r.uploaderName}</span> ({r.uploaderDepartment})
+                        <div className="text-[9.5px] text-slate-500 mt-1">
+                          Người gửi: <span className="font-medium text-slate-800">{r.uploaderName}</span> ({r.uploaderDepartment})
                         </div>
                       </td>
 
                       {/* Cột 4: Phương án Cải tiến */}
-                      <td className="py-3 px-4 align-top max-w-xs">
+                      <td className="py-2.5 px-3 border border-slate-900 align-top max-w-xs">
                         {latestResolution ? (
-                          <div className="bg-emerald-50/60 p-2 rounded-lg border border-emerald-100 text-[11px]">
-                            <div className="font-bold text-emerald-800 flex items-center gap-1">
-                              <CheckCircle className="w-3 h-3 text-emerald-600 shrink-0" />
+                          <div className="bg-emerald-50 p-2 rounded border border-emerald-800 text-[10.5px]">
+                            <div className="font-bold text-emerald-900 flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3 text-emerald-700 shrink-0" />
                               <span>{latestResolution.handlerName || latestResolution.departmentName || "Bộ phận xử lý"}:</span>
                             </div>
-                            <p className="text-emerald-900 mt-0.5 line-clamp-2 italic text-[10.5px]">
+                            <p className="text-emerald-950 mt-0.5 line-clamp-2 italic text-[10px]">
                               "{latestResolution.resultText}"
                             </p>
                           </div>
                         ) : (
-                          <div className="text-amber-600 bg-amber-50/60 px-2 py-1 rounded-md border border-amber-100 text-[10.5px] font-medium inline-block">
+                          <div className="text-amber-700 bg-amber-50 px-2 py-1 rounded border border-amber-800 text-[10px] font-medium inline-block">
                             Chờ đưa ra giải pháp
                           </div>
                         )}
                       </td>
 
                       {/* Cột 5: Trạng thái & Tiến độ */}
-                      <td className="py-3 px-4 align-top text-center whitespace-nowrap">
+                      <td className="py-2.5 px-3 border border-slate-900 align-top text-center whitespace-nowrap">
                         {isClosed ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-700 shadow-2xs">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-black bg-emerald-100 text-emerald-800 border border-emerald-800 shadow-2xs">
                             <ShieldCheck className="w-3 h-3" />
                             ĐÃ NGHIỆM THU
                           </span>
                         ) : hasResolutions ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-blue-100 text-blue-700 shadow-2xs">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-black bg-blue-100 text-blue-800 border border-blue-800 shadow-2xs">
                             <CheckCircle2 className="w-3 h-3" />
                             ĐÃ CÓ GIẢI PHÁP
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-700 shadow-2xs">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-black bg-amber-100 text-amber-800 border border-amber-800 shadow-2xs">
                             <Clock className="w-3 h-3" />
                             ĐANG CHỜ
                           </span>
