@@ -232,6 +232,109 @@ export async function compressAvatar(file: File): Promise<string> {
   return canvas.toDataURL("image/jpeg", 0.75);
 }
 
+export interface LogoCompressionResult {
+  base64: string;
+  originalSizeKb: number;
+  compressedSizeKb: number;
+  width: number;
+  height: number;
+  format: 'png' | 'jpeg' | 'webp';
+}
+
+/**
+ * High-performance smart logo optimizer for 4M1E1I brand headers.
+ * Supports transparent PNG, vector SVG, WebP and JPEG.
+ * Automatically resizes to maxDimension (default 256px) to keep size under 30KB
+ * while retaining ultra-crisp visual quality.
+ */
+export async function compressLogoImage(
+  file: File,
+  options?: {
+    maxDimension?: number;
+    fitMode?: 'contain' | 'cover';
+    preserveTransparency?: boolean;
+    quality?: number;
+  }
+): Promise<LogoCompressionResult> {
+  const isSvg = file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg");
+  const origKb = Math.round((file.size / 1024) * 10) / 10;
+
+  if (isSvg && file.size <= 100 * 1024) {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target?.result as string);
+      reader.onerror = () => reject(new Error("Lỗi đọc file SVG."));
+      reader.readAsDataURL(file);
+    });
+    return {
+      base64: dataUrl,
+      originalSizeKb: origKb,
+      compressedSizeKb: origKb,
+      width: 256,
+      height: 256,
+      format: 'png'
+    };
+  }
+
+  const img = await loadImage(file);
+  const maxDim = options?.maxDimension || 256;
+  const preserveTrans = options?.preserveTransparency !== false;
+  const quality = options?.quality || 0.88;
+  const fitMode = options?.fitMode || 'contain';
+
+  const srcWidth = img.naturalWidth || img.width;
+  const srcHeight = img.naturalHeight || img.height;
+
+  let targetWidth = srcWidth;
+  let targetHeight = srcHeight;
+
+  if (targetWidth > maxDim || targetHeight > maxDim) {
+    const ratio = Math.min(maxDim / targetWidth, maxDim / targetHeight);
+    targetWidth = Math.round(targetWidth * ratio);
+    targetHeight = Math.round(targetHeight * ratio);
+  }
+
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    throw new Error("Không khởi tạo được bộ lọc canvas 2D.");
+  }
+
+  if (fitMode === 'cover') {
+    canvas.width = maxDim;
+    canvas.height = maxDim;
+    let sx = 0;
+    let sy = 0;
+    const sSize = Math.min(srcWidth, srcHeight);
+    if (srcWidth > srcHeight) {
+      sx = (srcWidth - srcHeight) / 2;
+    } else {
+      sy = (srcHeight - srcWidth) / 2;
+    }
+    ctx.drawImage(img, sx, sy, sSize, sSize, 0, 0, maxDim, maxDim);
+  } else {
+    canvas.width = Math.max(16, targetWidth);
+    canvas.height = Math.max(16, targetHeight);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  }
+
+  const isPngType = file.type === "image/png" || file.type === "image/webp" || file.name.toLowerCase().endsWith(".png");
+  const mimeType = (preserveTrans && isPngType) ? "image/png" : "image/jpeg";
+  const format: 'png' | 'jpeg' | 'webp' = mimeType === "image/png" ? 'png' : 'jpeg';
+
+  const base64 = canvas.toDataURL(mimeType, mimeType === "image/jpeg" ? quality : undefined);
+  const compKb = Math.round(((base64.length * 0.75) / 1024) * 10) / 10;
+
+  return {
+    base64,
+    originalSizeKb: origKb,
+    compressedSizeKb: compKb,
+    width: canvas.width,
+    height: canvas.height,
+    format
+  };
+}
+
 /**
  * Generates an offline SVG fallback illustration matching the 4M1E1I category.
  * Embeds direct Vector SVG (Data URI) into source code for 100% offline availability,

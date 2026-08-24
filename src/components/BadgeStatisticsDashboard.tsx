@@ -420,7 +420,7 @@ function ManagerCard({ mgr }: {
                 </p>
 
                 <div className="flex items-center justify-between text-[10px] text-slate-500 pt-0.5">
-                  <span className="font-mono bg-slate-200/60 px-1.5 py-0.5 rounded text-slate-700 font-bold" translate="no">Mã: #{bItem.reportCode}</span>
+                  <span className="font-sans bg-slate-200/60 px-1.5 py-0.5 rounded text-slate-700 font-bold" translate="no">Mã: #{bItem.reportCode}</span>
                   <span translate="no">{bItem.badgeTimestamp}</span>
                 </div>
               </div>
@@ -1507,7 +1507,7 @@ export default function BadgeStatisticsDashboard({
                       {/* Top Bar of item card */}
                       <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-100 text-xs">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-[11px] font-black bg-slate-900 text-white px-2 py-0.5 rounded">
+                          <span className="font-sans text-[11px] font-black bg-slate-900 text-white px-2 py-0.5 rounded">
                             <span translate="no" className="notranslate">ID: {item.reportCode}</span>
                           </span>
                           <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${

@@ -1825,7 +1825,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
               </div>
 
               <div className="relative z-10 pl-2 shrink-0">
-                <span className="text-2.5xl sm:text-3xl font-black font-mono text-white tracking-tight drop-shadow-xs">
+                <span className="text-2.5xl sm:text-3xl font-black font-sans text-white tracking-tight drop-shadow-xs">
                   {statusCounts.all}
                 </span>
               </div>
@@ -1859,7 +1859,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
               </div>
 
               <div className="relative z-10 pl-2 shrink-0">
-                <span className="text-2.5xl sm:text-3xl font-black font-mono text-white tracking-tight drop-shadow-xs">
+                <span className="text-2.5xl sm:text-3xl font-black font-sans text-white tracking-tight drop-shadow-xs">
                   {statusCounts.inProgress}
                 </span>
               </div>
@@ -1893,7 +1893,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
               </div>
 
               <div className="relative z-10 pl-2 shrink-0">
-                <span className="text-2.5xl sm:text-3xl font-black font-mono text-white tracking-tight drop-shadow-xs">
+                <span className="text-2.5xl sm:text-3xl font-black font-sans text-white tracking-tight drop-shadow-xs">
                   {statusCounts.pass}
                 </span>
               </div>
@@ -1927,7 +1927,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
               </div>
 
               <div className="relative z-10 pl-2 shrink-0">
-                <span className="text-2.5xl sm:text-3xl font-black font-mono text-white tracking-tight drop-shadow-xs">
+                <span className="text-2.5xl sm:text-3xl font-black font-sans text-white tracking-tight drop-shadow-xs">
                   {statusCounts.fail}
                 </span>
               </div>
@@ -2049,7 +2049,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                   }`}
                 >
                   <span translate="no" className="notranslate">TẤT CẢ PHÂN HỆ</span>
-                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-mono font-bold ${
+                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-sans font-bold ${
                     trialTypeFilter === "ALL"
                       ? "bg-white/20 text-white"
                       : "bg-slate-200/90 text-slate-700"
@@ -2070,7 +2070,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                 >
                   <span className="text-sm">🏢</span>
                   <span translate="no" className="notranslate">TN-B2B (Công nghiệp)</span>
-                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-mono font-bold ${
+                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-sans font-bold ${
                     trialTypeFilter === "B2B"
                       ? "bg-white/25 text-white"
                       : "bg-blue-100 text-blue-700"
@@ -2091,7 +2091,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                 >
                   <span className="text-sm">🛍️</span>
                   <span translate="no" className="notranslate">TN-B2C (Gia dụng)</span>
-                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-mono font-bold ${
+                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-sans font-bold ${
                     trialTypeFilter === "B2C"
                       ? "bg-white/25 text-white"
                       : "bg-purple-100 text-purple-700"
@@ -2147,7 +2147,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                         <span translate="no" className="notranslate">{item.createdByName}</span>
                       </div>
                       <span className="text-slate-300 font-normal">|</span>
-                      <span className="text-[9px] text-slate-400 font-mono font-semibold select-none">
+                      <span className="text-[9px] text-slate-400 font-sans font-semibold select-none">
                         <span translate="no" className="notranslate">{item.createdAt}</span>
                       </span>
                     </div>
@@ -2171,7 +2171,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                       </span>
                     )}
                     {item.code && (
-                      <span className="text-[9px] text-slate-400 font-mono font-semibold select-none">
+                      <span className="text-[9px] text-slate-400 font-sans font-semibold select-none">
                         <span translate="no" className="notranslate">ID: {item.code}</span>
                       </span>
                     )}
@@ -3299,7 +3299,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                                         {acknowledgesList.map((ack, aIdx) => (
                                           <div key={aIdx} className="flex justify-between items-center gap-1.5 text-slate-700">
                                             <span className="font-semibold text-slate-800 truncate max-w-[170px]"><span translate="no" className="notranslate"><T>{ack.by}</T></span></span>
-                                            <span className="text-slate-400 shrink-0 font-mono text-[8.5px] select-none">{ack.at}</span>
+                                            <span className="text-slate-400 shrink-0 font-sans font-semibold text-[8.5px] select-none">{ack.at}</span>
                                           </div>
                                         ))}
                                       </div>

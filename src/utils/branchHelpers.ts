@@ -380,7 +380,10 @@ export const canUserEditReport = (
   const isAdmin =
     roleUpper === "CHỦ ADMIN" ||
     roleUpper === "ADMIN" ||
-    currentUser.role === UserRole.ADMIN;
+    currentUser.role === UserRole.ADMIN ||
+    currentUser.id === "USR-ADMIN" ||
+    currentUser.isSuperAdmin === true ||
+    roleUpper.includes("ADMIN");
 
   // 1. Admin luôn có toàn quyền
   if (isAdmin) return true;
@@ -446,7 +449,10 @@ export const canUserDeleteReport = (
   const isAdmin =
     roleUpper === "CHỦ ADMIN" ||
     roleUpper === "ADMIN" ||
-    currentUser.role === UserRole.ADMIN;
+    currentUser.role === UserRole.ADMIN ||
+    currentUser.id === "USR-ADMIN" ||
+    currentUser.isSuperAdmin === true ||
+    roleUpper.includes("ADMIN");
 
   // 1. Admin luôn có toàn quyền xóa
   if (isAdmin) return true;

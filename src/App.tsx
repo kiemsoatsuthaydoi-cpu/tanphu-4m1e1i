@@ -505,7 +505,9 @@ export default function App() {
   // Persistence state
   const [users, setUsers] = useState<User[]>(() => {
     const saved = safeGetItem("4m1e1i_users");
-    let loadedUsers = safeParseJSON(saved, initialUsers);
+    const savedDeletedUserIds = safeParseJSON(safeGetItem("4m1e1i_deleted_user_ids"), []);
+    const deletedUserSet = new Set(savedDeletedUserIds);
+    let loadedUsers = safeParseJSON(saved, initialUsers).filter((u: User) => !deletedUserSet.has(u.id));
     // Restore original admin password for Lê Nhật Trường, promote Kim Thị Bích Tuyền and override branch/dept to BBM (DNP-BBM)
     loadedUsers = loadedUsers.map((u: User) => {
       if (u.id === "2024.00912") {
@@ -576,11 +578,13 @@ export default function App() {
 
   const [reports, setReports] = useState<QualityReport[]>(() => {
     const saved = safeGetItem("4m1e1i_reports");
+    const savedDeletedReportIds = safeParseJSON(safeGetItem("4m1e1i_deleted_report_ids"), []);
+    const deletedSet = new Set(savedDeletedReportIds);
     const loadedReports: QualityReport[] = safeParseJSON(saved, initialReports);
     const existingIds = new Set((loadedReports || []).map((r: QualityReport) => r.id));
-    const mergedList = [...(loadedReports || [])];
+    const mergedList = [...(loadedReports || [])].filter((r: QualityReport) => !deletedSet.has(r.id));
     initialReports.forEach((initR) => {
-      if (!existingIds.has(initR.id)) {
+      if (!existingIds.has(initR.id) && !deletedSet.has(initR.id)) {
         mergedList.push(initR);
       }
     });
@@ -740,6 +744,24 @@ export default function App() {
   useEffect(() => {
     deletedReplyIdsRef.current = deletedReplyIds;
   }, [deletedReplyIds]);
+
+  const [deletedReportIds, setDeletedReportIds] = useState<string[]>(() => {
+    const saved = safeGetItem("4m1e1i_deleted_report_ids");
+    return safeParseJSON(saved, []);
+  });
+  const deletedReportIdsRef = useRef<string[]>(deletedReportIds);
+  useEffect(() => {
+    deletedReportIdsRef.current = deletedReportIds;
+  }, [deletedReportIds]);
+
+  const [deletedUserIds, setDeletedUserIds] = useState<string[]>(() => {
+    const saved = safeGetItem("4m1e1i_deleted_user_ids");
+    return safeParseJSON(saved, []);
+  });
+  const deletedUserIdsRef = useRef<string[]>(deletedUserIds);
+  useEffect(() => {
+    deletedUserIdsRef.current = deletedUserIds;
+  }, [deletedUserIds]);
 
   // Topic Code Sequence Counter (Guarantees non-repeating topic codes even if topics are deleted)
   const [topicCodeCounter, setTopicCodeCounter] = useState<number>(() => {
@@ -1093,9 +1115,11 @@ export default function App() {
   useEffect(() => {
     if (!broadcasts) return;
 
-    if (isFirstBroadcastsLoadRef.current) {
+    if (!syncCompleted || isFirstBroadcastsLoadRef.current) {
       if (broadcasts.length > 0) {
         prevBroadcastsRef.current = broadcasts;
+      }
+      if (syncCompleted) {
         isFirstBroadcastsLoadRef.current = false;
       }
       return;
@@ -1150,15 +1174,17 @@ export default function App() {
     });
 
     prevBroadcastsRef.current = broadcasts;
-  }, [broadcasts, currentUser]);
+  }, [broadcasts, currentUser, syncCompleted]);
 
   // Listen and notify for quality reports updates (real-time new reports and deletes)
   useEffect(() => {
     if (!reports) return;
 
-    if (isFirstReportsLoadRef.current) {
+    if (!syncCompleted || isFirstReportsLoadRef.current) {
       if (reports.length > 0) {
         prevReportsRef.current = reports;
+      }
+      if (syncCompleted) {
         isFirstReportsLoadRef.current = false;
       }
       return;
@@ -1267,7 +1293,7 @@ export default function App() {
     });
 
     prevReportsRef.current = reports;
-  }, [reports, currentUser]);
+  }, [reports, currentUser, syncCompleted]);
 
   // Sign up and login screens
   const [authScreen, setAuthScreen] = useState<"LOGIN" | "REGISTER">("LOGIN");
@@ -1521,12 +1547,14 @@ export default function App() {
               password: fu.password || current.password
             };
           } else {
-            finalUsers.push(fu);
+            if (!deletedUserIdsRef.current.includes(fu.id)) {
+              finalUsers.push(fu);
+            }
           }
         });
       }
 
-      finalUsers = sanitizeUsers(finalUsers.map((u) => {
+      finalUsers = sanitizeUsers(finalUsers.filter((u) => !deletedUserIdsRef.current.includes(u.id)).map((u) => {
         let userPwd = u.password;
         if (u.id === "2018.00281" && (!userPwd || userPwd === "123456")) {
           userPwd = "111222";
@@ -1566,7 +1594,15 @@ export default function App() {
       }));
       setUsers(finalUsers);
 
-      const finalReports = sanitizeReports(attachLocalImages(fReports.length > 0 ? fReports : [...reports]));
+      const validReportsFromDb = fReports.filter(
+        (r) => !deletedReportIdsRef.current.includes(r.id)
+      );
+      const fallbackReports = reports.filter(
+        (r) => !deletedReportIdsRef.current.includes(r.id)
+      );
+      const finalReports = sanitizeReports(
+        attachLocalImages(validReportsFromDb.length > 0 ? validReportsFromDb : fallbackReports)
+      );
       setReports(finalReports);
 
       let latestCompanies = fCompanies.length > 0 ? fCompanies : [...companies];
@@ -1846,7 +1882,9 @@ export default function App() {
         "4m1e1i_read_notifications",
         "4m1e1i_deleted_notifications",
         "4m1e1i_deleted_topic_ids",
-        "4m1e1i_deleted_reply_ids"
+        "4m1e1i_deleted_reply_ids",
+        "4m1e1i_deleted_report_ids",
+        "4m1e1i_deleted_user_ids"
       ]);
 
       const keysToRemove: string[] = [];
@@ -1887,7 +1925,11 @@ export default function App() {
       (snapshot) => {
         const list: QualityReport[] = [];
         snapshot.forEach((doc) => {
-          list.push(doc.data() as QualityReport);
+          const data = doc.data() as QualityReport;
+          const repId = doc.id || data.id;
+          if (repId && !deletedReportIdsRef.current.includes(repId)) {
+            list.push({ ...data, id: repId });
+          }
         });
         setReports(sanitizeReports(attachLocalImages(list)));
       },
@@ -2025,9 +2067,13 @@ export default function App() {
         const list: User[] = [];
         snapshot.forEach((doc) => {
           const data = { ...doc.data() } as any;
+          const userId = doc.id || data.id;
+          if (userId && deletedUserIdsRef.current.includes(userId)) {
+            return;
+          }
           const appUser: any = {
             ...data,
-            id: doc.id || data.id,
+            id: userId,
             phone: data.phone || data.phoneNumber || "",
             fullName: data.fullName || data.name || "",
             createdAt: data.createdAt || new Date().toISOString()
@@ -2049,8 +2095,9 @@ export default function App() {
         
         const sanitizedLatest = sanitizeUsers(list);
         setUsers((prev) => {
-          const next = [...prev];
+          const next = [...prev].filter((u) => !deletedUserIdsRef.current.includes(u.id));
           sanitizedLatest.forEach((fetched) => {
+            if (deletedUserIdsRef.current.includes(fetched.id)) return;
             const idx = next.findIndex(u => u.id === fetched.id || (u.phone && fetched.phone && u.phone.replace(/\s+/g, "") === fetched.phone.replace(/\s+/g, "")));
             if (idx >= 0) {
               const current = next[idx];
@@ -2698,9 +2745,15 @@ export default function App() {
   };
 
   const handleDeleteUser = (id: string) => {
+    setDeletedUserIds((prev) => {
+      const next = Array.from(new Set([...prev, id]));
+      safeSetItem("4m1e1i_deleted_user_ids", JSON.stringify(next));
+      return next;
+    });
+    deletedUserIdsRef.current.push(id);
     setUsers((prev) => prev.filter((u) => u.id !== id));
     if (dbConnected) {
-      deleteDocument(COLLECTIONS.USERS, id);
+      deleteDocument(COLLECTIONS.USERS, id).catch(console.error);
     }
   };
 
@@ -3792,11 +3845,39 @@ export default function App() {
         isOpen: true,
         title: "Xóa vĩnh viễn báo cáo?",
         message: "Kiểm soát chất lượng: Bạn có thật sự muốn XÓA VĨNH VIỄN bản báo cáo này? Thao tác này KHÔNG THỂ KHÔI PHỤC!",
-        onConfirm: () => {
-          setReports((prev) => sanitizeReports(prev.filter((r) => r.id !== id)));
+        onConfirm: async () => {
+          // Lưu vào danh sách đã xóa vĩnh viễn
+          setDeletedReportIds((prev) => {
+            const next = Array.from(new Set([...prev, id]));
+            safeSetItem("4m1e1i_deleted_report_ids", JSON.stringify(next));
+            return next;
+          });
+          deletedReportIdsRef.current.push(id);
+
+          setReports((prev) => {
+            const next = sanitizeReports(prev.filter((r) => r.id !== id));
+            try {
+              const lightweightReports = next.map((r) => {
+                const { imageUrl, imageUrls, ...rest } = r;
+                return rest;
+              });
+              safeSetItem("4m1e1i_reports", JSON.stringify(lightweightReports));
+            } catch (e) {}
+            return next;
+          });
+
           if (dbConnected) {
-            deleteDocument(COLLECTIONS.REPORTS, id);
+            deleteDocument(COLLECTIONS.REPORTS, id).catch((err) => {
+              console.error("Lỗi khi xóa báo cáo Firestore:", err);
+            });
           }
+          try {
+            localStorage.removeItem(`4m1e1i_img_${id}`);
+            localStorage.removeItem(`4m1e1i_img_urls_${id}`);
+          } catch (e) {
+            console.error("Lỗi xóa cache ảnh cục bộ:", e);
+          }
+          showToast("Đã xóa báo cáo vĩnh viễn khỏi Cloud Firestore! 🔥", "success");
           setConfirmDialog(null);
         }
       });
@@ -3805,7 +3886,7 @@ export default function App() {
         isOpen: true,
         title: "Chuyển vào Thùng rác?",
         message: "Kiểm soát chất lượng: Bạn có chắc chắn muốn chuyển bản báo cáo này vào Thùng rác?",
-        onConfirm: () => {
+        onConfirm: async () => {
           setReports((prev) => {
             const deletedReport = prev.find((r) => r.id === id);
             if (deletedReport) {
@@ -3823,6 +3904,7 @@ export default function App() {
             }
             return prev;
           });
+          showToast("Đã chuyển báo cáo vào Thùng rác lưu trữ tạm thời! 🗑️", "warning");
           setConfirmDialog(null);
         }
       });
@@ -3833,6 +3915,16 @@ export default function App() {
   const handleUpdateReport = (updatedReport: QualityReport) => {
     const existing = reports.find(r => r.id === updatedReport.id);
     if (!existing) return;
+
+    // If report is recovered from trash, remove from deletedReportIds if present
+    if (updatedReport.isDeleted === false && deletedReportIdsRef.current.includes(updatedReport.id)) {
+      setDeletedReportIds((prev) => {
+        const next = prev.filter((x) => x !== updatedReport.id);
+        safeSetItem("4m1e1i_deleted_report_ids", JSON.stringify(next));
+        return next;
+      });
+      deletedReportIdsRef.current = deletedReportIdsRef.current.filter((x) => x !== updatedReport.id);
+    }
 
     const now = new Date();
     const hrs = String(now.getHours()).padStart(2, '0');
@@ -4182,7 +4274,7 @@ export default function App() {
                     placeholder="Ví dụ: 2026.00001"
                     value={loginId}
                     onChange={(e) => setLoginId(formatEmployeeId(e.target.value, loginId))}
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-850 font-mono shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-850 font-sans shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
                 {loginId.length > 0 && !isLoginIdValid && (
@@ -4205,7 +4297,7 @@ export default function App() {
                     placeholder="Nhập số điện thoại..."
                     value={loginPhone}
                     onChange={(e) => setLoginPhone(formatPhoneNumber(e.target.value))}
-                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-850 font-mono shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-850 font-sans shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
                 {loginPhone.length > 0 && !isLoginPhoneValid && (
@@ -4331,7 +4423,7 @@ export default function App() {
                       placeholder="Ví dụ: 2026.00001"
                       value={regId}
                       onChange={(e) => setRegId(formatEmployeeId(e.target.value, regId))}
-                      className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-850 font-mono shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-850 font-sans shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                     />
                   </div>
                   {regId.length > 0 && !isRegIdValid && (
@@ -4354,7 +4446,7 @@ export default function App() {
                       placeholder="Ví dụ: 090x..."
                       value={regPhone}
                       onChange={(e) => setRegPhone(formatPhoneNumber(e.target.value))}
-                      className={`w-full bg-slate-50 border pl-9 pr-3 py-2.5 text-xs text-slate-850 font-mono shadow-sm focus:outline-none transition-colors rounded-xl ${
+                      className={`w-full bg-slate-50 border pl-9 pr-3 py-2.5 text-xs text-slate-850 font-sans shadow-sm focus:outline-none transition-colors rounded-xl ${
                         regPhone.length > 0 && !isRegPhoneValid
                           ? "border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500"
                           : "border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
@@ -5076,6 +5168,8 @@ export default function App() {
             onDeleteKnowledgeDoc={handleDeleteKnowledgeDoc}
             festiveBannerConfig={festiveBannerConfig}
             onUpdateFestiveBannerConfig={handleUpdateFestiveBannerConfig}
+            headerLogoAvatar={headerLogoAvatar}
+            onUpdateHeaderLogoAvatar={handleUpdateHeaderLogoAvatar}
           />
         </div>
 
