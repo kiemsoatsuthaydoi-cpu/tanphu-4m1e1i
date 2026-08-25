@@ -12716,20 +12716,20 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                               )}
                               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100/60 pb-2 mb-2.5">
                                 <div className="flex flex-wrap items-center gap-1.5">
-                                  <span className={`px-2 py-0.5 rounded text-[9.5px] font-black border uppercase tracking-wider ${tag1Class}`}>
+                                  <span className={`px-2 py-0.5 rounded text-[10.5px] font-black border uppercase tracking-wider ${tag1Class}`}>
                                     <T>{tag1Text}</T>
                                   </span>
                                   {isUnread && (
-                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-black border uppercase tracking-wider text-rose-700 bg-rose-100 border-rose-200 animate-pulse">
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-black border uppercase tracking-wider text-rose-700 bg-rose-100 border-rose-200 animate-pulse">
                                       <T>MỚI</T>
                                     </span>
                                   )}
-                                  <span className={`px-2 py-0.5 rounded text-[9.5px] font-bold border ${tag2Class}`}>
+                                  <span className={`px-2 py-0.5 rounded text-[10.5px] font-bold border ${tag2Class}`}>
                                     <T>{tag2Text}</T>
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-2.5">
-                                  <span className="text-[10px] text-slate-400 font-bold font-mono">
+                                  <span className="text-[11px] text-slate-400 font-bold font-mono">
                                     <T>{item.timestamp}</T>
                                   </span>
                                   {currentUser?.role === UserRole.ADMIN && (
@@ -12786,7 +12786,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                   )}
                                 </div>
                               </div>
-                              <div className="text-xs text-slate-800 font-medium font-sans leading-relaxed break-words whitespace-pre-wrap">
+                              <div className="text-[13.5px] text-slate-800 font-medium font-sans leading-relaxed break-words whitespace-pre-wrap">
                                 <T>{item.content}</T>
                               </div>
                             </div>

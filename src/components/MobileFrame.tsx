@@ -4659,6 +4659,13 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
     }
   }, [activeBottomTab, currentUser, mobileStatsSubTab]);
 
+  // Tự động đưa Bản tin về trang chủ "Biến động 4M1E1I" khi rời khỏi phân hệ Bản Tin hoặc chuyển sang trang khác (Đề xuất, Cá nhân, Duyệt NS, Phân tích, v.v.)
+  useEffect(() => {
+    if (activeBottomTab !== "BAO_CAO" || mobileFeedSubTab !== "FEED") {
+      setMobileFeedViewMode("REPORT");
+    }
+  }, [activeBottomTab, mobileFeedSubTab]);
+
   // Sync state refs for popstate handler
   const activeBottomTabRef = useRef(activeBottomTab);
   const activeForumTopicIdRef = useRef(activeForumTopicId);
@@ -14526,17 +14533,17 @@ App Link: ${window.location.origin}`}
                               <div className="flex-1 min-w-0 pr-1 flex justify-between gap-1.5 items-start">
                                 <div className="flex-1 min-w-0">
                                   <div className="flex justify-between items-start gap-1 flex-wrap">
-                                    <span className={`text-[10px] tracking-wide block uppercase ${
+                                    <span className={`text-[11.5px] tracking-wide block uppercase ${
                                       isUnread ? "font-black text-blue-900" : "font-extrabold text-slate-700"
                                     }`}>
                                       <T>{notif.title}</T>
                                     </span>
-                                    <span className="text-[8px] text-slate-400 font-bold shrink-0 font-mono" translate="no">
+                                    <span className="text-[9px] text-slate-400 font-bold shrink-0 font-mono" translate="no">
                                       {notif.timestamp}
                                     </span>
                                   </div>
-                                  <p className={`text-[10px] mt-1 leading-normal ${
-                                    isUnread ? "font-bold text-blue-800" : "font-medium text-slate-500"
+                                  <p className={`text-[11.5px] mt-1 leading-normal ${
+                                    isUnread ? "font-bold text-blue-800" : "font-medium text-slate-600"
                                   }`}>
                                     <T>{notif.description}</T>
                                   </p>
@@ -14726,17 +14733,17 @@ App Link: ${window.location.origin}`}
                             <div className="flex-1 min-w-0 pr-1 flex justify-between gap-1.5 items-start">
                               <div className="flex-1 min-w-0">
                                 <div className="flex justify-between items-start gap-1 flex-wrap">
-                                  <span className={`text-[10px] tracking-wide block uppercase ${
+                                  <span className={`text-[11.5px] tracking-wide block uppercase ${
                                     isUnread ? "font-black text-blue-900" : "font-extrabold text-slate-700"
                                   }`}>
                                     <T>{notif.title}</T>
                                   </span>
-                                  <span className="text-[8px] text-slate-400 font-bold shrink-0 font-mono" translate="no">
+                                  <span className="text-[9px] text-slate-400 font-bold shrink-0 font-mono" translate="no">
                                     {notif.timestamp}
                                   </span>
                                 </div>
-                                <p className={`text-[10px] mt-1 leading-normal ${
-                                  isUnread ? "font-bold text-blue-800" : "font-medium text-slate-500"
+                                <p className={`text-[11.5px] mt-1 leading-normal ${
+                                  isUnread ? "font-bold text-blue-800" : "font-medium text-slate-600"
                                 }`}>
                                   <T>{notif.description}</T>
                                 </p>
