@@ -11301,11 +11301,28 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                           {/* Table Container */}
                           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
                             <div className="p-3.5 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2">
-                              <div className="flex items-center gap-2">
-                                <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
-                                <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-                                  <T>DANH SÁCH CHI TIẾT VIỆC CỦA TÔI ({filteredMyReports.length})</T>
-                                </h3>
+                              <div className="flex items-center gap-3 flex-wrap">
+                                <div className="flex items-center gap-2">
+                                  <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
+                                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                                    <T>DANH SÁCH CHI TIẾT VIỆC CỦA TÔI ({filteredMyReports.length})</T>
+                                  </h3>
+                                </div>
+                                {/* Legend Badges */}
+                                <div className="hidden lg:flex items-center gap-2 text-[10px] font-bold">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                    <T>Xanh lá: Đã đóng / Xong</T>
+                                  </span>
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-50 text-rose-800 border border-rose-200">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                                    <T>Đỏ: Quá hạn tiếp nhận</T>
+                                  </span>
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                                    <T>Xanh dương: Điểm sáng / Kaizen</T>
+                                  </span>
+                                </div>
                               </div>
                               <div className="flex items-center gap-3">
                                 <span className="text-[11px] text-slate-500 font-medium">
@@ -11375,11 +11392,40 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                       const isResolved = isMyResolved(r);
                                       const isClosed = (r.resolutions && r.resolutions.length > 0 && r.resolutions.every((res) => res.status === "Đã xử lý")) || !!r.qcConfirmed;
                                       const hasResolutions = (r.resolutions && r.resolutions.length > 0) || !!r.qcConfirmed;
+                                      const isDsa = r.reportType === "DSA" || !!r.isSpotlight;
                                       const directivesCount = r.directives?.length || 0;
                                       const resolutionsCount = r.resolutions?.length || 0;
 
+                                      // Tính quá hạn tiếp nhận (>24h chưa có người tiếp nhận và chưa có giải pháp, không áp dụng cho DSA và việc đã đóng)
+                                      const hasReceivers = r.receiverTimestamps && Object.keys(r.receiverTimestamps).length > 0;
+                                      let isOverdueAck = false;
+                                      if (!isClosed && !isDsa && !hasReceivers && !hasResolutions) {
+                                        try {
+                                          const startMs = parseReportTimestamp(r.timestamp).getTime();
+                                          if (!isNaN(startMs) && Date.now() - startMs > 24 * 60 * 60 * 1000) {
+                                            isOverdueAck = true;
+                                          }
+                                        } catch (e) {
+                                          isOverdueAck = false;
+                                        }
+                                      }
+
+                                      // Xác định class bao viền và màu nền theo 3 nhóm ưu tiên:
+                                      // 1. Hoàn thành: Tô màu xanh lá nhạt + kẻ khung line Xanh Green
+                                      // 2. Quá hạn tiếp nhận: Tô màu đỏ nhạt + kẻ khung line Đỏ
+                                      // 3. Điểm sáng / Kaizen: Tô màu xanh dương nhạt + kẻ khung line Xanh Blue
+                                      // 4. Còn lại: Viền và nền trung tính tiêu chuẩn
+                                      let rowStyle = "hover:bg-indigo-50/30 border-l-4 border-l-transparent";
+                                      if (isClosed) {
+                                        rowStyle = "bg-emerald-50/70 hover:bg-emerald-100/70 border-l-4 border-l-emerald-500";
+                                      } else if (isOverdueAck) {
+                                        rowStyle = "bg-rose-50/75 hover:bg-rose-100/80 border-l-4 border-l-rose-500";
+                                      } else if (isDsa) {
+                                        rowStyle = "bg-blue-50/60 hover:bg-blue-100/70 border-l-4 border-l-blue-500";
+                                      }
+
                                       return (
-                                        <tr key={r.id} className="hover:bg-indigo-50/30 transition-colors">
+                                        <tr key={r.id} className={`${rowStyle} transition-colors`}>
                                           {/* STT */}
                                           <td className="py-2.5 px-3 text-slate-400 font-mono text-[10px]">
                                             {index + 1}
@@ -11410,32 +11456,32 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
 
                                           {/* Phân loại 4M1E1I */}
                                           <td className="py-2.5 px-3 whitespace-nowrap">
-                                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold border border-blue-200 bg-blue-50 text-blue-700">
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10.5px] font-bold border border-blue-200 bg-blue-50/80 text-blue-700 w-[142px] justify-start shadow-2xs">
                                               {getCategoryIcon(r.category)}
-                                              <span>{r.category}</span>
+                                              <span className="truncate">{r.category}</span>
                                             </span>
                                           </td>
 
                                           {/* Vai trò của tôi */}
                                           <td className="py-2.5 px-3 whitespace-nowrap">
-                                            <div className="flex items-center gap-1 flex-wrap">
+                                            <div className="flex flex-col items-start gap-1">
                                               {isCreated && (
-                                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                                <span className="inline-flex items-center justify-center px-2 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200 w-[96px] text-center shadow-2xs">
                                                   <T>Người tạo</T>
                                                 </span>
                                               )}
                                               {isAssigned && (
-                                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                                <span className="inline-flex items-center justify-center px-2 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 w-[96px] text-center shadow-2xs">
                                                   <T>Được chỉ đạo</T>
                                                 </span>
                                               )}
                                               {isResolved && (
-                                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                <span className="inline-flex items-center justify-center px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 w-[96px] text-center shadow-2xs">
                                                   <T>Đã đăng GP</T>
                                                 </span>
                                               )}
                                               {!isCreated && !isAssigned && !isResolved && (
-                                                <span className="px-1.5 py-0.5 rounded text-[9px] font-medium text-slate-500 bg-slate-100">
+                                                <span className="inline-flex items-center justify-center px-2 py-0.5 rounded text-[9px] font-medium text-slate-500 bg-slate-100 border border-slate-200 w-[96px] text-center">
                                                   <T>Liên quan</T>
                                                 </span>
                                               )}
@@ -11471,9 +11517,19 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                           {/* Tiến độ / Trạng thái */}
                                           <td className="py-2.5 px-3 whitespace-nowrap">
                                             {isClosed ? (
-                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-200">
-                                                <CheckCircle className="w-3 h-3 text-blue-600" />
-                                                <T>Đã đóng</T>
+                                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                                <CheckCircle className="w-3 h-3 text-emerald-600" />
+                                                <T>Đã đóng (Hoàn tất)</T>
+                                              </span>
+                                            ) : isOverdueAck ? (
+                                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">
+                                                <AlertTriangle className="w-3 h-3 text-rose-600" />
+                                                <T>Quá hạn tiếp nhận (&gt;24h)</T>
+                                              </span>
+                                            ) : isDsa ? (
+                                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-300">
+                                                <Sparkles className="w-3 h-3 text-blue-600" />
+                                                <T>Điểm sáng / Kaizen</T>
                                               </span>
                                             ) : hasResolutions ? (
                                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
@@ -11521,7 +11577,15 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                               <button
                                                 type="button"
                                                 onClick={() => setSelectedPersonalTaskReport(r)}
-                                                className="p-1 text-indigo-600 hover:bg-indigo-50 rounded border border-indigo-200 transition-colors cursor-pointer"
+                                                className={`p-1 rounded border transition-colors cursor-pointer ${
+                                                  isClosed
+                                                    ? "text-emerald-700 bg-emerald-100/60 hover:bg-emerald-200/70 border-emerald-300"
+                                                    : isOverdueAck
+                                                    ? "text-rose-700 bg-rose-100/60 hover:bg-rose-200/70 border-rose-300"
+                                                    : isDsa
+                                                    ? "text-blue-700 bg-blue-100/60 hover:bg-blue-200/70 border-blue-300"
+                                                    : "text-indigo-600 hover:bg-indigo-50 border-indigo-200"
+                                                }`}
                                                 title="Xem chi tiết báo cáo"
                                               >
                                                 <Eye className="w-3 h-3" />
@@ -12001,10 +12065,59 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                     </div>
                                   </div>
 
-                                  {/* Mục 3: Các bước thực hiện */}
+                                   {/* Mục 3: Nhận diện màu sắc theo tình trạng đầu việc */}
                                   <div>
                                     <h4 className="text-xs sm:text-sm font-black text-indigo-900 uppercase tracking-wider mb-3 flex items-center gap-2 pb-1.5 border-b border-indigo-100">
                                       <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 inline-flex items-center justify-center text-[10px] font-black">3</span>
+                                      <T>QUY TẮC NHẬN DIỆN MÀU SẮC ĐẦU VIỆC</T>
+                                    </h4>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                      {/* Màu Xanh lá */}
+                                      <div className="p-3.5 rounded-xl bg-emerald-50 border-2 border-emerald-300 space-y-1.5">
+                                        <div className="flex items-center gap-2">
+                                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
+                                          <span className="text-[11px] font-black text-emerald-800 uppercase">
+                                            <T>Tô Xanh lá / Khung Green</T>
+                                          </span>
+                                        </div>
+                                        <p className="text-[11px] text-emerald-950">
+                                          <T>Dành cho các việc <strong>ĐÃ HOÀN THÀNH (Đã đóng / Xong)</strong>. Giúp bạn nhanh chóng nhận biết những hạng mục đã được xử lý trọn vẹn.</T>
+                                        </p>
+                                      </div>
+
+                                      {/* Màu Đỏ */}
+                                      <div className="p-3.5 rounded-xl bg-rose-50 border-2 border-rose-300 space-y-1.5">
+                                        <div className="flex items-center gap-2">
+                                          <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0 animate-pulse"></span>
+                                          <span className="text-[11px] font-black text-rose-800 uppercase">
+                                            <T>Tô Đỏ nhạt / Khung Red</T>
+                                          </span>
+                                        </div>
+                                        <p className="text-[11px] text-rose-950">
+                                          <T>Dành cho các việc <strong>TỒN ĐỌNG QUÁ HẠN TIẾP NHẬN (&gt;24h)</strong> chưa có nhân sự bấm tiếp nhận/xử lý để cảnh báo ưu tiên giải quyết ngay.</T>
+                                        </p>
+                                      </div>
+
+                                      {/* Màu Xanh dương */}
+                                      <div className="p-3.5 rounded-xl bg-blue-50 border-2 border-blue-300 space-y-1.5">
+                                        <div className="flex items-center gap-2">
+                                          <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0"></span>
+                                          <span className="text-[11px] font-black text-blue-800 uppercase">
+                                            <T>Tô Blue / Khung Xanh Blue</T>
+                                          </span>
+                                        </div>
+                                        <p className="text-[11px] text-blue-950">
+                                          <T>Dành cho các <strong>ĐIỂM SÁNG / KAIZEN (DSA)</strong> cải tiến không có hành động khắc phục sự cố.</T>
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Mục 4: Các bước thực hiện */}
+                                  <div>
+                                    <h4 className="text-xs sm:text-sm font-black text-indigo-900 uppercase tracking-wider mb-3 flex items-center gap-2 pb-1.5 border-b border-indigo-100">
+                                      <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 inline-flex items-center justify-center text-[10px] font-black">4</span>
                                       <T>CÁCH THỰC HIỆN XỬ LÝ & ĐÓNG ĐẦU VIỆC CỦA BẠN</T>
                                     </h4>
 

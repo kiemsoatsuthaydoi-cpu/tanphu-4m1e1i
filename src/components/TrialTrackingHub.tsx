@@ -569,6 +569,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
   const [newImages, setNewImages] = useState<string[]>([]);
   const [isCompressingNewImages, setIsCompressingNewImages] = useState(false);
   const [clonedFromTrial, setClonedFromTrial] = useState<TrialTrackingItem | null>(null);
+  const [showCreateCancelConfirm, setShowCreateCancelConfirm] = useState(false);
 
   // Lightbox Modal state
   const [lightboxImages, setLightboxImages] = useState<{ urls: string[]; index: number; title: string } | null>(null);
@@ -1629,6 +1630,10 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
       return;
     }
     if (!newTitle.trim() || !newProduct.trim()) return;
+    if (!newReqDocNo.trim()) {
+      if (showToast) showToast("Vui lòng nhập Mã số Đề Nghị thử nghiệm!");
+      return;
+    }
 
     const dateStr = new Date().toLocaleDateString("vi-VN", {
       day: "2-digit",
@@ -1775,9 +1780,13 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
     };
 
     saveItems([newItem, ...trialItems]);
+    resetCreateForm();
+  };
+
+  const resetCreateForm = () => {
     setIsCreateModalOpen(false);
+    setShowCreateCancelConfirm(false);
     setClonedFromTrial(null);
-    // Reset inputs
     setNewTrialType("");
     setNewTitle("");
     setNewProduct("");
@@ -1787,6 +1796,23 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
     setNewImages([]);
     setNewMachineDetail("");
     setCustomWorkshopInput("");
+  };
+
+  const handleCancelCreateTrial = () => {
+    const hasInput = !!(
+      newTitle.trim() ||
+      newProduct.trim() ||
+      newReqDocNo.trim() ||
+      newNotes.trim() ||
+      newImages.length > 0 ||
+      newTrialType ||
+      clonedFromTrial
+    );
+    if (hasInput) {
+      setShowCreateCancelConfirm(true);
+    } else {
+      resetCreateForm();
+    }
   };
 
   const stepList: { key: TrialStepKey; label: string; number: string; role: string }[] = [
@@ -4406,7 +4432,8 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                 </h3>
               </div>
               <button 
-                onClick={() => setIsCreateModalOpen(false)}
+                type="button"
+                onClick={handleCancelCreateTrial}
                 className="text-teal-200 hover:text-white text-xl font-bold p-1 leading-none cursor-pointer"
               >
                 ✕
@@ -4596,21 +4623,22 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                 </div>
               </div>
 
-              {/* Mã số Đề nghị (tuỳ chọn) */}
+              {/* Mã số Đề nghị: Bắt buộc */}
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
-                  <span translate="no" className="notranslate">Mã số Đề Nghị (tuỳ chọn):</span>
+                  <span translate="no" className="notranslate">Mã số Đề Nghị: *</span>
                 </label>
                 <input
                   type="text"
+                  required
                   value={newReqDocNo}
                   onChange={(e) => setNewReqDocNo(e.target.value)}
                   placeholder="VD: ĐN-TN-08/26..."
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  className="w-full px-3 py-2 border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 bg-amber-50/40 text-slate-900 font-medium placeholder:text-slate-400"
                 />
               </div>
 
-              {/* Đính kèm hình ảnh mẫu thử nghiệm (Tối đa 2 ảnh - Nhỏ gọn, tối ưu di động) */}
+              {/* Đính kèm hình ảnh mẫu thử nghiệm (Tối đa 2 ảnh - Nhỏ gọn, tối ưu chiều cao) */}
               <div onPaste={handleNewTrialPaste}>
                 <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
@@ -4623,7 +4651,7 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                 <div className="flex items-center gap-2 flex-wrap">
                   {/* Danh sách ảnh đã đính kèm */}
                   {newImages.map((imgUrl, idx) => (
-                    <div key={idx} className="relative group w-14 h-14 rounded-lg overflow-hidden border border-teal-400 bg-slate-100 shrink-0 shadow-3xs">
+                    <div key={idx} className="relative group w-9 h-9 rounded-lg overflow-hidden border border-teal-400 bg-slate-100 shrink-0 shadow-3xs">
                       <img 
                         src={imgUrl} 
                         alt={`Ảnh mẫu ${idx + 1}`} 
@@ -4633,19 +4661,19 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                       <button
                         type="button"
                         onClick={() => setNewImages(prev => prev.filter((_, i) => i !== idx))}
-                        className="absolute top-0.5 right-0.5 w-4 h-4 bg-rose-600/90 hover:bg-rose-700 text-white rounded-full flex items-center justify-center shadow cursor-pointer transition-all active:scale-90"
+                        className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-rose-600/90 hover:bg-rose-700 text-white rounded-full flex items-center justify-center shadow cursor-pointer transition-all active:scale-90"
                         title="Xóa ảnh này"
                       >
-                        <X className="w-2.5 h-2.5 stroke-[3]" />
+                        <X className="w-2 h-2 stroke-[3]" />
                       </button>
                     </div>
                   ))}
 
-                  {/* Nút thêm ảnh */}
+                  {/* Nút thêm ảnh - Rút ngắn chiều cao h-9 */}
                   {newImages.length < 2 && (
                     <label 
                       htmlFor="new-trial-image-upload" 
-                      className={`h-14 px-3 border border-dashed rounded-lg flex items-center justify-center gap-1.5 cursor-pointer transition-all text-xs font-semibold ${
+                      className={`h-9 px-3 border border-dashed rounded-lg flex items-center justify-center gap-1.5 cursor-pointer transition-all text-xs font-semibold ${
                         isCompressingNewImages
                           ? "bg-slate-100 border-slate-300 text-slate-400 cursor-wait"
                           : "bg-teal-50/50 hover:bg-teal-100/60 border-teal-400 text-teal-800 active:scale-95"
@@ -4679,17 +4707,17 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                 </div>
               </div>
 
-              {/* Ghi chú khởi tạo */}
+              {/* Ghi chú khởi tạo - 1 dòng tối ưu không gian */}
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
                   <span translate="no" className="notranslate">Ghi chú khởi tạo bước 1 (ĐN thử nghiệm):</span>
                 </label>
-                <textarea
+                <input
+                  type="text"
                   value={newNotes}
                   onChange={(e) => setNewNotes(e.target.value)}
-                  rows={2}
                   placeholder="Ghi chú yêu cầu kỹ thuật, tiêu chuẩn test..."
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-slate-900 placeholder:text-slate-400"
                 />
               </div>
 
@@ -4697,14 +4725,14 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
               <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold"
+                  onClick={handleCancelCreateTrial}
+                  className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold cursor-pointer transition-colors"
                 >
                   <span translate="no" className="notranslate">Hủy bỏ</span>
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold shadow-sm flex items-center gap-1.5"
+                  className="px-5 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold shadow-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
                 >
                   <Plus className="w-4 h-4" />
                   <span translate="no" className="notranslate">Khởi Tạo Tiến Trình</span>
@@ -4712,6 +4740,39 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
               </div>
             </form>
           </div>
+
+          {/* Visual Confirm Cancelation Modal */}
+          {showCreateCancelConfirm && (
+            <div className="fixed inset-0 z-[70] bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+              <div className="bg-white rounded-2xl w-full max-w-[320px] p-5 shadow-2xl border border-slate-100 flex flex-col items-center text-center animate-in fade-in zoom-in-95 duration-200">
+                <div className="w-12 h-12 bg-amber-50 rounded-full flex items-center justify-center mb-3 text-amber-500">
+                  <AlertTriangle className="w-6 h-6" />
+                </div>
+                <h3 className="font-bold text-slate-950 text-sm mb-2">
+                  <span translate="no" className="notranslate">Xác nhận hủy bỏ?</span>
+                </h3>
+                <p className="text-slate-500 text-xs mb-5 leading-relaxed">
+                  <span translate="no" className="notranslate">Chủ quản có chắc chắn muốn hủy bỏ không? Toàn bộ nhập liệu thử nghiệm chưa lưu sẽ bị mất hoàn toàn.</span>
+                </p>
+                <div className="grid grid-cols-2 gap-2.5 w-full">
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateCancelConfirm(false)}
+                    className="py-2.5 text-xs font-bold border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 active:bg-slate-100 transition-colors cursor-pointer"
+                  >
+                    <span translate="no" className="notranslate">QUAY LẠI</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetCreateForm}
+                    className="py-2.5 text-xs font-bold bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl transition-colors shadow-sm cursor-pointer"
+                  >
+                    <span translate="no" className="notranslate">ĐỒNG Ý</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

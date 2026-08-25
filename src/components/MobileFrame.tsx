@@ -9454,6 +9454,22 @@ App Link: ${window.location.origin}`;
                     <option value="CLOSED">Đã đóng</option>
                   </select>
                 </div>
+
+                {/* Visual Legend Bar */}
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1 text-[8.5px] font-bold flex-wrap">
+                  <div className="flex items-center gap-1 text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                    <T><span translate="no" className="notranslate">Xanh lá: Đã đóng / Xong</span></T>
+                  </div>
+                  <div className="flex items-center gap-1 text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                    <T><span translate="no" className="notranslate">Đỏ: Quá hạn tiếp nhận</span></T>
+                  </div>
+                  <div className="flex items-center gap-1 text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                    <T><span translate="no" className="notranslate">Xanh dương: Điểm sáng / Kaizen</span></T>
+                  </div>
+                </div>
               </div>
 
               {/* Task Items List */}
@@ -9507,47 +9523,92 @@ App Link: ${window.location.origin}`;
                       const isResolved = isMyResolved(task);
                       const isClosed = (task.resolutions && task.resolutions.length > 0 && task.resolutions.every((res) => res.status === "Đã xử lý")) || !!task.qcConfirmed;
                       const hasResolutions = (task.resolutions && task.resolutions.length > 0) || !!task.qcConfirmed;
+                      const isDsa = task.reportType === "DSA" || !!task.isSpotlight;
+
+                      // Tính quá hạn tiếp nhận (>24h chưa có người tiếp nhận và chưa có giải pháp, không áp dụng cho DSA và việc đã đóng)
+                      const hasReceivers = task.receiverTimestamps && Object.keys(task.receiverTimestamps).length > 0;
+                      let isOverdueAck = false;
+                      if (!isClosed && !isDsa && !hasReceivers && !hasResolutions) {
+                        try {
+                          const startMs = parseReportTimestamp(task.timestamp).getTime();
+                          if (!isNaN(startMs) && Date.now() - startMs > 24 * 60 * 60 * 1000) {
+                            isOverdueAck = true;
+                          }
+                        } catch (e) {
+                          isOverdueAck = false;
+                        }
+                      }
+
+                      // Xác định class bao viền và màu nền theo 3 nhóm ưu tiên:
+                      // 1. Hoàn thành: Tô màu xanh lá nhạt + khung viền Xanh Green
+                      // 2. Quá hạn tiếp nhận: Tô màu đỏ nhạt + khung viền Đỏ
+                      // 3. Điểm sáng / Kaizen: Tô màu xanh dương nhạt + khung viền Xanh Blue
+                      // 4. Còn lại: Viền và nền trắng/trung tính tiêu chuẩn
+                      let cardStyle = "bg-white border-slate-200 hover:border-slate-300";
+                      if (isClosed) {
+                        cardStyle = "bg-emerald-50/75 border-emerald-400 ring-1 ring-emerald-300/80 shadow-emerald-100/50";
+                      } else if (isOverdueAck) {
+                        cardStyle = "bg-rose-50/80 border-rose-400 ring-1 ring-rose-300/80 shadow-rose-100/50";
+                      } else if (isDsa) {
+                        cardStyle = "bg-blue-50/65 border-blue-400 ring-1 ring-blue-300/80 shadow-blue-100/50";
+                      }
 
                       return (
                         <div
                           key={task.id}
-                          className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs space-y-2.5 hover:border-blue-200 transition-all"
+                          className={`rounded-2xl border-2 p-3.5 shadow-xs space-y-2.5 transition-all ${cardStyle}`}
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 text-[9px] font-black">
                                 {task.category}
                               </span>
+
+                              {/* Status Tag */}
                               {isClosed ? (
-                                <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
-                                  Đã đóng
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                  <CheckCircle className="w-2.5 h-2.5 text-emerald-600" />
+                                  <T><span translate="no" className="notranslate">Đã đóng (Hoàn tất)</span></T>
+                                </span>
+                              ) : isOverdueAck ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">
+                                  <AlertTriangle className="w-2.5 h-2.5 text-rose-600" />
+                                  <T><span translate="no" className="notranslate">Quá hạn tiếp nhận (&gt;24h)</span></T>
+                                </span>
+                              ) : isDsa ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black bg-blue-100 text-blue-800 border border-blue-300">
+                                  <Sparkles className="w-2.5 h-2.5 text-blue-600" />
+                                  <T><span translate="no" className="notranslate">Điểm sáng / Kaizen</span></T>
                                 </span>
                               ) : hasResolutions ? (
-                                <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                  Đã có GP
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                                  <T><span translate="no" className="notranslate">Đã có GP</span></T>
                                 </span>
                               ) : (
-                                <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                                  Đang xử lý
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                  <Clock className="w-2.5 h-2.5 text-amber-600" />
+                                  <T><span translate="no" className="notranslate">Đang xử lý</span></T>
                                 </span>
                               )}
+
                               {isCreated && (
                                 <span className="px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[8.5px] font-semibold">
-                                  Tôi tạo
+                                  <T><span translate="no" className="notranslate">Tôi tạo</span></T>
                                 </span>
                               )}
                               {isAssigned && (
                                 <span className="px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 text-[8.5px] font-semibold border border-amber-200">
-                                  Được phân công
+                                  <T><span translate="no" className="notranslate">Được phân công</span></T>
                                 </span>
                               )}
                               {isResolved && (
                                 <span className="px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-700 text-[8.5px] font-semibold border border-purple-200">
-                                  Tham gia GP
+                                  <T><span translate="no" className="notranslate">Tham gia GP</span></T>
                                 </span>
                               )}
                             </div>
-                            <span className="text-[9px] text-slate-400 shrink-0">
+                            <span className="text-[9px] text-slate-400 shrink-0 font-mono">
                               {task.timestamp ? String(task.timestamp).slice(0, 10) : ""}
                             </span>
                           </div>
@@ -9562,10 +9623,10 @@ App Link: ${window.location.origin}`;
                             </p>
                           )}
 
-                          <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[9px] text-slate-500">
+                          <div className="flex items-center justify-between pt-2 border-t border-slate-200/70 text-[9px] text-slate-500">
                             <div className="flex items-center gap-1">
                               <Building2 className="w-3 h-3 text-slate-400" />
-                              <span>{task.factory}</span>
+                              <span className="font-semibold text-slate-700">{task.factory}</span>
                               {task.uploaderDepartment && <span>• {task.uploaderDepartment}</span>}
                             </div>
                             <button
@@ -9583,7 +9644,15 @@ App Link: ${window.location.origin}`;
                                   }
                                 }, 250);
                               }}
-                              className="px-2 py-1 rounded-lg bg-blue-50 text-blue-700 font-bold hover:bg-blue-100 transition-colors flex items-center gap-1 cursor-pointer border-none"
+                              className={`px-2 py-1 rounded-lg font-bold transition-colors flex items-center gap-1 cursor-pointer border ${
+                                isClosed
+                                  ? "bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200"
+                                  : isOverdueAck
+                                  ? "bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-200"
+                                  : isDsa
+                                  ? "bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200"
+                                  : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                              }`}
                             >
                               <ExternalLink className="w-3 h-3" />
                               <T><span translate="no" className="notranslate">Xem chi tiết</span></T>
