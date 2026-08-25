@@ -4167,7 +4167,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
   const [showOnlineUsersDrawer, setShowOnlineUsersDrawer] = useState(false);
   const [confirmDeletePartnerUser, setConfirmDeletePartnerUser] = useState<User | null>(null);
   const [onlineSearchTerm, setOnlineSearchTerm] = useState("");
-  const [onlineTabFilter, setOnlineTabFilter] = useState<"TOPICS" | "INBOX" | "ALL">("TOPICS");
+  const [onlineTabFilter, setOnlineTabFilter] = useState<"ONLINE" | "TOPICS" | "INBOX" | "ALL">("ONLINE");
   
   const [activeDirectChatUser, setActiveDirectChatUser] = useState<User | null>(null);
   const [directMessageInput, setDirectMessageInput] = useState("");
@@ -7051,11 +7051,11 @@ App Link: ${window.location.origin}`;
                 <button 
                   onClick={() => {
                     setOnlineSearchTerm("");
-                    setOnlineTabFilter("ALL");
+                    setOnlineTabFilter("ONLINE");
                     setShowOnlineUsersDrawer(true);
                   }}
                   className="relative hover:scale-115 active:scale-95 transition-all p-1 cursor-pointer bg-transparent border-none outline-none shrink-0"
-                  title="Số nhân viên đang online"
+                  title="Số nhân viên đang trực tuyến (Nhấp để xem danh sách trực tuyến)"
                 >
                   <Users className="w-[18px] h-[18px] text-emerald-300 pointer-events-none" />
                   <span className="absolute -top-1 -right-1 bg-emerald-500 text-[8px] text-white font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border border-slate-900 leading-none shadow-sm animate-pulse pointer-events-none">
@@ -12048,7 +12048,7 @@ App Link: ${window.location.origin}`;
       </>)}
 
       {/* Floating Action Buttons Area (Dockable to Right Edge & Draggable Up/Down) */}
-      {activeBottomTab === "BAO_CAO" && !showTrash && !showMobileCloudQuota && (
+      {activeBottomTab === "BAO_CAO" && !showTrash && !showMobileCloudQuota && !showOnlineUsersDrawer && (
         isFabDocked ? (
           /* Thanh nút thu gọn nhỏ ở sát mép phải - Thao tác trực tiếp được cả Lên top, Tạo mới và Mở rộng, Khoảng hở hở rộng gấp 3 lần và Rê lên xuống được */
           <div
@@ -14765,16 +14765,20 @@ App Link: ${window.location.origin}`}
                     </button>
 
                     <div className="flex items-center gap-1.5">
-                      {onlineTabFilter === "TOPICS" ? (
+                      {onlineTabFilter === "ONLINE" ? (
+                        <Users className="w-4 h-4 text-emerald-600 animate-pulse" />
+                      ) : onlineTabFilter === "TOPICS" ? (
                         <Flame className="w-4 h-4 text-amber-600 fill-amber-500" />
                       ) : onlineTabFilter === "INBOX" ? (
                         <MessageSquare className="w-4 h-4 text-emerald-600 stroke-[2.5]" />
                       ) : (
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-xs" />
+                        <Users className="w-4 h-4 text-slate-600" />
                       )}
                       <span className="font-black text-[13px] text-emerald-900 tracking-tight uppercase">
                         <T>
-                          {onlineTabFilter === "TOPICS"
+                          {onlineTabFilter === "ONLINE"
+                            ? "TRỰC TUYẾN THỜI GIAN THỰC"
+                            : onlineTabFilter === "TOPICS"
                             ? "THẢO LUẬN CHUYÊN ĐỀ"
                             : onlineTabFilter === "INBOX"
                             ? "HỘP THOẠI"
@@ -14783,7 +14787,9 @@ App Link: ${window.location.origin}`}
                       </span>
                       <span translate="no" className="bg-emerald-100 text-emerald-800 text-[11px] font-black px-2 py-0.5 rounded-full font-mono ml-0.5 notranslate">
                         (
-                        {onlineTabFilter === "TOPICS"
+                        {onlineTabFilter === "ONLINE"
+                          ? onlineCount
+                          : onlineTabFilter === "TOPICS"
                           ? topicsBadgeCount
                           : onlineTabFilter === "INBOX"
                           ? uniqueConvCount
@@ -14831,7 +14837,9 @@ App Link: ${window.location.origin}`}
                       <input
                         type="text"
                         placeholder={
-                          onlineTabFilter === "TOPICS"
+                          onlineTabFilter === "ONLINE"
+                            ? "Tìm nhân sự đang online..."
+                            : onlineTabFilter === "TOPICS"
                             ? "Tìm chuyên đề, người tạo, mã KPH..."
                             : onlineTabFilter === "INBOX"
                             ? "Tìm tin nhắn, tên người nhắn..."
@@ -14851,50 +14859,65 @@ App Link: ${window.location.origin}`}
                       )}
                     </div>
 
-                    {/* 3 Tab Filters */}
-                    <div className="flex bg-slate-100 p-0.5 rounded-xl text-[10.5px] font-extrabold overflow-x-auto scrollbar-none gap-1">
+                    {/* 4 Tab Filters */}
+                    <div className="flex bg-slate-100 p-0.5 rounded-xl text-[10px] font-extrabold overflow-x-auto scrollbar-none gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setOnlineTabFilter("ONLINE")}
+                        className={`flex-1 py-1.5 px-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 shrink-0 ${
+                          onlineTabFilter === "ONLINE"
+                            ? "bg-white text-emerald-800 shadow-xs font-black ring-1 ring-emerald-300"
+                            : "text-slate-500 hover:text-slate-800"
+                        }`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span><T>ONLINE</T></span>
+                        <span className="bg-emerald-100 text-emerald-800 text-[8.5px] px-1.5 py-0.2 rounded-full font-mono font-black ml-0.5">
+                          {onlineCount}
+                        </span>
+                      </button>
                       <button
                         type="button"
                         onClick={() => setOnlineTabFilter("TOPICS")}
-                        className={`flex-1 py-1.5 px-2 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                        className={`flex-1 py-1.5 px-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 shrink-0 ${
                           onlineTabFilter === "TOPICS"
-                            ? "bg-white text-amber-900 shadow-xs font-black"
+                            ? "bg-white text-amber-900 shadow-xs font-black ring-1 ring-amber-300"
                             : "text-slate-500 hover:text-slate-800"
                         }`}
                       >
                         <span>🔥</span>
                         <span><T>CHUYÊN ĐỀ</T></span>
-                        <span className="bg-amber-100 text-amber-900 text-[9px] px-1.5 py-0.2 rounded-full font-mono font-black ml-0.5">
+                        <span className="bg-amber-100 text-amber-900 text-[8.5px] px-1.5 py-0.2 rounded-full font-mono font-black ml-0.5">
                           {topicsBadgeCount}
                         </span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setOnlineTabFilter("INBOX")}
-                        className={`flex-1 py-1.5 px-2 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                        className={`flex-1 py-1.5 px-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 shrink-0 ${
                           onlineTabFilter === "INBOX"
-                            ? "bg-white text-emerald-800 shadow-xs font-black"
+                            ? "bg-white text-emerald-800 shadow-xs font-black ring-1 ring-emerald-300"
                             : "text-slate-500 hover:text-slate-800"
                         }`}
                       >
                         <span>💬</span>
                         <span><T>1:1</T></span>
-                        <span className="bg-emerald-100 text-emerald-800 text-[9px] px-1.5 py-0.2 rounded-full font-mono font-black ml-0.5">
+                        <span className="bg-emerald-100 text-emerald-800 text-[8.5px] px-1.5 py-0.2 rounded-full font-mono font-black ml-0.5">
                           {uniqueConvCount}
                         </span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setOnlineTabFilter("ALL")}
-                        className={`flex-1 py-1.5 px-2 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                        className={`flex-1 py-1.5 px-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 shrink-0 ${
                           onlineTabFilter === "ALL"
-                            ? "bg-white text-slate-800 shadow-xs font-black"
+                            ? "bg-white text-slate-800 shadow-xs font-black ring-1 ring-slate-300"
                             : "text-slate-500 hover:text-slate-800"
                         }`}
                       >
                         <span>👥</span>
                         <span><T>TẤT CẢ</T></span>
-                        <span className="bg-slate-200 text-slate-700 text-[9px] px-1.5 py-0.2 rounded-full font-mono font-black ml-0.5">
+                        <span className="bg-slate-200 text-slate-700 text-[8.5px] px-1.5 py-0.2 rounded-full font-mono font-black ml-0.5">
                           {users.length}
                         </span>
                       </button>
@@ -15264,6 +15287,7 @@ App Link: ${window.location.origin}`}
 
                 const processedUsers = getOnlineUsers()
                   .filter((u) => {
+                    if (onlineTabFilter === "ONLINE" && !u.isOnlineSimulated) return false;
                     if (!searchClean) return true;
                     return (
                       u.fullName.toLowerCase().includes(searchClean) ||
@@ -15273,6 +15297,9 @@ App Link: ${window.location.origin}`}
                     );
                   })
                   .sort((a, b) => {
+                    if (onlineTabFilter === "ONLINE") {
+                      return (b.lastActiveTime || 0) - (a.lastActiveTime || 0);
+                    }
                     // Người đang online sẽ được ưu tiên đưa lên đầu danh sách
                     if (a.isOnlineSimulated && !b.isOnlineSimulated) return -1;
                     if (!a.isOnlineSimulated && b.isOnlineSimulated) return 1;
@@ -15289,7 +15316,11 @@ App Link: ${window.location.origin}`}
                         <Users className="w-6 h-6 text-slate-400" />
                       </div>
                       <div className="text-slate-400 text-xs font-bold leading-normal">
-                        <T>Không tìm thấy nhân sự phù hợp!</T>
+                        <T>
+                          {onlineTabFilter === "ONLINE"
+                            ? "Hiện không có nhân sự trực tuyến phù hợp!"
+                            : "Không tìm thấy nhân sự phù hợp!"}
+                        </T>
                       </div>
                     </div>
                   );
@@ -15419,18 +15450,6 @@ App Link: ${window.location.origin}`}
               })()}
             </div>
           </div>
-
-          {/* Scroll to Top Floating Button on Online Users page */}
-          {onlineScrollTop > 100 && (
-            <button
-              type="button"
-              onClick={() => onlineScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
-              className="absolute bottom-36 right-5 w-10 h-10 bg-blue-600 hover:bg-blue-700 active:scale-90 text-white rounded-full flex items-center justify-center shadow-lg transition-all z-50 cursor-pointer"
-              title="Lên đầu trang"
-            >
-              <ArrowUp className="w-5 h-5 text-white stroke-[2.5px]" />
-            </button>
-          )}
         </div>
       )}
 
