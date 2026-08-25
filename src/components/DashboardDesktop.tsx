@@ -9752,27 +9752,27 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
 
                                       <div className="shrink-0 flex flex-col items-end gap-1">
                                         {r.reportType === "RRO" ? (
-                                          <span className="text-[11px] font-black text-white flex items-center gap-1 bg-blue-600 border border-blue-700 px-1.5 py-0.5 rounded-md leading-none shadow-3xs shrink-0 select-none">
+                                          <span className="text-[11px] font-black text-white inline-flex items-center gap-1.5 bg-blue-600 border border-blue-700 px-2.5 py-1 rounded-full leading-tight shadow-3xs shrink-0 select-none">
                                             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block" />
                                             <T><span translate="no" className="notranslate">⚠️ RỦI RO (RRO)</span></T>
                                           </span>
                                         ) : r.reportType === "KNN" || (r.reportType === "KPH" && r.kphSubtype === "BN") ? (
-                                          <span className="text-[11px] font-black text-white flex items-center gap-1 bg-red-600 border border-red-700 px-1.5 py-0.5 rounded-md leading-none shadow-3xs shrink-0 select-none">
+                                          <span className="text-[11px] font-black text-white inline-flex items-center gap-1.5 bg-red-600 border border-red-700 px-2.5 py-1 rounded-full leading-tight shadow-3xs shrink-0 select-none">
                                             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block" />
                                             <T><span translate="no" className="notranslate">🚨 ĐIỂM KPH (BN)</span></T>
                                           </span>
                                         ) : r.reportType === "KPH" || r.isAbnormal ? (
-                                          <span className="text-[11px] font-black text-white flex items-center gap-1 bg-amber-600 border border-amber-700 px-1.5 py-0.5 rounded-md leading-none shadow-3xs shrink-0 select-none">
+                                          <span className="text-[11px] font-black text-white inline-flex items-center gap-1.5 bg-amber-600 border border-amber-700 px-2.5 py-1 rounded-full leading-tight shadow-3xs shrink-0 select-none">
                                             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block" />
                                             <T><span translate="no" className="notranslate">⚠️ ĐIỂM KPH (NB)</span></T>
                                           </span>
                                         ) : r.reportType === "DSA" || r.isSpotlight ? (
-                                          <span className="text-[11px] font-black text-white flex items-center gap-1 bg-emerald-600 border border-emerald-700 px-1.5 py-0.5 rounded-md leading-none shadow-3xs shrink-0 select-none">
+                                          <span className="text-[11px] font-black text-white inline-flex items-center gap-1.5 bg-emerald-600 border border-emerald-700 px-2.5 py-1 rounded-full leading-tight shadow-3xs shrink-0 select-none">
                                             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block" />
                                             <T><span translate="no" className="notranslate">⭐ ĐIỂM SÁNG (DSA)</span></T>
                                           </span>
                                         ) : (
-                                          <span className="text-[11px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded select-none">
+                                          <span className="text-[11px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-full select-none leading-tight">
                                             <T><span translate="no" className="notranslate">NORMAL</span></T>
                                           </span>
                                         )}
@@ -9846,8 +9846,8 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                     {/* Cross-Company Transfer Bar */}
                                     {(r.targetCompany || r.assignedCompany || (r.transferHistory && r.transferHistory.length > 0)) ? (
                                       <div className="border-t border-indigo-100/90 bg-indigo-50/50 px-2.5 py-1.5 flex items-center justify-between text-[11.5px] select-none">
-                                        <div className="flex items-center gap-1 min-w-0">
-                                          <span className="px-1 py-0.2 rounded bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wider shrink-0">
+                                        <div className="flex items-center gap-1.5 min-w-0">
+                                          <span className="px-2 py-0.8 rounded-md bg-indigo-600 text-white text-[10.5px] font-black uppercase tracking-wider shrink-0 inline-flex items-center gap-1 leading-normal shadow-3xs">
                                             🔄 Liên CTY
                                           </span>
                                           <span className="font-extrabold text-indigo-900 truncate text-[11.5px]">
@@ -9867,7 +9867,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                                 setTransferCompanyModalReport(r);
                                                 setTransferTargetCompany(r.targetCompany || "DNP");
                                               }}
-                                              className={`font-extrabold text-[10.5px] border px-1.5 py-0.5 rounded transition-colors shrink-0 shadow-3xs ${
+                                              className={`font-extrabold text-[10.5px] border px-2 py-0.8 rounded-md transition-colors shrink-0 shadow-3xs ${
                                                 isAllowed
                                                   ? "text-indigo-700 hover:text-indigo-900 bg-white hover:bg-indigo-100 border-indigo-300 cursor-pointer"
                                                   : "text-slate-400 bg-slate-100 border-slate-200 cursor-not-allowed opacity-75"
@@ -9898,7 +9898,7 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                                                 const defaultTarget = (r.factory.includes("DNP") || r.factory.includes("BBM") || r.factory.includes("BBC")) ? "TPP" : "DNP";
                                                 setTransferTargetCompany(defaultTarget);
                                               }}
-                                              className={`font-bold text-[10.5px] border px-1.5 py-0.2 rounded transition-colors shrink-0 ${
+                                              className={`font-bold text-[10.5px] border px-2 py-0.8 rounded-md transition-colors shrink-0 ${
                                                 isAllowed
                                                   ? "text-slate-600 hover:text-indigo-700 bg-white hover:bg-indigo-50 border-slate-250 hover:border-indigo-300 cursor-pointer"
                                                   : "text-slate-400 bg-slate-100 border-slate-200 cursor-not-allowed opacity-75"

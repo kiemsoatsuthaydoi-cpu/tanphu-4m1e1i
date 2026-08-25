@@ -6644,10 +6644,15 @@ App Link: ${window.location.origin}`;
   };
 
   const handleFloatingGoHome = () => {
+    setShowMobileCloudQuota(false);
     setShowTrash(false);
+    setShowMobileSidebar(false);
     setShowNotifDrawer(false);
     setShowQrCodeView(false);
     setShowOnlineUsersDrawer(false);
+    setShowAboutAndonModal(false);
+    setShowKnowledgeModal(false);
+    setShowLogoutConfirm(false);
     setActiveDirectChatUser(null);
     setActiveForumTopicId(null);
     setActiveBottomTab("BAO_CAO");
@@ -6667,6 +6672,7 @@ App Link: ${window.location.origin}`;
 
   // Check if current view is Main 4M1E1I Feed or Trial Tracking Hub (both have their own FAB)
   const isFeedMainPage = (
+    !showMobileCloudQuota &&
     !showTrash && 
     !showQrCodeView && 
     !showNotifDrawer && 
@@ -6956,7 +6962,10 @@ App Link: ${window.location.origin}`;
               {/* --- 1. ARCHIVE / TRASH (Secondary) --- */}
               {currentUser?.role !== UserRole.STAFF && currentUser?.role !== UserRole.REVIEWER && (
                 <button
-                  onClick={() => setShowTrash(true)}
+                  onClick={() => {
+                    setShowTrash(true);
+                    setShowMobileCloudQuota(false);
+                  }}
                   className="relative hover:scale-115 active:scale-95 transition-transform p-1 cursor-pointer shrink-0"
                   title="Lưu trữ / Thùng rác"
                 >
@@ -7112,7 +7121,7 @@ App Link: ${window.location.origin}`;
       </div>
 
       {/* Internal layout controls (Search inputs & Status filters) */}
-      {activeBottomTab === "BAO_CAO" && mobileFeedSubTab === "FEED" && (
+      {activeBottomTab === "BAO_CAO" && mobileFeedSubTab === "FEED" && !showMobileCloudQuota && !showTrash && (
         <div className={`transition-all duration-300 overflow-hidden shrink-0 ${
           showFilters ? (mobileFeedViewMode === "TRIAL" ? "max-h-[140px] opacity-100" : "max-h-[105px] opacity-100") : "max-h-0 opacity-0 pointer-events-none"
         }`}>
@@ -12039,7 +12048,7 @@ App Link: ${window.location.origin}`;
       </>)}
 
       {/* Floating Action Buttons Area (Dockable to Right Edge & Draggable Up/Down) */}
-      {activeBottomTab === "BAO_CAO" && !showTrash && (
+      {activeBottomTab === "BAO_CAO" && !showTrash && !showMobileCloudQuota && (
         isFabDocked ? (
           /* Thanh nút thu gọn nhỏ ở sát mép phải - Thao tác trực tiếp được cả Lên top, Tạo mới và Mở rộng, Khoảng hở hở rộng gấp 3 lần và Rê lên xuống được */
           <div
@@ -12221,6 +12230,13 @@ App Link: ${window.location.origin}`;
         <button
           type="button"
           onClick={() => {
+            setShowMobileCloudQuota(false);
+            setShowTrash(false);
+            setShowMobileSidebar(false);
+            setShowNotifDrawer(false);
+            setShowQrCodeView(false);
+            setShowOnlineUsersDrawer(false);
+            setActiveDirectChatUser(null);
             setActiveBottomTab("CA_NHAN");
           }}
           className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors min-w-0 overflow-hidden ${
@@ -12241,6 +12257,13 @@ App Link: ${window.location.origin}`;
         <button
           type="button"
           onClick={() => {
+            setShowMobileCloudQuota(false);
+            setShowTrash(false);
+            setShowMobileSidebar(false);
+            setShowNotifDrawer(false);
+            setShowQrCodeView(false);
+            setShowOnlineUsersDrawer(false);
+            setActiveDirectChatUser(null);
             setActiveBottomTab("BAO_CAO");
             setMobileFeedSubTab("PROPOSAL");
             setMobileFeedViewMode("REPORT");
@@ -12281,7 +12304,14 @@ App Link: ${window.location.origin}`;
         <button
           type="button"
           onClick={() => {
-            if (activeBottomTab === "BAO_CAO" && mobileFeedSubTab === "FEED") {
+            setShowMobileCloudQuota(false);
+            setShowTrash(false);
+            setShowMobileSidebar(false);
+            setShowNotifDrawer(false);
+            setShowQrCodeView(false);
+            setShowOnlineUsersDrawer(false);
+            setActiveDirectChatUser(null);
+            if (activeBottomTab === "BAO_CAO" && mobileFeedSubTab === "FEED" && !showMobileCloudQuota && !showTrash) {
               setShowNewsCompanyPopover(prev => !prev);
             } else {
               setActiveBottomTab("BAO_CAO");
@@ -12339,7 +12369,16 @@ App Link: ${window.location.origin}`;
         {(currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.REVIEWER || isHQOrManagerUser(currentUser)) && (
           <button
             type="button"
-            onClick={() => setActiveBottomTab("PHE_DUYET")}
+            onClick={() => {
+              setShowMobileCloudQuota(false);
+              setShowTrash(false);
+              setShowMobileSidebar(false);
+              setShowNotifDrawer(false);
+              setShowQrCodeView(false);
+              setShowOnlineUsersDrawer(false);
+              setActiveDirectChatUser(null);
+              setActiveBottomTab("PHE_DUYET");
+            }}
             className={`flex flex-col items-center justify-center py-0.5 border-none bg-transparent cursor-pointer transition-colors min-w-0 overflow-visible ${
               activeBottomTab === "PHE_DUYET" ? "text-amber-600 font-extrabold" : "text-slate-400 hover:text-amber-600"
             }`}
@@ -16264,8 +16303,8 @@ App Link: ${window.location.origin}`}
             onClick={() => setShowMobileSidebar(false)}
           />
 
-          {/* Floating Drawer Panel (Tự co giãn chiều cao theo nội dung huy hiệu thi đua, có độ cao tối thiểu thanh thoát tạo khoảng hở trên nút Đăng xuất, cách thanh menu đáy 5pt) */}
-          <div className="relative w-[85%] max-w-[320px] min-h-[400px] sm:min-h-[420px] max-h-[calc(100%-8px)] bg-slate-50 shadow-2xl flex flex-col z-10 animate-in slide-in-from-right duration-250 border-2 border-blue-500/30 rounded-2xl sm:rounded-3xl overflow-hidden ring-4 ring-blue-500/10">
+          {/* Floating Drawer Panel (Tự co giãn chiều cao theo nội dung huy hiệu thi đua, vươn cao lên trên tạo khoảng hở thông thoáng) */}
+          <div className="relative w-[85%] max-w-[325px] min-h-[455px] sm:min-h-[480px] max-h-[calc(100%-8px)] bg-slate-50 shadow-2xl flex flex-col z-10 animate-in slide-in-from-right duration-250 border-2 border-blue-500/30 rounded-2xl sm:rounded-3xl overflow-hidden ring-4 ring-blue-500/10">
             
             {/* 1. HEADER PROFILE THU NHỎ - TINH GỌN PHƯƠNG ÁN 1 */}
             <div className="bg-gradient-to-r from-blue-700 via-blue-800 to-indigo-900 text-white px-3.5 py-2.5 shrink-0 shadow-sm relative overflow-hidden">
@@ -16507,6 +16546,8 @@ App Link: ${window.location.origin}`}
                   <button
                     type="button"
                     onClick={() => {
+                      setShowMobileCloudQuota(false);
+                      setShowTrash(false);
                       setShowMobileSidebar(false);
                       setActiveBottomTab("PHAN_TICH");
                     }}
