@@ -5683,11 +5683,11 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                     { id: "PHÊ_DUYỆT", label: "Phê duyệt nhân sự", icon: UserCheck, count: pendingApprovalsCount, color: "text-amber-400" },
                   ]
                 : []),
-              { id: "FORM_CAPA", label: "Lập CAPA", icon: FileText, color: "text-indigo-400" },
+              { id: "FORM_CAPA", label: "Thiết lập CAPA", icon: FileText, color: "text-indigo-400" },
               { id: "THỬ_NGHIỆM", label: "Sổ nhật ký thử nghiệm", icon: FlaskConical, color: "text-teal-400" },
               { id: "THỐNG_KÊ", label: "Báo cáo thống kê", icon: BarChart4, color: "text-emerald-400" },
               ...(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.REVIEWER
-                ? [{ id: "THÔNG_BÁO", label: "Phát sóng & Ticker", icon: Bell, count: unreadCount, color: "text-yellow-400" }]
+                ? [{ id: "THÔNG_BÁO", label: currentUser.role === UserRole.ADMIN ? "Phát sóng & Ticker" : "Hệ thống Thông báo", icon: Bell, count: unreadCount, color: "text-yellow-400" }]
                 : []),
               { id: "QUY_CHẾ", label: "Kho Tri thức Ai", icon: BookOpen, color: "text-teal-400" },
               { id: "TRAO_ĐỔI", label: "Trao đổi & Hộp thoại 1:1", icon: MessageSquare, count: unreadDirectMessagesCount, color: "text-pink-400" },
@@ -12238,10 +12238,18 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
                   </div>
                   <div>
                     <h1 className="text-lg font-bold text-slate-800 tracking-normal uppercase">
-                      <T>TRUNG TÂM CẤU HÌNH & PHÁT SÓNG BẢNG TIN</T>
+                      {currentUser?.role === UserRole.ADMIN ? (
+                        <T>TRUNG TÂM CẤU HÌNH & PHÁT SÓNG BẢNG TIN</T>
+                      ) : (
+                        <T>HỆ THỐNG THÔNG BÁO</T>
+                      )}
                     </h1>
                     <p className="text-slate-500 text-xs sm:text-sm mt-0.5 font-medium">
-                      <T>Quản trị toàn quyền thông báo chữ chạy (Ticker) khẩn cấp trên đỉnh hệ thống và đăng tin tức trực tuyến tới toàn bộ cán bộ công nhân viên.</T>
+                      {currentUser?.role === UserRole.ADMIN ? (
+                        <T>Quản trị toàn quyền thông báo chữ chạy (Ticker) khẩn cấp trên đỉnh hệ thống và đăng tin tức trực tuyến tới toàn bộ cán bộ công nhân viên.</T>
+                      ) : (
+                        <T>Theo dõi toàn bộ thông báo hệ thống, biến động phát sinh và các cập nhật mới nhất.</T>
+                      )}
                     </p>
                   </div>
                 </div>

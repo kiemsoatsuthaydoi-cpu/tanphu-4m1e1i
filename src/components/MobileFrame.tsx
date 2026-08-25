@@ -22,6 +22,7 @@ import BadgeStatisticsDashboard from "./BadgeStatisticsDashboard";
 import MobileForumView from "./MobileForumView";
 import PersonalContributionTab from "./PersonalContributionTab";
 import { TrialTrackingHub } from "./TrialTrackingHub";
+import { MobileCapaModal, checkReportHasCapa } from "./MobileCapaModal";
 import { db } from "../utils/firebase";
 import { collection, onSnapshot, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { COLLECTIONS, saveDocument, deleteDocument } from "../utils/firebaseSync";
@@ -2613,6 +2614,7 @@ export default function MobileFrame({
   const [showQrCodeView, setShowQrCodeView] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [openChatReportId, setOpenChatReportId] = useState<string | null>(null);
+  const [selectedCapaReportModal, setSelectedCapaReportModal] = useState<QualityReport | null>(null);
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editChatText, setEditChatText] = useState<string>("");
   const [deletingChatId, setDeletingChatId] = useState<string | null>(null);
@@ -11843,6 +11845,30 @@ App Link: ${window.location.origin}`;
                   )}
 
                   <div className="flex items-center gap-1.5 ml-auto shrink-0 flex-nowrap whitespace-nowrap">
+                    {/* Compact CAPA Icon Button to the left of Discussion icon */}
+                    {(() => {
+                      const capaCheck = checkReportHasCapa(report, reports);
+
+                      return (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedCapaReportModal(report);
+                          }}
+                          className={`relative flex items-center justify-center bg-white border border-slate-200 hover:border-indigo-300 rounded-lg p-1 shrink-0 shadow-3xs transition-all hover:scale-105 active:scale-95 cursor-pointer text-slate-400 hover:text-indigo-600 capa-btn-${report.id}`}
+                          title={`Xem biểu mẫu CAPA (BM01-ISO-QT04) - ${capaCheck.isApproved ? (capaCheck.activeVersion || "Đã duyệt") : "Dự thảo ISO"}`}
+                        >
+                          <FileText className={`w-4 h-4 stroke-[2.3px] ${capaCheck.isApproved ? "text-indigo-600 fill-indigo-50" : "text-indigo-500"}`} />
+                          {capaCheck.isApproved ? (
+                            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-1.5 ring-white" title="Đã duyệt"></span>
+                          ) : (
+                            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-blue-400 ring-1.5 ring-white" title="Dự thảo"></span>
+                          )}
+                        </button>
+                      );
+                    })()}
+
                     {(() => {
                       const reportChats = (chats || []).filter((c) => c.reportRefId === report.id);
                       const chatCount = reportChats.length;
@@ -14936,64 +14962,64 @@ App Link: ${window.location.origin}`}
                     </div>
 
                     {/* 4 Tab Filters */}
-                    <div className="flex bg-slate-100 p-0.5 rounded-xl text-[10px] font-extrabold overflow-x-auto scrollbar-none gap-1">
+                    <div className="flex bg-slate-100 p-0.5 rounded-xl text-[9.5px] font-extrabold gap-0.5 w-full items-center">
                       <button
                         type="button"
                         onClick={() => setOnlineTabFilter("ONLINE")}
-                        className={`flex-1 py-1.5 px-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 shrink-0 ${
+                        className={`flex-1 min-w-0 py-1.5 px-0.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-0.5 whitespace-nowrap shrink-0 ${
                           onlineTabFilter === "ONLINE"
                             ? "bg-white text-emerald-800 shadow-xs font-black ring-1 ring-emerald-300"
                             : "text-slate-500 hover:text-slate-800"
                         }`}
                       >
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        <span><T>ONLINE</T></span>
-                        <span className="bg-emerald-100 text-emerald-800 text-[8.5px] px-1.5 py-0.2 rounded-full font-mono font-black ml-0.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                        <span className="whitespace-nowrap"><T>ONLINE</T></span>
+                        <span className="bg-emerald-100 text-emerald-800 text-[8px] px-1 py-0.2 rounded-full font-mono font-black shrink-0">
                           {onlineCount}
                         </span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setOnlineTabFilter("TOPICS")}
-                        className={`flex-1 py-1.5 px-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 shrink-0 ${
+                        className={`flex-1 min-w-0 py-1.5 px-0.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-0.5 whitespace-nowrap shrink-0 ${
                           onlineTabFilter === "TOPICS"
                             ? "bg-white text-amber-900 shadow-xs font-black ring-1 ring-amber-300"
                             : "text-slate-500 hover:text-slate-800"
                         }`}
                       >
-                        <span>🔥</span>
-                        <span><T>CHUYÊN ĐỀ</T></span>
-                        <span className="bg-amber-100 text-amber-900 text-[8.5px] px-1.5 py-0.2 rounded-full font-mono font-black ml-0.5">
+                        <span className="shrink-0 text-[9.5px]">🔥</span>
+                        <span className="whitespace-nowrap"><T>CHUYÊN ĐỀ</T></span>
+                        <span className="bg-amber-100 text-amber-900 text-[8px] px-1 py-0.2 rounded-full font-mono font-black shrink-0">
                           {topicsBadgeCount}
                         </span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setOnlineTabFilter("INBOX")}
-                        className={`flex-1 py-1.5 px-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 shrink-0 ${
+                        className={`flex-1 min-w-0 py-1.5 px-0.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-0.5 whitespace-nowrap shrink-0 ${
                           onlineTabFilter === "INBOX"
                             ? "bg-white text-emerald-800 shadow-xs font-black ring-1 ring-emerald-300"
                             : "text-slate-500 hover:text-slate-800"
                         }`}
                       >
-                        <span>💬</span>
-                        <span><T>1:1</T></span>
-                        <span className="bg-emerald-100 text-emerald-800 text-[8.5px] px-1.5 py-0.2 rounded-full font-mono font-black ml-0.5">
+                        <span className="shrink-0 text-[9.5px]">💬</span>
+                        <span className="whitespace-nowrap"><T>1:1</T></span>
+                        <span className="bg-emerald-100 text-emerald-800 text-[8px] px-1 py-0.2 rounded-full font-mono font-black shrink-0">
                           {uniqueConvCount}
                         </span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setOnlineTabFilter("ALL")}
-                        className={`flex-1 py-1.5 px-1.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 shrink-0 ${
+                        className={`flex-1 min-w-0 py-1.5 px-0.5 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-0.5 whitespace-nowrap shrink-0 ${
                           onlineTabFilter === "ALL"
                             ? "bg-white text-slate-800 shadow-xs font-black ring-1 ring-slate-300"
                             : "text-slate-500 hover:text-slate-800"
                         }`}
                       >
-                        <span>👥</span>
-                        <span><T>TẤT CẢ</T></span>
-                        <span className="bg-slate-200 text-slate-700 text-[8.5px] px-1.5 py-0.2 rounded-full font-mono font-black ml-0.5">
+                        <span className="shrink-0 text-[9.5px]">👥</span>
+                        <span className="whitespace-nowrap"><T>ALL</T></span>
+                        <span className="bg-slate-200 text-slate-700 text-[8px] px-1 py-0.2 rounded-full font-mono font-black shrink-0">
                           {users.length}
                         </span>
                       </button>
@@ -18025,6 +18051,19 @@ App Link: ${window.location.origin}`}
             </div>
           </div>
         </div>
+      )}
+
+      {/* Mobile CAPA Viewer Modal (Form Hình 2 - BM01-ISO-QT04) */}
+      {selectedCapaReportModal && (
+        <MobileCapaModal
+          report={selectedCapaReportModal}
+          allReports={reports}
+          currentUser={currentUser}
+          users={users}
+          branches={branches}
+          onClose={() => setSelectedCapaReportModal(null)}
+          onShowToast={showToast}
+        />
       )}
 
     </div>
