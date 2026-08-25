@@ -20,6 +20,7 @@ import {
 import { QualityReport, CapaData, CapaVersion, User, Branch } from "../types";
 import { parseReportTimestamp } from "../utils/notificationHelper";
 import { generateProfessionalClientCapaDraft } from "../utils/aiCapaGenerator";
+import { isCapaBelongingToReport, isVersionsBelongingToReport } from "./CapaManagementHub";
 
 const T: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <span translate="no" className="notranslate">{children}</span>
@@ -73,6 +74,18 @@ export const checkReportHasCapa = (
 } => {
   if (!report) return { hasCapa: false, isApproved: false, versions: [] };
 
+  // Quy tắc: Chỉ các bản tin Không Phù Hợp (KPH NB / KPH BN) và Rủi Ro / Cảnh Báo (RRO) mới lập CAPA.
+  // Các điểm sáng (DSA / Spotlight) tuyệt đối KHÔNG lập CAPA.
+  const isDsa =
+    report.reportType === "DSA" ||
+    !!report.isSpotlight ||
+    (report as any).category === "GREEN" ||
+    (report as any).isDsaReport;
+
+  if (isDsa) {
+    return { hasCapa: false, isApproved: false, versions: [] };
+  }
+
   const keys = [report.id, report.reportCode].filter(Boolean) as string[];
   let foundVersions: CapaVersion[] = [];
   let foundDraft: CapaData | null = null;
@@ -86,8 +99,11 @@ export const checkReportHasCapa = (
       if (vStr) {
         const parsed = JSON.parse(vStr);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          foundVersions = parsed.filter((v: any) => v && v.data);
-          if (foundVersions.length > 0) break;
+          const valid = parsed.filter((v: any) => v && v.data);
+          if (valid.length > 0 && isVersionsBelongingToReport(valid, report, allReports)) {
+            foundVersions = valid;
+            break;
+          }
         }
       }
     } catch (e) {}
@@ -101,7 +117,7 @@ export const checkReportHasCapa = (
         localStorage.getItem(`capa_draft_${k}`);
       if (fStr) {
         const parsed = JSON.parse(fStr);
-        if (parsed && typeof parsed === "object") {
+        if (parsed && typeof parsed === "object" && isCapaBelongingToReport(parsed, report, allReports)) {
           foundDraft = parsed;
           break;
         }
@@ -109,14 +125,9 @@ export const checkReportHasCapa = (
     } catch (e) {}
   }
 
+  // Chỉ xem là đã duyệt / ban hành khi đã có ít nhất một phiên bản ban hành chính thức (v1.0, v1.1...)
   const isApproved = foundVersions.length > 0;
-  const hasCapa =
-    isApproved ||
-    (foundDraft !== null &&
-      (!!foundDraft.ncDescription ||
-        !!foundDraft.reason ||
-        !!foundDraft.productName ||
-        !!foundDraft.docNo));
+  const hasCapa = isApproved || (foundDraft !== null && (!!foundDraft.ncDescription || !!foundDraft.reason));
 
   const activeVersion = isApproved
     ? foundVersions[0].version

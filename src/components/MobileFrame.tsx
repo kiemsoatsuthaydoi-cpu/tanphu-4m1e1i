@@ -11845,9 +11845,13 @@ App Link: ${window.location.origin}`;
                   )}
 
                   <div className="flex items-center gap-1.5 ml-auto shrink-0 flex-nowrap whitespace-nowrap">
-                    {/* Compact CAPA Icon Button to the left of Discussion icon */}
+                    {/* Compact CAPA Icon Button to the left of Discussion icon - CHỈ hiển thị khi CAPA đã được ban hành / ký duyệt */}
                     {(() => {
+                      const isDsa = report.reportType === "DSA" || !!report.isSpotlight || (report as any).category === "GREEN" || (report as any).isDsaReport;
+                      if (isDsa) return null;
+
                       const capaCheck = checkReportHasCapa(report, reports);
+                      if (!capaCheck.isApproved) return null;
 
                       return (
                         <button
@@ -11857,14 +11861,10 @@ App Link: ${window.location.origin}`;
                             setSelectedCapaReportModal(report);
                           }}
                           className={`relative flex items-center justify-center bg-white border border-slate-200 hover:border-indigo-300 rounded-lg p-1 shrink-0 shadow-3xs transition-all hover:scale-105 active:scale-95 cursor-pointer text-slate-400 hover:text-indigo-600 capa-btn-${report.id}`}
-                          title={`Xem biểu mẫu CAPA (BM01-ISO-QT04) - ${capaCheck.isApproved ? (capaCheck.activeVersion || "Đã duyệt") : "Dự thảo ISO"}`}
+                          title={`Xem biểu mẫu CAPA đã ký duyệt (${capaCheck.activeVersion || "v1.0"})`}
                         >
-                          <FileText className={`w-4 h-4 stroke-[2.3px] ${capaCheck.isApproved ? "text-indigo-600 fill-indigo-50" : "text-indigo-500"}`} />
-                          {capaCheck.isApproved ? (
-                            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-1.5 ring-white" title="Đã duyệt"></span>
-                          ) : (
-                            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-blue-400 ring-1.5 ring-white" title="Dự thảo"></span>
-                          )}
+                          <FileText className="w-4 h-4 stroke-[2.3px] text-indigo-600 fill-indigo-50" />
+                          <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-1.5 ring-white" title="Đã ký duyệt ban hành"></span>
                         </button>
                       );
                     })()}
