@@ -422,12 +422,13 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
 
   // Local state for items
   const [trialItems, setTrialItems] = useState<TrialTrackingItem[]>(() => {
-    let rawDeleted: string[] = [];
+    const DUMMY_BLACKLIST = ["TN-BNI-2608001", "TN-BBM-2608002"];
+    let rawDeleted: string[] = [...DUMMY_BLACKLIST];
     try {
       const savedDeleted = localStorage.getItem("tanphu_deleted_trial_ids_v1");
       if (savedDeleted) {
         const parsed = JSON.parse(savedDeleted);
-        if (Array.isArray(parsed)) rawDeleted = parsed;
+        if (Array.isArray(parsed)) rawDeleted = Array.from(new Set([...rawDeleted, ...parsed]));
       }
     } catch (e) {}
 
@@ -435,15 +436,15 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           return filterTrialItemsWithin30Days(
-            parsed.filter((item: TrialTrackingItem) => !rawDeleted.includes(item.id) && !item.isDeleted),
+            parsed.filter((item: TrialTrackingItem) => item && !rawDeleted.includes(item.id) && !item.isDeleted),
             30
           );
         }
       } catch (e) {}
     }
-    return initialTrialTrackings.filter(item => !rawDeleted.includes(item.id));
+    return [];
   });
 
   const [isCloudConnected, setIsCloudConnected] = useState(true);

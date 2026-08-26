@@ -219,11 +219,15 @@ export async function deleteTrialFromCloud(id: string): Promise<boolean> {
   }
 }
 
+export const DUMMY_TRIAL_BLACKLIST = ["TN-BNI-2608001", "TN-BBM-2608002"];
+
 /**
  * Fetch all Trial Tracking documents from Firestore
  */
 export async function fetchTrialsFromCloud(deletedTrialIds: string[] = []): Promise<TrialTrackingItem[]> {
   if (!db) return [];
+
+  const allDeleted = Array.from(new Set([...deletedTrialIds, ...DUMMY_TRIAL_BLACKLIST]));
 
   try {
     const snap = await getDocs(collection(db, TRIAL_COLLECTION));
@@ -232,7 +236,7 @@ export async function fetchTrialsFromCloud(deletedTrialIds: string[] = []): Prom
     snap.forEach((d) => {
       const data = d.data() as TrialTrackingItem;
       const itemId = d.id || data?.id;
-      if (data && !data.isDeleted && !deletedTrialIds.includes(itemId)) {
+      if (data && !data.isDeleted && !allDeleted.includes(itemId)) {
         items.push({
           ...data,
           id: itemId
@@ -266,11 +270,12 @@ export function subscribeTrialsFromCloud(
       collRef,
       (snap) => {
         const deletedIds = getDeletedIds ? getDeletedIds() : [];
+        const allDeleted = Array.from(new Set([...deletedIds, ...DUMMY_TRIAL_BLACKLIST]));
         const items: TrialTrackingItem[] = [];
         snap.forEach((d) => {
           const data = d.data() as TrialTrackingItem;
           const itemId = d.id || data?.id;
-          if (data && !data.isDeleted && !deletedIds.includes(itemId)) {
+          if (data && !data.isDeleted && !allDeleted.includes(itemId)) {
             items.push({
               ...data,
               id: itemId
@@ -305,16 +310,18 @@ export async function autoMigrateLocalTrialsToCloud(
 ): Promise<boolean> {
   if (!db) return false;
 
-  try {
-    const cloudItems = await fetchTrialsFromCloud(deletedTrialIds);
+  const allDeleted = Array.from(new Set([...deletedTrialIds, ...DUMMY_TRIAL_BLACKLIST]));
 
-    // Filter out any deleted IDs
-    const itemsToSeed = (localItems && localItems.length > 0 ? localItems : initialTrialTrackings)
-      .filter(item => !deletedTrialIds.includes(item.id) && !item.isDeleted);
+  try {
+    const cloudItems = await fetchTrialsFromCloud(allDeleted);
+
+    // Filter out any deleted or dummy IDs
+    const itemsToSeed = (localItems || [])
+      .filter(item => item && !allDeleted.includes(item.id) && !item.isDeleted);
 
     if (cloudItems.length === 0) {
       if (itemsToSeed.length > 0) {
-        console.log(`[Auto Migration] Seeding ${itemsToSeed.length} initial trial trackings to Firestore...`);
+        console.log(`[Auto Migration] Seeding ${itemsToSeed.length} local trial trackings to Firestore...`);
         for (const item of itemsToSeed) {
           await saveTrialToCloud(item);
         }
@@ -324,7 +331,7 @@ export async function autoMigrateLocalTrialsToCloud(
       // Check if any local item does not exist on Cloud and not in deleted list
       const cloudIdSet = new Set(cloudItems.map((c) => c.id));
       for (const localItem of itemsToSeed) {
-        if (!cloudIdSet.has(localItem.id) && !deletedTrialIds.includes(localItem.id)) {
+        if (!cloudIdSet.has(localItem.id) && !allDeleted.includes(localItem.id)) {
           console.log(`[Auto Migration] Syncing local trial ${localItem.id} to Firestore...`);
           await saveTrialToCloud(localItem);
         }
