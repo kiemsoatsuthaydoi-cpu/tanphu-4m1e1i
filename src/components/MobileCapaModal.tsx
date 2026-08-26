@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   X,
   Printer,
@@ -97,7 +97,7 @@ export const checkReportHasCapa = (
         hasCapa: meta.hasCapa,
         isApproved: meta.isApproved,
         activeVersion: meta.activeVersion,
-        capaData: meta.isApproved && meta.versions.length > 0 ? meta.versions[0].data : meta.formData,
+        capaData: meta.formData,
         versions: meta.versions
       };
     }
@@ -145,19 +145,31 @@ export const checkReportHasCapa = (
   const isApproved = foundVersions.length > 0;
   const hasCapa = isApproved || (foundDraft !== null && (!!foundDraft.ncDescription || !!foundDraft.reason));
 
-  const activeVersion = isApproved
-    ? foundVersions[0].version
+  let activeVersionTagStored: string | null = null;
+  for (const k of keys) {
+    activeVersionTagStored = localStorage.getItem(`capa_active_version_v1_${k}`) || localStorage.getItem(`capa_active_version_${k}`);
+    if (activeVersionTagStored) break;
+  }
+
+  let activeVersion = isApproved
+    ? (activeVersionTagStored || foundVersions[0].version)
     : foundDraft
     ? "Dự thảo"
     : undefined;
 
-  const capaData = isApproved ? foundVersions[0].data : foundDraft || undefined;
+  let activeVersionData = foundDraft || undefined;
+  if (isApproved) {
+    const matchedVer = foundVersions.find(
+      (v) => v.version === activeVersion || v.version.toLowerCase().trim() === activeVersion?.toLowerCase().trim()
+    );
+    activeVersionData = matchedVer ? matchedVer.data : foundVersions[0].data;
+  }
 
   return {
     hasCapa,
     isApproved,
     activeVersion,
-    capaData,
+    capaData: activeVersionData,
     versions: foundVersions
   };
 };
@@ -171,11 +183,25 @@ export const MobileCapaModal: React.FC<MobileCapaModalProps> = ({
   onClose,
   onShowToast
 }) => {
-  const [activeVersionIndex, setActiveVersionIndex] = useState<number>(0);
-  const [activeZoomImg, setActiveZoomImg] = useState<string | null>(null);
-
   const capaInfo = checkReportHasCapa(report, allReports);
   const versions = capaInfo.versions;
+
+  const defaultIndex = useMemo(() => {
+    if (versions.length > 0 && capaInfo.activeVersion) {
+      const idx = versions.findIndex(
+        (v) => v.version === capaInfo.activeVersion || v.version.toLowerCase().trim() === capaInfo.activeVersion?.toLowerCase().trim()
+      );
+      if (idx !== -1) return idx;
+    }
+    return 0;
+  }, [versions, capaInfo.activeVersion]);
+
+  const [activeVersionIndex, setActiveVersionIndex] = useState<number>(defaultIndex);
+  const [activeZoomImg, setActiveZoomImg] = useState<string | null>(null);
+
+  useEffect(() => {
+    setActiveVersionIndex(defaultIndex);
+  }, [defaultIndex]);
 
   // Selected version or fallback to draft/default data
   const rawFallbackData: CapaData = {
@@ -303,21 +329,24 @@ export const MobileCapaModal: React.FC<MobileCapaModalProps> = ({
             <span className="font-extrabold text-slate-600 shrink-0">
               <T>Lịch sử ban hành:</T>
             </span>
-            {versions.map((ver, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => setActiveVersionIndex(idx)}
-                className={`px-2 py-0.5 rounded-md font-bold text-[10px] cursor-pointer transition-all whitespace-nowrap ${
-                  activeVersionIndex === idx
-                    ? "bg-indigo-600 text-white shadow-xs"
-                    : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
-                }`}
-              >
-                <span>{ver.version}</span>
-                {idx === 0 && <span className="ml-1 text-[8px] font-normal opacity-80">(Hiện hành)</span>}
-              </button>
-            ))}
+            {versions.map((ver, idx) => {
+              const isCurrentActive = ver.version === capaInfo.activeVersion || (idx === 0 && !capaInfo.activeVersion);
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setActiveVersionIndex(idx)}
+                  className={`px-2 py-0.5 rounded-md font-bold text-[10px] cursor-pointer transition-all whitespace-nowrap ${
+                    activeVersionIndex === idx
+                      ? "bg-indigo-600 text-white shadow-xs"
+                      : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  <span>{ver.version}</span>
+                  {isCurrentActive && <span className="ml-1 text-[8px] font-normal opacity-80">(Hiện hành)</span>}
+                </button>
+              );
+            })}
           </div>
         )}
 

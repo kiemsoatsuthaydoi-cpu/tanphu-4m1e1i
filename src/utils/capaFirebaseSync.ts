@@ -325,14 +325,32 @@ export function subscribeAllCapaDocuments(
           const hasVersions = Array.isArray(data.versions) && data.versions.length > 0;
           const validVersions = hasVersions ? data.versions.filter((v: any) => v && v.data) : [];
           const isApproved = validVersions.length > 0;
-          const latestVer = isApproved ? validVersions[validVersions.length - 1].version : undefined;
+          
+          // Determine active version tag
+          let activeVerTag = data.activeVersionTag;
+          if (!activeVerTag && isApproved) {
+            activeVerTag = validVersions[0]?.version || validVersions[validVersions.length - 1]?.version;
+          }
+
+          // Active version data
+          let activeData = data.activeFormData;
+          if (isApproved) {
+            const foundVer = validVersions.find(
+              (v) => v.version === activeVerTag || v.version.toLowerCase().trim() === activeVerTag?.toLowerCase().trim()
+            );
+            if (foundVer && foundVer.data) {
+              activeData = foundVer.data;
+            } else if (validVersions[0]?.data) {
+              activeData = validVersions[0].data;
+            }
+          }
 
           const meta = {
-            hasCapa: isApproved || !!data.activeFormData,
+            hasCapa: isApproved || !!activeData,
             isApproved,
-            activeVersion: data.activeVersionTag || latestVer,
+            activeVersion: activeVerTag,
             versions: validVersions,
-            formData: data.activeFormData
+            formData: activeData
           };
 
           keys.forEach((k) => {
