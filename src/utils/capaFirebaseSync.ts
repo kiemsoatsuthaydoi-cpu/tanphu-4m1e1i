@@ -1,5 +1,5 @@
 import { db, storage } from "./firebase";
-import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, setDoc, onSnapshot, collection } from "firebase/firestore";
 import { ref, uploadString, getDownloadURL } from "firebase/storage";
 import { CapaData, CapaVersion, CapaDocument } from "../types";
 
@@ -140,7 +140,8 @@ export async function saveCapaToCloud(
   reportId: string,
   form: CapaData,
   versions: CapaVersion[],
-  activeVersionTag?: string
+  activeVersionTag?: string,
+  alternateId?: string
 ): Promise<boolean> {
   if (!reportId) return false;
   
@@ -164,6 +165,14 @@ export async function saveCapaToCloud(
   try {
     const docRef = doc(db, CAPA_COLLECTION, reportId);
     await setDoc(docRef, sanitized, { merge: true });
+
+    // Also mirror to alternate ID (e.g. reportCode B0000001 <-> R-1) if present
+    if (alternateId && alternateId !== reportId) {
+      const altPayload = { ...sanitized, id: alternateId, reportId: alternateId };
+      const altRef = doc(db, CAPA_COLLECTION, alternateId);
+      await setDoc(altRef, altPayload, { merge: true });
+    }
+
     console.log(`[Firestore] CAPA Document for report ${reportId} saved successfully to Cloud.`);
     return true;
   } catch (error: any) {
@@ -176,7 +185,8 @@ export async function saveCapaToCloud(
  * Fetch CAPA document from Firestore
  */
 export async function fetchCapaFromCloud(
-  reportId: string
+  reportId: string,
+  alternateId?: string
 ): Promise<{
   form: CapaData | null;
   versions: CapaVersion[] | null;
@@ -187,7 +197,15 @@ export async function fetchCapaFromCloud(
 
   try {
     const docRef = doc(db, CAPA_COLLECTION, reportId);
-    const snap = await getDoc(docRef);
+    let snap = await getDoc(docRef);
+
+    if ((!snap.exists() || !snap.data()?.versions || snap.data()?.versions.length === 0) && alternateId && alternateId !== reportId) {
+      const altRef = doc(db, CAPA_COLLECTION, alternateId);
+      const altSnap = await getDoc(altRef);
+      if (altSnap.exists()) {
+        snap = altSnap;
+      }
+    }
 
     if (snap.exists()) {
       const data = snap.data() as CapaDocument;
@@ -271,3 +289,73 @@ export async function autoMigrateLocalCapaToCloud(
     return false;
   }
 }
+
+/**
+ * Subscribe to all CAPA documents in Firestore for instant system-wide sync across all clients
+ */
+export function subscribeAllCapaDocuments(
+  onUpdate?: (docs: Record<string, CapaDocument>) => void
+): () => void {
+  if (!db) {
+    return () => {};
+  }
+
+  try {
+    const collRef = collection(db, CAPA_COLLECTION);
+    const unsubscribe = onSnapshot(
+      collRef,
+      (snapshot) => {
+        const result: Record<string, CapaDocument> = {};
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data() as CapaDocument;
+          const docId = docSnap.id;
+          const reportKey = data.reportId || docId;
+          result[docId] = { ...data, id: docId };
+
+          // Đồng bộ tự động vào LocalStorage đệm để tất cả các màn hình (Mobile & Desktop) truy xuất tức thời 0ms
+          const keys = Array.from(new Set([docId, reportKey])).filter(Boolean);
+
+          if (Array.isArray(data.versions) && data.versions.length > 0) {
+            const vStr = JSON.stringify(data.versions);
+            keys.forEach((k) => {
+              try {
+                localStorage.setItem(`capa_versions_v1_${k}`, vStr);
+                localStorage.setItem(`capa_versions_${k}`, vStr);
+                if (data.activeVersionTag) {
+                  localStorage.setItem(`capa_active_version_v1_${k}`, data.activeVersionTag);
+                }
+              } catch (e) {}
+            });
+          }
+
+          if (data.activeFormData) {
+            const fStr = JSON.stringify(data.activeFormData);
+            keys.forEach((k) => {
+              try {
+                localStorage.setItem(`capa_form_v1_${k}`, fStr);
+                localStorage.setItem(`capa_form_${k}`, fStr);
+              } catch (e) {}
+            });
+          }
+        });
+
+        // Trigger custom event for reactive UI update
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("capa-cloud-synced", { detail: result }));
+        }
+
+        if (onUpdate) {
+          onUpdate(result);
+        }
+      },
+      (error) => {
+        console.warn("[Firestore] Error subscribing to all CAPA documents:", error);
+      }
+    );
+    return unsubscribe;
+  } catch (error) {
+    console.warn("[Firestore] Could not subscribe to CAPA documents collection:", error);
+    return () => {};
+  }
+}
+

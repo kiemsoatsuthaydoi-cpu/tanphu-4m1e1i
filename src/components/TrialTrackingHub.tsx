@@ -2344,11 +2344,11 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                         )}
                       </div>
 
-                      {/* 4. Vị trí / Phân xưởng */}
+                      {/* 4. BP/ĐV phụ trách */}
                       {item.workshop && (
                         <div className="text-xs text-slate-600 flex items-baseline gap-1.5 flex-wrap">
                           <span className="text-slate-500 font-semibold shrink-0">
-                            <span translate="no" className="notranslate">Vị trí / Phân xưởng:</span>
+                            <span translate="no" className="notranslate">BP/ĐV phụ trách:</span>
                           </span>
                           <span className="font-bold text-slate-800 leading-tight break-words">
                             <span translate="no" className="notranslate">{abbreviateDepartmentName(item.workshop)}</span>
@@ -2458,11 +2458,11 @@ export const TrialTrackingHub: React.FC<TrialTrackingHubProps> = ({
                           </div>
                         </div>
 
-                        {/* 4. Vị trí / Phân xưởng (xuống dòng riêng) */}
+                        {/* 4. BP/ĐV phụ trách (xuống dòng riêng) */}
                         {item.workshop && (
                           <div className="mt-2 text-xs text-slate-600 flex items-baseline gap-1.5 flex-wrap">
                             <span className="text-slate-500 font-semibold shrink-0">
-                              <span translate="no" className="notranslate">Vị trí / Phân xưởng:</span>
+                              <span translate="no" className="notranslate">BP/ĐV phụ trách:</span>
                             </span>
                             <span className="font-bold text-slate-800 leading-tight break-words">
                               <span translate="no" className="notranslate">{abbreviateDepartmentName(item.workshop)}</span>

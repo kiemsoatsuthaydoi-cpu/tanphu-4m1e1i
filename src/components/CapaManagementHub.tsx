@@ -207,33 +207,44 @@ export const isCapaBelongingToReport = (
 ): boolean => {
   if (!data || typeof data !== "object") return false;
 
+  const validCodes = new Set<string>();
+  if (report.id) validCodes.add(report.id.toString().trim());
+  if (report.reportCode) validCodes.add(report.reportCode.toString().trim());
+
   // 1. Check reportId if explicitly specified
-  if (data.reportId && data.reportId !== report.id) {
-    return false;
+  if (data.reportId && typeof data.reportId === "string") {
+    const trimmedId = data.reportId.trim();
+    if (!validCodes.has(trimmedId)) {
+      // Only reject if it clearly matches a different report
+      if (allReports && allReports.length > 0) {
+        const isOtherReport = allReports.some(
+          (r) =>
+            r.id !== report.id &&
+            r.reportCode !== report.reportCode &&
+            (r.id === trimmedId || (r.reportCode && r.reportCode === trimmedId))
+        );
+        if (isOtherReport) {
+          return false;
+        }
+      }
+    }
   }
 
   // 2. Check ncNumber if specified
   if (data.ncNumber && typeof data.ncNumber === "string") {
     const trimmedNc = data.ncNumber.trim();
-    const validCodes = new Set<string>();
-    if (report.id) validCodes.add(report.id.toString().trim());
-    if (report.reportCode) validCodes.add(report.reportCode.toString().trim());
-
-    // If ncNumber is a standardized code format (B0000001, R-1, etc.)
-    const isCodeFormat = /^B\d{5,8}$|^R-\d+$/i.test(trimmedNc);
-    if (isCodeFormat && !validCodes.has(trimmedNc)) {
-      return false;
-    }
-
-    // Ensure ncNumber does not match a DIFFERENT report in the list
-    if (allReports && allReports.length > 0) {
-      const isOtherReportCode = allReports.some(
-        (r) =>
-          r.id !== report.id &&
-          (r.id === trimmedNc || (r.reportCode && r.reportCode === trimmedNc))
-      );
-      if (isOtherReportCode) {
-        return false;
+    if (!validCodes.has(trimmedNc)) {
+      // Ensure ncNumber does not match a DIFFERENT report in the list
+      if (allReports && allReports.length > 0) {
+        const isOtherReportCode = allReports.some(
+          (r) =>
+            r.id !== report.id &&
+            r.reportCode !== report.reportCode &&
+            (r.id === trimmedNc || (r.reportCode && r.reportCode === trimmedNc))
+        );
+        if (isOtherReportCode) {
+          return false;
+        }
       }
     }
   }
@@ -250,7 +261,7 @@ export const isVersionsBelongingToReport = (
   allReports?: QualityReport[]
 ): boolean => {
   if (!versions || !Array.isArray(versions) || versions.length === 0) return false;
-  return versions.every((v) => v && v.data && isCapaBelongingToReport(v.data, report, allReports));
+  return versions.some((v) => v && v.data && isCapaBelongingToReport(v.data, report, allReports));
 };
 
 const getCapaStorageItem = (
@@ -496,6 +507,7 @@ interface DatePickerInputProps {
   inputClassName?: string;
   placeholder?: string;
   containerClassName?: string;
+  disabled?: boolean;
 }
 
 function DatePickerInput({
@@ -504,6 +516,7 @@ function DatePickerInput({
   inputClassName = "w-full text-xs font-bold text-blue-700 print:text-black bg-transparent focus:bg-amber-50 focus:outline-none",
   placeholder = "dd/mm/yy",
   containerClassName = "relative inline-flex items-center w-full",
+  disabled = false,
 }: DatePickerInputProps) {
   const displayValue = React.useMemo(() => {
     if (!value || value.includes("NaN")) {
@@ -515,6 +528,7 @@ function DatePickerInput({
   const isoDate = React.useMemo(() => ddmmyyToYYYYMMDD(displayValue), [displayValue]);
 
   const handleDatePicked = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (disabled) return;
     if (e.target.value) {
       const formatted = yyyymmddToDDMMYY(e.target.value);
       onChange(formatted);
@@ -526,19 +540,25 @@ function DatePickerInput({
       <input
         type="text"
         value={displayValue}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          if (!disabled) onChange(e.target.value);
+        }}
         placeholder={placeholder}
-        className={inputClassName}
+        disabled={disabled}
+        readOnly={disabled}
+        className={`${inputClassName} ${disabled ? "cursor-default select-text focus:bg-transparent" : ""}`}
       />
-      <div className="relative no-print ml-1 shrink-0 cursor-pointer text-slate-400 hover:text-blue-600 transition-colors" title="Bấm để chọn ngày từ lịch">
-        <input
-          type="date"
-          value={isoDate}
-          onChange={handleDatePicked}
-          className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
-        />
-        <Calendar className="w-3.5 h-3.5" />
-      </div>
+      {!disabled && (
+        <div className="relative no-print ml-1 shrink-0 cursor-pointer text-slate-400 hover:text-blue-600 transition-colors" title="Bấm để chọn ngày từ lịch">
+          <input
+            type="date"
+            value={isoDate}
+            onChange={handleDatePicked}
+            className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
+          />
+          <Calendar className="w-3.5 h-3.5" />
+        </div>
+      )}
     </div>
   );
 }
@@ -694,21 +714,68 @@ export default function CapaManagementHub({
   const [isCommitDialogOpen, setIsCommitDialogOpen] = useState(false);
   const [newVersionNote, setNewVersionNote] = useState("");
   const [isDraftModified, setIsDraftModified] = useState(false);
+  const [isCreateDraftModalOpen, setIsCreateDraftModalOpen] = useState(false);
+  const [draftBaseOption, setDraftBaseOption] = useState<string>("LATEST");
+  const [isDiscardConfirmOpen, setIsDiscardConfirmOpen] = useState(false);
+  const [cloudCapaSyncTick, setCloudCapaSyncTick] = useState<number>(0);
+
+  useEffect(() => {
+    const handleCapaSync = () => {
+      setCloudCapaSyncTick((t) => t + 1);
+    };
+    window.addEventListener("capa-cloud-synced", handleCapaSync);
+    return () => {
+      window.removeEventListener("capa-cloud-synced", handleCapaSync);
+    };
+  }, []);
+
+  const viewingVersionRef = useRef<string | null>(viewingVersion);
+  const isDraftModifiedRef = useRef<boolean>(isDraftModified);
+
+  useEffect(() => {
+    viewingVersionRef.current = viewingVersion;
+  }, [viewingVersion]);
+
+  useEffect(() => {
+    isDraftModifiedRef.current = isDraftModified;
+  }, [isDraftModified]);
+
+  const isReadOnly = viewingVersion !== null;
 
   // Function to switch report cleanly
   const handleSelectReport = (repId: string) => {
     isPrintSnapshotLoadedRef.current = false;
     loadedSnapshotReportIdRef.current = null;
     setSelectedReportId(repId);
-    setViewingVersion(null);
     setIsDraftModified(false);
+
+    // Check if target report has existing released versions
+    const targetReport = reports.find((r) => r.id === repId || r.reportCode === repId || (r.id && r.id.toString() === repId.toString()));
+    let targetVerTag: string | null = null;
+    if (targetReport) {
+      const storedVers = getCapaStorageItem("capa_versions_v1", targetReport.id, reports, targetReport);
+      if (storedVers) {
+        try {
+          const parsed = JSON.parse(storedVers);
+          if (Array.isArray(parsed) && parsed.length > 0 && parsed[0]?.version) {
+            targetVerTag = parsed[0].version;
+          }
+        } catch (e) {}
+      }
+    }
+
+    setViewingVersion(targetVerTag);
 
     try {
       const curUrl = new URL(window.location.href);
       curUrl.searchParams.set("reportId", repId);
       curUrl.searchParams.delete("print");
       curUrl.searchParams.delete("use_snapshot");
-      curUrl.searchParams.delete("version");
+      if (targetVerTag) {
+        curUrl.searchParams.set("version", targetVerTag);
+      } else {
+        curUrl.searchParams.delete("version");
+      }
       curUrl.hash = "";
       window.history.replaceState({}, "", curUrl.toString());
     } catch (e) {}
@@ -829,7 +896,7 @@ export default function CapaManagementHub({
 
       return true;
     });
-  }, [reports, selectedTypeFilter, selectedPeriod, selectedBranch, capaStatusFilter, searchQuery]);
+  }, [reports, selectedTypeFilter, selectedPeriod, selectedBranch, capaStatusFilter, searchQuery, cloudCapaSyncTick]);
 
   // Auto select first report on mount or when filtered list changes and selection becomes invalid
   useEffect(() => {
@@ -879,12 +946,14 @@ export default function CapaManagementHub({
     if (storedVersionsStr) {
       try {
         const rawVers = JSON.parse(storedVersionsStr);
-        if (Array.isArray(rawVers) && isVersionsBelongingToReport(rawVers, currentReport, reports)) {
-          loadedVersions = rawVers.filter((v: any) => v && v.version);
-        } else {
-          // Corrupted or cross-polluted data detected - clean it
-          removeCapaStorageItem("capa_versions_v1", currentReport.id, reports, currentReport);
-          loadedVersions = [];
+        if (Array.isArray(rawVers)) {
+          const validVers = rawVers.filter((v: any) => v && v.version && v.data);
+          if (validVers.length > 0 && isVersionsBelongingToReport(validVers, currentReport, reports)) {
+            loadedVersions = validVers;
+          } else if (validVers.length > 0) {
+            // Keep versions safely if they are not explicitly belonging to another report
+            loadedVersions = validVers;
+          }
         }
       } catch (e) {
         loadedVersions = [];
@@ -1117,13 +1186,6 @@ export default function CapaManagementHub({
       // Ensure existing versions have real images and cleaned content
       loadedVersions = loadedVersions.map((v) => {
         let sanitizedData = sanitizeCapaData(v.data);
-        if (cachedDraft && (v.version === "v2.0" || v.versionNumber === 2)) {
-          sanitizedData = sanitizeCapaData({
-            ...sanitizedData,
-            ...cachedDraft,
-            rev: "v2.0"
-          });
-        }
         if (JSON.stringify(sanitizedData) !== JSON.stringify(v.data)) {
           updatedAny = true;
           return {
@@ -1134,7 +1196,7 @@ export default function CapaManagementHub({
         return v;
       });
       if (updatedAny) {
-        setCapaStorageItem("capa_versions_v1", currentReport.id, JSON.stringify(loadedVersions), reports);
+        setCapaStorageItem("capa_versions_v1", currentReport.id, JSON.stringify(loadedVersions), reports, currentReport);
       }
     } else {
       // Báo cáo mới chưa lập CAPA -> danh sách phiên bản là rỗng
@@ -1256,20 +1318,49 @@ export default function CapaManagementHub({
     let isSubscribed = true;
     const syncCloudData = async () => {
       try {
-        const cloudDoc = await fetchCapaFromCloud(currentReport.id);
+        const cloudDoc = await fetchCapaFromCloud(currentReport.id, currentReport.reportCode);
         if (!isSubscribed) return;
 
         if (cloudDoc) {
-          if (cloudDoc.versions && isVersionsBelongingToReport(cloudDoc.versions, currentReport, reports)) {
-            setVersions(cloudDoc.versions);
-            setCapaStorageItem("capa_versions_v1", currentReport.id, JSON.stringify(cloudDoc.versions), reports);
+          let updatedVers: CapaVersion[] = [];
+          if (cloudDoc.versions && Array.isArray(cloudDoc.versions) && cloudDoc.versions.length > 0) {
+            const validCloudVers = cloudDoc.versions.filter((v) => v && v.version && v.data);
+            if (validCloudVers.length > 0) {
+              updatedVers = validCloudVers;
+              setVersions(validCloudVers);
+              setCapaStorageItem("capa_versions_v1", currentReport.id, JSON.stringify(validCloudVers), reports, currentReport);
+            }
           }
+
           if (cloudDoc.form && isCapaBelongingToReport(cloudDoc.form, currentReport, reports)) {
-            setCapaForm(cloudDoc.form);
-            setCapaStorageItem("capa_form_v1", currentReport.id, JSON.stringify(cloudDoc.form), reports);
+            setCapaStorageItem("capa_form_v1", currentReport.id, JSON.stringify(cloudDoc.form), reports, currentReport);
           }
+
+          // If report has released versions, determine active view
+          if (updatedVers && updatedVers.length > 0) {
+            const currentViewing = viewingVersionRef.current;
+            if (currentViewing) {
+              const matchedVer = updatedVers.find((v) => v.version === currentViewing);
+              if (matchedVer) {
+                setCapaForm(matchedVer.data);
+              } else {
+                setCapaForm(updatedVers[0].data);
+                setViewingVersion(updatedVers[0].version);
+              }
+            } else if (!isDraftModifiedRef.current) {
+              // Not actively editing a new draft -> show official released version!
+              setCapaForm(updatedVers[0].data);
+              setViewingVersion(updatedVers[0].version);
+            }
+          } else {
+            // No released versions yet -> show draft form
+            if (cloudDoc.form && isCapaBelongingToReport(cloudDoc.form, currentReport, reports)) {
+              setCapaForm(cloudDoc.form);
+            }
+          }
+
           if (cloudDoc.activeVersionTag) {
-            setCapaStorageItem("capa_active_version_v1", currentReport.id, cloudDoc.activeVersionTag, reports);
+            setCapaStorageItem("capa_active_version_v1", currentReport.id, cloudDoc.activeVersionTag, reports, currentReport);
           }
           if (cloudDoc.updatedAt) {
             setLastCloudSyncTime(new Date(cloudDoc.updatedAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }));
@@ -1297,10 +1388,28 @@ export default function CapaManagementHub({
     // Subscribe to live updates from other devices / collaborators
     const unsubscribe = subscribeCapaFromCloud(currentReport.id, (cloudUpdate) => {
       if (!isSubscribed) return;
-      if (cloudUpdate.versions && isVersionsBelongingToReport(cloudUpdate.versions, currentReport, reports)) {
-        setVersions(cloudUpdate.versions);
+      let updatedVers: CapaVersion[] = [];
+      if (cloudUpdate.versions && Array.isArray(cloudUpdate.versions) && cloudUpdate.versions.length > 0) {
+        const validVers = cloudUpdate.versions.filter((v) => v && v.version && v.data);
+        if (validVers.length > 0) {
+          updatedVers = validVers;
+          setVersions(validVers);
+          setCapaStorageItem("capa_versions_v1", currentReport.id, JSON.stringify(validVers), reports, currentReport);
+        }
       }
-      if (cloudUpdate.form && isCapaBelongingToReport(cloudUpdate.form, currentReport, reports) && !isDraftModified) {
+
+      if (updatedVers && updatedVers.length > 0) {
+        const currentViewing = viewingVersionRef.current;
+        if (currentViewing) {
+          const matchedVer = updatedVers.find((v) => v.version === currentViewing);
+          if (matchedVer) {
+            setCapaForm(matchedVer.data);
+          }
+        } else if (!isDraftModifiedRef.current) {
+          setCapaForm(updatedVers[0].data);
+          setViewingVersion(updatedVers[0].version);
+        }
+      } else if (cloudUpdate.form && isCapaBelongingToReport(cloudUpdate.form, currentReport, reports) && !isDraftModifiedRef.current && !viewingVersionRef.current) {
         setCapaForm(cloudUpdate.form);
       }
       setCloudSyncStatus("synced");
@@ -1313,18 +1422,65 @@ export default function CapaManagementHub({
       isSubscribed = false;
       unsubscribe();
     };
-  }, [selectedReportId]);
+  }, [selectedReportId, viewingVersion]);
 
   // Save changes to localStorage & Firebase Cloud
   const handleUpdateForm = (field: keyof CapaData, value: any) => {
     if (!capaForm) return;
 
-    let updated = { ...capaForm, [field]: value };
-
-    // If user was viewing a released version snapshot and edits it, switch to working draft mode
+    // Guard: if viewing an official released version, allow post-release updates but protect core 4M1E / 5W2H
     if (viewingVersion !== null) {
-      setViewingVersion(null);
+      const allowedPostReleaseFields: (keyof CapaData)[] = [
+        "supplierRepSigned",
+        "supplierRepName",
+        "supplierRepDate",
+        "customerFeedbackStatus",
+        "customerOpinion",
+        "customerRepName",
+        "customerRepDate",
+        "verificationResult",
+        "verificationDate",
+        "verificationBy",
+        "verificationStatus",
+        "additionalNotes",
+        "illustrationUrls",
+        "companyLogoUrl"
+      ];
+
+      if (!allowedPostReleaseFields.includes(field)) {
+        if (onShowToast) {
+          onShowToast("⚠️ Phiên bản chính thức đã được khóa nội dung phân tích. Vui lòng bấm '+ Tạo bản nháp mới' để tạo phiên bản cập nhật tiếp theo!", "warning");
+        }
+        return;
+      }
+
+      // If it IS an allowed post-release field, update the version in place
+      const updated = { ...capaForm, [field]: value };
+      setCapaForm(updated);
+      if (selectedReportId) {
+        const currentReport = reports.find((r) => r.id === selectedReportId || r.reportCode === selectedReportId || (r.id && r.id.toString() === selectedReportId.toString()));
+        const targetReportId = currentReport ? currentReport.id : selectedReportId;
+        const targetReportCode = currentReport?.reportCode;
+
+        setVersions((prevVers) => {
+          const updatedVers = prevVers.map((v) => {
+            if (v.version === viewingVersion) {
+              return {
+                ...v,
+                data: updated
+              };
+            }
+            return v;
+          });
+          setCapaStorageItem("capa_versions_v1", targetReportId, JSON.stringify(updatedVers), reports, currentReport);
+          saveCapaToCloud(targetReportId, updated, updatedVers, viewingVersion, targetReportCode);
+          return updatedVers;
+        });
+      }
+      return;
     }
+
+    let updated = { ...capaForm, [field]: value };
 
     // Detect if content is modified when a version has already been released
     const isSignatureToggle = field === "supplierRepSigned" || field === "qcStaffSigned";
@@ -1338,9 +1494,13 @@ export default function CapaManagementHub({
 
     setCapaForm(updated);
     if (selectedReportId) {
-      setCapaStorageItem("capa_form_v1", selectedReportId, JSON.stringify(updated), reports);
+      const currentReport = reports.find((r) => r.id === selectedReportId || r.reportCode === selectedReportId || (r.id && r.id.toString() === selectedReportId.toString()));
+      const targetReportId = currentReport ? currentReport.id : selectedReportId;
+      const targetReportCode = currentReport?.reportCode;
+
+      setCapaStorageItem("capa_form_v1", targetReportId, JSON.stringify(updated), reports, currentReport);
       // Auto-sync non-blocking to Firebase Cloud
-      saveCapaToCloud(selectedReportId, updated, versions, viewingVersion || "DRAFT").then((ok) => {
+      saveCapaToCloud(targetReportId, updated, versions, "DRAFT", targetReportCode).then((ok) => {
         if (ok) {
           setCloudSyncStatus("synced");
           setLastCloudSyncTime(new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }));
@@ -1349,18 +1509,174 @@ export default function CapaManagementHub({
     }
   };
 
+  // Explicit Draft Creation Handler
+  const handleConfirmCreateDraft = () => {
+    if (!selectedReportId) return;
+    const currentReport = reports.find(
+      (r) => r.id === selectedReportId || r.reportCode === selectedReportId || (r.id && r.id.toString() === selectedReportId.toString())
+    );
+    if (!currentReport) return;
+
+    let baseData: CapaData;
+    const nextVerTag = getNextVersionTag(versions);
+
+    if (draftBaseOption === "LATEST") {
+      if (versions.length > 0) {
+        baseData = JSON.parse(JSON.stringify(versions[0].data));
+      } else if (capaForm) {
+        baseData = JSON.parse(JSON.stringify(capaForm));
+      } else {
+        baseData = { ...capaForm! };
+      }
+    } else if (draftBaseOption === "BLANK") {
+      // Re-extract from original report
+      const reportDateFormatted = safeFormatDate(currentReport.timestamp);
+      const todayFormatted = safeFormatDate(new Date());
+      const defaultResponsible = currentReport.assignedPersonName || (currentReport.uploaderDepartment || "");
+      const cleanNcDesc = `${currentReport.content || ""}${currentReport.notes ? `. Ghi chú: ${currentReport.notes}` : ""}`.trim();
+      const cleanReason = currentReport.resolutions && currentReport.resolutions.length > 0 
+        ? currentReport.resolutions.map((r) => r.resultText).filter(Boolean).join("\n").trim() 
+        : "";
+      const cleanCorrection = currentReport.directives && currentReport.directives.length > 0 
+        ? currentReport.directives.map((d) => d.text).filter(Boolean).join("\n").trim() 
+        : "";
+
+      baseData = {
+        reportId: currentReport.id,
+        docNo: "BM01-ISO-QT04-KPPN",
+        rev: `${nextVerTag} (Dự thảo)`,
+        effDate: formatDateDDMMYY(),
+        occurDate: reportDateFormatted,
+        sendDate: reportDateFormatted || todayFormatted,
+        ncNumber: currentReport.reportCode || currentReport.id,
+        poNumber: "",
+        productType: "finished",
+        productName: capaForm?.productName || "Sản phẩm",
+        customerName: capaForm?.customerName || "Khách hàng",
+        productCode: capaForm?.productCode || "",
+        totalQuantity: "",
+        ncQuantity: "1 đơn vị",
+        ncStatus: "on_hold",
+        ncDescription: cleanNcDesc,
+        illustrationUrls: capaForm?.illustrationUrls || [],
+        reason: cleanReason,
+        correction: cleanCorrection,
+        correctionTargetDate: reportDateFormatted || todayFormatted,
+        correctionResponsible: defaultResponsible,
+        traceability: "",
+        traceabilityTargetDate: reportDateFormatted || todayFormatted,
+        traceabilityResponsible: defaultResponsible,
+        preventiveAction: "",
+        preventiveTargetDate: reportDateFormatted || todayFormatted,
+        preventiveResponsible: defaultResponsible,
+        qcStaffName: currentReport.uploaderName ? formatNameCapitalized(currentReport.uploaderName) : (currentUser?.fullName ? formatNameCapitalized(currentUser.fullName) : ""),
+        qcStaffDate: reportDateFormatted || todayFormatted,
+        qcStaffSigned: false,
+        supplierRepName: "",
+        supplierRepDate: reportDateFormatted || todayFormatted,
+        supplierRepSigned: false,
+        qcHeadName: "",
+        approvalDate: "",
+        stampStatus: "PASS",
+        approvalNote: "",
+        customerFeedbackStatus: "satisfy",
+        customerOpinion: "",
+        customerRepName: "",
+        customerRepDate: reportDateFormatted || todayFormatted,
+        customerRepSigned: false,
+        verificationResult: "",
+        verificationDate: "",
+        verificationBy: "",
+        verificationStatus: "",
+        additionalNotes: "",
+        isAiDrafted: false
+      };
+    } else if (draftBaseOption === "EXISTING_DRAFT") {
+      const cached = getCapaStorageItem("capa_form_v1", selectedReportId, reports);
+      if (cached) {
+        try {
+          baseData = JSON.parse(cached);
+        } catch (e) {
+          baseData = versions.length > 0 ? JSON.parse(JSON.stringify(versions[0].data)) : { ...capaForm! };
+        }
+      } else {
+        baseData = versions.length > 0 ? JSON.parse(JSON.stringify(versions[0].data)) : { ...capaForm! };
+      }
+    } else {
+      // Base option is a specific version tag e.g. "v1.0"
+      const foundVer = versions.find((v) => v.version === draftBaseOption);
+      if (foundVer) {
+        baseData = JSON.parse(JSON.stringify(foundVer.data));
+      } else {
+        baseData = versions.length > 0 ? JSON.parse(JSON.stringify(versions[0].data)) : { ...capaForm! };
+      }
+    }
+
+    // Reset signatures for new version re-approval if inheriting from released version or blank
+    if (draftBaseOption !== "EXISTING_DRAFT") {
+      baseData.supplierRepSigned = false;
+      baseData.supplierRepDate = "";
+      baseData.qcStaffSigned = false;
+      baseData.qcStaffDate = "";
+      baseData.approvalDate = "";
+      baseData.approvalNote = "";
+      baseData.effDate = formatDateDDMMYY();
+      baseData.rev = `${nextVerTag} (Dự thảo)`;
+    }
+
+    const targetReportId = currentReport.id;
+    const targetReportCode = currentReport.reportCode;
+
+    setCapaForm(baseData);
+    setViewingVersion(null);
+    setIsDraftModified(true);
+    setCapaStorageItem("capa_form_v1", targetReportId, JSON.stringify(baseData), reports, currentReport);
+    removeCapaStorageItem("capa_active_version_v1", targetReportId, reports, currentReport);
+    setIsCreateDraftModalOpen(false);
+
+    if (onShowToast) {
+      onShowToast(`✓ Đã bắt đầu biên soạn bản nháp cho ${nextVerTag}!`, "success");
+    }
+  };
+
+  // Discard Draft Handler
+  const handleDiscardDraft = () => {
+    if (!selectedReportId || versions.length === 0) return;
+    const currentReport = reports.find(
+      (r) => r.id === selectedReportId || r.reportCode === selectedReportId || (r.id && r.id.toString() === selectedReportId.toString())
+    );
+    const targetReportId = currentReport ? currentReport.id : selectedReportId;
+
+    const latestVer = versions[0];
+    const latestData = JSON.parse(JSON.stringify(latestVer.data));
+    setCapaForm(latestData);
+    setViewingVersion(latestVer.version);
+    setIsDraftModified(false);
+    setCapaStorageItem("capa_active_version_v1", targetReportId, latestVer.version, reports, currentReport);
+    setIsDiscardConfirmOpen(false);
+    if (onShowToast) {
+      onShowToast(`✓ Đã đóng bản nháp và quay lại xem phiên bản chính thức ${latestVer.version}!`, "info");
+    }
+  };
+
   // Manual Save Draft Handler
   const handleSaveDraftManual = () => {
     if (!capaForm || !selectedReportId) return;
 
-    setCapaStorageItem("capa_form_v1", selectedReportId, JSON.stringify(capaForm), reports);
+    const currentReport = reports.find(
+      (r) => r.id === selectedReportId || r.reportCode === selectedReportId || (r.id && r.id.toString() === selectedReportId.toString())
+    );
+    const targetReportId = currentReport ? currentReport.id : selectedReportId;
+    const targetReportCode = currentReport?.reportCode;
+
+    setCapaStorageItem("capa_form_v1", targetReportId, JSON.stringify(capaForm), reports, currentReport);
 
     if (versions.length > 0) {
       setIsDraftModified(true);
     }
 
     setCloudSyncStatus("syncing");
-    saveCapaToCloud(selectedReportId, capaForm, versions, "DRAFT").then((ok) => {
+    saveCapaToCloud(targetReportId, capaForm, versions, "DRAFT", targetReportCode).then((ok) => {
       if (ok) {
         setCloudSyncStatus("synced");
         setLastCloudSyncTime(new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }));
@@ -1406,22 +1722,33 @@ export default function CapaManagementHub({
       data: JSON.parse(JSON.stringify(finalFormToSave))
     };
 
+    const currentReport = reports.find((r) => r.id === selectedReportId || r.reportCode === selectedReportId || (r.id && r.id.toString() === selectedReportId.toString()));
+    const targetReportId = currentReport ? currentReport.id : selectedReportId;
+    const targetReportCode = currentReport?.reportCode;
+
     const updatedVersions = [newVersionObj, ...versions];
     setVersions(updatedVersions);
-    setCapaStorageItem("capa_versions_v1", selectedReportId, JSON.stringify(updatedVersions), reports);
+    setCapaStorageItem("capa_versions_v1", targetReportId, JSON.stringify(updatedVersions), reports, currentReport);
 
     setCapaForm(finalFormToSave);
-    setCapaStorageItem("capa_form_v1", selectedReportId, JSON.stringify(finalFormToSave), reports);
-    setCapaStorageItem("capa_active_version_v1", selectedReportId, versionTag, reports);
+    setCapaStorageItem("capa_form_v1", targetReportId, JSON.stringify(finalFormToSave), reports, currentReport);
+    setCapaStorageItem("capa_active_version_v1", targetReportId, versionTag, reports, currentReport);
 
     setIsDraftModified(false);
     setViewingVersion(versionTag);
     setNewVersionNote("");
     setIsCommitDialogOpen(false);
 
-    // Save newly committed version directly to Cloud
+    try {
+      const curUrl = new URL(window.location.href);
+      curUrl.searchParams.set("reportId", targetReportId);
+      curUrl.searchParams.set("version", versionTag);
+      window.history.replaceState({}, "", curUrl.toString());
+    } catch (e) {}
+
+    // Save newly committed version directly to Cloud with dual ID support
     setCloudSyncStatus("syncing");
-    saveCapaToCloud(selectedReportId, finalFormToSave, updatedVersions, versionTag).then((ok) => {
+    saveCapaToCloud(targetReportId, finalFormToSave, updatedVersions, versionTag, targetReportCode).then((ok) => {
       if (ok) {
         setCloudSyncStatus("synced");
         setLastCloudSyncTime(new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }));
@@ -1455,8 +1782,14 @@ export default function CapaManagementHub({
             const updatedUrls = [...filteredUrls, uploadedUrl];
             const updated = { ...prev, illustrationUrls: updatedUrls };
             if (selectedReportId) {
-              setCapaStorageItem("capa_form_v1", selectedReportId, JSON.stringify(updated), reports);
-              setCapaStorageItem("4m1e1i_img_urls", selectedReportId, JSON.stringify(updatedUrls), reports);
+              const currentReport = reports.find(
+                (r) => r.id === selectedReportId || r.reportCode === selectedReportId || (r.id && r.id.toString() === selectedReportId.toString())
+              );
+              const targetReportId = currentReport ? currentReport.id : selectedReportId;
+              const targetReportCode = currentReport?.reportCode;
+
+              setCapaStorageItem("capa_form_v1", targetReportId, JSON.stringify(updated), reports, currentReport);
+              setCapaStorageItem("4m1e1i_img_urls", targetReportId, JSON.stringify(updatedUrls), reports, currentReport);
               
               let newVersToSave = versions;
               // If viewing a released version (e.g. v2.0 or v1.0), update that version's data as well
@@ -1475,12 +1808,12 @@ export default function CapaManagementHub({
                     return v;
                   });
                   newVersToSave = newVers;
-                  setCapaStorageItem("capa_versions_v1", selectedReportId, JSON.stringify(newVers), reports);
+                  setCapaStorageItem("capa_versions_v1", targetReportId, JSON.stringify(newVers), reports, currentReport);
                   return newVers;
                 });
               }
 
-              saveCapaToCloud(selectedReportId, updated, newVersToSave, viewingVersion || "DRAFT").then((ok) => {
+              saveCapaToCloud(targetReportId, updated, newVersToSave, viewingVersion || "DRAFT", targetReportCode).then((ok) => {
                 if (ok) {
                   setCloudSyncStatus("synced");
                   setLastCloudSyncTime(new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }));
@@ -1505,6 +1838,12 @@ export default function CapaManagementHub({
     const updatedUrls = currentUrls.filter((_, i) => i !== index);
     handleUpdateForm("illustrationUrls", updatedUrls);
     if (selectedReportId && viewingVersion) {
+      const currentReport = reports.find(
+        (r) => r.id === selectedReportId || r.reportCode === selectedReportId || (r.id && r.id.toString() === selectedReportId.toString())
+      );
+      const targetReportId = currentReport ? currentReport.id : selectedReportId;
+      const targetReportCode = currentReport?.reportCode;
+
       setVersions((prevVers) => {
         const newVers = prevVers.map((v) => {
           if (v.version === viewingVersion) {
@@ -1518,8 +1857,8 @@ export default function CapaManagementHub({
           }
           return v;
         });
-        setCapaStorageItem("capa_versions_v1", selectedReportId, JSON.stringify(newVers), reports);
-        saveCapaToCloud(selectedReportId, { ...capaForm, illustrationUrls: updatedUrls }, newVers, viewingVersion);
+        setCapaStorageItem("capa_versions_v1", targetReportId, JSON.stringify(newVers), reports, currentReport);
+        saveCapaToCloud(targetReportId, { ...capaForm, illustrationUrls: updatedUrls }, newVers, viewingVersion, targetReportCode);
         return newVers;
       });
     }
@@ -1528,11 +1867,15 @@ export default function CapaManagementHub({
   // Switch Version Handler
   const handleSelectVersionToView = (verTag: string | null) => {
     if (!selectedReportId) return;
+    const currentReport = reports.find(
+      (r) => r.id === selectedReportId || r.reportCode === selectedReportId || (r.id && r.id.toString() === selectedReportId.toString())
+    );
+    const targetReportId = currentReport ? currentReport.id : selectedReportId;
 
     if (verTag === null || verTag === "DRAFT" || verTag === "DRAFT_NEXT") {
       setViewingVersion(null);
-      removeCapaStorageItem("capa_active_version_v1", selectedReportId, reports);
-      const cached = getCapaStorageItem("capa_form_v1", selectedReportId, reports);
+      removeCapaStorageItem("capa_active_version_v1", targetReportId, reports, currentReport);
+      const cached = getCapaStorageItem("capa_form_v1", targetReportId, reports, currentReport);
       if (cached) {
         try {
           const parsed = JSON.parse(cached);
@@ -1554,8 +1897,7 @@ export default function CapaManagementHub({
         const targetData = JSON.parse(JSON.stringify(targetVer.data));
         setCapaForm(targetData);
         setViewingVersion(targetVer.version);
-        setCapaStorageItem("capa_active_version_v1", selectedReportId, targetVer.version, reports);
-        setCapaStorageItem("capa_form_v1", selectedReportId, JSON.stringify(targetData), reports);
+        setCapaStorageItem("capa_active_version_v1", targetReportId, targetVer.version, reports, currentReport);
         setIsDraftModified(false);
       }
     }
@@ -2641,126 +2983,191 @@ export default function CapaManagementHub({
           ) : (
             <div>
               {/* VERSION CONTROL STATUS BAR */}
+              {/* VERSION CONTROL STATUS BAR */}
               {(() => {
                 const latestVerTag = versions.length > 0 ? versions[0].version : null;
                 const isViewingSpecificVersion = viewingVersion !== null;
                 const isViewingOldVersion = isViewingSpecificVersion && viewingVersion !== latestVerTag;
                 const isViewingCurrentVersion = isViewingSpecificVersion && viewingVersion === latestVerTag;
                 const nextVerTag = getNextVersionTag(versions);
+                const hasCachedDraft = !!(selectedReportId && getCapaStorageItem("capa_form_v1", selectedReportId, reports));
 
                 return (
                   <div className="no-print mb-4">
-                    <div className={`p-3.5 rounded-xl flex flex-wrap items-center justify-between gap-3 shadow-md border transition-all ${
+                    <div className={`p-3.5 rounded-xl flex flex-col gap-3 shadow-md border transition-all ${
                       isViewingOldVersion
-                        ? "bg-amber-950 text-amber-100 border-amber-800"
+                        ? "bg-slate-900 text-amber-100 border-amber-500/50"
                         : isViewingCurrentVersion
-                        ? "bg-slate-900 text-white border-emerald-500/50 ring-1 ring-emerald-500/20"
+                        ? "bg-slate-900 text-white border-emerald-500/60 ring-1 ring-emerald-500/20"
                         : isDraftModified
                         ? "bg-slate-900 text-white border-indigo-500/80 ring-1 ring-indigo-500/30"
                         : "bg-slate-900 text-white border-slate-800"
                     }`}>
-                      <div className="flex items-center justify-between w-full gap-3">
-                        <div className="flex items-center gap-2.5">
+                      <div className="flex items-center justify-between w-full gap-3 flex-wrap">
+                        <div className="flex items-center gap-2 flex-wrap">
                           {isViewingOldVersion ? (
                             <span className="px-3 py-1.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-black rounded-lg flex items-center gap-1.5 shadow-2xs">
                               <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                              <span translate="no" className="notranslate">XEM PHIÊN BẢN CŨ ({viewingVersion})</span>
+                              <span translate="no" className="notranslate">XEM PHIÊN BẢN CŨ ({viewingVersion}) [CHẾ ĐỘ CHỈ ĐỌC]</span>
                             </span>
                           ) : isViewingCurrentVersion ? (
                             <span className="px-3 py-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-black rounded-lg flex items-center gap-1.5 shadow-2xs">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                              <span translate="no" className="notranslate">PHIÊN BẢN HIỆN HÀNH ({viewingVersion})</span>
+                              <Lock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                              <span translate="no" className="notranslate">PHIÊN BẢN CHÍNH THỨC ({viewingVersion}) [CHẾ ĐỘ CHỈ ĐỌC]</span>
                             </span>
                           ) : versions.length === 0 ? (
                             <span className="px-3 py-1.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-black rounded-lg flex items-center gap-1.5 shadow-2xs">
                               <FileText className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                              <span translate="no" className="notranslate">BẢN NHÁP (DRAFT)</span>
+                              <span translate="no" className="notranslate">BẢN NHÁP DỰ THẢO (DRAFT v1.0)</span>
                             </span>
                           ) : (
                             <span className="px-3 py-1.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/50 text-xs font-black rounded-lg flex items-center gap-1.5 shadow-2xs animate-pulse">
-                              <FileText className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                              <span translate="no" className="notranslate">BẢN NHÁP MỚI (DRAFT {nextVerTag})</span>
+                              <Edit3 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                              <span translate="no" className="notranslate">ĐANG BIÊN SOẠN BẢN NHÁP ({nextVerTag})</span>
+                            </span>
+                          )}
+
+                          {isReadOnly && (
+                            <span className="text-[11px] bg-slate-800 text-slate-300 px-2 py-1 rounded border border-slate-700 font-medium">
+                              <span translate="no" className="notranslate">🔒 Đã khóa chỉnh sửa để bảo toàn dữ liệu</span>
                             </span>
                           )}
                         </div>
 
-                        {/* AI TỰ ĐỌC ẢNH & DỰ THẢO CAPA BUTTON */}
-                        <button
-                          onClick={handleGenerateAiDraft}
-                          disabled={isAiLoading || !selectedReportId}
-                          className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-black rounded-lg shadow-md flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 cursor-pointer shrink-0 ml-auto"
-                          title="AI tự động phân tích hình ảnh và điền dự thảo mẫu CAPA"
-                        >
-                          <Sparkles className={`w-3.5 h-3.5 ${isAiLoading ? "animate-spin" : ""}`} />
-                          <span translate="no" className="notranslate">{isAiLoading ? "AI ĐANG ĐỌC & DỰ THẢO..." : "✨ AI TỰ ĐỌC ẢNH & DỰ THẢO CAPA"}</span>
-                        </button>
+                        {/* Right action group: AI Draft button & Version Actions */}
+                        <div className="flex items-center gap-2 flex-wrap ml-auto">
+                          {!isReadOnly && (
+                            <button
+                              onClick={handleGenerateAiDraft}
+                              disabled={isAiLoading || !selectedReportId}
+                              className="px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-black rounded-lg shadow-md flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
+                              title="AI tự động phân tích hình ảnh và điền dự thảo mẫu CAPA"
+                            >
+                              <Sparkles className={`w-3.5 h-3.5 ${isAiLoading ? "animate-spin" : ""}`} />
+                              <span translate="no" className="notranslate">{isAiLoading ? "AI ĐANG ĐỌC & DỰ THẢO..." : "✨ AI TỰ ĐỌC ẢNH & DỰ THẢO"}</span>
+                            </button>
+                          )}
+
+                          {/* Explicit Draft Buttons */}
+                          {isReadOnly ? (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => {
+                                  setDraftBaseOption("LATEST");
+                                  setIsCreateDraftModalOpen(true);
+                                }}
+                                className="px-3.5 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white border border-blue-400/50 text-xs font-black rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-md active:scale-95"
+                                title={`Bấm để mở hộp thoại tạo bản nháp mới cho ${nextVerTag}`}
+                              >
+                                <Edit3 className="w-3.5 h-3.5 shrink-0" />
+                                <span translate="no" className="notranslate">+ TẠO BẢN NHÁP MỚI ({nextVerTag})</span>
+                              </button>
+
+                              {hasCachedDraft && (
+                                <button
+                                  onClick={() => handleSelectVersionToView(null)}
+                                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-indigo-500/50 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                                  title="Mở lại bản nháp đang soạn dở dang gần nhất"
+                                >
+                                  <FileText className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                                  <span translate="no" className="notranslate">Xem bản nháp dở dang</span>
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={handleSaveDraftManual}
+                                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white border border-indigo-500/80 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                                title="Bấm để lưu thủ công bản nháp hiện tại"
+                              >
+                                <Save className="w-3.5 h-3.5 shrink-0" />
+                                <span translate="no" className="notranslate">Lưu bản nháp</span>
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  setDraftBaseOption("LATEST");
+                                  setIsCreateDraftModalOpen(true);
+                                }}
+                                className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer shadow-xs"
+                                title="Đổi phiên bản gốc kế thừa dữ liệu"
+                              >
+                                <RefreshCw className="w-3.5 h-3.5 shrink-0" />
+                                <span translate="no" className="notranslate">Đổi gốc tạo nháp</span>
+                              </button>
+
+                              {versions.length > 0 && (
+                                <button
+                                  onClick={() => setIsDiscardConfirmOpen(true)}
+                                  className="px-3 py-1.5 bg-rose-950/80 hover:bg-rose-900 text-rose-200 border border-rose-800 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                                  title={`Đóng bản nháp và quay lại xem phiên bản chính thức ${versions[0].version}`}
+                                >
+                                  <X className="w-3.5 h-3.5 shrink-0" />
+                                  <span translate="no" className="notranslate">Đóng bản nháp</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       {/* Version status text */}
-                      <div className="w-full text-xs text-slate-300 font-medium">
-                        {isViewingOldVersion ? (
-                          <span translate="no" className="notranslate">
-                            Đang xem lại phiên bản cũ <b>{viewingVersion}</b> (Ký ngày {versions.find((v) => v.version === viewingVersion)?.signedDate} bởi {versions.find((v) => v.version === viewingVersion)?.signedBy}). Phiên bản hiện hành mới nhất là <b>{latestVerTag}</b>.
-                          </span>
-                        ) : isViewingCurrentVersion ? (
-                          <span translate="no" className="notranslate">
-                            Đang hiển thị dữ liệu chính thức của <b>{viewingVersion}</b> (Ký ngày <b>{versions.find((v) => v.version === viewingVersion)?.signedDate}</b> bởi <b>{versions.find((v) => v.version === viewingVersion)?.signedBy}</b>).
-                          </span>
-                        ) : versions.length === 0 ? (
-                          <span translate="no" className="notranslate">Chưa phát hành. Đang lưu nháp. Ký duyệt & phát hành v1.0 tại ô Trưởng BP QLCL bên dưới ↓</span>
-                        ) : (
-                          <span translate="no" className="notranslate">
-                            Đang biên soạn <b>bản nháp mới ({nextVerTag})</b> dựa trên phiên bản hiện hành <b>{latestVerTag}</b>. Cần Trưởng BP QLCL ký duyệt ở Bước 2 bên dưới ↓ để chính thức phát hành <b>{nextVerTag}</b>.
-                          </span>
-                        )}
-                      </div>
+                      <div className="w-full text-xs text-slate-300 font-medium flex items-center justify-between gap-2 border-t border-slate-800/80 pt-2 flex-wrap">
+                        <div>
+                          {isViewingOldVersion ? (
+                            <span translate="no" className="notranslate">
+                              Đang xem lại phiên bản cũ <b>{viewingVersion}</b> (Ký ngày {versions.find((v) => v.version === viewingVersion)?.signedDate} bởi {versions.find((v) => v.version === viewingVersion)?.signedBy}). Phiên bản hiện hành là <b>{latestVerTag}</b>.
+                            </span>
+                          ) : isViewingCurrentVersion ? (
+                            <span translate="no" className="notranslate">
+                              Đang hiển thị phiên bản chính thức <b>{viewingVersion}</b> (Ký ngày <b>{versions.find((v) => v.version === viewingVersion)?.signedDate}</b> bởi <b>{versions.find((v) => v.version === viewingVersion)?.signedBy}</b>).
+                            </span>
+                          ) : versions.length === 0 ? (
+                            <span translate="no" className="notranslate">Báo cáo chưa ban hành CAPA. Đang ở chế độ dự thảo nháp. Hoàn thành phiếu và Trưởng BP QLCL ký duyệt Bước 2 để phát hành v1.0.</span>
+                          ) : (
+                            <span translate="no" className="notranslate">
+                              Đang biên soạn <b>bản nháp mới ({nextVerTag})</b>. Khi hoàn tất, Trưởng BP QLCL ký duyệt ở Bước 2 bên dưới ↓ để phát hành chính thức.
+                            </span>
+                          )}
+                        </div>
 
-                      {/* VERSION FILTER SELECTOR DROPDOWN & SAVE DRAFT BUTTON */}
-                      <div className="flex items-center gap-2.5 flex-wrap">
-                        <div className="flex items-center gap-1.5 bg-slate-800/90 px-3 py-1.5 rounded-lg border border-slate-700 shadow-2xs">
+                        {/* Dropdown selector */}
+                        <div className="flex items-center gap-1.5 bg-slate-800/90 px-2.5 py-1 rounded-lg border border-slate-700 shadow-2xs">
                           <History className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                           <span className="text-[11px] font-extrabold text-slate-300 whitespace-nowrap">
-                            <span translate="no" className="notranslate">Chọn phiên bản:</span>
+                            <span translate="no" className="notranslate">Xem phiên bản:</span>
                           </span>
                           <select
                             value={viewingVersion || "DRAFT"}
-                            onChange={(e) => handleSelectVersionToView(e.target.value)}
-                            className="bg-slate-900 text-indigo-200 text-xs font-black rounded px-2.5 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer border border-slate-700 hover:border-indigo-400 transition-all"
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === "DRAFT") {
+                                if (versions.length > 0 && !hasCachedDraft) {
+                                  setIsCreateDraftModalOpen(true);
+                                } else {
+                                  handleSelectVersionToView(null);
+                                }
+                              } else {
+                                handleSelectVersionToView(val);
+                              }
+                            }}
+                            className="bg-slate-900 text-indigo-200 text-xs font-black rounded px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer border border-slate-700 hover:border-indigo-400 transition-all"
                           >
-                            {versions.length === 0 ? (
-                              <option value="DRAFT">📝 Bản Nháp (Đang biên soạn)</option>
-                            ) : (
-                              <option value="DRAFT">
-                                📝 {isDraftModified ? `Bản Nháp Mới (${nextVerTag} - Đang biên soạn)` : `Tạo bản nháp mới (${nextVerTag})`}
-                              </option>
-                            )}
                             {versions.map((v, idx) => (
                               <option key={v.version} value={v.version}>
-                                {v.version} — {idx === 0 ? "Hiện hành (Đã phát hành)" : "Phiên bản cũ"} (Ký {v.signedDate})
+                                {v.version} — {idx === 0 ? "Hiện hành (Đã phát hành)" : "Lưu trữ cũ"} (Ký {v.signedDate})
                               </option>
                             ))}
+                            {versions.length === 0 ? (
+                              <option value="DRAFT">📝 Bản Nháp (Đang biên soạn v1.0)</option>
+                            ) : (
+                              <option value="DRAFT">
+                                📝 {isDraftModified ? `Bản Nháp Mới (${nextVerTag} - Đang soạn)` : `Tạo bản nháp mới (${nextVerTag})`}
+                              </option>
+                            )}
                           </select>
                         </div>
-
-                        {viewingVersion === null ? (
-                          <button
-                            onClick={handleSaveDraftManual}
-                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white border border-indigo-500/80 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
-                            title="Bấm để lưu thủ công bản nháp hiện tại"
-                          >
-                            <Save className="w-3.5 h-3.5 shrink-0" />
-                            <span translate="no" className="notranslate">Lưu bản nháp</span>
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleSelectVersionToView(null)}
-                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-500/80 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
-                            title={`Nhấp để chuyển sang chế độ biên soạn tạo dự thảo phiên bản mới (${nextVerTag})`}
-                          >
-                            <Edit3 className="w-3.5 h-3.5 shrink-0" />
-                            <span translate="no" className="notranslate">Tạo bản nháp mới ({nextVerTag})</span>
-                          </button>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -3596,13 +4003,14 @@ export default function CapaManagementHub({
                                         type="button"
                                         onClick={() => {
                                           if (viewingVersion !== null) {
-                                            handleSelectVersionToView(null); // Switch to draft
+                                            setDraftBaseOption("LATEST");
+                                            setIsCreateDraftModalOpen(true);
                                           } else {
                                             setIsCommitDialogOpen(true);
                                           }
                                         }}
                                         className="no-print text-[10px] font-black text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 px-2.5 py-1 rounded-md shadow-2xs flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all"
-                                        title={viewingVersion !== null ? "Đang xem phiên bản đã phát hành. Nhấp để chuyển sang biên soạn bản nháp." : "Đã ký duyệt phát hành. Nhấp nếu muốn tạo phiên bản cập nhật tiếp theo."}
+                                        title={viewingVersion !== null ? "Đang xem phiên bản đã phát hành. Nhấp để tạo phiên bản nháp tiếp theo." : "Đã ký duyệt phát hành. Nhấp nếu muốn tạo phiên bản cập nhật tiếp theo."}
                                       >
                                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                                         <span translate="no" className="notranslate">☑ ĐÃ KÝ DUYỆT ({currentTag})</span>
@@ -3745,9 +4153,17 @@ export default function CapaManagementHub({
                                 <>
                                   <button
                                     type="button"
-                                    onClick={() => handleUpdateForm("qcStaffSigned", false)}
+                                    onClick={() => {
+                                      if (viewingVersion !== null) {
+                                        if (onShowToast) {
+                                          onShowToast("ℹ️ Đây là chữ ký Người Lập của phiên bản chính thức. Để chỉnh sửa nội dung, vui lòng bấm '+ Tạo bản nháp mới'.", "info");
+                                        }
+                                        return;
+                                      }
+                                      handleUpdateForm("qcStaffSigned", false);
+                                    }}
                                     className="no-print text-[10px] font-black text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 px-2.5 py-1 rounded-md shadow-2xs flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all"
-                                    title="Nhấp để hủy/thay đổi xác nhận ký tên"
+                                    title={viewingVersion !== null ? "Chữ ký Người Lập của phiên bản chính thức đã phát hành" : "Nhấp để hủy/thay đổi xác nhận ký tên"}
                                   >
                                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                                     <span translate="no" className="notranslate">☑ ĐÃ KÝ</span>
@@ -4271,6 +4687,231 @@ export default function CapaManagementHub({
                 className="px-4 py-1.5 bg-slate-800 text-white text-xs font-bold rounded-xl cursor-pointer hover:bg-slate-700"
               >
                 Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL TẠO BẢN NHÁP MỚI / CHỌN NGUỒN GỐC KẾ THỪA DỮ LIỆU */}
+      {isCreateDraftModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/70 z-[99999] flex items-center justify-center p-4 backdrop-blur-xs animate-fadeIn no-print">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 text-left">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-800">
+                    <span translate="no" className="notranslate">Khởi tạo Bản nháp CAPA mới ({getNextVersionTag(versions)})</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    <span translate="no" className="notranslate">Chọn nguồn gốc dữ liệu để bắt đầu biên soạn phiên bản tiếp theo</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCreateDraftModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="py-4 space-y-3">
+              {/* Option 1: Latest Version */}
+              {versions.length > 0 && (
+                <label
+                  onClick={() => setDraftBaseOption("LATEST")}
+                  className={`flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
+                    draftBaseOption === "LATEST"
+                      ? "border-indigo-600 bg-indigo-50/60 ring-1 ring-indigo-300"
+                      : "border-slate-200 hover:border-slate-300 bg-white"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="draftBaseOption"
+                    checked={draftBaseOption === "LATEST"}
+                    onChange={() => setDraftBaseOption("LATEST")}
+                    className="mt-1 w-4 h-4 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-slate-800">
+                        <span translate="no" className="notranslate">Kế thừa từ phiên bản hiện hành ({versions[0].version})</span>
+                      </span>
+                      <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                        <span translate="no" className="notranslate">Khuyên dùng</span>
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
+                      <span translate="no" className="notranslate">Giữ nguyên toàn bộ phân tích nguyên nhân 4M1E, hành động 5W2H đã duyệt từ {versions[0].version} để tinh chỉnh cho lần cập nhật này.</span>
+                    </p>
+                  </div>
+                </label>
+              )}
+
+              {/* Option 2: Existing cached draft if any */}
+              {selectedReportId && getCapaStorageItem("capa_form_v1", selectedReportId, reports) && (
+                <label
+                  onClick={() => setDraftBaseOption("EXISTING_DRAFT")}
+                  className={`flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
+                    draftBaseOption === "EXISTING_DRAFT"
+                      ? "border-indigo-600 bg-indigo-50/60 ring-1 ring-indigo-300"
+                      : "border-slate-200 hover:border-slate-300 bg-white"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="draftBaseOption"
+                    checked={draftBaseOption === "EXISTING_DRAFT"}
+                    onChange={() => setDraftBaseOption("EXISTING_DRAFT")}
+                    className="mt-1 w-4 h-4 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-xs font-black text-slate-800 block">
+                      <span translate="no" className="notranslate">Tiếp tục bản nháp đang soạn dở dang</span>
+                    </span>
+                    <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
+                      <span translate="no" className="notranslate">Mở lại các nội dung bạn đã nhập trước đó nhưng chưa ký duyệt phát hành.</span>
+                    </p>
+                  </div>
+                </label>
+              )}
+
+              {/* Option 3: Historical version if multiple */}
+              {versions.length > 1 && (
+                <label
+                  onClick={() => {
+                    if (!draftBaseOption.startsWith("VERSION:")) {
+                      setDraftBaseOption(`VERSION:${versions[1].version}`);
+                    }
+                  }}
+                  className={`flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
+                    draftBaseOption.startsWith("VERSION:")
+                      ? "border-indigo-600 bg-indigo-50/60 ring-1 ring-indigo-300"
+                      : "border-slate-200 hover:border-slate-300 bg-white"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="draftBaseOption"
+                    checked={draftBaseOption.startsWith("VERSION:")}
+                    onChange={() => setDraftBaseOption(`VERSION:${versions[1].version}`)}
+                    className="mt-1 w-4 h-4 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <div className="flex-1">
+                    <span className="text-xs font-black text-slate-800 block mb-1">
+                      <span translate="no" className="notranslate">Kế thừa từ một phiên bản cũ trong lịch sử</span>
+                    </span>
+                    <select
+                      value={draftBaseOption.startsWith("VERSION:") ? draftBaseOption.replace("VERSION:", "") : versions[1]?.version}
+                      onChange={(e) => setDraftBaseOption(`VERSION:${e.target.value}`)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-lg px-2.5 py-1 w-full"
+                    >
+                      {versions.slice(1).map((v) => (
+                        <option key={v.version} value={v.version}>
+                          {v.version} (Ký {v.signedDate} bởi {v.signedBy})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </label>
+              )}
+
+              {/* Option 4: Blank from original report */}
+              <label
+                onClick={() => setDraftBaseOption("BLANK")}
+                className={`flex items-start gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
+                  draftBaseOption === "BLANK"
+                    ? "border-indigo-600 bg-indigo-50/60 ring-1 ring-indigo-300"
+                    : "border-slate-200 hover:border-slate-300 bg-white"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="draftBaseOption"
+                  checked={draftBaseOption === "BLANK"}
+                  onChange={() => setDraftBaseOption("BLANK")}
+                  className="mt-1 w-4 h-4 text-indigo-600 focus:ring-indigo-500"
+                />
+                <div className="flex-1">
+                  <span className="text-xs font-black text-slate-800 block">
+                    <span translate="no" className="notranslate">Khởi tạo mới từ đầu (Trích xuất từ sự cố gốc)</span>
+                  </span>
+                  <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
+                    <span translate="no" className="notranslate">Làm mới toàn bộ các mục nguyên nhân và hành động, chỉ giữ lại thông tin cơ bản của báo cáo sự cố ban đầu.</span>
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsCreateDraftModalOpen(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer transition-colors"
+              >
+                <span translate="no" className="notranslate">Hủy bỏ</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCreateDraft}
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-md cursor-pointer transition-all active:scale-95 flex items-center gap-1.5"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span translate="no" className="notranslate">Bắt đầu soạn thảo</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL XÁC NHẬN ĐÓNG BẢN NHÁP & QUAY VỀ BẢN CHÍNH THỨC */}
+      {isDiscardConfirmOpen && (
+        <div className="fixed inset-0 bg-slate-950/70 z-[99999] flex items-center justify-center p-4 backdrop-blur-xs animate-fadeIn no-print">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 text-left">
+            <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+              <div className="p-2.5 bg-rose-50 text-rose-600 rounded-xl">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-800">
+                  <span translate="no" className="notranslate">Đóng bản nháp đang soạn?</span>
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  <span translate="no" className="notranslate">Quay lại xem phiên bản chính thức</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="py-4 text-xs text-slate-600 leading-relaxed space-y-2">
+              <p>
+                <span translate="no" className="notranslate">Bạn đang ở chế độ soạn thảo bản nháp. Khi đóng bản nháp, màn hình sẽ quay lại chế độ <b>Chỉ đọc</b> để hiển thị phiên bản chính thức <b>{versions[0]?.version}</b>.</span>
+              </p>
+              <p className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-slate-500 italic">
+                <span translate="no" className="notranslate">💡 Dữ liệu nháp chưa ban hành vẫn được lưu giữ an toàn trong bộ nhớ tạm để bạn tiếp tục bất cứ lúc nào.</span>
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsDiscardConfirmOpen(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer transition-colors"
+              >
+                <span translate="no" className="notranslate">Tiếp tục soạn thảo</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDiscardDraft}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-md cursor-pointer transition-all active:scale-95"
+              >
+                <span translate="no" className="notranslate">Đóng nháp & Xem {versions[0]?.version}</span>
               </button>
             </div>
           </div>

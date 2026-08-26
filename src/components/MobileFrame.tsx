@@ -3798,6 +3798,17 @@ ${report.notes ? `• Ghi chú: ${report.notes}` : ""}`;
     return `${m}/${yyyy}`;
   }, []);
   const [sidebarBadgeMonth, setSidebarBadgeMonth] = useState<string>(currentMonthStr);
+  const [, setCapaUpdateTick] = useState<number>(0);
+
+  useEffect(() => {
+    const handleCapaSync = () => {
+      setCapaUpdateTick((t) => t + 1);
+    };
+    window.addEventListener("capa-cloud-synced", handleCapaSync);
+    return () => {
+      window.removeEventListener("capa-cloud-synced", handleCapaSync);
+    };
+  }, []);
   const [selectedBadgeDetailModal, setSelectedBadgeDetailModal] = useState<{
     name: string;
     count: number;

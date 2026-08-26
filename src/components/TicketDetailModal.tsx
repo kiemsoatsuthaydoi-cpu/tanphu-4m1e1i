@@ -204,7 +204,7 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
           {/* CAPA Section */}
           <div className="space-y-3">
             <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-emerald-500 text-black text-xs font-black flex items-center justify-center">CAPA</span>
+              <span className="px-2 py-0.5 rounded-md bg-emerald-500 text-slate-950 text-[10px] font-black tracking-wide flex items-center justify-center shadow-xs">CAPA</span>
               Hành Động Khắc Phục & Phòng Ngừa (CAPA)
             </h4>
 
