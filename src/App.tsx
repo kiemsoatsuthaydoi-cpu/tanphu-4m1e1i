@@ -2202,10 +2202,7 @@ export default function App() {
       }
     );
 
-    const unsubscribeCapa = subscribeAllCapaDocuments((capaDocs) => {
-      // Trigger update so Mobile and Desktop reactive views refresh CAPA buttons instantly
-      setReports((prev) => [...prev]);
-    });
+    const unsubscribeCapa = subscribeAllCapaDocuments();
 
     return () => {
       unsubscribeReports();

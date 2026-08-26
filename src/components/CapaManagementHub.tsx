@@ -49,7 +49,8 @@ import {
   fetchCapaFromCloud,
   subscribeCapaFromCloud,
   autoMigrateLocalCapaToCloud,
-  uploadCapaImage
+  uploadCapaImage,
+  globalCapaMetaMap
 } from "../utils/capaFirebaseSync";
 import { generateProfessionalClientCapaDraft } from "../utils/aiCapaGenerator";
 
@@ -271,8 +272,24 @@ const getCapaStorageItem = (
   currentReportObj?: QualityReport | null
 ): string | null => {
   const keys = getCapaReportKeys(reportIdOrCode, reportsList, currentReportObj);
+
+  // Fast memory lookup from real-time cloud registry
+  for (const k of keys) {
+    const meta = globalCapaMetaMap[k];
+    if (meta) {
+      if (prefix === "capa_versions_v1" && meta.versions && meta.versions.length > 0) {
+        return JSON.stringify(meta.versions);
+      }
+      if (prefix === "capa_active_version_v1" && meta.activeVersion) {
+        return meta.activeVersion;
+      }
+      if (prefix === "capa_form_v1" && meta.formData) {
+        return JSON.stringify(meta.formData);
+      }
+    }
+  }
   
-  // List of exact fallback prefixes to check
+  // List of exact fallback prefixes to check in localStorage
   const candidatePrefixes = [prefix];
   if (prefix === "capa_versions_v1") {
     candidatePrefixes.push("capa_versions", "capa_history");

@@ -291,10 +291,21 @@ export async function autoMigrateLocalCapaToCloud(
 }
 
 /**
+ * In-memory global registry for quick CAPA status checks (0ms latency, zero main-thread blocking)
+ */
+export const globalCapaMetaMap: Record<string, {
+  hasCapa: boolean;
+  isApproved: boolean;
+  activeVersion?: string;
+  versions: CapaVersion[];
+  formData?: CapaData;
+}> = {};
+
+/**
  * Subscribe to all CAPA documents in Firestore for instant system-wide sync across all clients
  */
 export function subscribeAllCapaDocuments(
-  onUpdate?: (docs: Record<string, CapaDocument>) => void
+  onUpdate?: () => void
 ): () => void {
   if (!db) {
     return () => {};
@@ -305,47 +316,37 @@ export function subscribeAllCapaDocuments(
     const unsubscribe = onSnapshot(
       collRef,
       (snapshot) => {
-        const result: Record<string, CapaDocument> = {};
         snapshot.forEach((docSnap) => {
           const data = docSnap.data() as CapaDocument;
           const docId = docSnap.id;
           const reportKey = data.reportId || docId;
-          result[docId] = { ...data, id: docId };
-
-          // Đồng bộ tự động vào LocalStorage đệm để tất cả các màn hình (Mobile & Desktop) truy xuất tức thời 0ms
           const keys = Array.from(new Set([docId, reportKey])).filter(Boolean);
 
-          if (Array.isArray(data.versions) && data.versions.length > 0) {
-            const vStr = JSON.stringify(data.versions);
-            keys.forEach((k) => {
-              try {
-                localStorage.setItem(`capa_versions_v1_${k}`, vStr);
-                localStorage.setItem(`capa_versions_${k}`, vStr);
-                if (data.activeVersionTag) {
-                  localStorage.setItem(`capa_active_version_v1_${k}`, data.activeVersionTag);
-                }
-              } catch (e) {}
-            });
-          }
+          const hasVersions = Array.isArray(data.versions) && data.versions.length > 0;
+          const validVersions = hasVersions ? data.versions.filter((v: any) => v && v.data) : [];
+          const isApproved = validVersions.length > 0;
+          const latestVer = isApproved ? validVersions[validVersions.length - 1].version : undefined;
 
-          if (data.activeFormData) {
-            const fStr = JSON.stringify(data.activeFormData);
-            keys.forEach((k) => {
-              try {
-                localStorage.setItem(`capa_form_v1_${k}`, fStr);
-                localStorage.setItem(`capa_form_${k}`, fStr);
-              } catch (e) {}
-            });
-          }
+          const meta = {
+            hasCapa: isApproved || !!data.activeFormData,
+            isApproved,
+            activeVersion: data.activeVersionTag || latestVer,
+            versions: validVersions,
+            formData: data.activeFormData
+          };
+
+          keys.forEach((k) => {
+            globalCapaMetaMap[k] = meta;
+          });
         });
 
         // Trigger custom event for reactive UI update
         if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent("capa-cloud-synced", { detail: result }));
+          window.dispatchEvent(new CustomEvent("capa-cloud-synced"));
         }
 
         if (onUpdate) {
-          onUpdate(result);
+          onUpdate();
         }
       },
       (error) => {

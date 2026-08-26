@@ -21,6 +21,7 @@ import { QualityReport, CapaData, CapaVersion, User, Branch } from "../types";
 import { parseReportTimestamp } from "../utils/notificationHelper";
 import { generateProfessionalClientCapaDraft } from "../utils/aiCapaGenerator";
 import { isCapaBelongingToReport, isVersionsBelongingToReport } from "./CapaManagementHub";
+import { globalCapaMetaMap } from "../utils/capaFirebaseSync";
 
 const T: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <span translate="no" className="notranslate">{children}</span>
@@ -87,6 +88,21 @@ export const checkReportHasCapa = (
   }
 
   const keys = [report.id, report.reportCode].filter(Boolean) as string[];
+
+  // 1. Fast path: check in-memory cloud synced map (0ms, zero disk I/O)
+  for (const k of keys) {
+    const meta = globalCapaMetaMap[k];
+    if (meta) {
+      return {
+        hasCapa: meta.hasCapa,
+        isApproved: meta.isApproved,
+        activeVersion: meta.activeVersion,
+        capaData: meta.isApproved && meta.versions.length > 0 ? meta.versions[0].data : meta.formData,
+        versions: meta.versions
+      };
+    }
+  }
+
   let foundVersions: CapaVersion[] = [];
   let foundDraft: CapaData | null = null;
 
